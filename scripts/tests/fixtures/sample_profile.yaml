@@ -1,0 +1,32 @@
+meta:
+  name: "Test User"
+  target_market: "nl"
+  language: "en"
+  headline: "Software Engineer"
+contact:
+  email: "test@example.com"
+  phone: "+31 6 0000 0000"
+  location: "Leiden, NL"
+  links:
+    linkedin: "linkedin.com/in/test"
+    github: "github.com/test"
+summary: "Engineer who ships."
+experience:
+  - title: "Engineer"
+    org: "Acme"
+    location: "Amsterdam"
+    start: "2023-01"
+    end: "present"
+    bullets:
+      - "Cut latency 40% by rewriting the pipeline."
+education:
+  - degree: "MSc CS"
+    institution: "Leiden University"
+    location: "Leiden"
+    start: "2021"
+    end: "2023"
+    details: "Thesis on X."
+skills:
+  technical: ["Python", "PyTorch"]
+  languages: ["English (native)"]
+projects: []
