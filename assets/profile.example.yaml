@@ -1,0 +1,48 @@
+# Canonical career profile. Single source of truth. Renderers read this.
+# All fields optional except meta.name and contact.email.
+meta:
+  name: "Jane Doe"
+  target_market: "nl"        # us | uk | eu | nl | other  (drives conventions)
+  language: "en"             # en | nl | ...
+  headline: "Machine Learning Engineer"   # optional one-liner under name
+contact:
+  email: "jane@example.com"
+  phone: "+31 6 1234 5678"
+  location: "Leiden, Netherlands"
+  links:
+    linkedin: "linkedin.com/in/janedoe"
+    github: "github.com/janedoe"
+    portfolio: ""
+summary: >
+  Two-to-four sentence professional summary.
+experience:
+  - title: "ML Engineer"
+    org: "Acme BV"
+    location: "Amsterdam"
+    start: "2023-01"
+    end: "present"
+    bullets:
+      - "Quantified, action-led achievement bullet."
+education:
+  - degree: "MSc Computer Science"
+    institution: "Leiden University"
+    location: "Leiden"
+    start: "2021"
+    end: "2023"
+    details: "Thesis on X; GPA 8.5/10."
+skills:
+  technical: ["Python", "PyTorch"]
+  tools: ["Docker", "Git"]
+  languages: ["English (native)", "Dutch (B1)"]
+  soft: ["Communication"]
+projects:
+  - name: "Project X"
+    role: "Lead"
+    description: "One-line description."
+    links: ["github.com/janedoe/x"]
+publications: []     # free-form strings
+awards: []
+certifications: []
+volunteer: []
+extras:
+  photo: false       # EU/NL CVs sometimes include a photo
