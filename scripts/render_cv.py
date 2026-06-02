@@ -239,10 +239,22 @@ def render_pdf(profile, out_path):
     else:
         cmd = [engine, "-interaction=nonstopmode", "-output-directory",
                str(out_path.parent), str(tex_path)]
-    subprocess.run(cmd, check=True, capture_output=True)
-    produced = tex_path.with_suffix(".pdf")
-    if produced != out_path and produced.exists():
-        produced.replace(out_path)
+    try:
+        subprocess.run(cmd, check=True, capture_output=True)
+    except subprocess.CalledProcessError:
+        print(
+            f"WARNING: LaTeX compile failed. PDF could not be produced. "
+            f"LaTeX source is at: {tex_path}",
+            file=sys.stderr,
+        )
+        return False
+
+    # If the engine wrote the PDF next to the .tex but the caller requested a
+    # different name, move it into place.
+    if not out_path.exists():
+        produced = tex_path.with_suffix(".pdf")
+        if produced.exists():
+            produced.replace(out_path)
     return True
 
 

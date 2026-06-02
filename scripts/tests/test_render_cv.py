@@ -42,9 +42,6 @@ def test_render_docx_creates_readable_file(sample_profile_path, tmp_path):
     assert "MSc CS" in text
 
 
-import shutil
-
-
 def test_build_latex_contains_content(sample_profile_path):
     p = render_cv.load_profile(sample_profile_path)
     tex = render_cv.build_latex(p)
@@ -65,3 +62,21 @@ def test_render_pdf_degrades_without_latex(sample_profile_path, tmp_path, monkey
     result = render_cv.render_pdf(p, out)
     assert result is False                      # signalled it could not build PDF
     assert (tmp_path / "cv.tex").exists()       # but emitted the .tex alongside
+
+
+def test_render_pdf_degrades_on_compile_error(sample_profile_path, tmp_path, monkeypatch):
+    import subprocess as _subprocess
+    # Simulate an engine that is found but fails to compile.
+    monkeypatch.setattr(render_cv, "find_latex_engine", lambda: "pdflatex")
+    monkeypatch.setattr(
+        render_cv.subprocess,
+        "run",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            _subprocess.CalledProcessError(1, "pdflatex")
+        ),
+    )
+    p = render_cv.load_profile(sample_profile_path)
+    out = tmp_path / "cv.pdf"
+    result = render_cv.render_pdf(p, out)
+    assert result is False                  # degrades gracefully
+    assert (tmp_path / "cv.tex").exists()   # .tex source is preserved
