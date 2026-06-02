@@ -87,7 +87,7 @@ TOP_FEEDBACK:
   - <specific, actionable item>
   - <specific, actionable item>
 SUPPLEMENTARY_QUESTIONS_FOR_CANDIDATE:
-  - <only if a gap could plausibly be closed with real info the CV may have omitted; else write "none">
+  - <specific question the candidate could answer with real, omitted info; if there are none, write exactly: - none>
 ```
 
 **Rules for the output block:**
@@ -95,7 +95,7 @@ SUPPLEMENTARY_QUESTIONS_FOR_CANDIDATE:
 - Replace `PASS | REJECT` with exactly one of `PASS` or `REJECT` (no pipe, no extra text on that line).
 - Replace each `N` with the integer score (1–5). For `letter_fit`, replace with either `N/5` or `n/a`.
 - Each `TOP_FEEDBACK` item must be specific and actionable (name the section/bullet/claim).
-- `SUPPLEMENTARY_QUESTIONS_FOR_CANDIDATE` must contain at least one bullet. If there are no honest questions to ask, write a single bullet: `- none`
+- `SUPPLEMENTARY_QUESTIONS_FOR_CANDIDATE` must contain at least one bullet. If there are no honest questions to ask, write a single bullet: `  - none`
 - Do not omit any field. Do not add extra fields.
 - This block must be the last thing in your response.
 
@@ -117,4 +117,21 @@ TOP_FEEDBACK:
 SUPPLEMENTARY_QUESTIONS_FOR_CANDIDATE:
   - Did you have direct reports or budget ownership at Acme Corp (2021–2023)? The CV implies a senior scope but does not confirm it
   - What were you doing between March and November 2022? Even a brief honest note (parental leave, health, coursework) will strengthen credibility
+```
+
+**No-questions example (PASS with nothing to ask):**
+
+```
+VERDICT: PASS
+SCORES:
+  requirement_match: 4/5 — Meets all four must-haves; distributed-systems experience is present but light
+  evidence: 4/5 — Majority of achievement bullets carry metrics; one Acme bullet still vague ("improved reliability")
+  clarity: 5/5 — Two-page CV, clean hierarchy, skimmable in under 30 seconds
+  credibility: 5/5 — Consistent timeline, claims are plausible and internally coherent
+  letter_fit: 4/5 — Names the company's recent platform migration; tone matches the engineering culture described on the careers page
+TOP_FEEDBACK:
+  - Evidence: Strengthen the "improved reliability" bullet in the 2023 Acme role with a concrete metric (e.g., uptime %, incident count reduction)
+  - Letter: Add one sentence connecting your distributed-systems work to the specific scale challenges mentioned in the job posting
+SUPPLEMENTARY_QUESTIONS_FOR_CANDIDATE:
+  - none
 ```
