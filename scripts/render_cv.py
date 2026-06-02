@@ -6,6 +6,8 @@ Usage:
 """
 import argparse
 import pathlib
+import shutil
+import subprocess
 import sys
 
 import yaml
@@ -138,6 +140,110 @@ def render_docx(profile, out_path):
             p.add_run(pr.get("description", ""))
 
     doc.save(str(out_path))
+
+
+_LATEX_REPLACEMENTS = {
+    "\\": r"\textbackslash{}", "&": r"\&", "%": r"\%", "$": r"\$",
+    "#": r"\#", "_": r"\_", "{": r"\{", "}": r"\}", "~": r"\textasciitilde{}",
+    "^": r"\textasciicircum{}",
+}
+
+
+def latex_escape(text):
+    if text is None:
+        return ""
+    out = []
+    for ch in str(text):
+        out.append(_LATEX_REPLACEMENTS.get(ch, ch))
+    return "".join(out)
+
+
+def find_latex_engine():
+    for engine in ("tectonic", "pdflatex"):
+        if shutil.which(engine):
+            return engine
+    return None
+
+
+def build_latex(profile):
+    e = latex_escape
+    meta = profile.get("meta", {}) or {}
+    parts = [
+        r"\documentclass[11pt,a4paper]{article}",
+        r"\usepackage[margin=2cm]{geometry}",
+        r"\usepackage{enumitem}",
+        r"\usepackage[hidelinks]{hyperref}",
+        r"\setlist{nosep,leftmargin=*}",
+        r"\pagestyle{empty}",
+        r"\begin{document}",
+        r"\begin{center}",
+        r"{\LARGE \textbf{%s}}\\[2pt]" % e(meta.get("name", "")),
+    ]
+    if meta.get("headline"):
+        parts.append(r"{\large %s}\\[2pt]" % e(meta["headline"]))
+    parts.append(e(_contact_line(profile)))
+    parts.append(r"\end{center}")
+
+    if profile.get("summary"):
+        parts += [r"\section*{Summary}", e(profile["summary"].strip())]
+
+    if profile.get("experience"):
+        parts.append(r"\section*{Experience}")
+        for ex in profile["experience"]:
+            dates = f"{ex.get('start','')} -- {ex.get('end','')}".strip(" -")
+            parts.append(r"\textbf{%s}, %s \hfill %s\\" % (
+                e(ex.get("title", "")), e(ex.get("org", "")), e(dates)))
+            bullets = ex.get("bullets") or []
+            if bullets:
+                parts.append(r"\begin{itemize}")
+                parts += [r"\item %s" % e(b) for b in bullets]
+                parts.append(r"\end{itemize}")
+
+    if profile.get("education"):
+        parts.append(r"\section*{Education}")
+        for ed in profile["education"]:
+            dates = f"{ed.get('start','')} -- {ed.get('end','')}".strip(" -")
+            parts.append(r"\textbf{%s}, %s \hfill %s\\" % (
+                e(ed.get("degree", "")), e(ed.get("institution", "")), e(dates)))
+            if ed.get("details"):
+                parts.append(e(ed["details"]) + r"\\")
+
+    skills = profile.get("skills") or {}
+    if any(skills.values()):
+        parts.append(r"\section*{Skills}")
+        for group, items in skills.items():
+            if items:
+                parts.append(r"\textbf{%s:} %s\\" % (
+                    e(group.capitalize()), e(", ".join(items))))
+
+    parts.append(r"\end{document}")
+    return "\n".join(parts) + "\n"
+
+
+def render_pdf(profile, out_path):
+    """Build PDF via LaTeX. Returns True on success, False if no engine
+    (still writes the .tex next to out_path so nothing is lost)."""
+    out_path = pathlib.Path(out_path)
+    tex_path = out_path.with_suffix(".tex")
+    tex_path.write_text(build_latex(profile), encoding="utf-8")
+
+    engine = find_latex_engine()
+    if engine is None:
+        print("WARNING: no LaTeX engine (tectonic/pdflatex) found. "
+              f"Wrote {tex_path}; install tectonic to produce a PDF.",
+              file=sys.stderr)
+        return False
+
+    if engine == "tectonic":
+        cmd = [engine, str(tex_path), "--outdir", str(out_path.parent)]
+    else:
+        cmd = [engine, "-interaction=nonstopmode", "-output-directory",
+               str(out_path.parent), str(tex_path)]
+    subprocess.run(cmd, check=True, capture_output=True)
+    produced = tex_path.with_suffix(".pdf")
+    if produced != out_path and produced.exists():
+        produced.replace(out_path)
+    return True
 
 
 def main(argv=None):
