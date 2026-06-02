@@ -28,3 +28,15 @@ def test_render_markdown_omits_empty_sections(sample_profile_path):
     p = render_cv.load_profile(sample_profile_path)
     md = render_cv.render_markdown(p)
     assert "## Projects" not in md            # projects is empty in fixture
+
+
+def test_render_docx_creates_readable_file(sample_profile_path, tmp_path):
+    from docx import Document
+    p = render_cv.load_profile(sample_profile_path)
+    out = tmp_path / "cv.docx"
+    render_cv.render_docx(p, out)
+    assert out.exists()
+    text = "\n".join(par.text for par in Document(str(out)).paragraphs)
+    assert "Test User" in text
+    assert "Cut latency 40%" in text
+    assert "MSc CS" in text

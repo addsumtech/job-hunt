@@ -84,6 +84,62 @@ def render_markdown(profile):
     return "\n".join(lines) + "\n"
 
 
+def render_docx(profile, out_path):
+    from docx import Document
+    from docx.shared import Pt
+
+    doc = Document()
+    meta = profile.get("meta", {}) or {}
+    title = doc.add_heading(meta.get("name", ""), level=0)
+    if meta.get("headline"):
+        doc.add_paragraph(meta["headline"])
+    contact = _contact_line(profile)
+    if contact:
+        doc.add_paragraph(contact)
+
+    if profile.get("summary"):
+        doc.add_heading("Summary", level=1)
+        doc.add_paragraph(profile["summary"].strip())
+
+    if profile.get("experience"):
+        doc.add_heading("Experience", level=1)
+        for e in profile["experience"]:
+            h = doc.add_paragraph()
+            h.add_run(f"{e.get('title','')}, {e.get('org','')}").bold = True
+            dates = f"{e.get('start','')} – {e.get('end','')}".strip(" –")
+            meta_bits = " · ".join([b for b in [e.get("location", ""), dates] if b])
+            if meta_bits:
+                doc.add_paragraph(meta_bits)
+            for b in (e.get("bullets") or []):
+                doc.add_paragraph(b, style="List Bullet")
+
+    if profile.get("education"):
+        doc.add_heading("Education", level=1)
+        for ed in profile["education"]:
+            p = doc.add_paragraph()
+            p.add_run(f"{ed.get('degree','')}, {ed.get('institution','')}").bold = True
+            if ed.get("details"):
+                doc.add_paragraph(ed["details"])
+
+    skills = profile.get("skills") or {}
+    if any(skills.values()):
+        doc.add_heading("Skills", level=1)
+        for group, items in skills.items():
+            if items:
+                p = doc.add_paragraph()
+                p.add_run(f"{group.capitalize()}: ").bold = True
+                p.add_run(", ".join(items))
+
+    if profile.get("projects"):
+        doc.add_heading("Projects", level=1)
+        for pr in profile["projects"]:
+            p = doc.add_paragraph()
+            p.add_run(f"{pr.get('name','')}: ").bold = True
+            p.add_run(pr.get("description", ""))
+
+    doc.save(str(out_path))
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("profile")
