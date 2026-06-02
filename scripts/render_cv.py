@@ -261,7 +261,17 @@ def main(argv=None):
     elif args.format == "docx":
         render_docx(profile, out)
     elif args.format == "pdf":
-        render_pdf(profile, out)
+        ok = render_pdf(profile, out)
+        if ok:
+            print(f"Wrote {out}")
+        else:
+            tex = out.with_suffix(".tex")
+            print(
+                f"PDF could not be built (no LaTeX engine found). "
+                f"LaTeX source written to: {tex}",
+                file=sys.stderr,
+            )
+        return
     print(f"Wrote {out}")
 
 
