@@ -82,7 +82,7 @@ job-application/
         ├── fixtures/
         │   ├── sample_profile.yaml
         │   └── sample_letter.yaml
-        └── test_render_cv.py
+        ├── test_render_cv.py
         └── test_render_letter.py
 ```
 
