@@ -25,3 +25,10 @@ def test_render_docx_letter(tmp_path):
     text = "\n".join(p.text for p in Document(str(out)).paragraphs)
     assert "Dear Hiring Team," in text
     assert "Acme" in text
+
+
+def test_letter_latex_preamble_has_unicode_packages():
+    """BUG 2: render_letter.build_latex must include inputenc for UTF-8 safety."""
+    data = render_letter.load(FIXTURES / "sample_letter.yaml")
+    tex = render_letter.build_latex(data)
+    assert r"\usepackage[utf8]{inputenc}" in tex

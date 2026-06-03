@@ -61,6 +61,8 @@ def build_latex(d):
     r = d.get("recipient", {}) or {}
     parts = [
         r"\documentclass[11pt,a4paper]{article}",
+        r"\usepackage[utf8]{inputenc}",
+        r"\usepackage[T1]{fontenc}",
         r"\usepackage[margin=2.5cm]{geometry}",
         r"\pagestyle{empty}",
         r"\begin{document}",

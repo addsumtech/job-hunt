@@ -13,12 +13,67 @@ import sys
 import yaml
 
 
+# ── i18n headings ────────────────────────────────────────────────────────────
+
+HEADINGS = {
+    "en": {
+        "summary":        "Summary",
+        "experience":     "Experience",
+        "education":      "Education",
+        "skills":         "Skills",
+        "projects":       "Projects",
+        "publications":   "Publications",
+        "awards":         "Awards",
+        "certifications": "Certifications",
+        "volunteer":      "Volunteer",
+    },
+    "nl": {
+        "summary":        "Samenvatting",
+        "experience":     "Werkervaring",
+        "education":      "Opleiding",
+        "skills":         "Vaardigheden",
+        "projects":       "Projecten",
+        "publications":   "Publicaties",
+        "awards":         "Prijzen",
+        "certifications": "Certificeringen",
+        "volunteer":      "Vrijwilligerswerk",
+    },
+}
+
+
+def headings(profile):
+    """Return the headings dict for the profile's language (default 'en')."""
+    lang = (profile.get("meta") or {}).get("language", "en")
+    return HEADINGS.get(lang, HEADINGS["en"])
+
+
+# ── URL helpers ───────────────────────────────────────────────────────────────
+
+def normalize_url(u):
+    """Ensure URL has a scheme; strip trailing whitespace."""
+    u = (u or "").strip()
+    if u and "://" not in u:
+        return "https://" + u
+    return u
+
+
+def display_url(u):
+    """Return a human-readable URL (no scheme prefix)."""
+    for prefix in ("https://", "http://"):
+        if u.startswith(prefix):
+            return u[len(prefix):]
+    return u
+
+
+# ── Shared helpers ────────────────────────────────────────────────────────────
+
 def load_profile(path):
     with open(path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
 def _contact_line(profile):
+    """Plain-text contact line used by Markdown/docx (raw URLs, · separator)."""
     c = profile.get("contact", {}) or {}
     parts = [c.get("email"), c.get("phone"), c.get("location")]
     links = (c.get("links") or {})
@@ -26,20 +81,33 @@ def _contact_line(profile):
     return " · ".join([p for p in parts if p])
 
 
+# ── Markdown renderer ─────────────────────────────────────────────────────────
+
 def render_markdown(profile):
+    h = headings(profile)
     meta = profile.get("meta", {}) or {}
     lines = [f"# {meta.get('name', '')}".rstrip()]
     if meta.get("headline"):
         lines.append(f"*{meta['headline']}*")
-    contact = _contact_line(profile)
-    if contact:
-        lines.append(contact)
+
+    # Contact line — render links as [display](url)
+    c = profile.get("contact", {}) or {}
+    contact_parts = [c.get("email"), c.get("phone"), c.get("location")]
+    for raw_url in (c.get("links") or {}).values():
+        if raw_url:
+            url = normalize_url(raw_url)
+            disp = display_url(url)
+            contact_parts.append(f"[{disp}]({url})")
+    contact_str = " · ".join([p for p in contact_parts if p])
+    if contact_str:
+        lines.append(contact_str)
+
     if profile.get("summary"):
-        lines += ["", "## Summary", profile["summary"].strip()]
+        lines += ["", f"## {h['summary']}", profile["summary"].strip()]
 
     exp = profile.get("experience") or []
     if exp:
-        lines += ["", "## Experience"]
+        lines += ["", f"## {h['experience']}"]
         for e in exp:
             header = f"**{e.get('title','')}**, {e.get('org','')}"
             dates = f"{e.get('start','')} – {e.get('end','')}".strip(" –")
@@ -51,7 +119,7 @@ def render_markdown(profile):
 
     edu = profile.get("education") or []
     if edu:
-        lines += ["", "## Education"]
+        lines += ["", f"## {h['education']}"]
         for ed in edu:
             dates = f"{ed.get('start','')} – {ed.get('end','')}".strip(" –")
             line = f"**{ed.get('degree','')}**, {ed.get('institution','')}"
@@ -63,51 +131,78 @@ def render_markdown(profile):
 
     skills = profile.get("skills") or {}
     if any(skills.values()):
-        lines += ["", "## Skills"]
+        lines += ["", f"## {h['skills']}"]
         for group, items in skills.items():
             if items:
                 lines.append(f"- **{group.capitalize()}:** {', '.join(items)}")
 
     projects = profile.get("projects") or []
     if projects:
-        lines += ["", "## Projects"]
+        lines += ["", f"## {h['projects']}"]
         for pr in projects:
-            lines.append(f"**{pr.get('name','')}** — {pr.get('description','')}")
+            name = pr.get("name", "")
+            role = pr.get("role", "")
+            desc = pr.get("description", "")
+            # Build header: name — role — description (omit role if absent)
+            header_parts = [f"**{name}**"]
+            if role:
+                header_parts.append(role)
+            header_parts.append(desc)
+            proj_line = " — ".join(header_parts)
+            # Append project links
+            proj_links = pr.get("links") or []
+            if proj_links:
+                link_strs = []
+                for raw in proj_links:
+                    url = normalize_url(raw)
+                    disp = display_url(url)
+                    link_strs.append(f"[{disp}]({url})")
+                proj_line += " — " + ", ".join(link_strs)
+            lines.append(proj_line)
 
-    for key, title in [("publications", "Publications"),
-                       ("awards", "Awards"),
-                       ("certifications", "Certifications"),
-                       ("volunteer", "Volunteer")]:
+    for key in ("publications", "awards", "certifications", "volunteer"):
         items = profile.get(key) or []
         if items:
-            lines += ["", f"## {title}"]
+            lines += ["", f"## {h[key]}"]
             lines += [f"- {it}" for it in items]
 
     return "\n".join(lines) + "\n"
 
 
+# ── docx renderer ─────────────────────────────────────────────────────────────
+
 def render_docx(profile, out_path):
     from docx import Document
     from docx.shared import Pt
 
+    h = headings(profile)
     doc = Document()
     meta = profile.get("meta", {}) or {}
-    title = doc.add_heading(meta.get("name", ""), level=0)
+    doc.add_heading(meta.get("name", ""), level=0)
     if meta.get("headline"):
         doc.add_paragraph(meta["headline"])
-    contact = _contact_line(profile)
-    if contact:
-        doc.add_paragraph(contact)
+
+    # Contact line — render links with display text (URL in parens)
+    c = profile.get("contact", {}) or {}
+    contact_parts = [c.get("email"), c.get("phone"), c.get("location")]
+    for raw_url in (c.get("links") or {}).values():
+        if raw_url:
+            url = normalize_url(raw_url)
+            disp = display_url(url)
+            contact_parts.append(f"{disp} ({url})")
+    contact_str = " · ".join([p for p in contact_parts if p])
+    if contact_str:
+        doc.add_paragraph(contact_str)
 
     if profile.get("summary"):
-        doc.add_heading("Summary", level=1)
+        doc.add_heading(h["summary"], level=1)
         doc.add_paragraph(profile["summary"].strip())
 
     if profile.get("experience"):
-        doc.add_heading("Experience", level=1)
+        doc.add_heading(h["experience"], level=1)
         for e in profile["experience"]:
-            h = doc.add_paragraph()
-            h.add_run(f"{e.get('title','')}, {e.get('org','')}").bold = True
+            hp = doc.add_paragraph()
+            hp.add_run(f"{e.get('title','')}, {e.get('org','')}").bold = True
             dates = f"{e.get('start','')} – {e.get('end','')}".strip(" –")
             meta_bits = " · ".join([b for b in [e.get("location", ""), dates] if b])
             if meta_bits:
@@ -116,7 +211,7 @@ def render_docx(profile, out_path):
                 doc.add_paragraph(b, style="List Bullet")
 
     if profile.get("education"):
-        doc.add_heading("Education", level=1)
+        doc.add_heading(h["education"], level=1)
         for ed in profile["education"]:
             p = doc.add_paragraph()
             p.add_run(f"{ed.get('degree','')}, {ed.get('institution','')}").bold = True
@@ -125,7 +220,7 @@ def render_docx(profile, out_path):
 
     skills = profile.get("skills") or {}
     if any(skills.values()):
-        doc.add_heading("Skills", level=1)
+        doc.add_heading(h["skills"], level=1)
         for group, items in skills.items():
             if items:
                 p = doc.add_paragraph()
@@ -133,14 +228,32 @@ def render_docx(profile, out_path):
                 p.add_run(", ".join(items))
 
     if profile.get("projects"):
-        doc.add_heading("Projects", level=1)
+        doc.add_heading(h["projects"], level=1)
         for pr in profile["projects"]:
             p = doc.add_paragraph()
             p.add_run(f"{pr.get('name','')}: ").bold = True
-            p.add_run(pr.get("description", ""))
+            role = pr.get("role", "")
+            desc = pr.get("description", "")
+            text_parts = [x for x in [role, desc] if x]
+            p.add_run(" — ".join(text_parts) if text_parts else "")
+            # Render project links
+            proj_links = pr.get("links") or []
+            for raw in proj_links:
+                url = normalize_url(raw)
+                disp = display_url(url)
+                doc.add_paragraph(f"{disp} ({url})")
+
+    for key in ("publications", "awards", "certifications", "volunteer"):
+        items = profile.get(key) or []
+        if items:
+            doc.add_heading(h[key], level=1)
+            for it in items:
+                doc.add_paragraph(it, style="List Bullet")
 
     doc.save(str(out_path))
 
+
+# ── LaTeX helpers ─────────────────────────────────────────────────────────────
 
 _LATEX_REPLACEMENTS = {
     "\\": r"\textbackslash{}", "&": r"\&", "%": r"\%", "$": r"\$",
@@ -165,11 +278,16 @@ def find_latex_engine():
     return None
 
 
+# ── LaTeX renderer ────────────────────────────────────────────────────────────
+
 def build_latex(profile):
     e = latex_escape
+    h = headings(profile)
     meta = profile.get("meta", {}) or {}
     parts = [
         r"\documentclass[11pt,a4paper]{article}",
+        r"\usepackage[utf8]{inputenc}",
+        r"\usepackage[T1]{fontenc}",
         r"\usepackage[margin=2cm]{geometry}",
         r"\usepackage{enumitem}",
         r"\usepackage[hidelinks]{hyperref}",
@@ -181,14 +299,29 @@ def build_latex(profile):
     ]
     if meta.get("headline"):
         parts.append(r"{\large %s}\\[2pt]" % e(meta["headline"]))
-    parts.append(e(_contact_line(profile)))
+
+    # Build contact line using \textbullet{} separator and \href for links
+    c = profile.get("contact", {}) or {}
+    contact_parts = []
+    for field in ("email", "phone", "location"):
+        val = c.get(field)
+        if val:
+            contact_parts.append(e(val))
+    for raw_url in (c.get("links") or {}).values():
+        if raw_url:
+            url = normalize_url(raw_url)
+            disp = display_url(url)
+            contact_parts.append(r"\href{%s}{%s}" % (url, e(disp)))
+    if contact_parts:
+        parts.append(r" \textbullet{} ".join(contact_parts))
+
     parts.append(r"\end{center}")
 
     if profile.get("summary"):
-        parts += [r"\section*{Summary}", e(profile["summary"].strip())]
+        parts += [r"\section*{%s}" % h["summary"], e(profile["summary"].strip())]
 
     if profile.get("experience"):
-        parts.append(r"\section*{Experience}")
+        parts.append(r"\section*{%s}" % h["experience"])
         for ex in profile["experience"]:
             dates = f"{ex.get('start','')} -- {ex.get('end','')}".strip(" -")
             parts.append(r"\textbf{%s}, %s \hfill %s\\" % (
@@ -200,7 +333,7 @@ def build_latex(profile):
                 parts.append(r"\end{itemize}")
 
     if profile.get("education"):
-        parts.append(r"\section*{Education}")
+        parts.append(r"\section*{%s}" % h["education"])
         for ed in profile["education"]:
             dates = f"{ed.get('start','')} -- {ed.get('end','')}".strip(" -")
             parts.append(r"\textbf{%s}, %s \hfill %s\\" % (
@@ -210,15 +343,47 @@ def build_latex(profile):
 
     skills = profile.get("skills") or {}
     if any(skills.values()):
-        parts.append(r"\section*{Skills}")
+        parts.append(r"\section*{%s}" % h["skills"])
         for group, items in skills.items():
             if items:
                 parts.append(r"\textbf{%s:} %s\\" % (
                     e(group.capitalize()), e(", ".join(items))))
 
+    if profile.get("projects"):
+        parts.append(r"\section*{%s}" % h["projects"])
+        for pr in profile["projects"]:
+            name = pr.get("name", "")
+            role = pr.get("role", "")
+            desc = pr.get("description", "")
+            line_parts = [r"\textbf{%s}" % e(name)]
+            if role:
+                line_parts.append(e(role))
+            line_parts.append(e(desc))
+            proj_line = ", ".join(line_parts)
+            # Project links via \href
+            proj_links = pr.get("links") or []
+            link_strs = []
+            for raw in proj_links:
+                url = normalize_url(raw)
+                disp = display_url(url)
+                link_strs.append(r"\href{%s}{%s}" % (url, e(disp)))
+            if link_strs:
+                proj_line += " --- " + ", ".join(link_strs)
+            parts.append(proj_line + r"\\")
+
+    for key in ("publications", "awards", "certifications", "volunteer"):
+        items = profile.get(key) or []
+        if items:
+            parts.append(r"\section*{%s}" % h[key])
+            parts.append(r"\begin{itemize}")
+            parts += [r"\item %s" % e(it) for it in items]
+            parts.append(r"\end{itemize}")
+
     parts.append(r"\end{document}")
     return "\n".join(parts) + "\n"
 
+
+# ── PDF renderer ──────────────────────────────────────────────────────────────
 
 def render_pdf(profile, out_path):
     """Build PDF via LaTeX. Returns True on success, False if no engine
@@ -257,6 +422,8 @@ def render_pdf(profile, out_path):
             produced.replace(out_path)
     return True
 
+
+# ── CLI ───────────────────────────────────────────────────────────────────────
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
