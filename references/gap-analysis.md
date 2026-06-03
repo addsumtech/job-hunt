@@ -74,7 +74,17 @@ A CV may omit things that are genuinely part of the candidate's background. If g
 > ✓ Allowed: real experience, just not yet documented.
 
 **Quantifying vaguely-stated real impact.**
-If a bullet says "improved system performance" and the user can supply the actual numbers, update the bullet. If the user cannot recall specifics, use honest scope language: "improved performance for a system serving ~200k monthly users."
+If a bullet says "improved system performance" and the user can supply the actual numbers, update the bullet. When exact numbers are unavailable, use this fallback ladder in order — stop at the most specific level the user can honestly confirm:
+
+| Level | Form | Example |
+|---|---|---|
+| 1 — Exact number | `X%`, `$X`, `Xms` | "Reduced latency by 38%" |
+| 2 — Honest range | "X–Y%" | "Cut processing time by 20–30%" |
+| 3 — Scope / scale | "~N users", "Xk records" | "Serving ~200k monthly users" |
+| 4 — Before → after | qualitative direction | "Reduced review cycle from days to hours" |
+| 5 — Team / org size as proxy | headcount or org scale | "Across a 40-person engineering org" |
+
+Never invent a precise figure. Level 5 is a last resort — a vague but honest scale claim is better than silence, but only barely. Push back up the ladder if the user can recall more.
 
 > ✓ Allowed: honest quantification is better than vague language, and honest approximation is better than silence.
 
@@ -98,6 +108,19 @@ These actions constitute misrepresentation. Do not do them, do not suggest them,
 **The one-line rule:** Emphasis and honest reframing — yes. Misrepresentation — no.
 
 **When in doubt:** If you are unsure whether a reframing crosses the line, ask the user. Do not make the call yourself; surface the question explicitly.
+
+### Claim-provenance checkpoint (mandatory)
+
+Before writing any REFRAME or KEYWORD-INSERT that introduces a skill, tool, technology, or scope claim that is not already explicitly in the CV:
+
+**Trace the claim to one of these two sources:**
+
+1. A specific line or field in the candidate's source profile (CV, LinkedIn, portfolio, upload). Cite the exact location.
+2. An answer the user gave during this session when asked a supplementary question (§3).
+
+**If neither source exists, the claim does NOT enter the CV.** Place it in HONEST-GAPS instead.
+
+> Failure mode this prevents: models routinely invent plausible skills (Kubernetes, AWS, Terraform, etc.) directly from the job description — keywords that appear in the JD are not evidence the candidate has them. Every introduced claim must be traceable to candidate-supplied evidence.
 
 ---
 
@@ -147,6 +170,10 @@ TAILORING PLAN — [Role Title] at [Company]
 
 ─── AMPLIFY ─────────────────────────────────────────────────────
 Move up / expand these real strengths; they are strong matches:
+  Include both must-haves AND strong nice-to-haves. A nice-to-have with `strong`
+  evidence is a differentiator — surface it prominently in the CV and mention it
+  in the cover letter, especially if it is rare in the applicant pool. Do not
+  treat strong nice-to-haves as mere checkboxes.
   1. [Requirement matched] → [Which experience to lead with; where to move it in the CV]
   2. …
 
@@ -158,7 +185,11 @@ Reword these real experiences using the posting's vocabulary:
 ─── KEYWORD-INSERT ──────────────────────────────────────────────
 Weave these exact posting terms into the CV where truthful:
   (Only include a keyword here if the candidate has genuine experience with it)
-  1. [Keyword] → [Where to insert: skills section / specific bullet / summary]
+  Placement priority: Skills section FIRST (ATS NER models weight a dedicated
+  Skills section more than the same keyword buried in a bullet), then reinforce
+  in relevant bullets for the human reader. See cv-craft.md §4 (Keyword placement
+  priority) for full guidance.
+  1. [Keyword] → Skills section; reinforce in [specific bullet / summary]
   2. …
 
 ─── HONEST-GAPS ─────────────────────────────────────────────────
@@ -170,6 +201,30 @@ These requirements remain weak after honest tailoring:
        • Leave: "Do not mention. The gap is minor relative to strong matches and addressing it draws attention."
   2. …
 ```
+
+### Keyword-coverage estimate (show to the user before and after tailoring)
+
+Before finalising the tailoring plan, compute and **show the user** this coverage table:
+
+```
+KEYWORD COVERAGE — [Role Title] at [Company]
+
+| Must-have requirement | In CV? | JD mentions ≈N× |
+|---|---|---|
+| [Requirement 1] | Yes / Partial / No | N× |
+| [Requirement 2] | Yes / Partial / No | N× |
+| … | … | … |
+
+HEADLINE: X of N must-haves strongly evidenced (Y partial, Z missing).
+```
+
+Run this before tailoring (baseline) and after (post-tailoring) so the user sees the delta.
+
+**REQUIRED disclaimer to include every time:**
+
+> ⚠️ This is a keyword-coverage *estimate*, not an ATS pass prediction. Modern ATS use semantic matching — they understand synonyms and context. Exact-keyword scores are a useful proxy but are imprecise: a CV with 8/10 must-haves genuinely evidenced in context will outperform one with 10/10 forced mentions. Keyword stuffing (adding terms not backed by real experience) can backfire at interview and with more sophisticated ATS. Use this table as a health check, not a target to game.
+
+**Computation:** count must-haves where evidence in the CV is `strong` (fully evidenced) or `partial` (partially evidenced). Do not count `missing`. Be honest about `partial` — a keyword in the Skills list with no supporting bullet is partial, not strong.
 
 ### Mitigation options for HONEST-GAPS
 
@@ -218,14 +273,28 @@ TAILORING PLAN — Data Analyst at FinCo (London, hybrid)
    data-model approach through self-directed evaluation."
 ```
 
+### Post-tailoring AI-uniformity check
+
+After completing all REFRAME and KEYWORD-INSERT edits, review the **full CV** for mechanical uniformity before presenting it to the user:
+
+1. **Verb variety:** Are the same stock verbs ("spearheaded", "leveraged", "drove", "utilized") repeated across multiple bullets or roles? Replace repetitive openers with alternatives from the action-verb bank in `cv-craft.md §3`.
+2. **Sentence structure variety:** Do bullets follow an identical grammatical template (verb → noun phrase → result → percentage)? Vary the structure — some bullets can lead with the outcome, some with the scope, some with the action.
+3. **Voice and specificity:** Does the CV read as one person's work history, or as a generic template filled in with different nouns? Each role should have at least one detail that is unmistakably that candidate's experience.
+4. **Prose quality:** Flawless-but-voiceless prose signals AI generation to experienced recruiters. Preserve natural sentence rhythms even when the grammar is corrected.
+
+If the uniformity check fails on any dimension, make targeted repairs before delivering the final CV.
+
+Cross-reference: `motivation-letter.md §6` (AI-Authenticity) for the same principle applied to the cover letter.
+
 ---
 
 ## 5. Cross-References
 
 **`cv-craft.md`** — consult for:
 - Bullet pattern and action-verb bank when rewriting bullets in REFRAME
-- ATS keyword mirroring rules (§4 of cv-craft.md) — the same principle drives KEYWORD-INSERT
+- ATS keyword mirroring rules and keyword placement priority (§4 of cv-craft.md) — the same principle drives KEYWORD-INSERT
 - Honest reframing rules in §7 of cv-craft.md — identical standard governs this file
+- AI-generated uniformity note in §7 of cv-craft.md
 
 **Motivation letter / cover letter** — the same honest-reframing rule that governs the CV governs the cover letter. HONEST-GAPS mitigations that involve the cover letter must still be factually accurate. The cover letter may frame, contextualise, and project forward — it may not invent.
 

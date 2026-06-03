@@ -49,9 +49,11 @@ Actionable guidelines for building and tailoring CVs. Every rule here tells you 
 | **Format** | Reverse-chronological, clean single column, standard headings | Same; may use 2-column for skills/contact | Same; may follow Europass but a clean custom CV is almost always received better | Reverse-chronological, single column |
 | **Contact fields** | Name, phone, email, city+state (no street address), LinkedIn URL, portfolio/GitHub if relevant | Same; can add city without county | Same; some add nationality/driving licence per above | Name, phone, email, city, LinkedIn |
 | **Language** | English | English | English widely accepted in NL tech; Dutch preferred for non-tech/government NL roles; match language to job posting | Match job-posting language; default English |
-| **File format** | PDF (unless .docx explicitly requested) | PDF | PDF | PDF |
+| **File format** | .docx for portal/ATS submission (see §4); PDF for human-facing copy or when posting requests PDF | PDF or .docx per above | PDF or .docx per above | .docx for ATS portals; PDF when requested |
 
 **NL-specific note:** For Dutch tech and international companies based in NL, English CVs are standard and expected. For Dutch-language job postings (overheid, onderwijs, traditional industries), write the CV in Dutch or offer both.
+
+**NL photo nuance:** For Dutch tech and international employers, omitting a photo is safe and is the modern default. For traditional Dutch-speaking sectors (retail, hospitality, some traditional non-tech firms), a photo is still commonly expected — match the sector norm. Default: omit when unsure.
 
 **Europass note:** Europass is bureaucratically recognised (EU institutions, some public-sector roles) but recruiters at private companies often find it verbose and dated. Use a clean custom CV by default; only switch to Europass if the posting explicitly requests it.
 
@@ -66,7 +68,7 @@ Actionable guidelines for building and tailoring CVs. Every rule here tells you 
 ```
 
 **Key rules:**
-- Start every bullet with a past-tense action verb (present tense for current role is acceptable but less common).
+- **Tense rule:** Use past tense for completed achievements in all roles, including the current one. Use present tense only for genuinely ongoing responsibilities in the current role (e.g. "Own the production ML pipeline"). Mixing tenses within a current-role entry is correct and expected — completed projects get past tense; live responsibilities get present tense.
 - Quantity wherever possible: %, $, hours, users, latency, error rate, team size.
 - If you have no number, name the scope or scale: "across 3 microservices", "for a team of 12", "supporting 200k MAU".
 - One bullet = one accomplishment. Not a job description.
@@ -115,11 +117,12 @@ ATS parsers are used by most companies with 50+ employees. A CV that confuses th
 - **Single-column layout.** ATS reads left-to-right, top-to-bottom in the document order. Multi-column layouts split mid-sentence.
 - **Use a common system font:** Calibri, Arial, Helvetica, Garamond, Georgia, Times New Roman. Avoid decorative or web-only fonts.
 - **Keep critical content in the body.** Text in headers, footers, text boxes, and tables may be skipped by parsers. Do not put your name only in the document header.
-- **Save as PDF.** Most modern ATS (Greenhouse, Lever, Workday, iCIMS) handle PDF well. Use `.docx` only if the job portal explicitly warns against PDF or requests Word format.
+- **File format — default to `.docx` for ATS/portal submissions.** 2025 parser testing across major ATS (Workday, Taleo, iCIMS) shows `.docx` parses more reliably than PDF in most portals. Use **PDF for the human-facing copy** (emailed directly to a recruiter, uploaded to a portfolio, or printed) and when the posting explicitly requests PDF (Greenhouse handles PDF well). If the portal gives you a choice and the posting doesn't specify, submit `.docx`. Never submit both unless asked.
+- **File naming:** `FirstName_LastName_CV.docx` / `FirstName_LastName_Resume.pdf`. Avoid names like `final_v3_REVISED_2.docx` — they signal disorganisation and can mangle ATS metadata.
 
 ### Do Not
 
-- Multi-column layouts for parsed sections (a two-column Skills section is a common trap).
+- Multi-column layouts for parsed sections (a two-column Skills section is a common trap). **Severity: two-column and table-based layouts caused parse failures in approximately 7 out of 8 ATS tested in 2025.** Keep all critical content in a single-column flow.
 - Text boxes (MS Word text boxes are invisible to many parsers).
 - Tables for experience/education content (thin borders sometimes parse correctly, but it's fragile).
 - Images of text (e.g., scanned letterhead, logo-as-text).
@@ -131,7 +134,17 @@ ATS parsers are used by most companies with 50+ employees. A CV that confuses th
 1. Copy the job posting into a text file.
 2. Identify the 10–15 skills, tools, and role-specific phrases that appear most (especially in "Requirements" and "Responsibilities").
 3. For each one, check if the CV already contains it in any form.
-4. Add the exact keyword where it naturally fits (in a bullet, in the skills list, or in the summary). Do not add keywords that are not genuinely part of your background — see §7.
+4. Add the exact keyword where it naturally fits. Do not add keywords that are not genuinely part of your background — see §7.
+
+### Keyword placement priority
+
+For a genuinely-held must-have keyword, placement order matters for ATS scoring:
+
+1. **Skills section first** — ATS NER (Named Entity Recognition) models weight a dedicated Skills section more heavily than the same term buried in a bullet. Place the keyword here.
+2. **Reinforce in relevant bullets** — once it appears in Skills, weave it into the accomplishment bullet(s) where it actually featured. This reinforcement also serves the human reader.
+3. **Summary / profile (optional)** — high-priority must-haves can appear in the summary too, but only if the summary naturally accommodates them; never force awkward keyword drops.
+
+Do not scatter keywords across bullets only — the Skills section is the primary signal for ATS keyword recognition.
 
 ---
 
@@ -223,3 +236,7 @@ Sentence 4 (optional): What you're targeting / the value you bring next
 - Adding a keyword from the job posting that does not reflect genuine experience.
 
 **Cross-reference:** See `gap-analysis.md` for detailed rules on how to handle skill gaps, experience gaps, and how to frame partial/adjacent experience honestly when tailoring for a specific posting.
+
+### AI-generated uniformity — flag and fix
+
+Identically-structured, voiceless bullets ("Spearheaded… Leveraged… Drove…" repeated across every role) read as machine-generated to experienced recruiters. After any AI-assisted rewrite, review the full CV for mechanical uniformity: stock verbs, parallel-but-hollow sentence structures, prose that is grammatically correct but has no personality. Vary sentence structure, mix bullet lengths, and preserve the candidate's real voice. Full treatment: see `motivation-letter.md §6` (AI-Authenticity section).

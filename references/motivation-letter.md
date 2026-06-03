@@ -9,6 +9,23 @@ Actionable guidelines for drafting a motivation/cover letter. Every rule tells y
 
 ---
 
+## 0. When to Write vs. Skip
+
+Write a motivation letter by default. Skip it only when one of the following clearly applies:
+
+| Skip condition | Explanation |
+|---|---|
+| The portal has no field for it | If the ATS provides nowhere to attach or paste a letter, omitting it is correct — don't force it into the "additional documents" field as a workaround unless you are confident it will be read. |
+| The posting explicitly says not to include one | Respect it; ignoring the instruction signals poor reading comprehension. |
+| High-volume / quick-apply role where letters are not standard | Mass-application postings (e.g. LinkedIn Easy Apply with 500+ applicants, junior roles where the process is clearly volume-driven) rarely have letters read. |
+| A strong referral has effectively replaced it | If the referring contact has briefed the hiring manager, a formal letter may be redundant — confirm with your referral. |
+
+**Why write even when unsure it will be read:** ~45% of hiring managers read the cover letter *before* the CV — it can set the frame for everything that follows. Write it as if it will be read first, by someone who hasn't seen your CV yet.
+
+**Earning attention:** ~65% of recruiters don't read every cover letter. A letter that looks generic at a glance (boilerplate opener, vague claims, no company-specific anchors) will not be read. The test is: would this letter make an overloaded recruiter slow down in the first two sentences? If not, revise the opening.
+
+---
+
 ## 1. Structure: the Paragraphs in Order
 
 A motivation letter has exactly four logical parts, written as 3–4 short paragraphs. Do not deviate from this order.
@@ -100,7 +117,7 @@ A motivation letter has exactly four logical parts, written as 3–4 short parag
 
 | Constraint | Rule |
 |---|---|
-| **Word count** | 250–350 words for the body (the `body` paragraphs in `letter.yaml`). Stays comfortably on one page when rendered. |
+| **Word count** | 250–350 words optimal for the body (the `body` paragraphs in `letter.yaml`). **400 words is the hard ceiling** — do not cut genuine value just to hit 350, but nothing beyond 400. Stays comfortably on one page when rendered. |
 | **Paragraphs** | 3–4 paragraphs total. Never a single monolithic block. Never more than 4 unless a specific structure requires it (rare). |
 | **Sentence length** | Vary it. Short sentences punch. Longer sentences can carry nuance. Aim for an average under 22 words. |
 | **Page limit** | One page, always. If the rendered output overflows, cut — starting with adjectives, filler transitions, and any sentence that is not carrying its weight. |
@@ -182,10 +199,11 @@ closing: "Sincerely,"
 
 | Situation | Salutation |
 |---|---|
-| Named contact (person's name known) | `Dear [First name] [Last name],` or `Dear [First name],` (use first name if the company tone is casual; full name if formal) |
+| Named contact (person's name confirmed) | `Dear [First name] [Last name],` or `Dear [First name],` (use first name if the company tone is casual; full name if formal) |
+| Name only guessed / inferred (uncertain) | Use `Dear Hiring Team,` — a generic but professional salutation is not penalised; a wrong name is worse than a generic one |
 | Team/department, no named contact | `Dear [Team Name] Hiring Team,` or `Dear Hiring Team,` |
 | Academic / highly formal context | `Dear Dr. [Last name],` |
-| Do not use | `To Whom It May Concern,` — outdated; `Dear Sir/Madam,` — outdated and gendered |
+| Do not use | `To Whom It May Concern,` — outdated; `Dear Sir/Madam,` — outdated and gendered; never fabricate a name |
 
 **`body`** — A YAML list. Each element is one paragraph as a single string. No Markdown formatting inside the strings (no `**bold**`, no bullet points) — render_letter.py outputs plain text per paragraph. Keep each paragraph to 4–7 sentences maximum.
 
@@ -224,7 +242,41 @@ When a material gap exists and the gap analysis says "address in cover letter", 
 
 ---
 
-## 6. Common Mistakes to Avoid
+## 6. AI-Authenticity: When AI Help Hurts and When It Doesn't
+
+~67% of hiring managers report they can spot AI-generated cover letters; ~54% view them negatively. However, **personalized AI-assisted letters are viewed favorably** — the problem is *generic* output, not AI involvement.
+
+### Tell-tale markers to eliminate
+
+| Marker | Example | Fix |
+|---|---|---|
+| Buzzword overload | "results-driven professional leveraging synergy to deliver proven track records" | Name a real outcome instead: "cut latency 40%" |
+| Flawless-but-voiceless prose | Grammatically perfect sentences with no personality, no concrete detail | Add one specific product, number, or moment that only you could write |
+| Generic enthusiasm | "I am passionate about innovation and excited to contribute to your mission" | State *which* aspect of the company's work and *why it connects to your work* |
+| Formulaic structure that matches every template | Hook → "my experience includes" → generic company praise → generic close | Lead with something that would only appear in a letter for this specific company |
+| Abstract claims, no concrete detail | "I have strong communication skills and a track record of success" | Evidence or remove: "presented quarterly findings to a 12-person exec team" |
+
+### The 80/20 rule for AI-assisted letters
+
+- **80% authentic specific content:** Real quantified achievements, company-specific references you researched, genuine reasons for interest. This content can only come from you.
+- **20% AI polish:** Structure, transitions, register consistency, grammar. AI earns its place here.
+
+A letter that passes this test: could any other candidate have written exactly this letter? If yes, it is too generic.
+
+---
+
+## 6b. NL Motivatiebrief Note
+
+In the Netherlands, the motivation letter (`motivatiebrief`) is **universally expected** and is read closely — more so than in the US or UK, where cover letters are often skimmed. Key calibration differences:
+
+- **Tone:** Direct and understated. American-style self-promotion ("I am a top performer who consistently exceeds expectations") reads as overclaiming and creates a poor impression with Dutch recruiters.
+- **Structure:** The same four-paragraph framework applies, but keep the opener concise — Dutch professional culture values getting to the point.
+- **Language:** Match the posting language. Dutch-language postings expect a Dutch letter; English-language postings (especially in tech) expect English. Never mix languages in the same letter.
+- **Length:** 250–350 words is equally appropriate in Dutch. A shorter, sharper letter is culturally well-received; padding is not.
+
+---
+
+## 7. Common Mistakes to Avoid
 
 | Mistake | Why it fails | Fix |
 |---|---|---|
@@ -239,7 +291,7 @@ When a material gap exists and the gap analysis says "address in cover letter", 
 
 ---
 
-## 7. Worked Example
+## 8. Worked Example
 
 ### Input
 
