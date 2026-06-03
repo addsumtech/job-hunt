@@ -94,4 +94,4 @@ job-application/
 cd scripts && python -m pytest tests/ -v
 ```
 
-Expected: 10 tests, all passing.
+Expected: 17 tests, all passing.
