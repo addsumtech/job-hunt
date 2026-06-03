@@ -1,6 +1,6 @@
 # job-application
 
-A Claude Code skill that takes a user from "I want this job" to a tailored, credible application package. It interviews the user, parses or builds a CV into a canonical `profile.yaml`, fetches and analyses the target job posting, tailors the CV through honest reframing (never fabrication), optionally drafts a motivation letter, and pressure-tests the package through a simulated recruiter review loop — iterating until the screener passes or reporting honestly if it cannot. Outputs Markdown, .docx, and PDF (via LaTeX).
+A Claude Code skill that takes a user from "I want this job" to a tailored, credible application package. It interviews the user, parses or builds a CV into a canonical `profile.yaml`, fetches and analyses the target job posting, tailors the CV through honest reframing (never fabrication), optionally drafts a motivation letter, and pressure-tests the package through a dual-lens review loop — two independent judges, a Hiring Manager (human lens) and an ATS Screener (machine lens), must both pass — iterating until they do or reporting honestly if they cannot. Outputs Markdown, .docx, and PDF (via LaTeX).
 
 ---
 
@@ -40,7 +40,7 @@ The skill executes these 8 steps (full detail in `SKILL.md`):
 4. **Gap analysis** — AMPLIFY / REFRAME / KEYWORD-INSERT / HONEST-GAPS table against the posting.
 5. **Tailor CV** — write a tailored copy; render in requested formats.
 6. **Motivation letter** — draft `letter.yaml` and render if requested.
-7. **HR review loop** — dispatch a fresh `hr-screener` subagent each round; iterate until `PASS` or 3 rounds.
+7. **Dual-lens review loop** — dispatch two fresh judges each round (a Hiring Manager human lens + an ATS machine lens); iterate until **both** `PASS` or 3 rounds.
 8. **Finalize** — list output paths, summarize changes, note remaining gaps, confirm the master profile is saved.
 
 ---
@@ -70,7 +70,8 @@ job-application/
 │   ├── job-posting-extraction.md   # How to parse a posting
 │   └── motivation-letter.md        # Letter craft guide
 ├── agents/
-│   └── hr-screener.md              # Simulated recruiter subagent
+│   ├── hiring-manager.md           # Review judge 1 — human lens (fit/credibility)
+│   └── ats-screener.md             # Review judge 2 — machine lens (keyword coverage)
 ├── assets/
 │   ├── profile.example.yaml        # Canonical profile schema
 │   ├── cv/template.tex             # LaTeX CV template

@@ -21,7 +21,7 @@ You are acting as this user's **experienced career coach and recruiter**. Your j
 
 **HONEST REFRAMING ONLY.** Never fabricate experience, skills, titles, dates, or credentials. You MAY reorder, re-emphasize, re-word, and surface real transferable skills the user already has. You may NOT invent anything. When in doubt, ask the user a question rather than guess or embellish. This rule overrides every other instinct in this skill — including the pressure to make the screener pass.
 
-**The HR-screener review loop is non-negotiable.** This skill does not judge its own output. A simulated recruiter (a fresh subagent) decides whether the package passes. You do not get to declare success on your own.
+**The dual-lens review loop is non-negotiable.** This skill does not judge its own output. Two independent judges — a Hiring Manager (human lens) and an ATS Screener (machine lens), each a fresh subagent — both decide whether the package passes. You do not get to declare success on your own.
 
 **Read references as you go.** Each step below points to a `references/*.md` file. Read that file when you reach the step — do not work from memory or assumption. The references hold the craft detail; this file is just the flow.
 
@@ -129,30 +129,35 @@ Read `references/motivation-letter.md` and follow it.
 
 ---
 
-## Step 6 — HR review loop (non-negotiable)
+## Step 6 — Dual-lens review loop (non-negotiable)
 
-Dispatch the `agents/hr-screener.md` subagent via the **Agent** tool. The subagent has **no other context**, so its prompt must contain everything:
-  1. The **full text** of `agents/hr-screener.md` as its instructions.
-  2. The structured job posting (from `<workspace>/posting.yaml`).
-  3. The tailored CV — the rendered **Markdown** (`<workspace>/cv.md`) is ideal.
-  4. The motivation letter (`<workspace>/letter.md`), if one was produced. If not, state: `No letter provided.`
+Two **independent judges** must **both** return `PASS` before the package is interview-ready. They fail in opposite directions, so the CV must be genuinely strong *and* mechanically findable to clear both:
 
-**Parsing the VERDICT (apply this procedure exactly):**
+- **Hiring Manager (human lens)** — `agents/hiring-manager.md` — judges real fit, evidence/credibility, clarity, narrative, and (if present) the cover letter's authenticity. Output: `VERDICT`, `SCORES`, `TOP_FEEDBACK`, `SUPPLEMENTARY_QUESTIONS_FOR_CANDIDATE`.
+- **ATS Screener (machine lens)** — `agents/ats-screener.md` — judges must-have keyword coverage and parse/format sanity on the CV only. Output: `VERDICT`, `COVERAGE`, `MISSING_OR_WEAK`, `FORMAT_ISSUES`, `TOP_FEEDBACK`.
 
-1. Find the last line in the screener's response that begins with `VERDICT:` followed by `PASS` or `REJECT` (case-insensitive). If this line is absent or the value is ambiguous (anything other than exactly `PASS` or `REJECT`), treat it as `REJECT` and re-dispatch a fresh screener.
-2. Read the `SCORES:` block — all five dimensions and their scores.
-3. Read `TOP_FEEDBACK:` — each bullet is a specific, actionable required fix.
-4. Read `SUPPLEMENTARY_QUESTIONS_FOR_CANDIDATE:` — each bullet is a question to relay to the user. A single `  - none` bullet means there are no questions.
+**Dispatch both** as fresh independent **Agent** subagents each round (they are independent — you may run them in parallel). Each has **no other context**, so paste everything it needs:
+
+- *Hiring Manager:* the **full text** of `agents/hiring-manager.md` + the structured posting (`<workspace>/posting.yaml`) + the tailored CV Markdown (`<workspace>/cv.md`) + the motivation letter (`<workspace>/letter.md`) if produced, else `No letter provided.`
+- *ATS Screener:* the **full text** of `agents/ats-screener.md` + the structured posting + the tailored CV Markdown (`<workspace>/cv.md`). (No letter — ATS doesn't parse letters.)
+
+**Parsing each verdict (apply exactly, to both):**
+
+1. In each judge's response, find the last line beginning with `VERDICT:` followed by `PASS` or `REJECT` (case-insensitive). If absent or ambiguous (anything other than exactly `PASS`/`REJECT`), treat that judge as `REJECT` and re-dispatch it.
+2. Hiring Manager: also read `SCORES`, `TOP_FEEDBACK`, and `SUPPLEMENTARY_QUESTIONS_FOR_CANDIDATE` (a single `  - none` bullet means no questions).
+3. ATS Screener: also read `COVERAGE`, `MISSING_OR_WEAK`, and `FORMAT_ISSUES`.
+
+**Combined verdict: PASS only if BOTH judges return `PASS`.** If either is `REJECT`, the round is a `REJECT`.
 
 **If `REJECT` — per-round sequence (order is mandatory):**
 
-1. **Edit first:** Apply `TOP_FEEDBACK` to `<workspace>/tailored-profile.yaml` (and `<workspace>/letter.yaml` if present). Ask the user any `SUPPLEMENTARY_QUESTIONS_FOR_CANDIDATE` — honestly, never inviting fabrication. Incorporate confirmed answers. Claim-provenance checkpoint still applies.
-2. **Re-render second:** Re-render ONLY the affected outputs from the just-edited YAML (do not re-send the stale rendered files). This ensures the screener always sees the current state.
-3. **Fresh screener third:** Dispatch a brand-new screener subagent with the newly rendered Markdown CV (and letter if applicable). Never re-dispatch with the old rendered version.
+1. **Edit first:** Merge the `TOP_FEEDBACK` from both judges (plus the ATS `MISSING_OR_WEAK` / `FORMAT_ISSUES`). Apply to `<workspace>/tailored-profile.yaml` (and `<workspace>/letter.yaml` if present). Ask the user any of the Hiring Manager's `SUPPLEMENTARY_QUESTIONS_FOR_CANDIDATE` — honestly, never inviting fabrication. **A keyword the ATS screener flags as missing goes into the CV ONLY if the candidate genuinely has it** (the claim-provenance checkpoint still applies); otherwise it stays in HONEST-GAPS.
+2. **Re-render second:** Re-render ONLY the affected outputs from the just-edited YAML (never re-send stale rendered files).
+3. **Re-judge third:** Dispatch BOTH fresh judges with the newly rendered files. Never re-dispatch with the old rendered version.
 
-**Loop until `PASS` or 3 rounds.** If still `REJECT` after 3 rounds, **STOP** and report honestly: what is still weak, why, and concrete next steps (skills to gain, certifications, better-fitting roles, etc.). Include the final keyword-coverage summary and any remaining honest gaps. **Do not fake a pass.**
+**Loop until BOTH pass or 3 rounds.** If both have not passed after 3 rounds, **STOP** and report honestly: which judge(s) still reject and why, the final ATS coverage %, any remaining honest gaps, and concrete next steps (skills to gain, certifications, better-fitting roles). **Do not fake a pass.**
 
-Tell the user the verdict and the screener's feedback **each round**.
+Tell the user **both verdicts and the ATS coverage %** each round.
 
 ---
 
