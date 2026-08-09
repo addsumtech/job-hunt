@@ -1,0 +1,307 @@
+{
+  "adapters": [
+    {
+      "site": "boss (BOSS直聘, www.zhipin.com)",
+      "login_state": "logged_in — from `opencli auth status -f json`: {\"site\":\"boss\",\"status\":\"logged_in\",\"logged_in\":true,\"checked\":\"quick\"}",
+      "read_commands": [
+        "search (job search, geek side)",
+        "detail <security-id>",
+        "joblist",
+        "stats",
+        "recommend",
+        "resume <uid>",
+        "chatlist",
+        "chatmsg <uid>",
+        "whoami"
+      ],
+      "write_commands": [
+        "greet",
+        "batchgreet",
+        "exchange",
+        "invite",
+        "mark",
+        "send",
+        "login"
+      ],
+      "best_search_command": "opencli boss search \"算法工程师\" --city 上海 --experience 3-5年 --degree 硕士 --salary 20-30K --jobType 全职 --page 1 --limit 15 -f json",
+      "output_fields": [
+        "name",
+        "salary",
+        "company",
+        "area",
+        "experience",
+        "degree",
+        "skills",
+        "boss",
+        "bossOnline",
+        "security_id",
+        "url"
+      ],
+      "pagination": "--page (int, default 1) + --limit (int, default 15). No total-count or has-more field is listed in `columns`.",
+      "notes": "16 commands, all strategy=cookie browser=true domain=www.zhipin.com. `search` query positional is OPTIONAL — omitting it returns 为你推荐职位 instead of a keyword search. --city defaults to 北京 (not nationwide), so it must be set explicitly for any other geography. Enumerated choice strings are given as free-text in help, not `choices`: --experience accepts 在校生(实习)/应届生(校招)/经验不限/1年以内/1-3年/3-5年/5-10年/10年以上; --degree 大专/本科/硕士/博士; --salary 3K以下/3-5K/5-10K/10-15K/15-20K/20-30K/30-50K/50K以上; --jobType 全职/兼职/实习 (help notes 不传=不限，混合校招与实习). Chain: search → security_id → `boss detail <security-id>` (columns include description, skills, welfare, company, industry, scale, stage, address). This adapter is dual-sided: chatlist/chatmsg take --side auto|boss|geek, and joblist/stats/recommend/resume are recruiter-side. NOT PROBED (search budget spent on 51job/indeed/1point3acres)."
+    },
+    {
+      "site": "linkedin (www.linkedin.com)",
+      "login_state": "logged_in — from `opencli auth status -f json`: {\"site\":\"linkedin\",\"status\":\"logged_in\",\"logged_in\":true,\"checked\":\"quick\"}",
+      "read_commands": [
+        "search (jobs)",
+        "job-detail <job-url>",
+        "jobs-preferences",
+        "people-search",
+        "salesnav-search",
+        "salesnav-inbox",
+        "salesnav-thread",
+        "inbox",
+        "thread-snapshot",
+        "sent-invitations",
+        "posts",
+        "post-analytics",
+        "profile-read",
+        "profile-experience",
+        "profile-projects",
+        "profile-analytics",
+        "services-read",
+        "timeline",
+        "whoami"
+      ],
+      "write_commands": [
+        "connect",
+        "safe-send",
+        "salesnav-message",
+        "login"
+      ],
+      "best_search_command": "opencli linkedin search \"MRI reconstruction engineer\" --location \"Netherlands\" --experience-level mid-senior --job-type full-time --date-posted week --remote hybrid,remote --limit 10 --start 0 -f json",
+      "output_fields": [
+        "rank",
+        "title",
+        "company",
+        "location",
+        "listed",
+        "salary",
+        "url"
+      ],
+      "pagination": "--start (int offset, default 0) + --limit (int, default 10, help says max 100).",
+      "notes": "23 commands — the richest adapter of the eight. `search` is the job search; filters are comma-separated free-text, not `choices`: --experience-level internship,entry,associate,mid-senior,director,executive; --job-type full-time,part-time,contract,temporary,volunteer,internship,other; --remote on-site,hybrid,remote; --date-posted one of any|month|week|24h; --company accepts company names or LinkedIn company IDs. --details (bool, default false) inlines full description + apply URL but the help marks it \"(slower)\"; otherwise use `job-detail <job-url>` (columns add workplace_type, job_type, applicants, listed, apply_url, company_url, description). RATE-LIMIT WARNING quoted verbatim from the help for `people-search`: \"Each invocation consumes against LinkedIn's monthly Commercial Use Limit on people search; throttle accordingly\" — its --limit is capped 1-10, default 5. Note strategy split (from `opencli list -f yaml`): search/job-detail/inbox/profile-* are strategy=cookie, while all salesnav-* plus thread-snapshot and sent-invitations are strategy=ui (DOM-driven, more fragile). NOT PROBED."
+    },
+    {
+      "site": "indeed (www.indeed.com)",
+      "login_state": "absent-from-list — `indeed` does not appear in `opencli auth status -f json` at all (65 site rows returned; grep for indeed/51job matched nothing). The adapter also exposes no `login` and no `whoami` command, so there is no auth adapter for it.",
+      "read_commands": [
+        "search",
+        "job <id> (aliases: detail, view)"
+      ],
+      "write_commands": [],
+      "best_search_command": "opencli indeed search \"MRI\" --location \"remote\" --fromage 7 --sort date --start 0 --limit 15 -f json",
+      "output_fields": [
+        "rank",
+        "id",
+        "title",
+        "company",
+        "location",
+        "salary",
+        "tags",
+        "url"
+      ],
+      "pagination": "--start (int, default 0; help: \"Pagination offset (multiple of 10, 0-based)\") + --limit (int, default 15; help: \"Max rows to return (1-25, capped at one page)\").",
+      "notes": "Only 2 commands. PROBED AND WORKS WITHOUT LOGIN: `opencli indeed search \"mri\" --limit 2 --window background -f json` returned exit 0 with 2 rows in ~seconds. DEFECT OBSERVED IN THAT PROBE: `title`, `salary` and `tags` came back as empty strings on BOTH rows, while id/company/location/url were populated (e.g. {\"rank\":1,\"id\":\"152875498075cf99\",\"title\":\"\",\"company\":\"UF Health\",\"location\":\"Gainesville, FL 32610\",\"salary\":\"\",\"tags\":\"\",\"url\":\"https://www.indeed.com/viewjob?jk=152875498075cf99\"}). So the search row is currently not self-sufficient — you must follow `indeed job <id>` to get the title. `id` is the 16-char hex jk. --sort takes relevance|date (free text, default relevance); --fromage takes 1/3/7/14 days. Help says \"rendered DOM via browser session, US site\"."
+    },
+    {
+      "site": "51job (前程无忧; we.51job.com + jobs.51job.com)",
+      "login_state": "absent-from-list — `51job` does not appear in `opencli auth status -f json`, and the adapter exposes no `login`/`whoami`. No auth adapter.",
+      "read_commands": [
+        "search <keyword>",
+        "hot",
+        "detail <jobId>",
+        "company <encCoId>"
+      ],
+      "write_commands": [],
+      "best_search_command": "opencli 51job search \"算法工程师\" --area 上海 --salary 20-30k --experience 3-5年 --degree 硕士 --sort 最新 --page 1 --limit 20 -f json",
+      "output_fields": [
+        "rank",
+        "jobId",
+        "title",
+        "salary",
+        "salaryMin",
+        "salaryMax",
+        "city",
+        "district",
+        "workYear",
+        "degree",
+        "tags",
+        "company",
+        "companyFull",
+        "companyType",
+        "companySize",
+        "industry",
+        "hr",
+        "issueDate",
+        "url",
+        "companyUrl",
+        "encCoId"
+      ],
+      "pagination": "--page (int, 1-based, default 1) + --limit (int, default 20, help: 1-50). Same pair on `hot`.",
+      "notes": "BEST NO-LOGIN JOB SOURCE OF THE EIGHT — verified. PROBED: `opencli 51job search 算法工程师 --limit 2 --window background -f json` returned exit 0, empty stderr, and 2 fully-populated rows with EVERY documented column present and non-empty (unlike indeed). Real sample row: jobId 173198362, title 高级算法工程师（视觉调试智能化、AI方向）, salary 3-6万, salaryMin 30000, salaryMax 60000, city 西安, degree 博士, issueDate 2026-08-08 10:23:15, encCoId VDMHY1M0BDgAZ1c9AWVWZA. Pre-split salaryMin/salaryMax integers make this the easiest adapter to filter programmatically. --area defaults to 全国 and takes a city name or 6-digit city code (help example \"080200\"); --sort takes 综合/最新/薪资/距离 (default 综合). Other free-text filters: --salary (\"10-15k\"/\"1-1.5万\"), --experience (\"应届\"/\"1-3年\"/\"3-5年\"/\"5-7年\"), --degree, --companyType (外资/国企/民营), --companySize (\"50-150\"/\"1000-5000\"). Chain: search → jobId → `51job detail <jobId>` (adds description, welfare, address, ageRequirement); search → encCoId → `51job company <encCoId>` (company intro + up to 50 open roles)."
+    },
+    {
+      "site": "nowcoder (牛客网, www.nowcoder.com) — 面经 source",
+      "login_state": "not_logged_in — quick check returned status \"unknown\" with error \"quickCheck not implemented; use --full to run whoami\", so I re-ran `opencli auth status --site nowcoder,maimai,1point3acres,upwork --full --timeout 40 -f json`, which returned {\"site\":\"nowcoder\",\"status\":\"not_logged_in\",\"logged_in\":false,\"checked\":\"full\"}.",
+      "read_commands": [
+        "search <query> --type post|question|user|job|all",
+        "experience",
+        "papers",
+        "detail <id>",
+        "referral",
+        "salary",
+        "practice",
+        "companies",
+        "jobs",
+        "recommend",
+        "trending",
+        "hot",
+        "topics",
+        "creators",
+        "suggest <query>",
+        "notifications",
+        "whoami"
+      ],
+      "write_commands": [
+        "login"
+      ],
+      "best_search_command": "opencli nowcoder search \"字节跳动 后端 面经\" --type post --limit 10 -f json",
+      "output_fields": [
+        "search → rank, title, author, school, content, id",
+        "experience → rank, title, author, school, likes, comments, views, id",
+        "papers → rank, title, company, practitioners",
+        "detail → title, author, school, content, likes, comments, views, time, location",
+        "companies → rank, company, companyId"
+      ],
+      "pagination": "Inconsistent across commands: `experience`, `referral`, `salary`, `recommend` take --page (default 1) + --limit (default 15). `search` takes ONLY --limit (default 10) — there is no --page, so search depth is hard-capped at one page. `papers` takes only --limit (default 10).",
+      "notes": "面经 ANSWER — three read paths, and the company/role filtering differs sharply between them. (1) `nowcoder papers --job <jobId> --company <companyId> --limit N` is the ONLY command with a real per-company + per-role filter. Help documents these IDs literally: --job 11002=Java, 11003=C++, 11200=Backend, 11203=QA, 11201=Frontend (default 11002); --company 139=Baidu, 138=Tencent, 239=Huawei (default '' = all). Its description is \"Interview question bank by company and job\". BUT its columns are only rank/title/company/practitioners — it returns question-SET titles and how many people practiced them, NOT question text; you would still need `detail`/`practice` to go deeper, and no column in `papers` yields an id to pass to `detail`. (2) `nowcoder experience` is literally described as \"Interview experience posts\" and returns post ids — but it has NO company and NO role option, only --page/--limit, so it is a raw undifferentiated 面经 feed you must filter client-side on `title`. (3) `nowcoder search \"<company> 面经\" --type post` is therefore the practical way to get 面经 for a NAMED company/role; it returns an `id`, and `nowcoder detail <id>` then returns the full `content` field — that is the only command that yields actual interview-question prose. LOGIN: search, experience, papers, detail, practice, referral, salary are all strategy=cookie browser=true (per `opencli list -f yaml`), so they need a logged-in nowcoder browser session, and the account is currently NOT logged in — expect these to fail until `opencli nowcoder login` is run. The strategy=public browser=false commands that need no session are only: companies, jobs, hot, topics, trending, recommend, creators. Useful no-login prep step: `nowcoder companies --job <id>` gives companyId values to feed to `papers`. NOT PROBED (budget spent; and the account is logged out anyway)."
+    },
+    {
+      "site": "1point3acres (一亩三分地, www.1point3acres.com) — 面经 source",
+      "login_state": "not_logged_in — from `opencli auth status -f json` (quick) and re-confirmed by `opencli auth status --site nowcoder,maimai,1point3acres,upwork --full --timeout 40 -f json`: {\"site\":\"1point3acres\",\"status\":\"not_logged_in\",\"logged_in\":false,\"checked\":\"full\"}.",
+      "read_commands": [
+        "forum <fid>",
+        "search <query>",
+        "thread <tid>",
+        "forums",
+        "hot",
+        "latest",
+        "digest",
+        "user <who>",
+        "notifications",
+        "whoami"
+      ],
+      "write_commands": [
+        "login"
+      ],
+      "best_search_command": "opencli 1point3acres search \"Google MLE 面经\" --fid 145 --limit 20 -f json   # help marks this 需要登录; account is currently logged out. No-login alternative is `opencli 1point3acres forum 145 --limit 20 -f json`, but see notes — I probed it and it returned HTTP 403.",
+      "output_fields": [
+        "forum → rank, tid, kind, title, author, replies, views, lastReplyTime, url",
+        "search → rank, tid, title, forum, author, replies, views, postTime, url",
+        "thread → floor, pid, author, postTime, content, url",
+        "forums → fid, name, url"
+      ],
+      "pagination": "`forum` --page (default 1) + --limit (default 20, max 50). `thread` --page (floor pagination, default 1) + --limit (floors returned, default 10, includes 主楼) + --contentLimit (per-floor body truncation, default 400 chars, minimum 50). `search`/`hot`/`latest`/`digest` take --limit only (default 20, max 50) — no --page.",
+      "notes": "面经 ANSWER — the retrieval path is board-based, not company-based, and there is NO company/role filter anywhere in this adapter. (1) `1point3acres forum 145` is the 海外面经 board: the fid help string names the boards verbatim — \"版块 ID，例如 145（海外面经）、198（海外职位内推）、27（研究生申请）\". Use `1point3acres forums --filter 面经` to enumerate other 面经 boards' fids. (2) `1point3acres search \"<company>\" --fid 145` is the only way to target a company/role, and its description says 需要登录 explicitly. (3) `1point3acres thread <tid> --limit 30 --contentLimit 2000` is what actually returns interview-question TEXT — it yields per-floor `content`, main post plus replies; raise --contentLimit because 400 chars will truncate a real 面经. LOGIN — MEASURED, NOT ASSUMED: forum/forums/thread/hot/latest/digest/user are strategy=public browser=false per `opencli list -f yaml`, i.e. plain HTTP with no browser, which suggests no login needed. That suggestion is WRONG in practice. I probed `opencli 1point3acres forum 145 --limit 2 -f json` while logged out and got exit 1 with: error.code COMMAND_EXEC, message \"1point3acres request failed: HTTP 403 Forbidden from https://www.1point3acres.com/bbs/forum-145-1.html\". So 1point3acres gates even its public-strategy endpoints; treat the WHOLE adapter as login-required. Only `search` and `notifications` are marked 需要登录 in the help text, which understates the real requirement."
+    },
+    {
+      "site": "upwork (www.upwork.com)",
+      "login_state": "not_logged_in — from `opencli auth status -f json` (quick) and re-confirmed via `--full`: {\"site\":\"upwork\",\"status\":\"not_logged_in\",\"logged_in\":false,\"checked\":\"full\"}.",
+      "read_commands": [
+        "search <query>",
+        "feed [tab] (alias: best-matches)",
+        "detail <id> (aliases: job, view)",
+        "whoami"
+      ],
+      "write_commands": [
+        "login"
+      ],
+      "best_search_command": "opencli upwork search \"MRI image reconstruction\" --location \"United States\" --sort recency --page 1 --per_page 10 -f json",
+      "output_fields": [
+        "rank",
+        "id",
+        "title",
+        "type",
+        "budget",
+        "experienceLevel",
+        "proposalsTier",
+        "skills",
+        "clientCountry",
+        "clientRating",
+        "publishedOn",
+        "url"
+      ],
+      "pagination": "--page (int, 1-based, default 1) + --per_page (int, default 10, help: \"Rows per page (10-50, capped at one page)\"). Note the underscore — it is --per_page, NOT --per-page, unlike every other flag in the toolset. `feed` uses --limit (default 20, 1-50) instead.",
+      "notes": "5 commands. LOGIN REQUIRED and currently absent: `search`'s own description says \"logged-in browser session, US site\", and `feed`'s says \"— requires login\" outright. Since auth status reports not_logged_in, both should be expected to fail until `opencli upwork login` is run. `feed [tab]` takes a positional tab of best-matches | most-recent. --sort takes recency | relevance | client_total_charge | client_total_reviews (free text, default recency). `detail <id>` accepts a ciphertext id (~01…/~02…) or a full /jobs/~02… URL and adds description, workload, category, clientSpent, clientHires, proposalsCount, publishedOn. This is freelance/contract work, not salaried postings — `budget` and `type` rather than a salary band. NOT PROBED (logged out; would have failed)."
+    },
+    {
+      "site": "maimai (脉脉, maimai.cn)",
+      "login_state": "not_logged_in — quick check returned \"unknown\" (\"quickCheck not implemented; use --full to run whoami\"); resolved by `opencli auth status --site nowcoder,maimai,1point3acres,upwork --full --timeout 40 -f json` → {\"site\":\"maimai\",\"status\":\"not_logged_in\",\"logged_in\":false,\"checked\":\"full\"}.",
+      "read_commands": [
+        "search-talents <query>",
+        "whoami"
+      ],
+      "write_commands": [
+        "login"
+      ],
+      "best_search_command": "opencli maimai search-talents \"算法工程师\" --cities 北京市 --degrees 3 --worktimes 2 --is_985 1 --sortby 1 --page 0 --size 20 -f json",
+      "output_fields": [
+        "name",
+        "job_title",
+        "company",
+        "historical_companies",
+        "location",
+        "work_year",
+        "school",
+        "degree",
+        "active_status",
+        "age",
+        "tags",
+        "mutual_friends"
+      ],
+      "pagination": "--page (int, default 0 — ZERO-BASED, unlike boss/51job/upwork which are 1-based) + --size (int, default 20).",
+      "notes": "NO JOB-SEARCH CAPABILITY — state this plainly. maimai has only 3 commands and the sole read/search command is `search-talents`, described as \"Search for candidates on Maimai with multi-dimensional filters\". It is RECRUITER-SIDE candidate sourcing: every output column describes a person (name, job_title, school, degree, mutual_friends), not a posting. There is no command to search or read job listings, no feed, no detail-by-job-id. If the goal is finding jobs, maimai is the wrong adapter. Its filters are coded integers documented in help: --worktimes 1=1-3y, 2=3-5y, 3=5-10y, 4=10+y; --degrees 1=大专,2=本科,3=硕士,4=博士,5=MBA; --professions 01=互联网,02=金融,03=电子,04=通信; --sortby 0=relevance,1=activity,2=work_years,3=education; --is_211 / --is_985 0=any,1=yes; --is_direct_chat 0=any,1=available. --companies and --schools are comma-separated. Requires login (strategy=cookie, browser=true) and the account is currently logged out. NOT PROBED."
+    }
+  ],
+  "shared_conventions": "Verified by running `opencli --help`, `opencli list --help`, `opencli list -f yaml`, and `opencli <site> --help -f yaml` for all eight sites (v1.8.6, node v22.23.1; binary is a symlink: /Users/donghanglyu/.local/bin/opencli -> ../lib/node_modules/@jackwener/opencli/dist/src/main.js).\n\nCOMMON OPTIONS (identical block emitted by all 8 adapters):\n- `-f, --format <fmt>` — choices table|plain|json|yaml|md|csv, default `table`. Per-COMMAND help additionally emits an `output_formats` list (table, plain, yaml, json, md, csv) that the per-SITE help omits.\n- `--trace <mode>` — choices off|on|retain-on-failure, default `off`.\n- `-v, --verbose` — Debug output, default false.\n- `-h, --help`.\nGlobal (from `opencli --help`): `--profile <name>` — \"Chrome profile/context alias for Browser Bridge commands\"; `-V, --version`.\n\nBROWSER COMMON OPTIONS (attached only to commands with `browser: true`):\n- `--window <mode>` — foreground|background. I used `--window background` on both browser probes and neither opened a visible window.\n- `--site-session <mode>` — ephemeral|persistent. Adapter site session lifecycle.\n- `--keep-tab <bool>` — true|false. Keep the browser tab lease after the command finishes.\nCommands with `browser: false` (nowcoder companies/creators/hot/jobs/recommend/topics/trending; 1point3acres digest/forum/forums/hot/latest/thread/user) do NOT receive these three flags at all.\n\nMACHINE-READABLE CONTRACT: `opencli <site> --help -f yaml` returns site, command_count, and per command: name, command, usage, access, description, browser, domain, positionals[], command_options[] (name/type/default/required/choices/help), columns[], example, and sometimes siteSession. Every adapter ends with a `next:` block listing `opencli <site> <command> --help -f yaml`. `columns` is the authoritative output-field list and matched the real JSON keys exactly on both probes.\n\n`access` FIELD is the read/write safety marker on every command — read | write. I honored this and ran zero write commands.\n\n`opencli list -f yaml` (1275 command entries total across all adapters) carries TWO fields the per-site help does not expose:\n- `strategy` — across the whole install the distinct values are: cookie, intercept, local, public, ui. For the 8 job sites only public / cookie / ui appear. public ⇔ browser:false (direct HTTP); cookie ⇔ browser:true using session cookies; ui ⇔ browser:true driving the DOM (all LinkedIn salesnav-*, thread-snapshot, sent-invitations, connect, safe-send).\n- `aliases` — only three exist among these 8 sites: indeed job → [detail, view]; upwork detail → [job, view]; upwork feed → [best-matches].\n\nEXIT CODES / ERROR SURFACE (observed): success → JSON array on stdout, empty stderr, exit 0 (51job and indeed probes). Failure → exit 1, NOTHING on stdout, and a YAML block on STDERR even when `-f json` was requested:\n  ok: false\n  error:\n    code: COMMAND_EXEC\n    message: '<site> request failed: HTTP 403 Forbidden from <url>'\n    exitCode: 1\nSo a caller parsing stdout as JSON must check the exit code — a failure yields empty stdout, not a JSON error object, and the error dialect is YAML regardless of -f.\n\nAUTH: `opencli auth status` supports --site <comma-list>, --full, --concurrency <n>, --timeout <seconds>, --only all|logged-in|not-logged-in|unknown|error, -f. Row shape: site, status, logged_in, identity, checked, error. `checked` is \"quick\" | \"full\" | \"skipped\". `opencli auth refresh` also exists (\"Touch logged-in site sessions to keep browser auth fresh\") — not run. Adapters with an auth adapter expose `login` (write) + `whoami` (read), both with siteSession: persistent.\n\nBROWSER BRIDGE HEALTH: `opencli doctor` → \"[OK] Daemon: running on port 19825 (v1.8.6) / [OK] Extension: connected (v1.0.22) / Profiles: • n4drczmg: connected v1.0.22 / [OK] Connectivity: connected in 2.1s / Everything looks good!\"\n\nRaw captures saved at /private/tmp/claude-501/-Users-donghanglyu/d1ca171b-6798-42dc-9582-87e4635be401/scratchpad/ — help_{linkedin,indeed,51job,nowcoder,1point3acres,upwork,maimai}.yaml, list_all.yaml, probe_{51job,indeed,1p3a}.{json,err}, extract.py.",
+  "failure_modes": [
+    {
+      "mode": "Login-gated endpoint returns HTTP 403 (OBSERVED on 1point3acres)",
+      "detection": "Exit code 1. stdout EMPTY. stderr carries YAML: `ok: false` / `error.code: COMMAND_EXEC` / `error.message: '1point3acres request failed: HTTP 403 Forbidden from https://www.1point3acres.com/bbs/forum-145-1.html'` / `error.exitCode: 1`. Detect on exit!=0 first, then parse stderr as YAML and read error.code + error.message; do NOT try to parse stdout as JSON.",
+      "right_response": "Cross-check with `opencli auth status --site <site> -f json`. If not_logged_in, the fix is `opencli <site> login` — a WRITE command, so surface it to the user rather than running it. Do not retry the read: the 403 is deterministic while logged out. Critically, do not trust `strategy: public` / `browser: false` as evidence that no login is needed — 1point3acres forum is public-strategy and still 403s."
+    },
+    {
+      "mode": "Silent partial extraction — exit 0, rows returned, documented columns empty (OBSERVED on indeed)",
+      "detection": "Exit 0 and a well-formed JSON array, so every status check passes. The defect is only visible by inspecting VALUES: `opencli indeed search \"mri\" --limit 2` returned 2 rows where title, salary and tags were all empty strings while id/company/location/url were populated. Detect by asserting that the identifying field (title) is non-empty on the returned rows, not by checking the exit code.",
+      "right_response": "Treat a search row as untrusted until a key field is confirmed non-empty. For indeed, follow each `id` with `opencli indeed job <id>` to recover the title. Report the gap rather than presenting empty titles as 'no data'. Never infer 'the site has no such jobs' from blank fields — the rows existed."
+    },
+    {
+      "mode": "Login state reported as `unknown` rather than a boolean (OBSERVED on nowcoder, maimai, and ~15 other sites)",
+      "detection": "`opencli auth status -f json` row reads status \"unknown\", logged_in \"\" (empty string, NOT false), checked \"skipped\", error \"quickCheck not implemented; use --full to run whoami\". A caller doing `if (!row.logged_in)` will silently misread this as logged-out.",
+      "right_response": "Re-probe with `opencli auth status --site <sites> --full --timeout 40 -f json`, which runs the read-only `whoami` and returns checked:\"full\". I did exactly this for nowcoder/maimai/1point3acres/upwork and all four resolved to not_logged_in. Distinguish the three states (logged_in / not_logged_in / unknown) explicitly; never collapse unknown into false."
+    },
+    {
+      "mode": "Site has no auth adapter at all (OBSERVED for indeed and 51job)",
+      "detection": "The site is simply ABSENT from `opencli auth status -f json` — the call returned 65 rows and grep for indeed/51job matched none, while the other six target sites were all present. Confirmed independently: neither adapter's yaml help lists a `login` or `whoami` command. This is different from not_logged_in and different from unknown.",
+      "right_response": "Read it as 'no login concept for this adapter', not as an error or a missing adapter. These are the sites to reach for first when no session is available — 51job in particular worked immediately and completely. Do not attempt `opencli 51job login`; the command does not exist."
+    },
+    {
+      "mode": "Browser bridge unavailable — daemon down or extension disconnected",
+      "detection": "NOT OBSERVED IN THIS SESSION, so the exact failure text is unverified. What I can source: `opencli doctor` is the designated diagnostic and prints per-component lines that were all `[OK]` here — 'Daemon: running on port 19825 (v1.8.6)', 'Extension: connected (v1.0.22)', 'Connectivity: connected in 2.1s'. Any browser:true command depends on all three. `opencli daemon status|restart|stop` exists per `opencli --help`.",
+      "right_response": "Run `opencli doctor` before concluding a site adapter is broken, since a dead bridge would take out every browser:true command across all sites at once — a useful signal to distinguish infrastructure failure from a single-site problem. The strategy=public / browser=false commands (nowcoder companies/jobs/hot/topics/trending/recommend/creators; 1point3acres forum/thread/hot/latest/digest/forums/user) should be unaffected by a bridge outage. I did not induce this failure, so treat the detection string as unconfirmed."
+    },
+    {
+      "mode": "Zero results vs. blocked request",
+      "detection": "NOT OBSERVED — neither probe returned an empty array, so I cannot report what a genuine zero-result response looks like (empty JSON array `[]` on exit 0 is the plausible shape but I did not see it). The important hazard is the ambiguity: a 403 gives exit 1 + empty stdout, which a naive `JSON.parse(stdout || '[]')` would convert into a zero-result success.",
+      "right_response": "Always branch on exit code before interpreting emptiness. Only call something 'no results' when exit==0 AND stdout parsed to an array; if exit!=0, it is a failure regardless of how empty stdout looks."
+    },
+    {
+      "mode": "Anti-bot / risk-control interstitial",
+      "detection": "NOT OBSERVED. I have no evidence of a risk-control or CAPTCHA failure mode in this toolset and cannot state how one would surface. Listed only so it is not mistaken for something I checked.",
+      "right_response": "If encountered, capture the raw stderr and re-run `opencli doctor`; do not assume it resembles the 403 shape above. Use `--trace on` (a documented common option) to capture a trace for diagnosis."
+    }
+  ],
+  "unverified": "Everything below is something I did NOT confirm by running it. Nothing here should be treated as a fact about opencli's behavior.\n\nRUNTIME BEHAVIOR NOT PROBED (5 of 8 sites never executed). The task capped me at three read-only searches. I spent them on 1point3acres forum 145 (403), 51job search (worked), and indeed search (worked with empty titles). I therefore have ZERO runtime evidence for boss, linkedin, nowcoder, upwork, maimai. For all five, every claim in the matrix comes from the yaml help text and `opencli list -f yaml` only. In particular I did not verify that the declared `columns` match the real JSON keys for those sites (it did match on 51job and indeed, which is encouraging but not proof), nor that any of them actually succeed.\n\nLOGIN-GATED COMMANDS NEVER EXERCISED. boss and linkedin report logged_in, but I never ran a single command against either, so \"logged_in\" is only what `auth status` claims — I have not confirmed the sessions actually work. upwork, nowcoder, maimai and 1point3acres are all not_logged_in, so their read commands are expected to fail; I did not confirm HOW they fail (whether they 403 like 1point3acres, redirect, or return empty).\n\nTHE nowcoder 面经 PATH IS DESIGN-INFERRED, NOT TESTED. My recommendation that `nowcoder search \"<company> 面经\" --type post` → `nowcoder detail <id>` is the way to get real interview questions for a named company follows from the help text (search returns `id`; detail returns `content`) but I never ran it. Specifically unverified: (a) whether `--type post` actually filters, since the help gives the values as free text \"all/post/question/user/job\" with no `choices` enum; (b) whether `detail` returns full 面经 prose or truncated content — there is no contentLimit-style flag and no documented truncation; (c) whether `papers` output can be chained anywhere, since its columns (rank/title/company/practitioners) contain no id.\n\nTHE nowcoder AND maimai NUMERIC ID TABLES ARE COPIED FROM HELP STRINGS, NOT TESTED. --job 11002=Java / 11003=C++ / 11200=Backend / 11203=QA / 11201=Frontend, --company 139=Baidu / 138=Tencent / 239=Huawei, --job 11226=Software / 11227=Hardware / 11229=Product / 11230=Finance, and maimai's --worktimes/--degrees/--professions/--sortby codes are all verbatim from the yaml help. I did not confirm any mapping is correct or current, and the help itself hedges with \"e.g.\". The full company-ID space is not enumerated anywhere I found; `nowcoder companies` is the documented way to discover companyId values but I did not run it.\n\n1point3acres fid VALUES: 145=海外面经, 198=海外职位内推, 27=研究生申请 are quoted from the `forum <fid>` help string. My one probe of fid 145 got a 403, so I did NOT confirm that 145 is in fact the 海外面经 board — only that the adapter built the URL https://www.1point3acres.com/bbs/forum-145-1.html from it. I did not run `1point3acres forums` to enumerate the real fid list.\n\nUNTESTED FLAG BEHAVIOR. I passed only --limit and --window on my probes. Every other flag in this matrix — boss --city/--experience/--degree/--salary/--industry/--jobType, linkedin --experience-level/--job-type/--date-posted/--remote/--company/--details/--start, indeed --location/--fromage/--sort/--start, 51job --area/--salary/--experience/--degree/--companyType/--companySize/--sort/--page, upwork --location/--category/--sort/--page/--per_page, maimai's entire filter set — is transcribed from help output and never exercised. Note that most of these free-text filters carry NO `choices` array in the yaml, meaning the CLI will not reject a malformed value; whether the adapter validates them server-side or silently ignores them is unknown. I also did not test whether the documented caps are enforced (indeed \"1-25\", 51job \"1-50\", linkedin \"max 100\", upwork \"10-50\").\n\nPAGINATION DEPTH UNVERIFIED. I never requested page 2 of anything. Whether --page/--start actually advances results, and whether the \"capped at one page\" notes on indeed/upwork mean deeper pagination is impossible, is untested. The absence of --page on `nowcoder search` and on 1point3acres search/hot/latest/digest is read off the option list, but I did not confirm that this truly caps retrieval depth.\n\nRATE LIMITS AND SIDE EFFECTS. The LinkedIn Commercial Use Limit warning on `people-search` is quoted from its description; I did not measure any quota, consumption rate, or reset window, and I attach no number to it. I did not investigate whether read commands on any site trigger risk control, leave read receipts, or mark messages seen — `linkedin inbox`, `boss chatlist`/`chatmsg` and `nowcoder notifications` are typed access=read, but whether reading a thread marks it read on the server is unknown and worth caution.\n\nWRITE COMMANDS: deliberately never run, per instruction. boss greet/batchgreet/exchange/invite/mark/send/login, linkedin connect/safe-send/salesnav-message/login, and the login commands on nowcoder/1point3acres/upwork/maimai are reported purely from help metadata. I note without testing that linkedin connect, safe-send and salesnav-message each expose a `--send` bool defaulting to false with help text describing dry-run as the default — I did not exercise even the dry-run path.\n\nCROSS-SITE FIELD SEMANTICS. I did not verify units or formats for salary/budget fields beyond the 51job sample (which showed salaryMin/salaryMax as plain integers and salary as a display string like \"3-6万\" and \"1.7-3.4万·15薪\"). boss `salary`, linkedin `salary`, indeed `salary` and upwork `budget` are all single strings with no documented format, and indeed's came back empty, so I cannot describe their shape.\n\n`intercept` and `local` STRATEGIES appear in the install-wide distinct-value list from `opencli list -f yaml` but on no command of these eight sites; I did not investigate what they mean.\n\nADAPTER SOURCE NOT READ. I worked entirely from the CLI's own introspection. I did not open the installed adapter source under ~/.local/lib/node_modules/@jackwener/opencli/, so I cannot speak to undocumented behavior, retry logic, or the true selectors behind the indeed title extraction failure."
+}
