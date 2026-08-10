@@ -118,6 +118,12 @@ def headings(profile):
     base.update(HEADINGS.get(meta.get("language", "en"), {}))
     override = meta.get("headings") or {}
     if isinstance(override, dict):
+        unknown = sorted(k for k in override if k not in base)
+        if unknown:
+            print(f"WARNING: meta.headings key(s) "
+                  f"{', '.join(repr(k) for k in unknown)} are not section keys and "
+                  f"were ignored — the section keeps its default label. Valid keys: "
+                  f"{', '.join(sorted(base))}.", file=sys.stderr)
         base.update({k: v for k, v in override.items() if k in base and v})
     return base
 
@@ -322,6 +328,11 @@ def section_order(profile):
         return default
     if isinstance(explicit, str):       # tolerate a single key written as a scalar
         explicit = [explicit]
+    unknown = [s for s in explicit if s not in _ALL_SECTIONS]
+    if unknown:
+        print(f"WARNING: meta.section_order entr(ies) "
+              f"{', '.join(repr(s) for s in unknown)} are not section keys and were "
+              f"ignored. Valid keys: {', '.join(_ALL_SECTIONS)}.", file=sys.stderr)
     order = []
     for s in list(explicit) + default:           # explicit first, then any omitted
         if s in _ALL_SECTIONS and s not in order:  # known-only, de-duplicated

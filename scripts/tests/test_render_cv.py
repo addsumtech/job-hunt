@@ -603,3 +603,36 @@ def test_cv_pdf_invokes_tectonic_with_the_tectonic_argv(tmp_path, monkeypatch):
     out = tmp_path / "cv.pdf"
     render_cv.render_pdf({"meta": {"name": "Z"}}, out)
     assert seen["cmd"] == [engine, str(tmp_path / "cv.tex"), "--outdir", str(tmp_path)]
+
+
+def test_unknown_headings_key_warns_and_names_the_valid_set(full_profile, capsys):
+    """Measured silent failure: role-families.md's legal recipe relabels a
+    section via meta.headings, and a key outside the built-in set is dropped
+    with no warning — so the CV renders perfectly and loses its heading."""
+    p = copy.deepcopy(full_profile)
+    p["meta"]["headings"] = {"selected_matters": "Selected Matters",
+                             "experience": "Clinical Experience"}
+    md = render_cv.render_markdown(p)
+    err = capsys.readouterr().err
+    assert "WARNING" in err
+    assert "'selected_matters'" in err
+    assert "certifications" in err and "publications" in err   # the valid set is listed
+    assert "## Clinical Experience" in md                      # the valid key still works
+
+
+def test_unknown_section_order_entry_warns(full_profile, capsys):
+    p = copy.deepcopy(full_profile)
+    p["meta"]["section_order"] = ["summary", "selected_matters", "experience"]
+    render_cv.render_markdown(p)
+    err = capsys.readouterr().err
+    assert "WARNING" in err and "'selected_matters'" in err
+
+
+def test_valid_headings_and_section_order_are_silent(full_profile, capsys):
+    """The quiet case: headings() runs on every render of every CV. A warning
+    here would appear on every clean run and be trained away."""
+    p = copy.deepcopy(full_profile)
+    p["meta"]["headings"] = {"experience": "Clinical Experience"}
+    p["meta"]["section_order"] = ["education", "skills", "experience"]
+    render_cv.render_markdown(p)
+    assert capsys.readouterr().err == ""
