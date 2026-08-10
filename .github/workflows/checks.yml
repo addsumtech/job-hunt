@@ -1,0 +1,28 @@
+name: checks
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # check_skill_lossless.py resolves the job-application-baseline TAG.
+          # A shallow checkout has no tags, and the check would exit 2.
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt pytest
+      - run: python3 -m pytest scripts/tests -q
+      - run: python3 scripts/check_skill_lossless.py --baseline 864ad7f
+      - name: market conventions
+        run: |
+          if [ -f scripts/check_conventions.py ]; then
+            python3 scripts/check_conventions.py --all
+          else
+            echo "check_conventions.py is not in this repo yet (Plan 2 lands it)"
+          fi
