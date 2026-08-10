@@ -1,0 +1,64 @@
+# Platform stop-signals for scripts/check_opencli_result.py.
+#
+# MATCHING RULE (this is the whole anti-cry-wolf design): a pattern here is
+# matched ONLY against the stderr of an invocation that exited non-zero. A
+# successful opencli call has EMPTY stderr, so nothing in this file can fire
+# on ordinary output — a job posting whose title contains "安全验证" or
+# "captcha" is a job about verification, not a verification wall.
+#
+# `verified: true` means the string was captured verbatim from a real run and
+# `observed:` names the date and command. `verified: false` means it is a
+# shape we expect but have NOT seen. The first time a real risk-control body
+# is captured, replace the guessed pattern with the verbatim string and flip
+# the flag. Do not add a `verified: true` entry you did not run.
+#
+# Cost of a false positive here is bounded and conservative: the mode stops
+# that one site for that one round and says so. Cost of a false negative is
+# a retry against a platform that just asked us to stop.
+
+measured_note: >-
+  The only failure body ever captured from this toolset (2026-08-09) is
+  exit 1 + EMPTY stdout + a YAML block on stderr even under -f json:
+  "ok: false / error: {code: COMMAND_EXEC, message: '1point3acres request
+  failed: HTTP 403 Forbidden from https://www.1point3acres.com/bbs/forum-145-1.html',
+  exitCode: 1}". That 403 is a LOGIN WALL, and check_opencli_result.py
+  resolves it in the login-wall branch against `opencli auth status`, not
+  here. No captcha, slider or rate-limit body has ever been observed.
+
+signals:
+  - id: http-429-rate-limited
+    site: "*"
+    pattern: "HTTP 429"
+    verified: false
+  - id: verify-human-en
+    site: "*"
+    pattern: "(?i)verify (that )?you are (a )?human"
+    verified: false
+  - id: unusual-traffic-en
+    site: "*"
+    pattern: "(?i)unusual traffic"
+    verified: false
+  - id: captcha-interstitial
+    site: "*"
+    pattern: "(?i)captcha"
+    verified: false
+  - id: slider-verification-cn
+    site: "*"
+    pattern: "滑块"
+    verified: false
+  - id: security-verification-cn
+    site: "*"
+    pattern: "安全验证"
+    verified: false
+  - id: risk-control-cn
+    site: "*"
+    pattern: "风控"
+    verified: false
+  - id: too-frequent-cn
+    site: "*"
+    pattern: "操作过于频繁"
+    verified: false
+  - id: access-restricted-cn
+    site: "*"
+    pattern: "访问受限"
+    verified: false
