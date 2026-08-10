@@ -191,7 +191,6 @@ def test_skill_md_carries_the_grounding_contract_summary():
 # since been built ALSO fails, which is what forces the entry out when its plan lands.
 NOT_YET_BUILT = {
     "check_conventions.py": "Plan 2 (assess mode) — the market-table lint",
-    "check_evidence_refs.py": "Plan 2 (assess mode) — resolves CV-nnn / JD-nnn citations",
 }
 
 
