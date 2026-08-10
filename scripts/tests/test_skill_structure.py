@@ -189,9 +189,7 @@ def test_skill_md_carries_the_grounding_contract_summary():
 # so it is a decision rather than a dangling pointer. The pair of tests below pins it
 # from both sides: an undeclared missing script fails, and a declared one that has
 # since been built ALSO fails, which is what forces the entry out when its plan lands.
-NOT_YET_BUILT = {
-    "check_conventions.py": "Plan 2 (assess mode) — the market-table lint",
-}
+NOT_YET_BUILT: dict[str, str] = {}
 
 
 def _named_scripts() -> dict[str, list[str]]:

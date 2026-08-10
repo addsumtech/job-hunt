@@ -18,10 +18,6 @@ lossless:
 	$(PY) scripts/check_skill_lossless.py --baseline $(BASELINE)
 
 conventions:
-	@if [ -f scripts/check_conventions.py ]; then \
-	  $(PY) scripts/check_conventions.py --all; \
-	else \
-	  echo "check_conventions.py is not in this repo yet (Plan 2 lands it) — skipped"; \
-	fi
+	python3 scripts/check_conventions.py --all
 
 check: test lossless conventions

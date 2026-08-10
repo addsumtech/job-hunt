@@ -23,9 +23,4 @@ jobs:
       - run: python3 -m pytest scripts/tests -q
       - run: python3 scripts/check_skill_lossless.py --baseline 864ad7f
       - name: market conventions
-        run: |
-          if [ -f scripts/check_conventions.py ]; then
-            python3 scripts/check_conventions.py --all
-          else
-            echo "check_conventions.py is not in this repo yet (Plan 2 lands it)"
-          fi
+        run: python3 scripts/check_conventions.py --all
