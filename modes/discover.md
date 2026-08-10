@@ -1,0 +1,448 @@
+# Mode: discover — 找什么
+
+Loaded unconditionally on entering discover mode. Read it in full before the first
+adapter call.
+
+**What this mode does:** turn a search intent into a shortlist of real, retrieved
+job listings with a provisional verdict on each. **What it does not do:** it never
+chains into `apply`. Thirty rows do not become thirty CVs; the whole point of
+ranking a shortlist is to let a person choose.
+
+## On entering this mode — before anything else
+
+```bash
+python3 scripts/enter_mode.py --workspace <ws> --mode discover
+```
+
+This writes a `mode_entry` record carrying **this file's content hash** into
+`journal.jsonl`. It is not bookkeeping: it is the half of the layer-1.5 backstop
+that a gate can see. `check_shortlist.py` fails the run with `NO_MODE_ENTRY` when
+the record is absent, and with `MODE_FILE_CHANGED` when the hash no longer matches
+the file on disk — meaning what was read is not what is now here, so re-enter and
+re-read. It is also what makes every receipt in this run stamped
+`"mode": "discover"` instead of `"unknown"`.
+
+Then read this file in full. Both halves matter: the gate below requires
+`shortlist.yaml` fields that are defined nowhere else, and the hash proves the
+definition you followed is the definition on disk.
+
+## Entry conditions (any one)
+
+1. The user wants to find or compare roles.
+2. `assess` returned `likely_screen_out` or `blocked`.
+3. The honest-gap early-stop fired.
+4. `assess` returned `stretch` and the user has not said they want that specific job.
+5. The user supplied two or more postings (ranking mode).
+
+Discover is **never** triggered as a side effect of another mode. The user starting
+it is the opt-in. Probing could not confirm whether read commands leave server-side
+traces (whether `linkedin inbox` marks a thread read, for instance), so there are no
+implicit calls.
+
+## Ownership
+
+| Reads | Writes |
+|---|---|
+| `profile.yaml` (never modified by any mode) | `searches/<YYYY-MM-DD>-<slug>/`, plus `search-preferences.yaml` — the one spine file discover owns |
+
+Discover is the **only** mode that writes `search-preferences.yaml`. `assess` reads
+it and must not create it: a file two modes write is a file whose contents nobody
+can account for.
+
+Workspace layout — **the path shape is load-bearing**, the resume-an-unfinished-run
+feature finds work by this shape:
+
+```text
+~/.claude/job-profiles/<name>/searches/<YYYY-MM-DD>-<slug>/
+  brief.yaml                 this round's reproducible search basis
+  shortlist.yaml             the structured shortlist
+  shortlist.md               readable: §0 来源与读取质量, §0.1 触发原因, §0.2 披露
+  raw/<site>-<n>.json        adapter stdout, VERBATIM, never edited
+  raw/<site>-<n>.err         adapter stderr for the same call
+  raw/opencli-help/<site>.yaml   the adapter's own metadata for this run
+  raw/auth-status.json       the auth probe output
+  journal.jsonl              mode_entry + adapter_call records + gate receipts
+```
+
+**Resolve both spine paths through `scripts/paths.py`, never by hand:**
+`paths.search_dir(<name>, "<YYYY-MM-DD>-<slug>")` for the workspace above and
+`paths.search_prefs(<name>)` for the preferences file below. One module owns the
+layout, and a run that string-joins its own version orphans the previous workspace
+with no error anywhere.
+
+`raw/*` is where every downstream claim's provenance chain terminates. Edit it and
+source tracing becomes theatre.
+
+## The shared search preferences — asked once, reused, confirmed
+
+`paths.search_prefs(<name>)` → `~/.claude/job-profiles/<name>/search-preferences.yaml`.
+Discover **owns** this file: it is the only mode that writes it, and `assess` reads
+it to avoid asking for the target market once per posting.
+
+```yaml
+updated: "2026-08-09"
+target_market: cn                    # cn / nl / de / uk / us / other
+locations: ["上海", "西安"]           # cities or regions, in the market's own language
+seniority: mid                       # new_grad|junior|mid|senior|unknown
+work_models: ["onsite", "hybrid"]    # remote|hybrid|onsite
+languages: ["Chinese", "English"]    # languages the user can work in
+salary_floor: {currency: CNY, amount: 30000, period: month}   # or null
+avoid: ["外包", "销售导向岗位"]
+experience_track: "medical imaging / MRI reconstruction"
+```
+
+**Every field here is asked, never inferred.** Reading a salary floor off a past
+payslip, an avoid-list off a CV, or a target market off the language someone happens
+to be typing in produces a file that looks like the user's preferences and is not —
+and because it is reused across every later round, one wrong inference quietly
+steers months of searching.
+
+- **First run** (the file does not exist): ask the eight questions above, in the
+  user's language, in one pass. `salary_floor: null` is a legitimate answer and the
+  only correct one if the user declines — never substitute a market median.
+  `target_market: other` is likewise legitimate: markets outside `cn/nl/de/uk/us`
+  have no convention data, and saying so beats borrowing a neighbour's.
+- **Later runs:** read it, show the user what it says, and **confirm once per
+  session** — not once per posting. Re-ask whenever this round's locations sit in a
+  different market than `target_market`.
+- Rewriting it is an explicit act with the user watching. Bump `updated` when you do.
+- `brief.yaml` below is this round's *narrowing* of these preferences, not a copy of
+  them: preferences are durable, a brief is one round.
+
+## Step 0 — state the trigger reason BEFORE searching
+
+Say why this search is happening, then write it into `brief.yaml` as
+`trigger_reason` and into `shortlist.md` under `## §0.1 触发原因`. Stating it
+afterwards is a rationalisation; `check_shortlist.py` fires `NO_TRIGGER_REASON` and
+`NO_TRIGGER_SECTION` if either is missing.
+
+If the original JD was judged unsuitable: **this round's candidates must be visibly
+more solid than it, not merely similarly titled.** Write how, per row, in
+`why_matched`.
+
+### brief.yaml — this round's reproducible basis
+
+```yaml
+slug: 2026-08-09-suanfa-shanghai       # <YYYY-MM-DD>-<short-slug>
+created: "2026-08-09"
+trigger_reason: "上一份 JD 被 assess 判为 likely_screen_out（缺 C++ 生产经验）…"
+target_titles: ["算法工程师", "algorithm engineer"]
+markets: ["cn"]                        # cn / nl / de / uk / us / other
+locations: ["上海", "西安"]
+seniority: mid                         # new_grad|junior|mid|senior|unknown
+employment_types: ["full_time"]
+work_models: ["onsite", "hybrid"]      # remote|hybrid|onsite
+languages: ["Chinese", "English"]
+must_have_constraints: ["work authorization: …"]
+nice_to_have: ["计算机视觉"]
+avoid: ["外包", "销售导向岗位"]
+target_count: 12                       # how many rows the user wants
+max_rows_per_round: 25                 # yellow-layer cap, per site per round
+max_pages_per_site: 2                  # yellow-layer cap
+max_age_days: 30                       # older than this ⇒ verification: stale_possible
+```
+
+`target_count` and `max_rows_per_round` are different things: the first is the goal,
+the second is the politeness cap from `references/source-policy.md`. Falling short of
+`target_count` requires a written `shortfall_reason` in `shortlist.yaml`
+(`SHORTFALL_NO_REASON`). **Never pad the count.**
+
+## Step 1 — probe the login state (three states, not two)
+
+```bash
+opencli auth status -f json > raw/auth-status.json
+```
+
+- `status: "logged_in"` — usable.
+- `status: "not_logged_in"` — usable only for adapters that do not need a session.
+- `status: "unknown"` — **not the same as logged out.** Its `logged_in` field is an
+  **EMPTY STRING**, not `false`, so `if (!row.logged_in)` misreads it. Re-probe:
+  `opencli auth status --site <sites> --full --timeout 40 -f json`, which runs the
+  read-only `whoami` and returns `checked: "full"`.
+- **Site absent from the list entirely** — `no_auth_adapter`. `indeed` and `51job`
+  are simply not there (65 rows returned, neither matched) and neither exposes a
+  `login` or `whoami` command. This is not an error and not a missing adapter: it
+  means the site has no login concept. Never run `opencli 51job login`; it does not
+  exist.
+
+Also save each adapter's own contract before calling it — `check_no_write.py` reads
+it from here:
+
+```bash
+mkdir -p raw/opencli-help
+opencli <site> --help -f yaml > raw/opencli-help/<site>.yaml
+```
+
+## Step 2 — choose sources
+
+Prefer sources that need no login. `51job` is the only adapter measured to return
+every documented column populated. `indeed` also works without login but returns
+empty titles (Step 4). For the four inlined adapters, use the command pairs in
+SKILL.md. For anything else, read `references/discovery-sources.md` first.
+
+## Step 3 — generate queries in BOTH languages
+
+Generate the keyword set in English **and** in the market's local language, and run
+both. **English-only keywords miss local-language postings**, which is not a
+rounding error in NL/DE/CN: a Dutch employer posting "Onderzoeker beeldreconstructie"
+or a Chinese one posting "图像重建算法工程师" is invisible to an English-only query,
+and the resulting empty result looks exactly like "there are no such jobs".
+
+Record every query string in `brief.yaml.target_titles` so the round is reproducible.
+
+## Step 4 — run the search, read the exit code first
+
+One round per site, capped at `max_rows_per_round`, `-f json`, `--window background`.
+**No detail pages at this stage.** Capture stdout and stderr to separate files, then
+classify:
+
+```bash
+set +e
+opencli 51job search "算法工程师" --area 上海 --page 1 --limit 25 \
+    --window background -f json > raw/51job-1.json 2> raw/51job-1.err
+RC=$?
+set -e
+python3 scripts/check_opencli_result.py --workspace . --site 51job --command search \
+    --exit-code "$RC" --stdout-file raw/51job-1.json --stderr-file raw/51job-1.err \
+    --auth-status-file raw/auth-status.json \
+    --command-line 'opencli 51job search "算法工程师" --area 上海 --page 1 --limit 25 --window background -f json'
+```
+
+**先看 exit code，再解释「空」。** A login wall gives exit 1, EMPTY stdout and a YAML
+error body on stderr *even under `-f json`*, so `JSON.parse(stdout || '[]')` silently
+converts a 403 into a zero-result success. Only `exit == 0` **and** stdout parsed to
+an array is "no results".
+
+The wrapper returns one of five classifications, each with an action:
+
+| classification | what happened | what to do |
+|---|---|---|
+| `ok` | exit 0, JSON array parsed | continue to Step 5 |
+| `not_logged_in` | login wall, and auth says the session is absent or unknown | cross-check auth; hand `opencli <site> login` **to the user** — it is a write command. Do not retry: the refusal is deterministic while logged out. **Do not treat `strategy: public` as evidence that no login is needed** — 1point3acres' public-strategy `forum` still 403s. |
+| `no_auth_adapter` | login wall on a site with no login concept | the platform is refusing, not the session. Drop the site for this round and say so. |
+| `platform_limit` | a stop-signal from `references/risk-control-signals.yaml`, or a refusal while auth says logged in | **立即停止。不重试、不改参数重试、不绕过。** Emit the degraded output below. |
+| `transport` | unrecognised failure, or exit 0 with unparsable stdout | run `opencli doctor` — a dead browser bridge takes out every `browser: true` command on every site at once, which distinguishes infrastructure failure from a single-site problem. |
+
+## Step 5 — row integrity, before anything else
+
+Assert the identity field is non-empty on every returned row: `title` for every
+adapter except `boss`, where it is `name`. The wrapper reports this as
+`empty_identity_rows` / `needs_detail_recovery`.
+
+`indeed` is measured to return exit 0, valid JSON, and empty `title`/`salary`/`tags`
+while `id`/`company`/`location`/`url` are populated. Recover each row with
+`opencli indeed job <id>` and report the gap in `§0`. **绝不** infer "this site has
+no such jobs" from blank fields — the rows existed.
+
+## Step 6 — normalise, then de-duplicate
+
+Every row becomes one `JobListingEvidence` entry plus this skill's four additions
+(`why_matched`, `verdict`, `provisional`, `effort`). This schema is defined here and
+nowhere else; `check_shortlist.py` requires all seventeen fields.
+
+```yaml
+- id: 51job-173198362              # <site>-<source_id>, stable within the search
+  title: 高级算法工程师（视觉调试智能化、AI方向）   # non-empty, or recover it
+  company: 比亚迪汽车工业
+  location: 西安 · 高新技术产业开发区
+  salary: 3-6万                     # verbatim display string from the adapter
+  url: https://jobs.51job.com/xian-gxjs/173198362.html   # tracking params stripped
+  source_site: 51job
+  source_id: "173198362"           # MUST appear verbatim in raw/51job-*.json
+  extraction_method: adapter_search # adapter_search|adapter_detail|user_paste|public_page
+  retrieved_at: "2026-08-09T14:02:11Z"
+  quality: card_only               # complete|partial|card_only
+  verification: collected_unverified # fresh_verified|collected_unverified|stale_possible
+  raw_text: "…the card text the evaluator actually saw…"
+  why_matched: "…"                 # see the rule below
+  verdict: worth_applying          # the five levels, nothing else
+  provisional: true                # always true in discover
+  effort: evening                  # quick|evening|multi_day|not_closable
+```
+
+- `quality`: `card_only` = search row only; `partial` = search row with fields
+  recovered by a detail call; `complete` = the detail page was fetched.
+- `effort`: how much work the row's *closable* gaps would take, from the card you
+  actually have — `quick` (rewording and reordering what is already true),
+  `evening` (one focused session: a small demo, a short write-up),
+  `multi_day`, `not_closable` (the gap is a hard disqualifier or years of
+  experience). It is what makes the within-band ordering in Step 7 a rule rather
+  than a sentiment, so it is a closed vocabulary the gate checks (`BAD_ENUM`), not
+  free text. Estimate it from the card and say so; do not pretend a card told you
+  more than it did.
+- `verification`: `fresh_verified` only when a detail call in **this** session
+  returned the posting; `collected_unverified` for a card; `stale_possible` when the
+  source's own posting date is older than `brief.max_age_days`.
+- De-duplicate across platforms on company + normalised title + location; keep the
+  row with the higher `quality`.
+
+**`why_matched` is one of exactly three places where the no-fabrication fence is
+restated, and this is that restatement.** Cite the brief field and the raw field
+that made the match — "brief.target_titles 命中「算法工程师」；raw salaryMin 30000
+在 brief 区间内". **绝不** write a reason that the card does not support, and 绝不
+borrow a requirement from a JD you have not fetched. An invented `why_matched` is
+the most persuasive part of a fabricated row.
+
+## Step 7 — provisional verdicts
+
+First scan for hard disqualifiers (work authorisation, licence, mandatory language,
+hard location) — a hit is `blocked` immediately. Everything else takes an ordinal
+level from the same vocabulary `assess` uses:
+
+`strong_apply` · `worth_applying` · `stretch` · `likely_screen_out` · `blocked`
+
+Within a level, **order by effort** — `quick` first, then `evening`, `multi_day`,
+`not_closable` — using each row's `effort` field. Ordering by effort-to-close is
+what turns a band into a plan: two `worth_applying` rows are not equally worth the
+user's next hour.
+
+**Every discover verdict carries `provisional: true` and may not be rendered without
+it.** That is two obligations, and both are checked:
+
+- in `shortlist.yaml`, the field itself (`MISSING_PROVISIONAL`);
+- in `shortlist.md`, the words **「基于卡片信息的初判」** on the section that renders
+  the rows (`MD_MISSING_PROVISIONAL_STAMP`). A YAML boolean is not a disclosure —
+  nobody reading the round ever sees it, and `shortlist.md` is what they read.
+
+The stamp is load-bearing: discover has a card, `assess` has the full JD and
+evidence blocks. Using one vocabulary without marking the confidence source would be
+passing card data off as a completed assessment.
+**规则：discover 的档位永不被带进 assess——assess 一律重算。**
+
+If a card cannot support any level at all, the card is **dropped from the shortlist**
+and counted in `shortfall_reason` — name it there, with what was missing. It does
+**not** become a row carrying `insufficient_evidence`: that is an orthogonal refusal
+state, not a sixth level and not a listing, and `check_shortlist.py` would reject
+such a row with `BAD_VERDICT`. A shortlist row asserts "this posting exists and here
+is what I make of it"; a card you cannot read supports the first half and not the
+second, so it belongs in the shortfall, not in the list.
+
+## Step 8 — detail fetch, top three only
+
+Fetch detail pages **only** for `strong_apply`, `worth_applying` and `stretch`.
+`likely_screen_out` and `blocked` rows stay card-level and are labelled **未取详情**
+in `shortlist.md`; the user can name one to fetch anyway, which is recorded in
+`shortlist.yaml.detail_fetch_exceptions` with a reason. `check_shortlist.py` enforces
+this as `DETAIL_FETCH_OUT_OF_BAND`. This cap is where detail fan-out stops being a
+crawl, and it is the mechanism that keeps this mode inside the yellow tier of
+`references/source-policy.md`.
+
+Each detail call goes through `scripts/check_opencli_result.py` too, and its stdout
+lands in `raw/<site>-detail-<id>.json`.
+
+## Step 9 — write the outputs
+
+`shortlist.yaml`:
+
+```yaml
+search_slug: 2026-08-09-suanfa-shanghai
+brief: brief.yaml
+shortfall_reason: null          # required (a written sentence) when rows < target_count
+detail_fetch_exceptions: []     # [{id: …, reason: 用户点名要求补取}]
+sources:                        # one entry per site used
+  - site: 51job
+    command: search
+    access: read
+    login_state: no_auth_adapter
+    classification: ok          # MUST match what journal.jsonl recorded
+    invocations: 1
+    rows_returned: 25
+    identity_field: title
+    identity_field_empty_rows: 0
+    detail_command: "opencli 51job detail <jobId>"
+    raw_files: ["raw/51job-1.json"]
+rows: [...]
+```
+
+`identity_field` and `detail_command` for any adapter outside the four inlined in
+SKILL.md come from `references/discovery-sources.md`. There is no other source for
+them, which is why `SOURCE_REPORT_MISSING` is that file's backstop.
+
+`shortlist.md` carries `## §0 来源与读取质量`, `## §0.1 触发原因`, and — when the run
+is degraded — `## §0.2 披露`. The section that lists the rows carries the stamp in
+its own heading, e.g. `## §1 候选（全部为基于卡片信息的初判 · provisional）`, and each
+row shows its band and its `effort`. Rows below the top three are labelled
+**未取详情**.
+
+## Degraded output — when no real postings could be retrieved
+
+Emit a **direction-level shortlist** (3-5 directions), each with: 目标方向 ·
+检索词 · 建议筛选条件 · 为何比原 JD 更稳 · 要避开的标题与信号 · 手动收集优先序.
+It has no `rows:`, so it cannot claim a posting exists.
+
+Then the disclosure block, verbatim, in `shortlist.md`:
+
+```text
+本次会话已登录：        <是|否|不适用—无 auth adapter>
+Adapter 返回：          <逐字错误信息>
+收到限制信号后重试：    否
+绕过任何平台控制：      否
+取得真实岗位：          否
+降级输出类型：          方向级 shortlist
+```
+
+The last four answers ship **pre-filled as 否**. That is the design: concealing a
+retry or a bypass has to be an active overwrite, not an omission.
+`check_shortlist.py` fires `DEGRADED_WITHOUT_DISCLOSURE` when the block is absent and
+`DISCLOSURE_INCOMPLETE` when an answer is blank.
+
+And the wording rule: **"没有匹配" is a claim, and it needs a receipt.** All-adapters-
+failed and genuinely-found-nothing produce the identical shape, so
+`EMPTY_RESULT_UNSUPPORTED` fires unless at least one adapter exited 0. If every
+adapter died, say *that*, not "there are no jobs".
+
+## Step 10 — gates, and cite the receipts
+
+```bash
+python3 scripts/check_no_write.py  --workspace .
+python3 scripts/check_shortlist.py --workspace .
+```
+
+Both must exit 0. **This mode may not claim success without a passing receipt for
+each in `journal.jsonl`** — a skipped script produces no output, and that looks
+exactly like a clean one.
+
+| Finding | What it means | What to do |
+|---|---|---|
+| `NO_MODE_ENTRY` | `journal.jsonl` has no `mode_entry` for discover | run `scripts/enter_mode.py --workspace <ws> --mode discover` and read this file — it was not loaded |
+| `MODE_FILE_CHANGED` | this file changed after the run entered the mode | what you read is not what is on disk. Re-enter and re-read. |
+| `SOURCE_ID_NOT_IN_RAW` | a row's identifier is in no capture from that site | delete the row. It was not retrieved. Do not "fix" it by editing `raw/`. |
+| `URL_NOT_FROM_ADAPTER` | the URL was assembled, not returned | replace it with the adapter's URL or drop the field |
+| `DUPLICATE_SOURCE_ID` | one retrieved posting appears as two rows | delete the duplicate; de-duplication removes rows, nothing adds them |
+| `SOURCE_REPORT_COUNT_MISMATCH` | the source report claims more than the receipts recorded | the receipts are right. Never reconcile by editing `raw/` or the journal. |
+| `EMPTY_RESULT_UNSUPPORTED` | "no results" wording with no adapter that exited 0 | rewrite as "every adapter failed", and emit the disclosure block |
+| `DEGRADED_WITHOUT_DISCLOSURE` | degraded run with no disclosure block | add the block, answers pre-filled 否 |
+| `MD_MISSING_PROVISIONAL_STAMP` | `shortlist.md` renders rows without 「基于卡片信息的初判」 | add the stamp to the section heading. The YAML flag is not a disclosure. |
+| `DETAIL_FETCH_OUT_OF_BAND` | a detail fetch below the top three verdicts | remove it, or record a named exception with a reason |
+| `CAP_MISSING` / `CAP_ABOVE_CEILING` | `brief.yaml`'s round caps are absent or raised | read `references/source-policy.md`; the caps are its enforceable half |
+| `SHORTFALL_NO_REASON` | fewer rows than `target_count`, no reason written | write the reason. Never pad. |
+| `SOURCE_REPORT_CONTRADICTS_JOURNAL` | `sources:` disagrees with the receipts | the receipts are right; fix the report |
+| `WRITE_COMMAND` | a write command was journaled | stop. Tell the user exactly what ran. It cannot be undone. |
+| `UNKNOWN_ACCESS` | a command's access could not be resolved | save `opencli <site> --help -f yaml` into `raw/opencli-help/` and re-run |
+
+## Self-check before reporting the round
+
+- [ ] `scripts/enter_mode.py --mode discover` run **first**, and this file read in full.
+- [ ] `search-preferences.yaml` read via `paths.search_prefs(<name>)`; written on
+      first run from answers the user gave, never from inference; confirmed once
+      this session.
+- [ ] `brief.yaml` written **before** the first adapter call, with `trigger_reason`
+      and both round caps.
+- [ ] `raw/opencli-help/<site>.yaml` saved for every site called.
+- [ ] `raw/auth-status.json` saved; `unknown` re-probed with `--full`.
+- [ ] Every adapter call classified by `scripts/check_opencli_result.py`.
+- [ ] Queries generated in both languages of the market.
+- [ ] Identity field asserted non-empty on every row; `indeed` rows recovered.
+- [ ] Every row carries `provisional: true` **and** `shortlist.md` carries
+      「基于卡片信息的初判」; no verdict copied into an assessment.
+- [ ] Every row carries an `effort` value, and rows are ordered by it within a band.
+- [ ] Cards that could not support any level were dropped and named in
+      `shortfall_reason` — not listed as `insufficient_evidence` rows.
+- [ ] Detail fetched only for `strong_apply` / `worth_applying` / `stretch`.
+- [ ] `references/source-policy.md` re-read if any action felt like it might be
+      yellow or red; `references/risk-control-signals.yaml` consulted on any failure.
+- [ ] `references/discovery-sources.md` read before calling any adapter outside the
+      four inlined in SKILL.md.
+- [ ] `scripts/check_no_write.py` and `scripts/check_shortlist.py` both exited 0, and
+      the completion message cites their `journal.jsonl` receipts.
+- [ ] No chaining into `apply`. The shortlist is handed back for a person to choose.
