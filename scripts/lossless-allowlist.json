@@ -1,0 +1,22 @@
+{
+  "_comment": [
+    "Lines from the job-application baseline that are deliberately NOT present in the",
+    "job-hunt tree. check_skill_lossless.py accounts for every substantive baseline line;",
+    "anything listed here is a decision someone made, with a written reason, rather than a",
+    "casualty of the migration.",
+    "",
+    "Each entry's key is sha1(normalize(line))[:16] as check_skill_lossless.py computes it.",
+    "'line' is kept alongside for a human reader; the key is what the script matches."
+  ],
+  "waived": {},
+  "deleted_files": {
+    "assets/cv/template.tex": {
+      "reason": "Dead and actively misleading. Nothing in scripts/ loads it (verified by grep at migration time: zero references to template.tex, assets/cv or assets/letter in any renderer); render_cv.py assembles its LaTeX inline, and this file had drifted from what is actually generated. A template nobody loads is a second, wrong source of truth.",
+      "deleted_in": "Task 2, 2026-08-10"
+    },
+    "assets/letter/template.tex": {
+      "reason": "Same as assets/cv/template.tex — render_letter.py assembles its LaTeX inline and never reads this file. Verified by grep at migration time.",
+      "deleted_in": "Task 2, 2026-08-10"
+    }
+  }
+}
