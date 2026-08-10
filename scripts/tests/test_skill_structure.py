@@ -182,3 +182,48 @@ def test_skill_md_carries_the_grounding_contract_summary():
                   "a floor on credibility, not a proof",
                   "restated in exactly three places"):
         assert token in text, f"SKILL.md is missing {token!r} from §8's summary"
+
+
+# Scripts a later plan builds. A path named in SKILL.md or a mode file that does not
+# exist yet is a forward reference, which is fine — but only if it is DECLARED here,
+# so it is a decision rather than a dangling pointer. The pair of tests below pins it
+# from both sides: an undeclared missing script fails, and a declared one that has
+# since been built ALSO fails, which is what forces the entry out when its plan lands.
+NOT_YET_BUILT = {
+    "check_conventions.py": "Plan 2 (assess mode) — the market-table lint",
+    "check_evidence_refs.py": "Plan 2 (assess mode) — resolves CV-nnn / JD-nnn citations",
+}
+
+
+def _named_scripts() -> dict[str, list[str]]:
+    """Every `<name>.py` mentioned anywhere in SKILL.md or a mode file, and where."""
+    found: dict[str, list[str]] = {}
+    files = [SKILL] + sorted((ROOT / "modes").glob("*.md"))
+    for f in files:
+        for name in set(re.findall(r"\b([a-z_]+\.py)\b", f.read_text(encoding="utf-8"))):
+            found.setdefault(name, []).append(f.name)
+    return found
+
+
+def test_every_script_named_in_layer_1_or_a_mode_file_exists_or_is_declared_pending():
+    """The Self-check guard only reads the `## Self-check` section. SKILL.md names
+    scripts elsewhere too — the grounding-contract summary and the gate table both do —
+    and a name there that resolves to nothing sends the model to run a command that is
+    not there. Nothing else reports that."""
+    for name, where in sorted(_named_scripts().items()):
+        if (ROOT / "scripts" / name).exists():
+            continue
+        assert name in NOT_YET_BUILT, (
+            f"{' and '.join(where)} names scripts/{name}, which does not exist and is "
+            f"not declared in NOT_YET_BUILT — either build it, stop naming it, or "
+            f"declare it with the plan that owns it")
+
+
+def test_a_pending_script_that_now_exists_is_removed_from_the_declaration():
+    """Self-retracting, like the Modes table. The moment its plan lands the script,
+    this goes red and the stale 'not yet built' note has to come out — otherwise the
+    declaration quietly becomes a lie that reads exactly like the truth."""
+    for name, owner in sorted(NOT_YET_BUILT.items()):
+        assert not (ROOT / "scripts" / name).exists(), (
+            f"scripts/{name} exists now ({owner} landed) — delete its NOT_YET_BUILT "
+            f"entry so the declaration keeps meaning something")
