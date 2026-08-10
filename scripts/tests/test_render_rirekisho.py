@@ -105,3 +105,116 @@ def test_missing_jp_block_renders_with_placeholders(tmp_path):
     rr.render_docx(profile, out)
     cells = "\n".join(c.text for t in Document(str(out)).tables for row in t.rows for c in row.cells)
     assert "写真貼付欄" in cells
+
+
+ACCEPTED = ["2023-09", "2021", "2023年9月", "2023/09"]
+REJECTED = ["Sep 2023", "September 2023", "03/2021", "", None]
+
+
+@pytest.mark.parametrize("value", ACCEPTED)
+def test_accepted_date_formats_produce_no_fatal_problem(jp_profile, value):
+    """`warnings` is not asserted empty here: the jp_profile fixture's
+    certification is genuinely undated (`"基本情報技術者試験 合格"`), and an
+    undated certification is a warning by design."""
+    p = dict(jp_profile)
+    p["education"] = [{"institution": "○○大学", "degree": "修士",
+                       "start": value, "end": "2023-03"}]
+    fatal, _ = rr.date_problems(p)
+    assert fatal == []
+
+
+@pytest.mark.parametrize("value", REJECTED)
+def test_unparseable_education_date_is_fatal_and_names_the_entry(jp_profile, value):
+    p = dict(jp_profile)
+    p["education"] = [{"institution": "○○大学", "degree": "修士",
+                       "start": value, "end": "2023-03"}]
+    fatal, _ = rr.date_problems(p)
+    assert len(fatal) == 1
+    assert "○○大学" in fatal[0]
+    assert "start" in fatal[0]
+    assert repr(value) in fatal[0] or "''" in fatal[0]
+
+
+def test_a_current_role_needs_no_end_date(jp_profile):
+    """現在に至る legitimately has no year. Flagging it would fire on every
+    employed candidate."""
+    fatal, _ = rr.date_problems(jp_profile)
+    assert fatal == []
+
+
+def test_an_undated_certification_warns_but_is_not_fatal(jp_profile):
+    p = dict(jp_profile)
+    p["certifications"] = ["基本情報技術者試験 合格"]
+    fatal, warnings = rr.date_problems(p)
+    assert fatal == []
+    assert len(warnings) == 1 and "基本情報技術者試験" in warnings[0]
+
+
+@pytest.mark.parametrize("cert,year,month", [
+    ("基本情報技術者試験 合格 (2021)", "2021", ""),
+    ("AWS Certified Cloud Practitioner (2024)", "2024", ""),
+    ("普通自動車第一種運転免許 (2015-04)", "2015", "4"),
+    ("2023年9月 応用情報技術者", "2023", "9"),
+])
+def test_a_certification_carrying_its_year_anywhere_is_read_and_silent(cert, year, month):
+    """The most ordinary real entry puts the year in parentheses at the end.
+    The anchored `_ym` returns ('', '') for it, which would blank the 年 cell
+    AND fire a warning on a perfectly good line — a check that cries wolf on
+    the common case is a check its reader stops seeing."""
+    rows = rr.licenses_rows({"certifications": [cert]})
+    assert (rows[0]["y"], rows[0]["m"]) == (year, month)
+    fatal, warnings = rr.date_problems({"certifications": [cert]})
+    assert fatal == [] and warnings == []
+
+
+@pytest.mark.parametrize("cert", ["ISO 27001 Lead Auditor", "CCNA 200-301",
+                                  "TOEIC 990"])
+def test_a_digit_string_that_is_not_a_year_does_not_become_one(cert):
+    """A false year printed into the 年 cell is worse than a blank one: it is
+    a fabricated date on a legal-ish form, and it looks exactly like a real one."""
+    rows = rr.licenses_rows({"certifications": [cert]})
+    assert rows[0]["y"] == ""
+    fatal, warnings = rr.date_problems({"certifications": [cert]})
+    assert fatal == [] and len(warnings) == 1
+
+
+def test_main_refuses_to_write_a_form_with_blank_year_cells(jp_profile, tmp_path, capsys):
+    import yaml
+    p = dict(jp_profile)
+    p["education"] = [{"institution": "○○大学", "degree": "修士",
+                       "start": "Sep 2023", "end": "2025-03"}]
+    src = tmp_path / "profile.yaml"
+    src.write_text(yaml.safe_dump(p, allow_unicode=True), encoding="utf-8")
+    out = tmp_path / "rirekisho.md"
+    assert rr.main([str(src), "--format", "md", "--out", str(out)]) == 1
+    err = capsys.readouterr().err
+    assert "WARNING" in err and "Sep 2023" in err
+    assert not out.exists()
+
+
+def test_allow_blank_dates_is_an_explicit_opt_in(jp_profile, tmp_path, capsys):
+    import yaml
+    p = dict(jp_profile)
+    p["education"] = [{"institution": "○○大学", "degree": "修士",
+                       "start": "Sep 2023", "end": "2025-03"}]
+    src = tmp_path / "profile.yaml"
+    src.write_text(yaml.safe_dump(p, allow_unicode=True), encoding="utf-8")
+    out = tmp_path / "rirekisho.md"
+    assert rr.main([str(src), "--format", "md", "--out", str(out),
+                    "--allow-blank-dates"]) == 0
+    assert out.exists()
+    assert "WARNING" in capsys.readouterr().err     # still says so, just doesn't refuse
+
+
+def test_a_fully_dated_profile_writes_and_is_silent(jp_profile, tmp_path, capsys):
+    """The quiet case, pinned as hard as the firing one — including the
+    certification, which is given its year here so that a silent run is a real
+    claim about the whole form rather than about the tables we happened to fix."""
+    import yaml
+    p = dict(jp_profile)
+    p["certifications"] = ["基本情報技術者試験 合格 (2021)"]
+    src = tmp_path / "profile.yaml"
+    src.write_text(yaml.safe_dump(p, allow_unicode=True), encoding="utf-8")
+    out = tmp_path / "rirekisho.md"
+    assert rr.main([str(src), "--format", "md", "--out", str(out)]) == 0
+    assert "WARNING" not in capsys.readouterr().err

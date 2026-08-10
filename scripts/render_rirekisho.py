@@ -53,17 +53,51 @@ def _sortable(s):
     return (int(y) if y else 9999, int(mo) if mo else 0)
 
 
+def _checked_ym(value, what, problems):
+    """(year, month) plus a recorded problem when there is no parseable year.
+
+    _ym returns ('', '') for anything it cannot read — 'Sep 2023',
+    'September 2023' and '03/2021' all do — and the row then renders with blank
+    年 and 月 cells. That is a structurally invalid 履歴書 that renders, saves and
+    passes pytest, and the rirekisho is deliberately routed away from all three
+    judges, so no other reader exists.
+    """
+    y, mo = _ym(value)
+    if not y and problems is not None:
+        problems.append(f"{what}: could not read a year from {value!r} — accepted "
+                        f"forms are '2023-09', '2023/09', '2021', '2023年9月'")
+    return y, mo
+
+
+# certifications[] is free-form prose, not a structured date field. The most
+# ordinary real entry is "基本情報技術者試験 合格 (2021)", and the anchored _ym
+# returns ('', '') for it — blanking the 年 cell while the year sits in plain
+# sight, and firing a warning on a perfectly good line. So search instead of
+# anchoring, and require a plausible year shape (19xx/20xx, not adjacent to
+# another digit) so that "ISO 27001" and "CCNA 200-301" do not silently print
+# a fabricated date into the form.
+_CERT_YEAR = re.compile(r"(?<!\d)((?:19|20)\d{2})(?!\d)(?:\s*[-/.年]\s*(\d{1,2})(?!\d))?")
+
+
+def _cert_ym(value):
+    m = _CERT_YEAR.search(str(value or ""))
+    if not m:
+        return "", ""
+    return m.group(1), (str(int(m.group(2))) if m.group(2) else "")
+
+
 # ── content builders ──────────────────────────────────────────────────────────
 
-def gakureki_shokureki_rows(profile):
+def gakureki_shokureki_rows(profile, problems=None):
     """Build the combined 学歴・職歴 rows: a 学歴 header, enrolled/graduated rows
     per degree, a 職歴 header, joined/left rows per role, and a closing 以上."""
     rows = [{"y": "", "m": "", "text": "学歴", "align": "center"}]
     for ed in sorted(profile.get("education") or [], key=lambda e: _sortable(e.get("start"))):
         name = " ".join(x for x in [ed.get("institution", ""), ed.get("degree", "")] if x)
-        y, mo = _ym(ed.get("start"))
+        y, mo = _checked_ym(ed.get("start"), f"学歴 {name} 入学 (start)", problems)
         rows.append({"y": y, "m": mo, "text": f"{name}　入学"})
-        ey, emo = _ym(ed.get("end"))
+        ey, emo = _checked_ym(ed.get("end"), f"学歴 {name} 卒業 (end)", problems) \
+            if not render_cv._is_current(ed) else _ym(ed.get("end"))
         verb = "在学中" if render_cv._is_current(ed) else "卒業"
         rows.append({"y": ey, "m": emo, "text": f"{name}　{verb}"})
 
@@ -73,27 +107,40 @@ def gakureki_shokureki_rows(profile):
         rows.append({"y": "", "m": "", "text": "なし", "align": "center"})
     for ex in sorted(exp, key=lambda e: _sortable(e.get("start"))):
         org = ex.get("org", "")
-        y, mo = _ym(ex.get("start"))
+        y, mo = _checked_ym(ex.get("start"), f"職歴 {org} 入社 (start)", problems)
         rows.append({"y": y, "m": mo, "text": f"{org}　入社"})
         if render_cv._is_current(ex):
             rows.append({"y": "", "m": "", "text": "現在に至る"})
         else:
-            ey, emo = _ym(ex.get("end"))
+            ey, emo = _checked_ym(ex.get("end"), f"職歴 {org} 退社 (end)", problems)
             rows.append({"y": ey, "m": emo, "text": f"{org}　退社"})
 
     rows.append({"y": "", "m": "", "text": "以上", "align": "right"})
     return rows
 
 
-def licenses_rows(profile):
-    """免許・資格 rows from the free-form certifications list."""
+def licenses_rows(profile, problems=None):
     rows = []
     for cert in (profile.get("certifications") or []):
-        y, mo = _ym(cert)
+        y, mo = _cert_ym(cert)
+        if not y and problems is not None:
+            problems.append(f"免許・資格 {cert}: no year found — the 年 cell will be "
+                            f"blank; add one, e.g. '基本情報技術者試験 合格 (2021)'")
         rows.append({"y": y, "m": mo, "text": cert})
     if not rows:
         rows.append({"y": "", "m": "", "text": "特になし"})
     return rows
+
+
+def date_problems(profile):
+    """(fatal, warnings). 学歴・職歴 rows must carry a year — the table IS the
+    form, and a blank 年 cell makes it structurally invalid. A certification
+    with no year at all is a common and tolerable omission, so it warns; a
+    certification that carries its year in prose is read and stays silent."""
+    fatal, warnings = [], []
+    gakureki_shokureki_rows(profile, fatal)
+    licenses_rows(profile, warnings)
+    return fatal, warnings
 
 
 # ── Markdown renderer (preview) ───────────────────────────────────────────────
@@ -222,15 +269,26 @@ def main(argv=None):
     ap.add_argument("--format", choices=["md", "docx"], default="docx",
                     help="docx is the authentic form; export it to PDF from Word/LibreOffice")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--allow-blank-dates", action="store_true",
+                    help="write the form anyway; the 年/月 cells will be blank")
     args = ap.parse_args(argv)
 
     profile = render_cv.load_profile(args.profile)
+    fatal, warnings = date_problems(profile)
+    for problem in fatal + warnings:
+        print(f"WARNING: {problem}", file=sys.stderr)
+    if fatal and not args.allow_blank_dates:
+        print("Refusing to write a 履歴書 with blank 年/月 cells in 学歴・職歴 — the "
+              "table is the form. Fix the dates, or pass --allow-blank-dates.",
+              file=sys.stderr)
+        return 1
     out = pathlib.Path(args.out)
     if args.format == "md":
         out.write_text(render_markdown(profile), encoding="utf-8")
     else:
         render_docx(profile, out)
     print(f"Wrote {out}")
+    return 0
 
 
 if __name__ == "__main__":
