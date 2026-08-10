@@ -85,7 +85,14 @@ def build_latex(d):
 def render_pdf(d, out_path):
     out_path = pathlib.Path(out_path)
     tex_path = out_path.with_suffix(".tex")
-    tex_path.write_text(build_latex(d), encoding="utf-8")
+    tex = build_latex(d)
+    tex_path.write_text(tex, encoding="utf-8")
+    if render_cv._has_cjk(tex):
+        print("WARNING: the letter contains CJK/Thai characters, which the "
+              "Latin-script LaTeX template cannot compile. Use Markdown or .docx "
+              f"(or a XeLaTeX template with a CJK font). Source at {tex_path}.",
+              file=sys.stderr)
+        return False
     engine = render_cv.find_latex_engine()
     if engine is None:
         print(f"WARNING: no LaTeX engine found. Wrote {tex_path}.", file=sys.stderr)
