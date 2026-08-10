@@ -1,0 +1,45 @@
+meta:
+  name: "José García"
+  language: "en"
+  headline: "Senior Software Engineer"
+contact:
+  email: "jose.garcia@example.com"
+  phone: "+31 6 1234 5678"
+  location: "Amsterdam, NL"
+  links:
+    linkedin: "linkedin.com/in/josegarcia"
+    github: "github.com/josegarcia"
+summary: "Experienced engineer building high-performance systems."
+experience:
+  - title: "Lead Engineer"
+    org: "TechCorp"
+    location: "Amsterdam"
+    start: "2022-01"
+    end: "present"
+    bullets:
+      - "Reduced system latency by 50%."
+      - "Led a team of 8 engineers."
+education:
+  - degree: "MSc Computer Science"
+    institution: "Universiteit van Amsterdam"
+    location: "Amsterdam"
+    start: "2019"
+    end: "2021"
+    details: "Thesis on distributed systems."
+skills:
+  technical: ["Python", "Go", "Kubernetes"]
+  languages: ["Spanish (native)", "English (fluent)", "Dutch (intermediate)"]
+projects:
+  - name: "OpenMetrics"
+    role: "Lead Developer"
+    description: "An open-source metrics collection framework."
+    links:
+      - "github.com/josegarcia/openmetrics"
+publications:
+  - "García, J. (2021). Distributed consensus at scale. Journal of Systems, 12(3)."
+awards:
+  - "Best Paper Award, SysCon 2021"
+certifications:
+  - "Certified Kubernetes Administrator (CKA), 2022"
+volunteer:
+  - "Mentor at CoderDojo Amsterdam, 2020–present"

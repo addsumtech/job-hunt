@@ -1,0 +1,14 @@
+sender:
+  name: "Test User"
+  email: "test@example.com"
+  location: "Leiden, NL"
+recipient:
+  name: "Hiring Team"
+  company: "Acme BV"
+  location: "Amsterdam, NL"
+date: "2026-06-02"
+salutation: "Dear Hiring Team,"
+body:
+  - "I am writing to apply for the Engineer role at Acme."
+  - "My experience cutting latency by 40% maps directly to your needs."
+closing: "Sincerely,"
