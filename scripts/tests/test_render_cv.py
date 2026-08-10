@@ -434,17 +434,109 @@ def test_personal_data_and_photo_included_for_non_cluster1(tmp_path):
     assert "includegraphics" in tex
 
 
-def test_personal_data_and_photo_stripped_for_cluster1(tmp_path):
-    """Defense-in-depth: a US/UK target never renders photo/DOB even if present."""
+# Realistic spellings, drawn from the eval scenario inputs and from what a
+# returning user actually types. Every one must either suppress or warn — never
+# render protected data silently.
+CLUSTER1_SPELLINGS = [
+    "us", "USA", "U.S.", "United States", "United States of America",
+    "United States (Los Angeles, CA)", "US (Boston)", "Los Angeles, CA",
+    "remote (US)", "uk", "U.K.", "United Kingdom", "London, United Kingdom",
+    "Canada", "Toronto, Canada", "Ireland", "australia", "New Zealand",
+]
+KNOWN_NON_CLUSTER1_SPELLINGS = [
+    "nl", "Netherlands", "Amsterdam, Netherlands", "Eindhoven, NL (hybrid)",
+    "Germany", "Munich, Germany", "Remote — EU", "Austria", "Switzerland",
+    "cn", "China", "中国", "Japan", "Tokyo, Japan", "South Korea", "Singapore",
+]
+UNRECOGNIZED_SPELLINGS = ["Brazil", "Dubai, UAE", "Mars", "", "somewhere nice"]
+
+
+@pytest.mark.parametrize("market", CLUSTER1_SPELLINGS)
+def test_cluster1_spellings_suppress_personal_data(tmp_path, market):
     img = tmp_path / "p.png"; img.write_bytes(b"\x89PNG\r\n\x1a\n")
-    for market in ("us", "United Kingdom", "australia"):
-        profile = {
-            "meta": {"name": "Z", "target_market": market, "photo": str(img)},
-            "contact": {"email": "z@x.com", "personal": {"date_of_birth": "1992"}},
-        }
-        md = render_cv.render_markdown(profile)
-        assert "1992" not in md and "Photo" not in md, f"{market} leaked personal data"
-        assert "includegraphics" not in render_cv.build_latex(profile)
+    profile = {
+        "meta": {"name": "Z", "target_market": market, "photo": str(img)},
+        "contact": {"email": "z@x.com", "personal": {"date_of_birth": "1992"}},
+    }
+    assert render_cv.resolve_cluster(market) == 1
+    md = render_cv.render_markdown(profile)
+    assert "1992" not in md and "Photo" not in md, f"{market!r} leaked personal data"
+    assert "includegraphics" not in render_cv.build_latex(profile)
+
+
+@pytest.mark.parametrize("market", KNOWN_NON_CLUSTER1_SPELLINGS)
+def test_known_non_cluster1_markets_render_quietly(tmp_path, capsys, market):
+    """The quiet case, pinned as hard as the firing one: a photo on a Dutch or
+    Chinese CV is a convention, not a defect. A warning here would be a warning
+    everyone learns to ignore."""
+    img = tmp_path / "p.png"; img.write_bytes(b"\x89PNG\r\n\x1a\n")
+    profile = {
+        "meta": {"name": "Z", "target_market": market, "photo": str(img)},
+        "contact": {"email": "z@x.com", "personal": {"date_of_birth": "1992"}},
+    }
+    assert render_cv.resolve_cluster(market) in (2, 3)
+    md = render_cv.render_markdown(profile)
+    assert "1992" in md
+    assert capsys.readouterr().err == ""
+
+
+@pytest.mark.parametrize("market", UNRECOGNIZED_SPELLINGS)
+def test_unrecognized_market_with_personal_data_warns_and_names_the_fields(tmp_path, capsys, market):
+    img = tmp_path / "p.png"; img.write_bytes(b"\x89PNG\r\n\x1a\n")
+    profile = {
+        "meta": {"name": "Z", "target_market": market, "photo": str(img)},
+        "contact": {"email": "z@x.com", "personal": {"date_of_birth": "1992"}},
+    }
+    assert render_cv.resolve_cluster(market) is None
+    render_cv.render_markdown(profile)
+    err = capsys.readouterr().err
+    assert "WARNING" in err
+    assert "contact.personal.date_of_birth" in err
+    assert "meta.photo" in err
+    assert repr(market) in err or f"{market!r}" in err
+
+
+def test_unrecognized_market_without_personal_data_is_silent(tmp_path, capsys):
+    """No protected data, nothing to warn about."""
+    profile = {"meta": {"name": "Z", "target_market": "Brazil"},
+               "contact": {"email": "z@x.com"}}
+    render_cv.render_markdown(profile)
+    assert capsys.readouterr().err == ""
+
+
+def test_the_unknown_market_warning_prints_once_per_profile_not_once_per_format(
+        tmp_path, capsys):
+    """An md + docx + pdf run — three invocations, or three direct calls from
+    one process — renders from the SAME profile. Three identical warnings is
+    how a warning gets trained away, and it is why this does not live in
+    personal_items (a generator consumed at three separate sites)."""
+    img = tmp_path / "p.png"; img.write_bytes(b"\x89PNG\r\n\x1a\n")
+    profile = {"meta": {"name": "Z", "target_market": "Dubai, UAE", "photo": str(img)},
+               "contact": {"email": "z@x.com",
+                           "personal": {"date_of_birth": "1992"}}}
+    render_cv.render_markdown(profile)
+    render_cv.build_latex(profile)
+    render_cv.render_docx(profile, tmp_path / "cv.docx")
+    assert capsys.readouterr().err.count("WARNING") == 1
+
+
+def test_resetting_lets_a_second_run_warn_again(tmp_path, capsys):
+    """The guard is per-run, not per-process: main() clears it, so a second
+    CLI invocation in the same process is not silently exempted."""
+    profile = {"meta": {"name": "Z", "target_market": "Mars"},
+               "contact": {"personal": {"nationality": "NL"}}}
+    render_cv.render_markdown(profile)
+    render_cv.reset_market_warnings()
+    render_cv.render_markdown(profile)
+    assert capsys.readouterr().err.count("WARNING") == 2
+
+
+def test_protected_fields_names_exactly_what_is_present():
+    profile = {"meta": {"name": "Z", "photo": "/tmp/p.png"},
+               "contact": {"personal": {"date_of_birth": "1992", "nationality": "NL",
+                                        "marital_status": None}}}
+    assert render_cv.protected_fields(profile) == [
+        "contact.personal.date_of_birth", "contact.personal.nationality", "meta.photo"]
 
 
 def test_cjk_pdf_degrades_without_unicode_engine(tmp_path, capsys, monkeypatch):

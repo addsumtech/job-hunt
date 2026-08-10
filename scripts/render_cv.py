@@ -27,6 +27,7 @@ import re
 import shutil
 import subprocess
 import sys
+import unicodedata
 
 import yaml
 
@@ -343,21 +344,156 @@ def _contact_links(profile):
             yield label, url
 
 
-# Markets where a photo / DOB / nationality on a CV is a liability rather than a
-# convention (US/Canada/UK/Ireland/Australia/NZ). The skill's tailoring step is
-# meant to strip these for such targets; the renderer enforces the same rule as
-# defense-in-depth so a mis-tailored profile can't leak protected data onto a
-# Cluster-1 CV. Matched loosely against meta.target_market.
-_CLUSTER1_MARKETS = {
-    "us", "usa", "united states", "ca", "can", "canada", "uk", "gb",
-    "united kingdom", "britain", "england", "scotland", "wales", "ie", "irl",
-    "ireland", "au", "aus", "australia", "nz", "new zealand",
+# Which regional CV convention a `meta.target_market` string belongs to.
+#   1 = US/CA/UK/IE/AU/NZ — a photo/DOB/nationality is a liability there; many
+#       employers route such CVs straight to rejection because considering that
+#       data exposes them to discrimination-law claims.
+#   2 = EU/EEA, 3 = East & SE Asia — the same fields are a normal convention.
+#   None = not recognised, which is NOT the same as "safe".
+#
+# Full names are matched as whole-word phrases anywhere in a segment, so
+# "United States of America" and "London, United Kingdom" both resolve. Two-letter
+# codes are matched only when they are the WHOLE segment: otherwise "Remote in
+# Berlin" would resolve to India via "in", and a false resolution is worse than
+# none — it silences the warning.
+_CLUSTER_NAMES = {
+    1: ["united states of america", "united states", "u s a", "america", "canada",
+        "united kingdom", "great britain", "britain", "england", "scotland", "wales",
+        "northern ireland", "republic of ireland", "ireland", "australia",
+        "new zealand", "u k", "u s"],
+    2: ["the netherlands", "netherlands", "holland", "germany", "deutschland",
+        "france", "belgium", "spain", "italy", "portugal", "austria", "switzerland",
+        "sweden", "norway", "denmark", "finland", "poland", "czechia",
+        "czech republic", "luxembourg", "greece", "romania", "hungary", "ireland eu",
+        "european union", "eea"],
+    3: ["mainland china", "china", "hong kong", "taiwan", "japan", "south korea",
+        "republic of korea", "korea", "singapore", "malaysia", "thailand", "vietnam",
+        "indonesia", "philippines", "india"],
 }
+_CLUSTER_CODES = {
+    1: ["us", "usa", "ca", "can", "uk", "gb", "ie", "irl", "au", "aus", "nz"],
+    2: ["nl", "de", "fr", "be", "es", "it", "pt", "at", "ch", "se", "no", "dk",
+        "fi", "pl", "cz", "lu", "gr", "ro", "hu", "eu"],
+    3: ["cn", "prc", "hk", "tw", "jp", "kr", "sg", "my", "th", "vn", "id", "ph", "in"],
+}
+# CJK market names have no word boundaries to split on, so they are matched by
+# substring. Without these a Chinese-language profile resolves to None and the
+# unknown-market warning fires on a perfectly ordinary Chinese CV.
+_CLUSTER_CJK = {
+    1: ["美国", "英国", "加拿大", "澳大利亚", "新西兰", "爱尔兰"],
+    2: ["荷兰", "德国", "法国", "比利时", "西班牙", "意大利", "瑞士", "瑞典", "欧盟"],
+    3: ["中国", "中国大陆", "香港", "台湾", "日本", "韩国", "新加坡", "马来西亚", "泰国", "印度"],
+}
+
+_NAME_CLUSTER, _CODE_CLUSTER, _CJK_CLUSTER = {}, {}, {}
+for _c, _names in _CLUSTER_NAMES.items():
+    for _n in _names:
+        _NAME_CLUSTER.setdefault(_n, _c)
+for _c, _codes in _CLUSTER_CODES.items():
+    for _n in _codes:
+        _CODE_CLUSTER.setdefault(_n, _c)
+for _c, _names in _CLUSTER_CJK.items():
+    for _n in _names:
+        _CJK_CLUSTER.setdefault(_n, _c)
+_MAX_NAME_WORDS = max(len(_n.split()) for _n in _NAME_CLUSTER)
+
+_MARKET_SEP = re.compile(r"[,()\[\]/|;·–—-]+")
+_MARKET_PUNCT = re.compile(r"[^\w\s]", re.UNICODE)
+
+# The protected fields, in the order they are reported. `contact.personal` is a
+# free-form dict, so any key in it is treated as protected — the risk is the
+# category, not a fixed list of key names.
+_PHOTO_FIELD = "meta.photo"
+
+
+def _market_segments(market):
+    text = unicodedata.normalize("NFKC", str(market or "")).lower()
+    for seg in _MARKET_SEP.split(text):
+        seg = " ".join(_MARKET_PUNCT.sub(" ", seg).split())
+        if seg:
+            yield seg
+
+
+def resolve_cluster(market):
+    """1, 2, 3 — or None when the string names no market we know.
+
+    When several clusters match (e.g. 'remote (US) / hybrid Berlin') the lowest
+    wins: suppression is the safe direction, because the cost of stripping a
+    photo from an EU CV is cosmetic and the cost of leaving a DOB on a US CV is
+    an automatic rejection at best.
+    """
+    text = unicodedata.normalize("NFKC", str(market or "")).lower()
+    found = {c for alias, c in _CJK_CLUSTER.items() if alias in text}
+    for seg in _market_segments(market):
+        if seg in _CODE_CLUSTER:
+            found.add(_CODE_CLUSTER[seg])
+        words = seg.split()
+        for n in range(_MAX_NAME_WORDS, 0, -1):
+            for i in range(len(words) - n + 1):
+                phrase = " ".join(words[i:i + n])
+                if phrase in _NAME_CLUSTER:
+                    found.add(_NAME_CLUSTER[phrase])
+    return min(found) if found else None
+
+
+def protected_fields(profile):
+    """Names of the protected personal-data fields actually present."""
+    out = []
+    personal = (profile.get("contact") or {}).get("personal") or {}
+    if isinstance(personal, dict):
+        out += [f"contact.personal.{k}" for k, v in personal.items()
+                if v not in (None, "")]
+    if (profile.get("meta") or {}).get("photo"):
+        out.append(_PHOTO_FIELD)
+    return out
+
+
+# One warning per (profile object, market), not per render call. An md + docx
+# + pdf run — three invocations, or three direct calls from one process —
+# renders from the SAME profile dict, and printing the identical warning three
+# times is how a warning gets trained away. (main() takes one --format per
+# invocation: md, docx or pdf. There is no `all`.) The profile OBJECT is held
+# rather than its id(): an id can be
+# reused after garbage collection, and a silently-suppressed leak warning is
+# exactly the failure this interlock exists to prevent.
+_MARKET_WARNED = []
+
+
+def reset_market_warnings():
+    """Forget which profiles have already warned. main() calls this at the top
+    of every CLI run so the guard is per-run, not per-process."""
+    _MARKET_WARNED.clear()
+
+
+def _warn_unknown_market(profile):
+    """Loud when the market is unrecognised AND protected data is present.
+
+    cv-craft.md claims a mis-tailored profile 'physically cannot leak protected
+    data onto a US/UK CV'. It could, for five measured spellings. The matcher
+    above closes those; this closes the class — an unrecognised market is not
+    evidence that rendering a DOB is safe, and silence there is what made the
+    original claim false.
+    """
+    market = (profile.get("meta") or {}).get("target_market")
+    if resolve_cluster(market) is not None:
+        return
+    fields = protected_fields(profile)
+    if not fields:
+        return
+    if any(p is profile and m == market for p, m in _MARKET_WARNED):
+        return
+    _MARKET_WARNED.append((profile, market))
+    print(f"WARNING: meta.target_market {market!r} matches no known CV-convention "
+          f"cluster, so the Cluster-1 personal-data interlock cannot fire. These "
+          f"fields will render as-is: {', '.join(fields)}. If this is a "
+          f"US/Canada/UK/Ireland/Australia/NZ target, set meta.target_market to a "
+          f"recognised country name and re-render — protected personal data on "
+          f"such a CV is a discrimination-law liability and a common auto-reject.",
+          file=sys.stderr)
 
 
 def _is_cluster1(profile):
-    tm = str((profile.get("meta") or {}).get("target_market", "")).strip().lower()
-    return tm in _CLUSTER1_MARKETS
+    return resolve_cluster((profile.get("meta") or {}).get("target_market")) == 1
 
 
 def personal_items(profile):
@@ -446,6 +582,7 @@ def group_label(group):
 # ── Markdown renderer ─────────────────────────────────────────────────────────
 
 def render_markdown(profile):
+    _warn_unknown_market(profile)
     h = headings(profile)
     meta = profile.get("meta", {}) or {}
     lines = [f"# {meta.get('name', '')}".rstrip()]
@@ -576,6 +713,7 @@ def _add_hyperlink(paragraph, text, url):
 
 
 def render_docx(profile, out_path):
+    _warn_unknown_market(profile)
     from docx import Document
 
     h = headings(profile)
@@ -838,6 +976,7 @@ def build_latex(profile, cjk=None):
     inputenc/fontenc setup, which cannot render CJK glyphs at all. When `cjk`
     is None we auto-detect from the profile content.
     """
+    _warn_unknown_market(profile)
     e = latex_escape
     # Escape headings for LaTeX up front: section labels can legitimately contain
     # LaTeX-special characters — the regulated-profession recipes use headers like
@@ -1030,6 +1169,7 @@ def render_pdf(profile, out_path):
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
 def main(argv=None):
+    reset_market_warnings()
     ap = argparse.ArgumentParser()
     ap.add_argument("profile")
     ap.add_argument("--format", choices=["md", "docx", "pdf"], default="md")
