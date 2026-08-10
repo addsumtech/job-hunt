@@ -1715,7 +1715,11 @@ off within a week, and then it is not there on the run that mattered.
       closing the gaps, and a strong apply with an evening of work left is an ordinary,
       honest assessment. A check that fired on those would be ignored within a week.
       """
-      if not assessment or assessment.get("verdict") != "strong_apply":
+      # VERDICTS is ordered strongest-first and its order is pinned by test_vocab.py,
+      # so index 0 is the top verdict. Written this way rather than as the literal
+      # because Plan 1's test_no_other_script_redeclares_a_closed_set fails any
+      # scripts/*.py that spells a verdict out — one source, one spelling.
+      if not assessment or assessment.get("verdict") != vocab.VERDICTS[0]:
           return False
       return assessment.get("effort") in CONFLICT_EFFORTS
 

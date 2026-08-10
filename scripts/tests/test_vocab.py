@@ -2,6 +2,8 @@ import pathlib
 import re
 import sys
 
+import pytest
+
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 import vocab
 
@@ -61,14 +63,44 @@ def test_no_other_script_redeclares_a_closed_set():
     """The whole point. A second copy fails on the day it is written rather
     than on the day the two copies disagree. `MOCK_MARKET_KEYS` (Plan 4's
     documented superset) is deliberately still allowed — the anchored regex
-    only rejects a bare re-declaration."""
+    only rejects a bare re-declaration.
+
+    A bare alias to the one source — `MARKET_KEYS = vocab.MARKET_KEYS`, which
+    `check_conventions.py` uses for readability — is allowed too, and only in
+    exactly that form. It is a second *name*, not a second *spelling*: it cannot
+    drift, because there is nothing in it to drift from. Anything else on the
+    right-hand side, a literal tuple most of all, still fails."""
+    alias = re.compile(r"^\s*(MARKET_KEYS|DEFECT_TAGS)\s*=\s*vocab\.\1\s*$", re.M)
     for f in sorted(SCRIPTS.glob("*.py")):
         if f.name == "vocab.py":
             continue
-        text = f.read_text(encoding="utf-8")
+        text = alias.sub("", f.read_text(encoding="utf-8"))
         assert "strong_apply" not in text, \
             f"{f.name} spells out a verdict — import it from vocab.py"
         assert not re.search(r"^\s*MARKET_KEYS\s*=", text, re.M), \
             f"{f.name} re-declares MARKET_KEYS — import it from vocab.py"
         assert not re.search(r"^\s*DEFECT_TAGS\s*=", text, re.M), \
             f"{f.name} re-declares DEFECT_TAGS — import it from vocab.py"
+
+
+def test_the_alias_carve_out_does_not_admit_a_real_second_copy(tmp_path, monkeypatch):
+    """Pin the carve-out from both sides. The exact alias passes; a literal tuple
+    under the same name does not — otherwise the widening quietly deletes the guard."""
+    import test_vocab as self_mod
+
+    ok = tmp_path / "ok.py"
+    ok.write_text("import vocab\nMARKET_KEYS = vocab.MARKET_KEYS\n", encoding="utf-8")
+    bad = tmp_path / "bad.py"
+    bad.write_text('MARKET_KEYS = ("cn", "nl", "de", "uk", "us")\n', encoding="utf-8")
+
+    monkeypatch.setattr(self_mod, "SCRIPTS", tmp_path)
+    ok_only = tmp_path / "keep"
+    ok_only.mkdir()
+    (ok_only / "ok.py").write_text(ok.read_text(encoding="utf-8"), encoding="utf-8")
+
+    monkeypatch.setattr(self_mod, "SCRIPTS", ok_only)
+    self_mod.test_no_other_script_redeclares_a_closed_set()  # quiet case: must not raise
+
+    monkeypatch.setattr(self_mod, "SCRIPTS", tmp_path)
+    with pytest.raises(AssertionError, match="re-declares MARKET_KEYS"):
+        self_mod.test_no_other_script_redeclares_a_closed_set()
