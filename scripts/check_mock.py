@@ -31,6 +31,8 @@ import pathlib
 import re
 import sys
 
+import yaml
+
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import enter_mode
 import journal
@@ -253,6 +255,155 @@ def check_assessment(assessment_text: str, transcript_text: str, round_no: int):
     return blocks, findings
 
 
+# ----------------------------------------------------------------- question-log.yaml
+
+def _parse_stamp(raw: str):
+    """`opencli nowcoder detail` returns an ISO-8601 timestamp; accept a bare date too."""
+    text = str(raw).strip().replace("Z", "")
+    for cut in (len(text), 19, 10):
+        try:
+            return datetime.datetime.fromisoformat(text[:cut]).date()
+        except ValueError:
+            continue
+    return None
+
+
+def check_question_log(path: pathlib.Path, today: datetime.date) -> list:
+    if not path.exists():
+        return [
+            f"NO_QUESTION_LOG: {path} is missing — modes/interview.md requires the log "
+            "seeded before the round, and it is the only record of where a question came from"
+        ]
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        return [f"QUESTION_LOG_UNPARSEABLE: {path}: {exc}"]
+    if not isinstance(data, dict):
+        return [f"QUESTION_LOG_UNPARSEABLE: {path}: top level is not a mapping"]
+
+    findings: list = []
+    posting_country = str(data.get("posting_country") or "").strip().upper()
+    if not posting_country:
+        findings.append(
+            "NO_POSTING_COUNTRY: question-log.yaml must record posting_country: <ISO-2>. "
+            "Without it the country rule cannot fire, and a same-name different-entity "
+            "post looks exactly like a right one"
+        )
+    questions = data.get("questions") or []
+    if not isinstance(questions, list) or not questions:
+        findings.append(f"QUESTION_LOG_EMPTY: {path} has no questions: list")
+        questions = []
+
+    for entry in questions:
+        if not isinstance(entry, dict):
+            findings.append(f"QUESTION_LOG_UNPARSEABLE: {path}: a questions: row is not a mapping")
+            continue
+        qid = entry.get("id", "?")
+        source = entry.get("source")
+        if source not in V.QUESTION_SOURCES:
+            findings.append(
+                f"UNKNOWN_QUESTION_SOURCE: {qid}: {source!r} is not one of "
+                + " | ".join(V.QUESTION_SOURCES)
+            )
+        if source != "scraped":
+            continue
+        if not str(entry.get("source_id") or "").strip():
+            findings.append(
+                f"NO_SOURCE_ID: {qid}: a scraped question needs the id that "
+                "`opencli nowcoder detail <id>` was called with"
+            )
+        use = str(entry.get("use") or "").strip()
+        if use not in ("shape", "question"):
+            findings.append(f"UNKNOWN_USE: {qid}: use: must be 'shape' or 'question'")
+        stamp = str(entry.get("source_time") or "").strip()
+        if not stamp:
+            findings.append(
+                f"NO_SOURCE_TIME: {qid}: copy the `time` field from `detail` — a search "
+                "row is elided and undated, and one result set held posts 3 days and "
+                "9.5 months old"
+            )
+        else:
+            when = _parse_stamp(stamp)
+            if when is None:
+                findings.append(f"BAD_SOURCE_TIME: {qid}: {stamp!r} is not an ISO-8601 timestamp")
+            elif (today - when).days > V.SCRAPED_SPECIFIC_MAX_AGE_DAYS and use == "question":
+                findings.append(
+                    f"STALE_SPECIFIC: {qid}: {stamp} is {(today - when).days} days old — "
+                    "it may set shape only, never be quoted as a specific question"
+                )
+        entity = str(entry.get("entity_country") or "").strip().upper()
+        if not entity:
+            findings.append(
+                f"NO_ENTITY_COUNTRY: {qid}: record which country's entity the post "
+                "describes; the company name matching is not evidence that the process does"
+            )
+        elif posting_country and entity != posting_country and not entry.get("country_named_in_post"):
+            findings.append(
+                f"WRONG_COUNTRY: {qid}: the source describes the {entity} entity and the "
+                f"posting is {posting_country} — move it to rejected: with "
+                "reason: wrong_country unless the post itself names the posting's country"
+            )
+
+    for entry in data.get("rejected") or []:
+        if not isinstance(entry, dict):
+            continue
+        reason = str(entry.get("reason") or "")
+        if reason not in V.REJECT_REASONS:
+            findings.append(
+                f"UNKNOWN_REJECT_REASON: {entry.get('id', '?')}: {reason!r} is not one of "
+                + " | ".join(V.REJECT_REASONS)
+            )
+    return findings
+
+
+# ----------------------------------------------------------------- answer-bank.md
+
+# `[ \t]` throughout, never `\s`: `\s` matches a newline, so `^\s*-\s*source:\s*\S+`
+# happily matches an EMPTY "- source:" line by borrowing the "-" from the next bullet.
+# That is the exact defect this check exists to catch, passing itself.
+_AB_HEADING = re.compile(r"^##[ \t]+(.+?)[ \t]*$", re.M)
+_AB_SOURCE = re.compile(r"^[ \t]*-[ \t]*source:[ \t]*\S+", re.M)
+
+
+def check_answer_bank(path: pathlib.Path) -> list:
+    if not path.exists():
+        return [
+            f"NO_ANSWER_BANK: {path} is missing — the answer bank is the only artifact "
+            "that compounds across applications, and modes/interview.md requires one "
+            "entry per story banked this round (--answer-bank to point elsewhere)"
+        ]
+    text = path.read_text(encoding="utf-8")
+    marks = list(_AB_HEADING.finditer(text))
+    if not marks:
+        return [f"NO_ANSWER_BANK_ENTRIES: {path} has no '## ' entries"]
+    findings = []
+    for index, mark in enumerate(marks):
+        end = marks[index + 1].start() if index + 1 < len(marks) else len(text)
+        body = text[mark.end():end]
+        if not _AB_SOURCE.search(body):
+            findings.append(
+                f"ANSWER_NO_SOURCE: answer-bank.md entry {mark.group(1)!r} has no "
+                "'- source:' line — an entry whose fact cannot be traced is worse than "
+                "no entry, because the candidate will say it out loud believing it was vetted"
+            )
+    return findings
+
+
+# ----------------------------------------------------------------- banned vocabulary
+
+def check_vocabulary(paths: list, scanner) -> list:
+    if scanner is None:
+        raise MissingDependency(
+            "scripts/lint_no_prediction.py (Plan 2) is not importable — refusing to "
+            "report a vocabulary check that did not run"
+        )
+    findings = []
+    for path in paths:
+        if path.exists():
+            findings.extend(scanner(path.read_text(encoding="utf-8"), str(path)))
+    return findings
+
+
 # ----------------------------------------------------------------- banned vocabulary
 
 def _default_scanner():
@@ -329,6 +480,9 @@ def run(workspace, round_no: int, answer_bank=None, today=None, vocab_scanner=_A
     workspace = pathlib.Path(workspace)
     answer_bank = pathlib.Path(answer_bank) if answer_bank else _answer_bank_default(workspace)
     skill_root = pathlib.Path(skill_root) if skill_root else _skill_root_default()
+    today = today or datetime.date.today()
+    scanner = _default_scanner() if vocab_scanner is _AUTO else vocab_scanner
+
     assessment_path = workspace / "mock" / f"assessment-{round_no}.md"
     transcript_path = workspace / "mock" / f"transcript-{round_no}.md"
     for path in (assessment_path, transcript_path):
@@ -341,6 +495,16 @@ def run(workspace, round_no: int, answer_bank=None, today=None, vocab_scanner=_A
     findings = check_mode_entry(workspace, skill_root)
     blocks, block_findings = check_assessment(assessment_text, transcript_text, round_no)
     findings += block_findings
+    findings += check_question_log(workspace / "mock" / "question-log.yaml", today)
+    findings += check_answer_bank(answer_bank)
+    findings += check_vocabulary(
+        [
+            assessment_path,
+            workspace / "mock" / "open-loops.md",
+            workspace / "mock" / "cheatsheet.md",
+        ],
+        scanner,
+    )
     return findings
 
 
