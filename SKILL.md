@@ -490,6 +490,64 @@ a fabrication the candidate then repeats back), and the shortlist's `why_matched
 
 **No mode may claim success while `journal.jsonl` lacks a receipt for its gates.** A skipped script produces no output, and no output is exactly what a clean run looks like. `scripts/check_skill_lossless.py` is the one exception and is marked as such: it is a repo-level CI check with no workspace and no receipt, so requiring one would be requiring evidence that cannot exist.
 
+<!-- BEGIN discover-inserts (plan 3) -->
+## Discovery: the read-only surface
+### opencli: the four command pairs this skill actually uses
+
+| site | search | detail | login state (2026-08-09) | identity field |
+|---|---|---|---|---|
+| `51job` | `opencli 51job search "<kw>" --area <city> --page 1 --limit 20 --window background -f json` | `opencli 51job detail <jobId>` | no auth adapter | `title` |
+| `indeed` | `opencli indeed search "<kw>" --location "<loc>" --fromage 7 --start 0 --limit 15 --window background -f json` | `opencli indeed job <id>` | no auth adapter | `title` — **measured EMPTY**, recover via detail |
+| `linkedin` | `opencli linkedin search "<kw>" --location "<loc>" --date-posted week --start 0 --limit 10 --window background -f json` | `opencli linkedin job-detail <job-url>` | logged in (cookie session) | `title` |
+| `boss` | `opencli boss search "<kw>" --city <城市> --page 1 --limit 15 --window background -f json` | `opencli boss detail <security_id>` | logged in (cookie session) | `name`, **not** `title` |
+
+Always `-f json`. Always `--window background`.
+And **always branch on the exit code before you read stdout**:
+a login wall gives exit 1, EMPTY stdout and a YAML error body on stderr even under
+`-f json`, so `JSON.parse(stdout || '[]')` turns a 403 into a zero-result success.
+Never run a command whose published `access:` is `write` —
+`check_no_write.py` reads that field out of the tool itself.
+
+### When a platform says stop, stop
+
+A platform limit is any refusal the platform itself put up: a risk-control or
+captcha body, a rate-limit, or a refusal on a site `opencli auth status` says you
+are logged into. When one appears, all six of these apply at once, and the last
+two are what make the first four checkable:
+
+1. **Stop that site for that round.**
+2. Do not retry.
+3. Do not change parameters and retry — a smaller `--limit`, a different city or a
+   fresh `--window` is still a retry.
+4. Do not route around it — no other adapter, no public mirror, no logged-in
+   session standing in for a logged-out one.
+5. Emit the **direction-level degraded output** instead: 3-5 目标方向, no `rows:`,
+   so it cannot claim a posting exists.
+6. Fill in the disclosure table, whose answers ship pre-filled as 否 precisely so
+   that concealing a retry has to be an active overwrite rather than an omission.
+
+The per-platform trigger strings are data and live in
+`references/risk-control-signals.yaml`; **this rule is not data and does not live
+in a reference file**, because the moment it needs to be applied is the moment
+nobody is going to go and look it up.
+
+**READ `references/source-policy.md` before the first live retrieval of any run**
+— before the first `opencli` adapter call — and again before agreeing to page
+further, to fetch more detail pages, or to work while the user is away. It is the
+ONE source standard: what is green, what is yellow-with-caps, and what is never
+done whatever the user asks. Its two round caps are enforced rather than
+suggested: `brief.yaml` must carry `max_rows_per_round` and `max_pages_per_site`,
+and `check_shortlist.py` fails the run with `CAP_MISSING` or `CAP_ABOVE_CEILING`.
+
+**READ `references/discovery-sources.md` when you are in discover mode and
+about to call an adapter other than the four in the table above** (upwork,
+nowcoder, 1point3acres, maimai, or any site added later). It carries that
+adapter's flags, its measured login state, its identity field and its detail
+command — and `shortlist.yaml`'s `sources:` entry cannot be filled in without
+them, so `check_shortlist.py` fails the run with `SOURCE_REPORT_MISSING` if you
+skipped it.
+<!-- END discover-inserts (plan 3) -->
+
 ## Self-check — run through this before reporting the package as done
 
 Read-when:
@@ -555,60 +613,3 @@ Told the user:
 - [ ] Any remaining honest gaps, and — if the loop ended un-passed — whether this is
       POORLY BUILT or an HONEST STRETCH.
 - [ ] The workspace path and every output file, including the `.tex`.
-
-<!-- BEGIN discover-inserts (plan 3) -->
-### opencli: the four command pairs this skill actually uses
-
-| site | search | detail | login state (2026-08-09) | identity field |
-|---|---|---|---|---|
-| `51job` | `opencli 51job search "<kw>" --area <city> --page 1 --limit 20 --window background -f json` | `opencli 51job detail <jobId>` | no auth adapter | `title` |
-| `indeed` | `opencli indeed search "<kw>" --location "<loc>" --fromage 7 --start 0 --limit 15 --window background -f json` | `opencli indeed job <id>` | no auth adapter | `title` — **measured EMPTY**, recover via detail |
-| `linkedin` | `opencli linkedin search "<kw>" --location "<loc>" --date-posted week --start 0 --limit 10 --window background -f json` | `opencli linkedin job-detail <job-url>` | logged in (cookie session) | `title` |
-| `boss` | `opencli boss search "<kw>" --city <城市> --page 1 --limit 15 --window background -f json` | `opencli boss detail <security_id>` | logged in (cookie session) | `name`, **not** `title` |
-
-Always `-f json`. Always `--window background`.
-And **always branch on the exit code before you read stdout**:
-a login wall gives exit 1, EMPTY stdout and a YAML error body on stderr even under
-`-f json`, so `JSON.parse(stdout || '[]')` turns a 403 into a zero-result success.
-Never run a command whose published `access:` is `write` —
-`check_no_write.py` reads that field out of the tool itself.
-
-### When a platform says stop, stop
-
-A platform limit is any refusal the platform itself put up: a risk-control or
-captcha body, a rate-limit, or a refusal on a site `opencli auth status` says you
-are logged into. When one appears, all six of these apply at once, and the last
-two are what make the first four checkable:
-
-1. **Stop that site for that round.**
-2. Do not retry.
-3. Do not change parameters and retry — a smaller `--limit`, a different city or a
-   fresh `--window` is still a retry.
-4. Do not route around it — no other adapter, no public mirror, no logged-in
-   session standing in for a logged-out one.
-5. Emit the **direction-level degraded output** instead: 3-5 目标方向, no `rows:`,
-   so it cannot claim a posting exists.
-6. Fill in the disclosure table, whose answers ship pre-filled as 否 precisely so
-   that concealing a retry has to be an active overwrite rather than an omission.
-
-The per-platform trigger strings are data and live in
-`references/risk-control-signals.yaml`; **this rule is not data and does not live
-in a reference file**, because the moment it needs to be applied is the moment
-nobody is going to go and look it up.
-
-**READ `references/source-policy.md` before the first live retrieval of any run**
-— before the first `opencli` adapter call — and again before agreeing to page
-further, to fetch more detail pages, or to work while the user is away. It is the
-ONE source standard: what is green, what is yellow-with-caps, and what is never
-done whatever the user asks. Its two round caps are enforced rather than
-suggested: `brief.yaml` must carry `max_rows_per_round` and `max_pages_per_site`,
-and `check_shortlist.py` fails the run with `CAP_MISSING` or `CAP_ABOVE_CEILING`.
-
-**READ `references/discovery-sources.md` when you are in discover mode and
-about to call an adapter other than the four in the table above** (upwork,
-nowcoder, 1point3acres, maimai, or any site added later). It carries that
-adapter's flags, its measured login state, its identity field and its detail
-command — and `shortlist.yaml`'s `sources:` entry cannot be filled in without
-them, so `check_shortlist.py` fails the run with `SOURCE_REPORT_MISSING` if you
-skipped it.
-<!-- END discover-inserts (plan 3) -->
