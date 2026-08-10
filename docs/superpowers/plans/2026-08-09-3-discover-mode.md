@@ -23,7 +23,7 @@
 - **Top three verdict levels** (the only ones a detail page may be fetched for): `VERDICTS[:3]` — `strong_apply`, `worth_applying`, `stretch`. Derived, never re-listed, so a change to the vocabulary cannot leave the cap behind.
 - **`JobListingEvidence` base fields, exact and complete:** `id, title, company, location, salary, url, source_site, source_id, extraction_method, retrieved_at, quality, verification, raw_text`. **Do not add or rename a base field.**
 - **The shortlist row is this skill's own schema on top of those base fields**, and it adds exactly three: `why_matched`, `verdict`, `provisional`, `effort`. Seventeen fields in total. `effort` is one of `vocab.EFFORT` (`quick` | `evening` | `multi_day` | `not_closable`) and exists so that D3's *within-a-band, order by effort-to-close* rule is implementable rather than merely stated. `check_shortlist.REQUIRED_ROW_FIELDS` is the single enumeration of all seventeen.
-- **`scripts/paths.py` is imported wherever a profile, workspace, search directory or `search-preferences.yaml` path is resolved** — `paths.search_prefs(name)`, `paths.search_dir(name, slug)`. No script and no mode file re-derives one of those with `.parents[n]` or a string join. (The gates themselves take `--workspace` as an argument and resolve nothing; the mode file is where the spine paths are named.) The **skill root** is not a spine path and `paths.py` does not model it, so `check_opencli_result.py` and `check_shortlist.py` derive it from `__file__` exactly as Plan 1's own `enter_mode.py` does — and both take an explicit override (`--signals-file`, `--skill-root`) so a test never depends on where the module happens to sit.
+- **`scripts/paths.py` is imported wherever a profile, workspace, search directory or `search-preferences.yaml` path is resolved** — `paths.search_prefs(name)`, `paths.search_dir(name, slug)`. No script and no mode file re-derives one of those with `.parents[n]` or a string join. (The gates themselves take `--workspace` as an argument and resolve nothing; the mode file is where the spine paths are named.) The **skill root** is modelled there too, as `paths.SKILL_ROOT`, and `paths.mode_file(mode, root)` resolves `modes/<mode>.md` under it — **mode first, root second**, and there is no `enter_mode.mode_file`. So `check_opencli_result.py` and `check_shortlist.py` `import paths` and use `paths.SKILL_ROOT`; neither re-derives a root with `.parent.parent`. Both still take an explicit override (`--signals-file`, `--skill-root`) so a test never depends on where the module happens to sit.
 - **Mode entry is the first thing `modes/discover.md` instructs.** `python3 scripts/enter_mode.py --workspace <ws> --mode discover` writes the `mode_entry` record and the mode file's content hash; `check_shortlist.py` fails with `NO_MODE_ENTRY` / `MODE_FILE_CHANGED` if it is absent or stale. That record is also what makes `journal.receipt` stamp this run's receipts `"mode": "discover"` instead of `"unknown"`.
 - **Expect one known-red window.** From Task 1 until Task 10, Plan 1's `scripts/tests/test_skill_structure.py` is FAILING, because it asserts `SKILL.md`'s `## Self-check` section names every `scripts/*.py`, every `references/*.md` and every `modes/*.md` in the tree — and this plan adds files before it registers them. That is why the per-task steps run only their own module and the **full** suite is not run until Task 10, which does the registration. Do not "fix" it by deleting the assertion.
 - **READ-ONLY.** No step in this plan may run an `opencli` command whose published `access:` is `write`. No login attempt on any site, ever, including in the dry run. There is no "confirm then send" path (spec D7).
@@ -65,8 +65,9 @@
 - Test: `scripts/tests/test_check_opencli_result.py`
 
 **Interfaces:**
-- Consumes (from Plan 1, `scripts/journal.py`):
-  - `journal.append(workspace: pathlib.Path, record: dict) -> None`
+- Consumes (from Plan 1):
+  - `journal.append(workspace: pathlib.Path, record: dict) -> None` (`scripts/journal.py`)
+  - `paths.SKILL_ROOT: pathlib.Path` (`scripts/paths.py`) — the repo root, used for `DEFAULT_SIGNALS_FILE`; never re-derived with `.parent.parent`
 - Produces (later tasks rely on these exact names):
   - `ADAPTER_CALL_ACTION: str` — the literal `"adapter_call"`
   - `CLASSIFICATIONS: tuple[str, ...]`
@@ -477,6 +478,7 @@
     import yaml  # noqa: E402
 
     import journal  # noqa: E402  (Plan 1)
+    import paths    # noqa: E402  (Plan 1)  — SKILL_ROOT lives here, not in __file__ math
 
     ADAPTER_CALL_ACTION = "adapter_call"
 
@@ -513,10 +515,7 @@
         re.compile(r"\bnot logged in\b", re.I),
     )
 
-    DEFAULT_SIGNALS_FILE = (
-        pathlib.Path(__file__).resolve().parent.parent
-        / "references" / "risk-control-signals.yaml"
-    )
+    DEFAULT_SIGNALS_FILE = paths.SKILL_ROOT / "references" / "risk-control-signals.yaml"
 
 
     def load_signals(path):
@@ -3357,7 +3356,7 @@ else. Every runtime claim is tagged runtime_verified true/false; only
 - [ ] **Step 2: Run the test to verify it fails**
 
     Run: `python3 -m pytest scripts/tests/test_source_policy.py -q`
-    Expected: FAIL, in **two shapes**. Seven tests error with `FileNotFoundError: .../references/source-policy.md`; `test_there_is_exactly_one_source_policy_file` fails with a plain `AssertionError: [] == ['source-policy.md']` because the glob finds nothing rather than raising; and `test_skill_md_carries_this_files_trigger_and_names_its_backstop` fails with `AssertionError` against a `SKILL.md` that Plan 1 already created.
+    Expected: FAIL, in **two shapes**. Eight tests error with `FileNotFoundError: .../references/source-policy.md` (all ten except the two that never open the policy file); `test_there_is_exactly_one_source_policy_file` fails with a plain `AssertionError: [] == ['source-policy.md']` because the glob finds nothing rather than raising; and `test_skill_md_carries_this_files_trigger_and_names_its_backstop` fails with `AssertionError` against a `SKILL.md` that Plan 1 already created.
 
 - [ ] **Step 3: Write the policy**
 
@@ -4229,7 +4228,7 @@ instructing an output its own gate refuses."
 - Test: `scripts/tests/test_check_shortlist_mode_entry.py`
 
 **Interfaces:**
-- Consumes: `enter_mode.latest_mode_entry(workspace, mode)`, `enter_mode.mode_file(skill_root, mode)`, `journal.sha256_file` (Plan 1); `modes/discover.md` (Task 7)
+- Consumes: `enter_mode.latest_mode_entry(workspace, mode)`, `paths.mode_file(mode, root) -> pathlib.Path`, `paths.SKILL_ROOT`, `journal.sha256_file` (Plan 1); `modes/discover.md` (Task 7). **There is no `enter_mode.mode_file`** — Plan 1 puts the mode-file path in `paths.py` on purpose, so `enter_mode` and every gate resolve it the same way. Note the argument order: **mode first, root second.**
 - Produces:
   - `check_shortlist.MODE: str` = `"discover"`
   - `check_shortlist._check_mode_entry(workspace, skill_root) -> list[str]`
@@ -4306,7 +4305,16 @@ instructing an output its own gate refuses."
 - [ ] **Step 2: Run the test to verify it fails**
 
     Run: `python3 -m pytest scripts/tests/test_check_shortlist_mode_entry.py -q`
-    Expected: FAIL — `AttributeError: module 'discover_fixtures' has no attribute 'mode_entry_record'` on three of the four, and `assert 0 == 1` on `test_no_mode_entry_fires`.
+    Expected: FAIL, in **three shapes**, and only three of the four tests fail.
+    `test_a_mode_file_changed_after_entry_fires` and
+    `test_the_hash_is_read_from_the_real_mode_file` error with
+    `AttributeError: module 'discover_fixtures' has no attribute 'mode_entry_record'`.
+    `test_no_mode_entry_fires` errors with
+    `TypeError: write_journal() got an unexpected keyword argument 'mode_entry'`, because
+    Task 3's `write_journal(workspace, records)` has no such parameter yet.
+    `test_a_workspace_that_entered_the_mode_is_quiet` **PASSES** — it is the quiet twin,
+    and there is nothing yet for it to be quiet about. If it fails now, something else is
+    already broken and Step 3 will hide it.
 
 - [ ] **Step 3: Teach the fixture to record the mode entry**
 
@@ -4372,11 +4380,17 @@ instructing an output its own gate refuses."
 
 - [ ] **Step 4: Add the check to the gate**
 
-    In `scripts/check_shortlist.py`, add the import next to the existing ones:
+    In `scripts/check_shortlist.py`, add **both** imports next to the existing ones:
 
     ```python
     import enter_mode  # noqa: E402  (Plan 1)
+    import paths       # noqa: E402  (Plan 1)
     ```
+
+    `paths` is not optional here. Plan 1 states it in so many words: *there is no
+    `enter_mode.mode_file`* — the mode-file path comes from `paths.mode_file(mode, root)`,
+    so `enter_mode` and every gate cannot disagree about where a mode file lives. Writing
+    `enter_mode.mode_file(...)` raises `AttributeError` on every call to `main`.
 
     Add the constant directly below `GATE`:
 
@@ -4396,7 +4410,7 @@ instructing an output its own gate refuses."
         """
         findings = []
         entry = enter_mode.latest_mode_entry(workspace, MODE)
-        mode_path = enter_mode.mode_file(skill_root, MODE)
+        mode_path = paths.mode_file(MODE, skill_root)   # mode first, root second
         if entry is None:
             findings.append(
                 "NO_MODE_ENTRY: journal.jsonl has no mode_entry for discover. "
@@ -4418,8 +4432,8 @@ instructing an output its own gate refuses."
 
     ```python
         parser.add_argument("--skill-root", type=pathlib.Path,
-                            default=pathlib.Path(__file__).resolve().parent.parent,
-                            help="repo root holding modes/ (default: this script's parent)")
+                            default=paths.SKILL_ROOT,
+                            help="repo root holding modes/ (default: paths.SKILL_ROOT)")
     ```
 
     and change the line that builds the findings list from
@@ -4920,19 +4934,41 @@ The second half is the same defect in prose. `SKILL.md` says `discover` is **not
           carries the stop-signal patterns `scripts/check_opencli_result.py` matches.
     ```
 
-- [ ] **Step 4: Register the scripts in SKILL.md's self-check**
+- [ ] **Step 4: Register the scripts in SKILL.md's self-check, each under a heading that tells the truth about its evidence**
 
-    Append to the **Ran, with a receipt in `journal.jsonl`** list:
+    Plan 1's self-check has no single "ran it" list. It has one heading per **kind of
+    evidence** — `Ran, with a receipt in journal.jsonl — scripts/check_apply.py requires
+    each of these:`, `Ran, leaving a mode_entry record rather than a gate receipt:`,
+    `Ran, leaving nothing in the journal (they render; they do not judge):`, `In CI, not
+    in a workspace (no receipt exists for these, by design):` — and closes by saying why:
+    *a checklist that promises a receipt where none can exist teaches its reader that one
+    of its lines is decorative, and the reader cannot tell which one.* None of this plan's
+    three scripts belongs under that first heading: the two discover gates do write
+    receipts, but `scripts/check_apply.py` is the **apply** gate and does not require them,
+    and `check_opencli_result.py` writes no receipt at all. So add two headings rather
+    than three lines to a list that would then be false.
+
+    Immediately **before** the closing paragraph that begins `Every line above says what
+    evidence it leaves`, insert:
 
     ```markdown
-    - [ ] `scripts/check_opencli_result.py` — once per adapter invocation. It is a
-          wrapper, not a gate: it writes an `adapter_call` record rather than a
-          receipt, and exits 0 (classified) or 2 (could not classify), never 1.
+    Ran, with a receipt in `journal.jsonl` — the discover gates. `scripts/check_apply.py`
+    does not require these; a discover run is not reportable without them:
     - [ ] `scripts/check_no_write.py` (discover)
     - [ ] `scripts/check_shortlist.py` (discover)
+
+    Ran, leaving an `adapter_call` record rather than a gate receipt:
+    - [ ] `scripts/check_opencli_result.py` — once per adapter invocation. It is a
+          wrapper, not a gate: it exits 0 (classified) or 2 (could not classify), never 1,
+          so there is no receipt to look for and no pass/fail to read into the exit code.
     ```
 
-    and to the **Told the user** list:
+    Then, in that closing paragraph, change `the three headings differ for a reason` to
+    `the headings differ for a reason` — there are now six, and a stale count in the
+    sentence explaining why the headings are separate is the same defect one level up.
+    Change nothing else in it, and leave Plan 1's own four lists byte-identical.
+
+    Append to the **Told the user** list:
 
     ```markdown
     - [ ] In discover: the §0 来源与读取质量 table, the trigger reason, every row's band

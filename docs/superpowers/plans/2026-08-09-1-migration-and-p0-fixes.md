@@ -1536,7 +1536,7 @@ one helper so the two renderers cannot drift again."
 - Modify: `scripts/render_cv.py` (replace `_CLUSTER1_MARKETS` and `_is_cluster1` at lines 346–360; call `_warn_unknown_market` as the first statement of the three render entry points — `render_markdown`, `render_docx`, `build_latex` — and nowhere else)
 - Test: `scripts/tests/test_render_cv.py`
 
-**One insertion point, named once.** The warning does **not** go in `personal_items`: that function is a generator (`yield` at `render_cv.py:379`) consumed at three sites (`:462`, `:607`, `:873`), so a `--format all` run would print the identical warning three times — which is precisely how a warning gets trained away. It goes at the top of each render entry point instead, guarded so that one profile warns once no matter how many formats are rendered from it.
+**One insertion point, named once.** The warning does **not** go in `personal_items`: that function is a generator (`yield` at `render_cv.py:379`) consumed at three sites (`:462`, `:607`, `:873`), so an md + docx + pdf run — three invocations, or three direct calls from one process — would print the identical warning three times. (`main` has `--format choices=["md","docx","pdf"]`; there is no `all`, so one CLI invocation renders one format and the repetition comes from repeating the run.) Three identical warnings is precisely how a warning gets trained away. It goes at the top of each render entry point instead, guarded so that one profile warns once no matter how many formats are rendered from it.
 
 **Interfaces:**
 - Consumes: nothing new.
@@ -1621,10 +1621,10 @@ one helper so the two renderers cannot drift again."
 
     def test_the_unknown_market_warning_prints_once_per_profile_not_once_per_format(
             tmp_path, capsys):
-        """A `--format all` run renders Markdown, docx and LaTeX from the SAME
-        profile. Three identical warnings is how a warning gets trained away, and
-        it is why this does not live in personal_items (a generator consumed at
-        three separate sites)."""
+        """An md + docx + pdf run — three invocations, or three direct calls from
+        one process — renders from the SAME profile. Three identical warnings is
+        how a warning gets trained away, and it is why this does not live in
+        personal_items (a generator consumed at three separate sites)."""
         img = tmp_path / "p.png"; img.write_bytes(b"\x89PNG\r\n\x1a\n")
         profile = {"meta": {"name": "Z", "target_market": "Dubai, UAE", "photo": str(img)},
                    "contact": {"email": "z@x.com",
@@ -1765,10 +1765,12 @@ one helper so the two renderers cannot drift again."
         return out
 
 
-    # One warning per (profile object, market), not per render call. A single
-    # `--format all` run renders Markdown, docx and LaTeX from the SAME profile
-    # dict, and printing the identical warning three times is how a warning gets
-    # trained away. The profile OBJECT is held rather than its id(): an id can be
+    # One warning per (profile object, market), not per render call. An md + docx
+    # + pdf run — three invocations, or three direct calls from one process —
+    # renders from the SAME profile dict, and printing the identical warning three
+    # times is how a warning gets trained away. (main() takes one --format per
+    # invocation: md, docx or pdf. There is no `all`.) The profile OBJECT is held
+    # rather than its id(): an id can be
     # reused after garbage collection, and a silently-suppressed leak warning is
     # exactly the failure this interlock exists to prevent.
     _MARKET_WARNED = []

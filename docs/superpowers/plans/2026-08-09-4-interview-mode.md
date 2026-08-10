@@ -84,7 +84,7 @@ The design research (`interview.md` §4e) also specifies eleven *answer-shape* o
 | File | Change |
 |---|---|
 | `SKILL.md` | Task 7 appends one section: the four anti-coaching rules + the tripwire + the mock-interview session mechanics. Task 9 adds this plan's rows to the gate table and its lines to the `## Self-check` section, and retracts "interview is not yet built". Nothing else in the file is touched. |
-| `scripts/paths.py` | Task 3 adds `profile_dir_of(workspace)` / `answer_bank_of(workspace)` — the inverse of `workspace()`, so `check_mock.py` never re-derives the layout with `.parents[n]`. Additive only; nothing existing changes. |
+| `scripts/paths.py` | Task 3 adds `profile_dir_of(workspace)` / `answer_bank_of(workspace)` — the inverse of `workspace()`, so `check_mock.py` never re-derives the layout with `.parents[n]`. Additive, plus a behaviour-preserving refactor of `answer_bank()` onto the new `ANSWER_BANK_NAME` constant. |
 | `scripts/tests/test_paths.py` | Task 3 appends two tests for the two new functions. Existing tests untouched. |
 | `scripts/tests/test_skill_structure.py` | Task 9 extends the library-only `skip` set with `mock_vocab.py` and `mock_blocks.py`. One line. |
 
@@ -1313,15 +1313,15 @@ The design research (`interview.md` §4e) also specifies eleven *answer-shape* o
 **Files:**
 - Create: `scripts/check_mock.py`
 - Create: `scripts/tests/mock_fixtures.py`
-- Modify: `scripts/paths.py` (add two functions; change nothing existing)
+- Modify: `scripts/paths.py` (add `ANSWER_BANK_NAME` and two functions, plus a behaviour-preserving refactor of `answer_bank()` onto that constant — Step 1c; no other existing behaviour changes)
 - Modify: `scripts/tests/test_paths.py` (append two tests)
 - Test: `scripts/tests/test_check_mock_core.py`
 
 **Interfaces:**
 - Consumes:
   - `scripts/journal.py` (Plan 1): `append(workspace, record)`, `receipt(workspace, gate, input_hashes, verdict, findings=None) -> dict`, `sha256_file(path) -> str`, `read_receipts(workspace, gate=None) -> list[dict]`
-  - `scripts/paths.py` (Plan 1): `ANSWER_BANK_NAME`, `answer_bank(name)`, plus the two functions this task adds
-  - `scripts/enter_mode.py` (Plan 1): `latest_mode_entry(workspace, mode) -> dict | None`, `mode_file(skill_root, mode) -> pathlib.Path`
+  - `scripts/paths.py` (Plan 1): `SKILL_ROOT`, `ANSWER_BANK_NAME`, `answer_bank(name)`, `mode_file(mode: str, root=None) -> pathlib.Path` (**mode first, root second**), plus the two functions this task adds
+  - `scripts/enter_mode.py` (Plan 1): `latest_mode_entry(workspace, mode) -> dict | None`. There is no `enter_mode.mode_file` — Plan 1 states so explicitly; the mode-file path comes from `paths.mode_file(mode, root)` so nothing can disagree about where a mode file lives
   - `scripts/mock_blocks.py` (Task 2): `ASSESSMENT`, `PROVENANCE`, `BlockParseError`, `parse_block`, `collapse_ws`, `normalize_quote`, `quote_is_in`
   - `scripts/mock_vocab.py` (Task 1): every constant, including `MOCK_MARKET_KEYS` (never `MARKET_KEYS`)
 - Produces, in `scripts/paths.py`:
@@ -2119,7 +2119,7 @@ The design research (`interview.md` §4e) also specifies eleven *answer-shape* o
         journal record is the only thing that reports it if it was not. Mirrors
         check_apply.py exactly — one mechanism, four modes."""
         entry = enter_mode.latest_mode_entry(workspace, MODE)
-        mode_path = enter_mode.mode_file(skill_root, MODE)
+        mode_path = paths.mode_file(MODE, skill_root)
         if entry is None:
             return [
                 f"NO_MODE_ENTRY: journal.jsonl has no mode_entry for {MODE} — "
@@ -2367,7 +2367,9 @@ The design research (`interview.md` §4e) also specifies eleven *answer-shape* o
 
 
     def _skill_root_default() -> pathlib.Path:
-        return pathlib.Path(__file__).resolve().parent.parent
+        # Ask paths.py rather than re-deriving `.parent.parent` here (R4). A
+        # hand-derived root is correct until someone moves one file.
+        return paths.SKILL_ROOT
 
 
     def run(workspace, round_no: int, answer_bank=None, today=None, vocab_scanner=_AUTO,
@@ -2793,7 +2795,7 @@ The design research (`interview.md` §4e) also specifies eleven *answer-shape* o
 - [ ] **Step 2: Run test to verify it fails**
 
     Run: `python3 -m pytest scripts/tests/test_check_mock_sources.py -q`
-    Expected: FAIL with `AttributeError: module 'check_mock' has no attribute 'check_question_log'` (and, before that, `test_a_missing_question_log_is_a_finding_not_an_exit_2` failing because `run()` returns `[]`)
+    Expected: FAIL — **23 failed, 9 passed**, the first being `test_a_missing_question_log_is_a_finding_not_an_exit_2` because `run()` returns `[]`. These are assertion failures, not import errors: `check_mock.py` still imports cleanly, the source checks simply do not exist yet, so nothing is ever appended to `findings`. If instead you see a collection error or an `AttributeError`, the test file itself is broken — fix that before Step 3.
 
 - [ ] **Step 3: Add the source checks to `scripts/check_mock.py`**
 
@@ -4643,14 +4645,15 @@ self-check. Those tests are correct and they stay. The consequence is that the m
 plan's files land, that suite goes red until they are registered — so registering them is a
 task, not a footnote.
 
-Plan 1 also wrote, in the Modes table, that `discover`, `assess` and `interview` are "not yet
-built in this repo — say so and stop rather than improvising them". After this plan lands
-that sentence is false, and a false layer-1 sentence is worse than a missing one: it tells
-the model to refuse a mode that now exists. Plan 1 pairs it with a test that goes red exactly
-when `modes/interview.md` exists and the sentence is still there.
+Plan 1 also wrote `SKILL.md`'s `## Modes` table, which carries one row per mode with a
+**Status** cell, and whose `interview` row reads `` `interview` is not yet built in this
+repo ``. After this plan lands that cell is false, and a false layer-1 sentence is worse
+than a missing one: it tells the model to refuse a mode that now exists. Plan 1 pairs it
+with `test_a_mode_that_exists_is_not_still_described_as_not_yet_built`, which goes red
+exactly when `modes/interview.md` exists and the stale cell is still there.
 
 **Files:**
-- Modify: `SKILL.md` (gate table row, self-check lines, Modes table sentence)
+- Modify: `SKILL.md` (gate table row, self-check lines, the `interview` row of the Modes table)
 - Modify: `scripts/tests/test_skill_structure.py` (extend the library-only `skip` set)
 
 **Interfaces:**
@@ -4665,23 +4668,41 @@ when `modes/interview.md` exists and the sentence is still there.
     `test_the_self_check_names_every_agent_file` on the two assessors,
     `test_the_self_check_names_every_mode_file` on `interview.md`,
     `test_the_self_check_names_every_script` on `check_mock.py`, `mock_blocks.py` and
-    `mock_vocab.py`, and `test_every_mode_named_in_skill_md_has_a_file_or_is_marked_unbuilt`
-    on the stale "not yet built" sentence. Write the list down — it is the checklist for
-    Steps 2–4.
+    `mock_vocab.py`, and `test_a_mode_that_exists_is_not_still_described_as_not_yet_built`
+    on the stale `interview` Status cell. Write the list down — it is the checklist for
+    Steps 2–5.
+
+    Note which test that last one is **not**:
+    `test_every_mode_named_in_skill_md_has_a_file_or_is_marked_unbuilt` `continue`s the
+    moment `modes/<mode>.md` exists, so it goes green by itself the instant this plan's
+    mode file lands and can never be the red one here. The retraction's only backstop is
+    `test_a_mode_that_exists_is_not_still_described_as_not_yet_built`.
 
 - [ ] **Step 2: Extend the library-only skip set in `scripts/tests/test_skill_structure.py`**
 
     `mock_vocab.py` and `mock_blocks.py` are imported, never invoked — the same category as
     `journal.py` and `paths.py`. A self-check line telling the model to "run
-    `scripts/mock_vocab.py`" would be a lie. Change the one line:
+    `scripts/mock_vocab.py`" would be a lie.
+
+    **This is an APPEND, not a replacement.** Plan 1 created the set as
+    `{"journal.py", "paths.py", "rounds.py", "vocab.py"}` and every later plan adds its own
+    library-only modules to the same line, so writing it out as a literal would silently
+    delete theirs. Expect Plan 1's four entries to be there already, and — if Plan 3
+    (discover) has landed, which is the natural order — `opencli_meta.py` as well. Plan 2
+    (assess) adds nothing here. Read the line, then add exactly `"mock_vocab.py"` and
+    `"mock_blocks.py"` to whatever it already holds and keep everything else.
+
+    With Plans 1–3 landed the line becomes:
 
     ```python
         skip = {"journal.py", "paths.py", "rounds.py", "vocab.py",
+                "opencli_meta.py",                    # Plan 3 — leave it
                 "mock_vocab.py", "mock_blocks.py"}    # imported, never invoked
     ```
 
-    (`vocab.py` is Plan 1's shared module and may already be in the set; if it is, leave it.
-    Do not add `check_mock.py` — it IS invoked, and Step 3 names it.)
+    If `opencli_meta.py` is absent because Plan 3 has not landed, omit it — do not add it
+    here; that entry is Plan 3's to make. Do not add `check_mock.py` — it IS invoked, and
+    Step 3 names it.
 
 - [ ] **Step 3: Add the gate-table row to `SKILL.md`**
 
@@ -4717,23 +4738,41 @@ when `modes/interview.md` exists and the sentence is still there.
     Expected: PASS — every "names every …" test plus the reverse check that no named path is
     missing from disk.
 
-- [ ] **Step 5: Retract "interview is not yet built" from the Modes table**
+- [ ] **Step 5: Rewrite the Status cell of the `interview` row in the Modes table**
 
-    In `SKILL.md`'s Modes table, the row Plan 1 wrote reads: "`apply` is live. `discover`,
-    `assess` and `interview` are **not yet built in this repo** — say so and stop rather than
-    improvising them." Remove `interview` from that list and give it a live row of its own:
+    `SKILL.md`'s Modes table is Plan 1's, one row per mode, three columns:
 
     ```markdown
-    | `interview` | live | `modes/interview.md` — a conversational mock interview run inline, assessed by two subagents with deliberately different inputs, gated by `scripts/check_mock.py` |
+    | Mode | Question it answers | Status |
+    |---|---|---|
     ```
 
-    Leave `discover` and `assess` exactly as they are unless their own plans have landed;
-    Plans 2 and 3 each retract their own sentence. Do not reword anything else in the table.
+    The `interview` row currently reads:
+
+    ```markdown
+    | `interview` | how do I answer, and what did I get wrong | `interview` is not yet built in this repo |
+    ```
+
+    Rewrite its **third** cell only, so the row becomes:
+
+    ```markdown
+    | `interview` | how do I answer, and what did I get wrong | live — `modes/interview.md`, gated by `scripts/check_mock.py` |
+    ```
+
+    **Do not add a row** — the row already exists, and appending a second `interview` row
+    leaves the stale cell on disk, which keeps the test below red. The middle cell stays
+    byte-for-byte; `live` belongs under **Status**, not under **Question it answers**.
+
+    Leave the `discover` and `assess` rows exactly as they are unless their own plans have
+    landed; Plans 2 and 3 each rewrite their own cell. Leave the "For an unbuilt mode: say
+    so and stop" paragraph under the table alone — it still governs the other two. Do not
+    reword anything else in the table.
 
     Run: `python3 -m pytest scripts/tests/test_skill_structure.py -q`
     Expected: PASS — including
-    `test_every_mode_named_in_skill_md_has_a_file_or_is_marked_unbuilt`, which is now
-    satisfied by the file existing rather than by the marker.
+    `test_a_mode_that_exists_is_not_still_described_as_not_yet_built`, which greps the
+    whole of `SKILL.md`, backticks stripped and whitespace collapsed, for
+    `interview is not yet built` and is satisfied only once no such text remains.
 
 - [ ] **Step 6: Run the full suite**
 
