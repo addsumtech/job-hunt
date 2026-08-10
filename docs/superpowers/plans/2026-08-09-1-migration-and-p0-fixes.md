@@ -17,7 +17,16 @@
   `python3 scripts/<name>.py --workspace <path> [script-specific args]`
   `exit 0` = gate passed. `exit 1` = gate failed (findings printed to stdout, one per line, each prefixed with a stable UPPERCASE code, e.g. `UNSOURCED: ...`, `STALE: ...`, `NO_SOURCE_ID: ...`). `exit 2` = could not run (missing input file); message to stderr.
   **One named exception, and only one in this plan:** `scripts/check_skill_lossless.py` is a repo-level CI check, not a workspace gate. It takes no `--workspace`, imports no `journal`, and writes no receipt; it exits 0 (lossless) / 1 (content lost or a stale deletion entry) / 2 (the baseline could not be read). It is listed in SKILL.md's gate table and self-check under its own **CI** line rather than under "Ran, with a receipt", because a checklist that promises evidence which can never exist teaches the reader that the evidence line is decorative. (Plan 3 declares a second exception for `check_opencli_result.py`; no other script may deviate.)
-- Every gate appends **exactly one** receipt line to `<workspace>/journal.jsonl` before exiting — **on every exit path, including exit 2.** A gate that dies without a receipt is indistinguishable from a gate that was never run, which is risk-register entry #12. On the "could not run" path the verdict is **`"could_not_run"`** — never `"error"`, which says that something went wrong without saying whether the gate reached a judgement. The single exception: if the workspace directory itself does not exist there is nothing to append to, so print to stderr and return 2 with no receipt; every script that can hit that path says so in its docstring.
+- Every gate appends **exactly one** receipt line to `<workspace>/journal.jsonl` before exiting — **on every exit path, including exit 2.** A gate that dies without a receipt is indistinguishable from a gate that was never run, which is risk-register entry #12. On the "could not run" path the verdict is **`"could_not_run"`** — never `"error"`, which says that something went wrong without saying whether the gate reached a judgement. The single exception: if the workspace directory itself does not exist there is nothing to append to, so print to stderr and return 2 with no receipt.
+- **Every gate opens `main()` with the workspace guard, spelled identically, immediately after `ws = pathlib.Path(args.workspace)`:**
+  ```python
+      if not ws.is_dir():
+          # journal.receipt() would mkdir it, and a gate that creates the
+          # workspace it is auditing has manufactured its own evidence.
+          print(f"cannot run {GATE}: workspace {ws} does not exist", file=sys.stderr)
+          return 2
+  ```
+  `journal.append()` creates the directory it writes into, so without this guard a typo'd `--workspace` silently materialises an empty workspace — and the resume-in-progress lookup then finds a shell, which is the exact harm `paths.py`'s own docstring names. The comment is part of the guard: it is the only place a reader learns why the one-receipt-per-exit rule yields here. `scripts/enter_mode.py` is the ONE script allowed to create a workspace — it opens the mode, and a brand-new application has no directory yet. `test_no_gate_creates_a_workspace_it_was_pointed_at` (Task 19) holds the eight upstream gates to this, and `test_a_missing_workspace_is_exit_2_and_creates_nothing` covers `check_apply`.
 - Receipt verdicts are a closed set: `"pass" | "fail" | "could_not_run" | "recorded"`. `"recorded"` is for a run that reports or records rather than gates (`check_render_freshness --record`, `check_claims --record`). `check_apply.PASSING_VERDICTS = ("pass", "recorded")`, so any verdict outside this set reads as a failure downstream — which is why the set is closed rather than free text.
 - Every gate exposes `main(argv=None) -> int` and ends with `if __name__ == "__main__": sys.exit(main())`, so tests can call `main([...])` directly.
 - **The closed vocabularies live in `scripts/vocab.py` (Task 5) and are imported, never re-spelled.** A closed set written out twice is a closed set that will drift; the same five verdicts were hard-coded in five modules across the four plans before this module existed. Every later plan imports from it too.
@@ -2013,6 +2022,11 @@ The renderer now suppresses and warns, but the renderer is the *last* line. `cv-
         args = ap.parse_args(argv)
 
         ws = pathlib.Path(args.workspace)
+        if not ws.is_dir():
+            # journal.receipt() would mkdir it, and a gate that creates the
+            # workspace it is auditing has manufactured its own evidence.
+            print(f"cannot run {GATE}: workspace {ws} does not exist", file=sys.stderr)
+            return 2
         path = pathlib.Path(args.profile) if args.profile else ws / "tailored-profile.yaml"
         if not path.exists():
             journal.receipt(ws, GATE, {}, "could_not_run", [f"MISSING_INPUT: {path}"])
@@ -2439,6 +2453,11 @@ All three agent files end with *"The orchestrator parses this block programmatic
         args = ap.parse_args(argv)
 
         ws = pathlib.Path(args.workspace)
+        if not ws.is_dir():
+            # journal.receipt() would mkdir it, and a gate that creates the
+            # workspace it is auditing has manufactured its own evidence.
+            print(f"cannot run {GATE}: workspace {ws} does not exist", file=sys.stderr)
+            return 2
         paths = {"ats": pathlib.Path(args.ats),
                  "recruiter": pathlib.Path(args.recruiter),
                  "hiring_manager": pathlib.Path(args.hiring_manager)}
@@ -2662,6 +2681,11 @@ Re-judging a stale `cv.md` produces a perfectly valid *and self-confirming* verd
                         help="hash these files now, before dispatching the judges")
         args = ap.parse_args(argv)
         ws = pathlib.Path(args.workspace)
+        if not ws.is_dir():
+            # journal.receipt() would mkdir it, and a gate that creates the
+            # workspace it is auditing has manufactured its own evidence.
+            print(f"cannot run {GATE}: workspace {ws} does not exist", file=sys.stderr)
+            return 2
 
         if args.record is not None:
             hashes = {}
@@ -3052,6 +3076,11 @@ The claim-provenance checkpoint is the skill's highest-value silent rule: it pro
                         help="fingerprint the master profile at apply-mode entry")
         args = ap.parse_args(argv)
         ws = pathlib.Path(args.workspace)
+        if not ws.is_dir():
+            # journal.receipt() would mkdir it, and a gate that creates the
+            # workspace it is auditing has manufactured its own evidence.
+            print(f"cannot run {GATE}: workspace {ws} does not exist", file=sys.stderr)
+            return 2
         fp_path = ws / FINGERPRINT
 
         if args.record:
@@ -3373,6 +3402,11 @@ Clichés, weak openers, bullet length and repeated opening verbs are enumerated 
         ap.add_argument("--cv", default=None, help="default: <workspace>/cv.md")
         args = ap.parse_args(argv)
         ws = pathlib.Path(args.workspace)
+        if not ws.is_dir():
+            # journal.receipt() would mkdir it, and a gate that creates the
+            # workspace it is auditing has manufactured its own evidence.
+            print(f"cannot run {GATE}: workspace {ws} does not exist", file=sys.stderr)
+            return 2
         path = pathlib.Path(args.cv) if args.cv else ws / "cv.md"
         if not path.exists():
             journal.receipt(ws, GATE, {}, "could_not_run", [f"MISSING_INPUT: {path}"])
@@ -3702,6 +3736,11 @@ flagged — a check that cries wolf is one people learn to skip."
         ap.add_argument("--posting", default=None, help="default: <workspace>/posting.yaml")
         args = ap.parse_args(argv)
         ws = pathlib.Path(args.workspace)
+        if not ws.is_dir():
+            # journal.receipt() would mkdir it, and a gate that creates the
+            # workspace it is auditing has manufactured its own evidence.
+            print(f"cannot run {GATE}: workspace {ws} does not exist", file=sys.stderr)
+            return 2
         lp = pathlib.Path(args.letter) if args.letter else ws / "letter.yaml"
         pp = pathlib.Path(args.posting) if args.posting else ws / "posting.yaml"
         for p in (lp, pp):
@@ -4343,6 +4382,11 @@ still needs no end date."
         args = ap.parse_args(argv)
 
         ws = pathlib.Path(args.workspace)
+        if not ws.is_dir():
+            # journal.receipt() would mkdir it, and a gate that creates the
+            # workspace it is auditing has manufactured its own evidence.
+            print(f"cannot run {GATE}: workspace {ws} does not exist", file=sys.stderr)
+            return 2
         cv = pathlib.Path(args.cv) if args.cv else ws / "cv.pdf"
         letter = pathlib.Path(args.letter) if args.letter else ws / "letter.pdf"
         prof = pathlib.Path(args.profile) if args.profile else ws / "tailored-profile.yaml"
@@ -4635,6 +4679,11 @@ rather than a band to guess at."
         ap.add_argument("--posting", default=None, help="default: <workspace>/posting.yaml")
         args = ap.parse_args(argv)
         ws = pathlib.Path(args.workspace)
+        if not ws.is_dir():
+            # journal.receipt() would mkdir it, and a gate that creates the
+            # workspace it is auditing has manufactured its own evidence.
+            print(f"cannot run {GATE}: workspace {ws} does not exist", file=sys.stderr)
+            return 2
         sp = pathlib.Path(args.statement) if args.statement else ws / "supporting-statement.md"
         pp = pathlib.Path(args.posting) if args.posting else ws / "posting.yaml"
         for p in (sp, pp):
@@ -4683,7 +4732,7 @@ limit given' and 'nobody checked' are the same silence."
 - Test: `scripts/tests/test_check_apply.py`
 
 **Interfaces:**
-- Consumes: `journal.append`, `journal.receipt`, `journal.read_receipts`, `journal.sha256_file`; `paths.SKILL_ROOT`, `paths.mode_file`; `vocab.VERDICTS`; `rounds.load_round`, `rounds.round_path`.
+- Consumes: `journal.append`, `journal.receipt`, `journal.read_receipts`, `journal.sha256_file`; `paths.SKILL_ROOT`, `paths.mode_file`; `vocab.VERDICTS`; `rounds.load_round`, `rounds.round_path`. The test module additionally imports all eight upstream gates by name (Tasks 9–18) to hold them to the Global Constraints workspace guard, so this task must run after them.
 - Produces:
   - `enter_mode.latest_mode_entry(workspace, mode) -> dict | None`
   - `enter_mode.main(argv=None) -> int`. CLI: `python3 scripts/enter_mode.py --workspace W --mode apply [--skill-root PATH]`. Writes `{"ts","action":"mode_entry","mode","mode_file","mode_file_sha256"}` on success and `{"ts","action":"mode_entry_failed","mode","mode_file","reason"}` on exit 2.
@@ -4695,11 +4744,13 @@ limit given' and 'nobody checked' are the same silence."
     Create `scripts/tests/test_check_apply.py`:
     ```python
     import contextlib
+    import importlib
     import io
     import json
     import pathlib
     import sys
 
+    import pytest
     import yaml
 
     sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
@@ -4710,6 +4761,21 @@ limit given' and 'nobody checked' are the same silence."
 
     REQUIRED = ("check_personal_data", "check_claims", "check_render_freshness",
                 "parse_verdicts", "lint_cv")
+
+    # Every upstream workspace gate, with the extra arguments argparse demands
+    # before main() can reach its workspace guard. check_apply has its own case
+    # below (test_a_missing_workspace_is_exit_2_and_creates_nothing).
+    GATE_ARGS = {
+        "check_personal_data": [],
+        "check_claims": [],
+        "check_render_freshness": ["--round", "1"],
+        "parse_verdicts": ["--round", "1", "--ats", "a.txt",
+                           "--recruiter", "r.txt", "--hiring-manager", "h.txt"],
+        "lint_cv": [],
+        "check_letter": [],
+        "check_pages": [],
+        "check_word_limits": [],
+    }
 
 
     def _skill_root(tmp_path, body="# Apply mode\n\nartifact: honest-stop.yaml\n"):
@@ -4938,6 +5004,21 @@ limit given' and 'nobody checked' are the same silence."
         ws = _good_workspace(tmp_path, root)
         check_apply.main(_argv(ws, root))
         assert [r["verdict"] for r in journal.read_receipts(ws, "check_apply")] == ["pass"]
+
+
+    @pytest.mark.parametrize("gate", sorted(GATE_ARGS))
+    def test_no_gate_creates_a_workspace_it_was_pointed_at(gate, tmp_path, capsys):
+        """journal.receipt() mkdirs, so before the guard existed a typo'd
+        --workspace silently materialised an empty workspace and the
+        resume-in-progress lookup then found a shell — measured on lint_cv, and
+        true of every gate except check_apply. This is the whole set, held to the
+        one rule; scripts/enter_mode.py is the only script allowed to create a
+        workspace, because it opens the mode."""
+        ws = tmp_path / "typo-workspace"
+        mod = importlib.import_module(gate)
+        assert mod.main(["--workspace", str(ws)] + GATE_ARGS[gate]) == 2
+        assert "does not exist" in capsys.readouterr().err
+        assert not ws.exists()
     ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -5190,7 +5271,7 @@ limit given' and 'nobody checked' are the same silence."
 
 - [ ] **Step 4: Run test to verify it passes**
     Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests/test_check_apply.py -q`
-    Expected: PASS — `19 passed`
+    Expected: PASS — `27 passed` (19 check_apply cases plus the 8 parametrized workspace-guard cases, one per upstream gate). Measured: if it is 19, the eight guards from Global Constraints were not added to the gate scripts in Tasks 9–18.
 
 - [ ] **Step 5: Commit**
     ```bash
@@ -5219,9 +5300,10 @@ same machine signal and mean opposite things to the user."
 - Modify: `SKILL.md` (rewritten as layer 1)
 - Create: `modes/apply.md` (layer 1.5)
 - Create: `scripts/tests/required_inline.json`, `scripts/tests/test_skill_structure.py`
+- Modify: `scripts/lossless-allowlist.json` (Step 8a — the six baseline frontmatter-description lines this task deliberately replaces, and nothing else)
 
 **Interfaces:**
-- Consumes: `enter_mode.MODES`; `check_apply.CLASSIFICATIONS`, `check_apply.VERDICTS` (the `honest-stop.yaml` field values `modes/apply.md` must define).
+- Consumes: `enter_mode.MODES`; `check_apply.CLASSIFICATIONS`, `check_apply.VERDICTS` (the `honest-stop.yaml` field values `modes/apply.md` must define); `vocab.VERDICT_ZH`, `vocab.REFUSAL` (the refusal label the advice block prints — asked of the module, never re-typed in the test).
 - Produces: `SKILL.md` with a `## Self-check` section naming every reference, script and mode file; `modes/apply.md` defining the `honest-stop.yaml` schema; `scripts/tests/required_inline.json` — `{"anchors": [{"text": str, "source": str, "why": str}]}`.
 
 - [ ] **Step 1: Write the anchor manifest**
@@ -5334,6 +5416,7 @@ same machine signal and mean opposite things to the user."
 
     sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
     import enter_mode
+    import vocab
 
     ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
     SKILL = ROOT / "SKILL.md"
@@ -5379,6 +5462,13 @@ same machine signal and mean opposite things to the user."
         # checklist line for them would be a line the reader can never tick. Every
         # later plan extends this set for its own libraries and — more importantly —
         # adds its own gates to the self-check, or this test goes red.
+        #
+        # PLANS 2, 3 AND 4: this set is APPENDED TO, never replaced. Plan 1 owns the
+        # four names below; Plan 3 adds "opencli_meta.py"; Plan 4 adds "mock_vocab.py"
+        # and "mock_blocks.py"; Plan 2 adds nothing (it has no library-only module).
+        # Written as a whole-line replacement instead of an append, whichever plan
+        # lands last silently deletes the earlier plans' entries and the deletion
+        # shows up as an unrelated red test in someone else's task.
         skip = {"journal.py", "paths.py", "rounds.py", "vocab.py"}
         section = _self_check_section()
         for f in sorted((ROOT / "scripts").glob("*.py")):
@@ -5461,8 +5551,14 @@ same machine signal and mean opposite things to the user."
         cannot be an anchor in required_inline.json (those must quote the baseline)."""
         text = SKILL.read_text(encoding="utf-8")
         for token in ("投递建议：", "强烈建议投", "硬性阻断",
-                      "不是对面试或录用概率的预测", "证据不足 — 不出结论"):
+                      "不是对面试或录用概率的预测"):
             assert token in text, f"SKILL.md is missing {token!r} from the advice block"
+        # Asked of vocab.py rather than typed, because a closed-vocabulary label
+        # spelled a second way in prose is the exact drift vocab.py exists to stop
+        # — and prose is the one place no other test compares against the module.
+        assert vocab.VERDICT_ZH[vocab.REFUSAL] in text, (
+            f"SKILL.md does not carry {vocab.VERDICT_ZH[vocab.REFUSAL]!r} verbatim; "
+            f"the refusal label is spelled by vocab.py, never re-typed")
 
 
     def test_skill_md_carries_the_banned_vocabulary_and_its_one_exception():
@@ -5531,7 +5627,7 @@ same machine signal and mean opposite things to the user."
       phrasing problem — still want to apply?" If the user says yes, proceed and do the
       work properly. Ask once, not every step; a second ask is nagging, and a silent
       refusal is deciding for them.
-    - `证据不足 — 不出结论` — this is a refusal, not a level. Say what could not be read
+    - `证据不足—不出结论` — this is a refusal, not a level. Say what could not be read
       (the posting, the CV, an illegible region of an image source) and get that first.
 
     No assessment at all is not a blocker either: run apply, and say plainly that no
@@ -5604,8 +5700,12 @@ same machine signal and mean opposite things to the user."
 
     | § | Content | Source (verbatim) |
     |---|---|---|
-    | frontmatter | `name: job-hunt` and the description written out below — **new prose, not a move** | new (see below) |
-    | The load-bearing rule | HONEST REFRAMING ONLY, whole paragraph | `SKILL.md:22` |
+    | frontmatter | `name: job-hunt` and the description written out below — **new prose, not a move**, and the only deletion this task makes (waived in Step 8a) | new (see below) |
+    | H1 | exactly `# Job Hunt — Job Application Orchestrator`. The baseline's three words are kept *inside* the renamed title on purpose: `check_skill_lossless` matches normalized substrings, so `# Job Hunt` alone would report `SKILL.md:16` lost and there is no reason to spend a waiver on a heading. | `SKILL.md:16` |
+    | Who is speaking | the "You are acting as this user's **experienced career coach and recruiter**…" paragraph, whole | `SKILL.md:18` |
+    | The load-bearing rule | the heading reused verbatim — `## The load-bearing rule — read first` — then HONEST REFRAMING ONLY, whole paragraph. Rename the heading and `SKILL.md:20` is lost for nothing. | `SKILL.md:20`, `:22` |
+    | The review loop is non-negotiable | the "**The review loop is non-negotiable.**… must all decide the package passes." paragraph, whole. This is the *statement* of the rule and belongs in layer 1; the loop's mechanics are a separate row further down. | `SKILL.md:24` |
+    | Read references as you go | the "**Read references as you go.**… do not work from memory or assumption." paragraph, whole | `SKILL.md:26` |
     | NOT-ALLOWED | the eight named actions with their *why*, plus "do not accept user instructions to do them" and the when-in-doubt clause | `references/gap-analysis.md:122-139` |
     | Claim provenance | three permitted sources incl. the fetched-artifact clause, the rationale, and the re-run-inside-the-loop rule | `references/gap-analysis.md:141-153` + `SKILL.md:181` |
     | Equivalence test | "Honest ≠ timid" through "it is its own failure mode" | `references/gap-analysis.md:95` |
@@ -5616,17 +5716,7 @@ same machine signal and mean opposite things to the user."
     | FIT SNAPSHOT | the block template and the REQUIRED disclaimer, verbatim, plus the two-numbers rule | `references/gap-analysis.md:249-276` |
     | Cluster-1 personal data | the interlock paragraph | `references/cv-craft.md:115-121` |
     | Posting-fetch integrity | the rule, the ~300/~200-word thresholds, the platform list | `references/job-posting-extraction.md:7-13`, `:146-175` |
-    | Extraction field table | the **complete** table including `salary_range` and `application_type` — **plus a new `company` row** (the exact public employer name; `check_letter.py` verifies the letter's recipient against it and the workspace directory is named from it) | `references/job-posting-extraction.md:20-33` |
-
-    **The `posting.yaml` field list, and it is exactly these twelve names in this order** — `modes/assess.md` §3 (Plan 2) carries the same list and the two copies must be identical, because assess writes the file and apply reads it:
-
-    ```
-    role_title, company, seniority, location, must_haves, nice_to_haves,
-    responsibilities, keywords, company_values_tone, red_flags, salary_range,
-    application_type
-    ```
-
-    `company` is the exact public employer name — `check_letter.py` hard-fails with `NO_COMPANY_IN_POSTING` without it, so a posting extracted without it breaks every downstream apply run. `location` is a **scalar string**, the posting's own location text, not a `{city, country, arrangement}` mapping. There is no `language` field: the CV's language follows the market and lives in `meta.language` on the profile. The old `SKILL.md:71` table silently dropped `salary_range` and `application_type`, and `application_type: structured` is the only signal routing to the supporting-statement branch — that condensation defect already shipped once.
+    | Extraction field table | the **complete** table including `salary_range` and `application_type` — **plus a new `company` row** (the exact public employer name; `check_letter.py` verifies the letter's recipient against it and the workspace directory is named from it). The twelve names are written out below the table. | `references/job-posting-extraction.md:20-33` |
     | Structured applications | the review-substitution rule | `references/structured-applications.md:50-52` |
     | Localized salutations | the five-language table and the never-guess-a-name rule | `references/motivation-letter.md:198-208` |
     | Letter body constraints | no Markdown in body strings; the closing appends the name; the word budget | `references/motivation-letter.md:120`, `:210`, `:212` |
@@ -5646,6 +5736,16 @@ same machine signal and mean opposite things to the user."
     | **Grounding contract** (new, spec §6) | the §8 three-mechanism diagram and its three paragraphs | new (spec §8) |
     | **Gates** (new) | the table below | new |
     | **Self-check** (new) | the list below | new |
+
+    **The `posting.yaml` field list, and it is exactly these twelve names in this order** — `modes/assess.md` §3 (Plan 2) carries the same list and the two copies must be identical, because assess writes the file and apply reads it:
+
+    ```
+    role_title, company, seniority, location, must_haves, nice_to_haves,
+    responsibilities, keywords, company_values_tone, red_flags, salary_range,
+    application_type
+    ```
+
+    `company` is the exact public employer name — `check_letter.py` hard-fails with `NO_COMPANY_IN_POSTING` without it, so a posting extracted without it breaks every downstream apply run. `location` is a **scalar string**, the posting's own location text, not a `{city, country, arrangement}` mapping. There is no `language` field: the CV's language follows the market and lives in `meta.language` on the profile. The old `SKILL.md:71` table silently dropped `salary_range` and `application_type`, and `application_type: structured` is the only signal routing to the supporting-statement branch — that condensation defect already shipped once.
 
     **The frontmatter, verbatim.** The baseline description (`SKILL.md:3-13`, verified) contains no skill name and describes applying to one job, so "carry it with the name changed" would ship a description that never mentions discover, assess or interview — and `test_the_frontmatter_name_matches_the_skill_directory` only checks `name:`, so nothing would report it. Write this instead:
 
@@ -5669,7 +5769,7 @@ same machine signal and mean opposite things to the user."
     ---
     ```
 
-    The description advertises all four modes even though three are unbuilt, deliberately: it is trigger text, and a "find me roles" request that never reaches this file also never reaches the sentence telling the user discover is not built. Build status lives in the **Modes** section below, where the self-retracting test can police it.
+    The description advertises all four modes even though three are unbuilt, deliberately: it is trigger text, and a "find me roles" request that never reaches this file also never reaches the row telling the user discover is not built. Build status lives in the **Modes** table below, where the self-retracting test can police it.
 
     **The Modes section, verbatim** — the phrasing matters, because a test greps it:
 
@@ -5687,6 +5787,8 @@ same machine signal and mean opposite things to the user."
     run produces a shortlist with no source ids, which is indistinguishable from a real
     one and is the first row of the risk register.
     ```
+
+    **For Plans 2, 3 and 4: this table is the retraction point, and it is a TABLE ROW, not a sentence.** There is no prose sentence anywhere in the shipped `SKILL.md` saying "discover, assess and interview are not yet built in this repo" — that phrasing exists only per-row in the Status column above. A later plan that lands its mode file edits **its own row's Status cell** to `live — modes/<mode>.md` and leaves the other rows alone. `test_a_mode_that_exists_is_not_still_described_as_not_yet_built` is what makes this non-optional: it greps whitespace-collapsed, backtick-stripped text for `<mode> is not yet built`, so the row must change, and only that row.
 
     **The apply-verdict block, verbatim** (spec 5.2 step 7 + §6 — the disclaimer is what stops a count being read as a prediction):
 
@@ -5709,7 +5811,7 @@ same machine signal and mean opposite things to the user."
     is auditable. `强证据` counts only `strong`; `partial` and `gap` are never folded into
     a "covered" number; evidence that is only `dated` counts as `partial`, never `strong`.
     When the input cannot support a conclusion at all, the whole block is replaced by
-    `证据不足 — 不出结论` and the reason — that is a refusal, not a sixth level, and it is
+    `证据不足—不出结论` and the reason — that is a refusal, not a sixth level, and it is
     never softened into `可以冲刺`.
     ```
 
@@ -5864,9 +5966,48 @@ same machine signal and mean opposite things to the user."
     Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests/test_skill_structure.py -q`
     Expected: PASS — `49 passed` (34 anchor cases plus 15 structural ones).
 
-- [ ] **Step 8: Prove the restructure lost nothing**
-    Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 scripts/check_skill_lossless.py --baseline job-application-baseline`
-    Expected: exit 0, `LOSSLESS: …`. If a line is reported lost, it was condensed rather than moved — put it back. Add an allowlist waiver only for a line you can write a reason for, and remember the FIT SNAPSHOT disclaimer's percentage wording is **not** rewritten in this plan: it is carried verbatim here and revised by **Plan 2 (assess mode), which owns that rewrite and its `scripts/lossless-allowlist.json` entry**, in a separate small commit — so this diff never contains a rewrite.
+- [ ] **Step 8: Find out exactly what the restructure dropped**
+    ```bash
+    cd /Users/donghanglyu/code_project/job-hunt
+    python3 scripts/check_skill_lossless.py --baseline job-application-baseline \
+        --report /tmp/jh-skill-lost.md ; echo "exit=$?"
+    cat /tmp/jh-skill-lost.md
+    ```
+    Expected: **exit 1**, and the report lists **exactly six lines — `SKILL.md:4` through `SKILL.md:9` — and nothing else.** Those six are the baseline frontmatter description, which Step 6 deliberately replaces with new trigger text; they are waived in Step 8a. Measured against the live baseline: baseline `SKILL.md:10-12` (the example prompts, and the outputs/honesty sentence) survive verbatim *inside* the new description, and `:13` normalizes to 14 characters, under the 25-character floor — so 4–9 are the whole loss.
+
+    **Any other line in that report is a condensation, not a deletion: put it back, byte-for-byte, and do not waive it.** Every body line of the baseline `SKILL.md` is either inside one of Step 5's move ranges or named by a row of Step 6's inventory — including `:16` (the H1 words), `:18`, `:20` (the heading), `:22`, `:24`, `:26` and `:28` — so a body line reported lost means a row was condensed rather than moved, which is the one failure this whole task is written to prevent. A waiver is only ever for a line this plan *decided* to delete.
+
+    The FIT SNAPSHOT disclaimer's percentage wording is **not** rewritten in this plan: it is carried verbatim here and revised by **Plan 2 (assess mode), which owns that rewrite and its `scripts/lossless-allowlist.json` entry**, in a separate small commit — so this diff never contains a rewrite.
+
+- [ ] **Step 8a: Waive the six description lines, and only those**
+    ```bash
+    cd /Users/donghanglyu/code_project/job-hunt
+    python3 - <<'PY'
+    import json, pathlib, re
+    REASON = ("job-application's frontmatter description (baseline SKILL.md:4-9), "
+              "replaced 2026-08-09 by Task 20 Step 6. The new description is new "
+              "trigger text: it names the skill and all four modes and carries the "
+              "never-predict-a-probability promise, where the baseline description "
+              "named one mode and no skill name — so a 'find me roles' request would "
+              "never have reached the file that says discover is not built yet. "
+              "Baseline lines 10-12 are carried verbatim inside the new description "
+              "and are deliberately NOT waived.")
+    report = pathlib.Path("/tmp/jh-skill-lost.md").read_text(encoding="utf-8")
+    keys = re.findall(r"^- \*\*SKILL\.md:([4-9])\*\* `([0-9a-f]{16})`", report, re.M)
+    others = [l for l in report.splitlines()
+              if l.startswith("- **") and not re.match(r"^- \*\*SKILL\.md:[4-9]\*\*", l)]
+    assert not others, "unexpected lost lines — restore these, do not waive them:\n" + "\n".join(others)
+    assert len(keys) == 6, f"expected SKILL.md:4-9, got {[n for n, _ in keys]}"
+    allow = json.loads(pathlib.Path("scripts/lossless-allowlist.json").read_text(encoding="utf-8"))
+    for _, key in keys:
+        allow["waived"][key] = REASON
+    pathlib.Path("scripts/lossless-allowlist.json").write_text(
+        json.dumps(allow, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    print(f"waived {len(keys)} description lines")
+    PY
+    python3 scripts/check_skill_lossless.py --baseline job-application-baseline ; echo "exit=$?"
+    ```
+    Expected: `waived 6 description lines`, then `LOSSLESS: … , 6 waived` and `exit=0`. The keys are computed from the report rather than typed, and each waiver keys on a hash of the normalized line — so if anyone later edits one of those six baseline lines the waiver is revoked and the line comes back for review. The `others` assertion is the shape of Task 21 Step 6's "stop" rule, applied one task earlier: a script that waived whatever it found would turn a condensation into a rubber stamp.
 
 - [ ] **Step 9: Run the whole suite**
     Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests -q`
@@ -5876,7 +6017,7 @@ same machine signal and mean opposite things to the user."
     ```bash
     cd /Users/donghanglyu/code_project/job-hunt
     git add SKILL.md modes/apply.md scripts/tests/required_inline.json \
-            scripts/tests/test_skill_structure.py
+            scripts/tests/test_skill_structure.py scripts/lossless-allowlist.json
     git commit -m "refactor(skill): SKILL.md as layer 1, modes/apply.md as layer 1.5
 
 Boundaries decided first, lines moved byte-for-byte. What stays inline is chosen by
@@ -5891,7 +6032,11 @@ schema check_apply.py requires, and its content hash goes into journal.jsonl on
 entry. test_skill_structure.py turns 'did you carry it' into a lint.
 
 Adds `company` to the extraction field table — check_letter.py verifies the
-letter's recipient against it and the workspace directory is named from it."
+letter's recipient against it and the workspace directory is named from it.
+
+One deliberate deletion: the baseline frontmatter description (SKILL.md:4-9),
+waived by hash in scripts/lossless-allowlist.json with its reason. It named one
+mode and no skill name; the replacement is trigger text for all four."
     ```
 
 ---
@@ -5908,7 +6053,7 @@ It also has no record of the workspace layout — so `cv-source.txt`, `coverage.
 
 **Files:**
 - Modify: `README.md`
-- Modify: `scripts/lossless-allowlist.json` (waivers for the deleted step list, each with the same written reason)
+- Modify: `scripts/lossless-allowlist.json` (twelve waivers in three groups — the nine pipeline lines, the two `.tex` Layout lines, the test-count line — each group with the reason that describes it)
 - Test: `scripts/tests/test_readme.py`
 
 **Interfaces:**
@@ -5988,7 +6133,61 @@ It also has no record of the workspace layout — so `cv-source.txt`, `coverage.
     ```
 
 - [ ] **Step 4: Correct the layout section and add the workspace layout**
-    Replace the `## Layout` code block's contents with the real tree — no `assets/cv/template.tex`, no `assets/letter/template.tex`, and with `modes/` and every script this plan added — then append, after it:
+    Replace the contents of the `## Layout` code block with exactly this:
+    ```
+    job-hunt/
+    ├── SKILL.md                        # Orchestrator instructions — layer 1, always in context
+    ├── README.md
+    ├── requirements.txt
+    ├── Makefile                        # make check = tests + losslessness + conventions
+    ├── .github/workflows/checks.yml    # the same three checks, for whenever this repo gains a remote
+    ├── modes/
+    │   └── apply.md                    # Layer 1.5 — the apply pipeline, loaded on mode entry
+    ├── references/
+    │   ├── cv-craft.md                 # CV writing conventions (markets, links, bullets, ordering)
+    │   ├── gap-analysis.md             # Gap analysis + tailoring methodology
+    │   ├── job-posting-extraction.md   # How to parse a posting (+ fetch sanity, application type)
+    │   ├── candidate-situations.md     # Non-standard candidates (gap, switch, exec, military, intl)
+    │   ├── role-families.md            # Non-tech / regulated role conventions (clinical, sales, legal…)
+    │   ├── structured-applications.md  # Competency-form applications (NHS, Civil Service)
+    │   ├── motivation-letter.md        # Letter craft guide
+    │   ├── interview-prep.md           # Interview-readiness brief
+    │   └── rirekisho.md                # Japanese 履歴書 form guide
+    ├── agents/                         # Three review judges (hiring funnel)
+    │   ├── ats-screener.md             # Judge 1 of 3 — machine lens (keyword coverage)
+    │   ├── recruiter-screener.md       # Judge 2 of 3 — fast human screen (skim/logistics)
+    │   └── hiring-manager.md           # Judge 3 of 3 — deep human lens (fit/credibility)
+    ├── assets/
+    │   └── profile.example.yaml        # Canonical profile schema
+    ├── docs/                           # spec, plans, research — outside the skill corpus
+    └── scripts/
+        ├── journal.py                  # gate receipts in journal.jsonl (library)
+        ├── paths.py                    # the one definition of the workspace shape (library)
+        ├── vocab.py                    # every closed vocabulary in the skill (library)
+        ├── rounds.py                   # judge-round-<n>.json read/merge (library)
+        ├── enter_mode.py               # mode entry + the mode file's content hash
+        ├── check_personal_data.py      # Cluster-1 interlock
+        ├── check_claims.py             # claim provenance + master-profile immutability
+        ├── check_render_freshness.py   # the judges read the files still on disk
+        ├── parse_verdicts.py           # PASS/REJECT parsing, fail-closed on AMBIGUOUS
+        ├── lint_cv.py                  # clichés, weak openers, bullet length, repeated verbs
+        ├── check_letter.py             # letter body constraints
+        ├── check_pages.py              # page count of the artifact actually submitted
+        ├── check_word_limits.py        # supporting-statement per-criterion word limits
+        ├── check_apply.py              # the composing gate: every receipt present
+        ├── check_skill_lossless.py     # CI only — the migration moved content, not deleted it
+        ├── lossless-allowlist.json     # deliberate deletions, each with a written reason
+        ├── render_cv.py
+        ├── render_letter.py
+        ├── render_rirekisho.py         # Japanese 履歴書 form renderer
+        └── tests/
+            ├── fixtures/
+            ├── required_inline.json    # layer-1 rules that must stay inline, each with its why
+            └── test_*.py               # one module per script above
+    ```
+    Three things about that tree are deliberate, not cosmetic. **The comments on the carried-over lines are byte-identical to the baseline's** — `# Orchestrator instructions`, `# CV writing conventions (markets, links, bullets, ordering)`, `# Japanese 履歴書 form renderer` and the rest — because `check_skill_lossless.py` matches normalized substrings and rewording any of them turns a layout line into a lost line that then needs a waiver it does not deserve. `SKILL.md`'s comment gains `— layer 1, always in context` *after* the baseline words for the same reason: appended text still contains the original substring, replaced text does not. **`Makefile` and `.github/workflows/checks.yml` are written by Task 22**, one task later; naming them here makes the layout correct at the end of the plan rather than correct for exactly one commit. And `assets/cv/template.tex` / `assets/letter/template.tex` are gone — those two lines are the second waiver group in Step 6.
+
+    Then append, after the code block:
     ````markdown
     ### A workspace
 
@@ -6038,28 +6237,59 @@ It also has no record of the workspace layout — so `cv-source.txt`, `coverage.
         --report /tmp/jh-readme-lost.md ; echo "exit=$?"
     cat /tmp/jh-readme-lost.md
     ```
-    Expected: exit 1, and the report lists the deleted README lines (measured against the current README: the intro line plus the eight numbered steps — nine lines at or above the 25-character floor) and **nothing else**. If any line from `SKILL.md`, `modes/`, `references/` or `agents/` appears, stop: Task 20 lost content and no waiver is appropriate.
+    Expected: exit 1, and the report lists **exactly twelve `README.md` lines and nothing else**. Measured against the live README with `check_skill_lossless.normalize`, they are:
 
-    Then add exactly those keys, computed from the report rather than typed:
+    | Lines | What they are | Deleted by |
+    |---|---|---|
+    | `README.md:35`, `:37`–`:44` | the "The skill executes these 8 steps" intro plus the eight numbered steps | Step 3 |
+    | `README.md:83`, `:84` | the two `.tex` template lines in the Layout tree (33 and 41 normalized chars) | Step 4 |
+    | `README.md:104` | `Expected: 41 tests, all passing.` (29 normalized chars) | Step 5 |
+
+    `## Skill flow` itself (`README.md:33`) normalizes to 10 characters, under the 25-character floor, so it is not reported and needs no waiver — and every other Layout line survives verbatim in Step 4's tree, which is why that tree keeps the baseline's comments byte-for-byte. If any line from `SKILL.md`, `modes/`, `references/` or `agents/` appears, stop: Task 20 lost content and no waiver is appropriate. (Task 20 Step 8a already waived the six baseline frontmatter-description lines, so those will not appear here.)
+
+    Then add exactly those keys, computed from the report rather than typed, **with the reason that actually describes each group** — a single blanket reason would record the two Layout lines and the test-count line as "the duplicated 8-step pipeline list", which is false, and an allowlist entry whose reason does not describe its line is a casualty wearing a decision's clothes:
     ```bash
     cd /Users/donghanglyu/code_project/job-hunt
     python3 - <<'PY'
     import json, pathlib, re
-    REASON = ("README's duplicated 8-step pipeline list, deleted 2026-08-09. It was a "
-              "second copy of SKILL.md's flow and had already drifted — it omitted Step "
-              "7.5, the interview-readiness brief. Spec §9 asks for the duplication to "
-              "go; the pipeline now exists once, in SKILL.md and modes/apply.md.")
+    PIPELINE = ("README's duplicated 8-step pipeline list, deleted 2026-08-09. It was a "
+                "second copy of SKILL.md's flow and had already drifted — it omitted Step "
+                "7.5, the interview-readiness brief. Spec §9 asks for the duplication to "
+                "go; the pipeline now exists once, in SKILL.md and modes/apply.md.")
+    TEMPLATES = ("README's Layout tree named assets/cv/template.tex and "
+                 "assets/letter/template.tex, both deleted in Task 2 as dead and drifted "
+                 "files that nothing loads. A layout line for a file that no longer exists "
+                 "sends a reader to look for it. The deletions themselves are recorded "
+                 "under deleted_files in this same allowlist.")
+    TESTCOUNT = ("README's 'Expected: 41 tests, all passing.' — a count nothing updates. It "
+                 "was already wrong before the migration (the suite was 51) and is wrong by "
+                 "more than a hundred now. Replaced by `make check`, which has no number in "
+                 "it to rot.")
+    GROUPS = {PIPELINE: {35, 37, 38, 39, 40, 41, 42, 43, 44},
+              TEMPLATES: {83, 84},
+              TESTCOUNT: {104}}
+
+    def reason_for(lineno: int) -> str:
+        for reason, lines in GROUPS.items():
+            if lineno in lines:
+                return reason
+        raise SystemExit(f"README.md:{lineno} was not expected to be deleted — read the "
+                         f"line and fix the edit; do not waive it under someone else's reason")
+
     report = pathlib.Path("/tmp/jh-readme-lost.md").read_text(encoding="utf-8")
-    keys = re.findall(r"^- \*\*(README\.md):\d+\*\* `([0-9a-f]{16})`", report, re.M)
+    hits = re.findall(r"^- \*\*README\.md:(\d+)\*\* `([0-9a-f]{16})`", report, re.M)
+    others = [l for l in report.splitlines()
+              if l.startswith("- **") and not l.startswith("- **README.md:")]
+    assert not others, "non-README losses — restore these, do not waive them:\n" + "\n".join(others)
     allow = json.loads(pathlib.Path("scripts/lossless-allowlist.json").read_text(encoding="utf-8"))
-    for _, key in keys:
-        allow["waived"][key] = REASON
+    for lineno, key in hits:
+        allow["waived"][key] = reason_for(int(lineno))
     pathlib.Path("scripts/lossless-allowlist.json").write_text(
         json.dumps(allow, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    print(f"waived {len(keys)} README lines")
+    print(f"waived {len(hits)} README lines in {len({reason_for(int(n)) for n, _ in hits})} groups")
     PY
     ```
-    Expected: `waived 9 README lines`. Every waiver keys on a hash of the normalized line, so editing any of those lines later revokes its waiver and brings it back for review.
+    Expected: `waived 12 README lines in 3 groups`. Every waiver keys on a hash of the normalized line, so editing any of those lines later revokes its waiver and brings it back for review.
 
 - [ ] **Step 7: Verify losslessness and the whole suite**
     ```bash
@@ -6067,7 +6297,7 @@ It also has no record of the workspace layout — so `cv-source.txt`, `coverage.
     python3 scripts/check_skill_lossless.py --baseline job-application-baseline
     python3 -m pytest scripts/tests -q
     ```
-    Expected: `LOSSLESS: … , 9 waived` and exit 0; the whole suite passes, including the four new `test_readme.py` cases.
+    Expected: `LOSSLESS: … , 18 waived` and exit 0; the whole suite passes, including the four new `test_readme.py` cases. Eighteen, not twelve: the script prints the running total for the whole allowlist, and Task 20 Step 8a already waived the six baseline frontmatter-description lines. If it says 12, Task 20's waivers were dropped when this step rewrote the file.
 
 - [ ] **Step 8: Commit**
     ```bash
@@ -6076,8 +6306,10 @@ It also has no record of the workspace layout — so `cv-source.txt`, `coverage.
     git commit -m "docs(readme): one pipeline, a correct layout, and the workspace shape
 
 The duplicated 8-step list had already drifted — it omitted Step 7.5 — which is
-the failure mode a second copy always has. Deleted, with each dropped line waived
-by hash and one written reason, so editing any of them revokes the waiver.
+the failure mode a second copy always has. Deleted. Twelve dropped lines are
+waived by hash in three groups, each with the reason that describes it: the nine
+pipeline lines, the two .tex Layout lines, and the stale test count. Editing any
+of them revokes its waiver.
 
 Also drops the two deleted .tex templates from the layout, adds modes/ and the
 gates, documents the workspace directory including cv-source.txt, coverage.json
@@ -6294,10 +6526,13 @@ One repo, two symlinks — the same shape as `slide-maker`, which is already sym
     ```bash
     head -3 ~/.claude/skills/job-hunt/SKILL.md
     head -3 ~/.codex/skills/job-hunt/SKILL.md
-    python3 ~/.claude/skills/job-hunt/scripts/check_apply.py --workspace /tmp/jh-smoke-does-not-exist; echo "exit=$?"
-    python3 ~/.codex/skills/job-hunt/scripts/lint_cv.py --workspace /tmp/jh-smoke-does-not-exist; echo "exit=$?"
+    SMOKE="/tmp/jh-smoke-$$"          # a path that does not exist, and must not exist after
+    python3 ~/.claude/skills/job-hunt/scripts/check_apply.py --workspace "$SMOKE"; echo "exit=$?"
+    python3 ~/.codex/skills/job-hunt/scripts/lint_cv.py --workspace "$SMOKE"; echo "exit=$?"
+    if [ -e "$SMOKE" ]; then echo "CREATED — the workspace guard is missing"; else echo "not created: ok"; fi
+    rm -rf "$SMOKE"
     ```
-    Expected: both `head` calls print `---` / `name: job-hunt` / `description: >-`; both scripts print a `cannot run …` message to stderr and `exit=2` — which proves the module imports resolved through the symlink (an unresolvable import would be a traceback, not an orderly exit 2).
+    Expected: both `head` calls print `---` / `name: job-hunt` / `description: >-`; both scripts print `cannot run <gate>: workspace /tmp/jh-smoke-<pid> does not exist` to stderr and `exit=2`; then `not created: ok`. The orderly exit 2 proves the module imports resolved through the symlink (an unresolvable import would be a traceback, not an exit 2). The `not created` line proves the Global Constraints workspace guard is really in every gate: measured before it was added, `lint_cv.py --workspace <a path that does not exist>` printed the right message, exited 2 **and left a `journal.jsonl` behind**, because `journal.receipt()` mkdirs — so a typo'd `--workspace` silently manufactured the empty workspace the resume lookup would later find. `rm -rf "$SMOKE"` is a belt-and-braces cleanup for the day that regresses.
 
 - [ ] **Step 6: Full suite and a final losslessness check**
     Run:
@@ -6306,7 +6541,7 @@ One repo, two symlinks — the same shape as `slide-maker`, which is already sym
     make check
     git status --short -- ':!docs'
     ```
-    Expected: `make check` runs the whole suite green and prints `LOSSLESS: … , 9 waived` with exit 0. `git status --short -- ':!docs'` shows **only** `?? scripts/tests/test_install.py`.
+    Expected: `make check` runs the whole suite green and prints `LOSSLESS: … , 18 waived` with exit 0 (6 from Task 20 Step 8a + 12 from Task 21 Step 6). `git status --short -- ':!docs'` shows **only** `?? scripts/tests/test_install.py`.
     `docs/` is excluded from that listing deliberately, not to hide anything: it is tracked, it is outside the skill corpus, and executing this plan legitimately leaves plan/research edits there. Anything else appearing under the skill tree itself — `SKILL.md`, `modes/`, `references/`, `agents/`, `assets/`, `scripts/`, `Makefile`, `.github/` — means a task's commit step was skipped; find it before finishing.
 
 - [ ] **Step 7: Commit**
@@ -6327,8 +6562,8 @@ symlinked: two skills with overlapping descriptions fight for the trigger."
 
 State these when reporting completion, so nobody assumes they landed:
 
-- **The `discover`, `assess` and `interview` modes.** SKILL.md names them and says, per mode and in those exact words, that each `is not yet built in this repo`; `modes/` holds only `apply.md`. `test_a_mode_that_exists_is_not_still_described_as_not_yet_built` turns each sentence into a self-retracting one: the suite goes red the moment a later plan lands the mode file without deleting the sentence.
-- **The self-check list and the gate table are extended by every later plan, and the suite is RED until they are.** `test_the_self_check_names_every_script` / `..._every_reference_file` / `..._every_agent_file` / `..._every_mode_file` are deliberately exhaustive. Plans 2, 3 and 4 together add fourteen scripts, three mode files, three reference files and two agent files, so each of them needs a final task that appends its own entries to SKILL.md's `## Self-check` section **and** its gate table, and extends the `skip` set for its library-only modules (`opencli_meta.py`, `mock_vocab.py`, `mock_blocks.py` join `journal.py`, `paths.py`, `rounds.py`, `vocab.py`). This plan cannot do it — it runs first — and the red suite is the mechanism, not an accident.
+- **The `discover`, `assess` and `interview` modes.** SKILL.md names them and says, per mode and in those exact words, that each `is not yet built in this repo`; `modes/` holds only `apply.md`. Those words are the **Status cell of that mode's row in SKILL.md's `## Modes` table** — there is no prose sentence to find. `test_a_mode_that_exists_is_not_still_described_as_not_yet_built` turns each row into a self-retracting one: the suite goes red the moment a later plan lands the mode file without editing its own row's Status to `live — modes/<mode>.md`.
+- **The self-check list and the gate table are extended by every later plan, and the suite is RED until they are.** `test_the_self_check_names_every_script` / `..._every_reference_file` / `..._every_agent_file` / `..._every_mode_file` are deliberately exhaustive. Plans 2, 3 and 4 together add fourteen scripts, three mode files, three reference files and two agent files, so each of them needs a final task that appends its own entries to SKILL.md's `## Self-check` section **and** its gate table, and **appends to** the `skip` set for its library-only modules (`opencli_meta.py` from Plan 3, `mock_vocab.py` and `mock_blocks.py` from Plan 4, joining `journal.py`, `paths.py`, `rounds.py`, `vocab.py`; Plan 2 has no library-only module and adds nothing). Appends, not replacements: three plans editing the same line as a whole-line replacement means whichever lands last deletes the other two's entries. This plan cannot do it — it runs first — and the red suite is the mechanism, not an accident.
 - **The mode-entry step for the other three modes.** `scripts/enter_mode.py` handles all four modes and `check_apply.py` requires the record for `apply`. Plans 2, 3 and 4 must each make `enter_mode.py --mode <theirs>` the first step of their mode file and mirror the `NO_MODE_ENTRY` / `MODE_FILE_CHANGED` findings into their own gate; without that, half of the layer-1.5 backstop exists for one mode out of four.
 - **The §12 flagged rewrite.** The FIT SNAPSHOT's required disclaimer talks about keyword-coverage *percentages*, and the new assess mode stops emitting those. Carrying it verbatim here is correct — this plan's job is that `job-hunt` does everything `job-application` does. **Plan 2 owns the rewrite**, as a separate small readable commit with its own `scripts/lossless-allowlist.json` entry naming it, so it is a decision rather than a casualty.
 - **Six layer-1 items from spec §6 that belong to the unbuilt modes**, listed so nobody finishes this plan believing SKILL.md is §6-complete. Landing here: the apply-verdict block and its disclaimer, the skill-wide banned-output vocabulary and its published-employer-rubric exception, and the §8 grounding-contract summary (Task 20). Landing with their modes: the read-only guarantee plus the `access: read` allow-list and the four opencli command pairs (**Plan 3**); the **platform-limit stop rule** — stop, no retry, no parameter change, no bypass, direction-level degradation, fill the disclosure table — which **Plan 3 carries into the same SKILL.md block** as the read-only guarantee; the four anti-coaching rules and their tripwire, and the mock-interview session mechanics (**Plan 4**).

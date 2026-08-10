@@ -49,7 +49,7 @@
 | `references/discovery-sources.md` | Layer 2. Per-adapter flags, measured login state, identity field, detail command, caps, risk-control strings, degraded-fallback field list. Trigger + backstop live in SKILL.md and `check_shortlist.py`. |
 | `references/source-policy.md` | The ONE source standard (green/yellow/red) that the skill actually obeys. Replaces the retired `job-search-coach` policy. Trigger + backstop live in SKILL.md and `check_shortlist.py`'s cap findings. |
 | `modes/discover.md` | Layer 1.5. The mode file: the mode-entry command, entry conditions, the `search-preferences.yaml` schema and the interview that fills it, the auth probe, bilingual queries, the `brief.yaml` and `shortlist.yaml` schemas (defined nowhere else), the provisional stamp rule for BOTH outputs, the platform-limit stop rule, the degraded disclosure block, the self-check list. |
-| `SKILL.md` | **Modified twice** — Task 5 appends a marked block carrying the four inlined command pairs, the six-clause platform-limit stop rule and the evaluable trigger for `references/discovery-sources.md`; Task 6 adds the trigger for `references/source-policy.md`; Task 10 registers everything in the `## Self-check` section and the gate table and retracts the "discover is not yet built" sentence. |
+| `SKILL.md` | **Modified twice** — Task 5 appends a marked block carrying the four inlined command pairs, the six-clause platform-limit stop rule and the evaluable trigger for `references/discovery-sources.md`; Task 6 adds the trigger for `references/source-policy.md`; Task 10 registers everything in the `## Self-check` section and the gate table and flips the `discover` row of the `## Modes` table from "not yet built" to live. |
 | `scripts/tests/conftest.py` | Puts `scripts/` on `sys.path` so tests can `import check_shortlist`. |
 | `scripts/tests/discover_fixtures.py` | Builds a **valid** discover workspace out of the real 2026-08-09 51job capture. Every test mutates exactly one thing away from valid. |
 | `scripts/tests/test_*.py` | One test module per deliverable, each pinning the quiet case as hard as the firing case. |
@@ -4642,7 +4642,7 @@ round tiny.
 
     Expected: PASS (119 passed — 16 + 12 + 19 + 26 + 4 + 10 + 10 + 19 + 3).
 
-    **Not the whole suite yet, and that is deliberate.** `scripts/tests/test_skill_structure.py` is still red: Plan 1 asserts `SKILL.md`'s `## Self-check` section names every script, reference and mode file in the tree, and this plan has added eight of them without registering any. Task 10 does the registration and then runs the whole suite. Do not delete the assertion to make this step green.
+    **Not the whole suite yet, and that is deliberate.** `scripts/tests/test_skill_structure.py` is still red: Plan 1 asserts `SKILL.md`'s `## Self-check` section names every script, reference and mode file in the tree, and this plan has added eight of them without registering any; `test_a_mode_that_exists_is_not_still_described_as_not_yet_built` is red too, because Task 7 created `modes/discover.md` while the `## Modes` table still calls it unbuilt. Task 10 does the registration, flips that row, and then runs the whole suite. Do not delete either assertion to make this step green.
 
 - [ ] **Step 5: Live read-only dry run against 51job**
 
@@ -4831,17 +4831,17 @@ Live dry run 2026-08-09, read-only, no login attempted:
 ### Task 10: register everything in SKILL.md, and retract "discover is not yet built"
 
 **Files:**
-- Modify: `SKILL.md` (the `## Self-check` section, the gate table, the Modes row)
-- Modify: `scripts/tests/test_skill_structure.py` (Plan 1) — extend the library-only skip set
+- Modify: `SKILL.md` (the `## Self-check` section, the gate table, this plan's row of the `## Modes` table)
+- Modify: `scripts/tests/test_skill_structure.py` (Plan 1) — append one entry to the library-only skip set (Plan 4 appends to the same literal; see Step 7)
 - Test: `scripts/tests/test_discover_registration.py`
 
 **Interfaces:**
-- Consumes: Plan 1's `test_skill_structure.py` assertions (`test_the_self_check_names_every_script`, `..._every_reference_file`, `..._every_mode_file`, `test_every_path_the_self_check_names_exists`, `test_every_mode_named_in_skill_md_has_a_file_or_is_marked_unbuilt`)
+- Consumes: Plan 1's `test_skill_structure.py` assertions (`test_the_self_check_names_every_script`, `..._every_reference_file`, `..._every_mode_file`, `test_every_path_the_self_check_names_exists`, `test_every_mode_named_in_skill_md_has_a_file_or_is_marked_unbuilt`, `test_a_mode_that_exists_is_not_still_described_as_not_yet_built`) and the shipped `## Modes` table Plan 1's Task 20 writes
 - Produces: a green full suite, and a `SKILL.md` that no longer tells the model to refuse a mode that works.
 
 **Why this exists and why it is last.** Plan 1's structural test asserts that `SKILL.md`'s `## Self-check` section names **every** `scripts/*.py`, `references/*.md` and `modes/*.md` in the tree. Those assertions are correct and stay — a checklist that silently stops covering new files is the exact failure the self-check was added to prevent. But it means every plan that adds files must also register them, and this plan adds eight. Until now nothing in Plans 2-4 did, so the suite would have gone red from Plan 2 onward and stayed red, which trains everyone to ignore it.
 
-The second half is the same defect in prose. `SKILL.md` says `discover` is **not yet built in this repo — say so and stop rather than improvising**. That sentence was true when Plan 1 wrote it. It is false the moment Task 7 lands, and a stale one costs more than a missing one: layer 1 would be instructing the model to refuse a mode that works, and every automated check would pass.
+The second half is the same defect in prose. `SKILL.md`'s `## Modes` table gives `discover` the status **`discover` is not yet built in this repo**, and the paragraph under the table says to say so and stop rather than improvise. That status was true when Plan 1 wrote it. It is false the moment Task 7 lands, and a stale "not built" costs more than a missing one: layer 1 would be instructing the model to refuse a mode that works, while the check guarding the *other* direction (`test_every_mode_named_in_skill_md_has_a_file_or_is_marked_unbuilt`, which only fires when the mode file is **absent**) would still pass. Plan 1 anticipated exactly this and wrote `test_a_mode_that_exists_is_not_still_described_as_not_yet_built`, which has been red since Task 7 landed `modes/discover.md` and goes green at Step 6.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4916,7 +4916,7 @@ The second half is the same defect in prose. `SKILL.md` says `discover` is **not
     python3 -m pytest scripts/tests/test_skill_structure.py -q ; echo "rc=$?"
     ```
 
-    Expected: the first module fails all four with `AssertionError`. The second fails `test_the_self_check_names_every_script` (naming `check_no_write.py` first), `test_the_self_check_names_every_reference_file` and `test_the_self_check_names_every_mode_file`. **This is the red that has been accumulating since Task 1** — see the note in Task 9 Step 4. Read the failures before fixing them; they are the list of what to register.
+    Expected: the first module fails all four with `AssertionError`. The second fails four: `test_the_self_check_names_every_script` (naming `check_no_write.py` first), `test_the_self_check_names_every_reference_file`, `test_the_self_check_names_every_mode_file`, and `test_a_mode_that_exists_is_not_still_described_as_not_yet_built` — that last one has been red since Task 7 created `modes/discover.md` while the `## Modes` table still called it unbuilt, and Step 6 is what clears it. **This is the red that has been accumulating since Task 1** — see the note in Task 9 Step 4. Read the failures before fixing them; they are the list of what to register.
 
 - [ ] **Step 3: Register the read-when entries in SKILL.md's self-check**
 
@@ -4986,29 +4986,70 @@ The second half is the same defect in prose. `SKILL.md` says `discover` is **not
     | Shortlist | `scripts/check_shortlist.py` | a row whose `source_id` is in no raw capture; a duplicated or over-counted source report; "no results" with no adapter that exited 0; a missing disclosure block or provisional stamp; a detail fetch outside the top three; an uncapped brief; a missing or stale mode entry |
     ```
 
-- [ ] **Step 6: Retract the "not yet built" sentence**
+- [ ] **Step 6: Flip this plan's row of the `## Modes` table**
 
-    In `SKILL.md`'s Modes row, `discover` must stop being described as unbuilt. Replace
-    whichever sentence marks it so — Plan 1 wrote *"`discover`, `assess` and `interview`
-    are **not yet built in this repo** — say so and stop rather than improvising them"*
-    — with per-mode sentences, so that the retraction is one sentence per mode and a
-    later plan can delete exactly its own:
+    Plan 1's Task 20 ships a purpose-built `## Modes` table in `SKILL.md` — one row per
+    mode with a **Status** column — precisely so that each later plan retracts exactly its
+    own line and cannot disturb another's. This is what you will find:
 
     ```markdown
-    | **Modes** | the four-mode map. `apply` is live. `discover` is live — enter it with `scripts/enter_mode.py --mode discover` and read `modes/discover.md` in full. `assess` is not yet built in this repo. `interview` is not yet built in this repo. For a mode that is not yet built, say so and stop rather than improvising it. | new |
+    ## Modes
+
+    | Mode | Question it answers | Status |
+    |---|---|---|
+    | `discover` | what is out there worth looking at | `discover` is not yet built in this repo |
+    | `assess` | is this posting worth applying to | `assess` is not yet built in this repo |
+    | `apply` | how do I build and pressure-test the application | live — `modes/apply.md` |
+    | `interview` | how do I answer, and what did I get wrong | `interview` is not yet built in this repo |
     ```
 
-    Leave the `assess` and `interview` sentences exactly as written above; Plans 2 and 4
-    each delete their own in their own final task.
+    Replace the `discover` row — **and only that row** — with:
 
-- [ ] **Step 7: Extend the library-only skip set**
+    ```markdown
+    | `discover` | what is out there worth looking at | live — `modes/discover.md`; enter with `scripts/enter_mode.py --mode discover` |
+    ```
 
-    In `scripts/tests/test_skill_structure.py`, `test_the_self_check_names_every_script`:
+    Leave the `assess`, `interview` and `apply` rows byte-identical: Plans 2 and 4 each
+    flip their own row in their own final task, and a whole-table rewrite here would take
+    theirs with it. Leave the paragraph below the table (*For an unbuilt mode: say so and
+    stop. Do not improvise it.*) untouched as well — it is written per-status, not
+    per-mode, so it needs no edit and still governs the two rows that remain unbuilt.
+
+    Two tests police this row and both are red right now: this plan's
+    `test_the_not_yet_built_sentence_retracted_itself`, and Plan 1's
+    `test_a_mode_that_exists_is_not_still_described_as_not_yet_built` in
+    `scripts/tests/test_skill_structure.py`, which fires the moment `modes/discover.md`
+    exists while the Status column still says otherwise. Both strip backticks and collapse
+    whitespace before searching, so re-wrapping the row or dropping the code formatting
+    will not hide a stale status from either of them.
+
+- [ ] **Step 7: Extend the library-only skip set — append one entry, do not replace the line**
+
+    In `scripts/tests/test_skill_structure.py`, `test_the_self_check_names_every_script`,
+    find the `skip = {...}` set literal and **add one entry to whatever it already holds**.
+    Do not retype the line from this plan as a whole-line replacement: Plan 4 appends
+    `mock_vocab.py` and `mock_blocks.py` to the same literal, so whichever of the two plans
+    ran last would silently delete the other's entry — and Plan 1's four with it. The
+    deleted module then quietly stops needing a self-check line, which is the one failure
+    this test exists to prevent.
+
+    Expected state on arrival — Plan 1 wrote these four, and Plan 2 added none because it
+    has no library-only module:
+
+    ```python
+        skip = {"journal.py", "paths.py", "rounds.py", "vocab.py"}
+    ```
+
+    After this step:
 
     ```python
         skip = {"journal.py", "paths.py", "rounds.py", "vocab.py",
                 "opencli_meta.py"}      # imported, never invoked
     ```
+
+    If the literal you find holds anything beyond those four, a later plan ran ahead of
+    this one: keep every entry it has and add `"opencli_meta.py"` alongside them. Its
+    entries are not yours to drop.
 
     `opencli_meta.py` is this plan's only library-only module: nothing runs it, it has
     no CLI, and `check_no_write.py` is the thing a self-check can ask you whether you
@@ -5018,9 +5059,14 @@ The second half is the same defect in prose. `SKILL.md` says `discover` is **not
 - [ ] **Step 8: Run the whole suite**
 
     Run: `python3 -m pytest scripts/tests -q`
-    Expected: PASS, no failures, no errors. This is the first time in this plan the
-    **full** suite is green, and it is the step that proves the accumulated red was
-    registration debt and nothing else.
+    Expected: PASS, no failures, no errors — including the four `test_skill_structure.py`
+    tests that were red in Step 2 (the three self-check-names tests, cleared by Steps 3-5
+    and 7, and `test_a_mode_that_exists_is_not_still_described_as_not_yet_built`, cleared
+    by Step 6) and all four of `test_discover_registration.py`. This plan's own ten
+    modules account for **123** of the passing tests — 16 + 12 + 19 + 26 + 4 + 10 + 10 +
+    19 + 3 + 4, which is Task 9 Step 4's 119 plus this task's four — and the rest are
+    Plan 1's and Plan 2's. This is the first time in this plan the **full** suite is green, and it is
+    the step that proves the accumulated red was registration debt and nothing else.
 
 - [ ] **Step 9: Commit**
 
@@ -5036,15 +5082,18 @@ so the plan that adds eight files is the plan that registers them —
 otherwise the suite goes red on the first new file and stays red, which
 teaches everyone to ignore it.
 
-SKILL.md said discover was not yet built and to stop rather than
-improvise. True when it was written, false since modes/discover.md
-landed, and a stale 'not built' is worse than a missing one: layer 1
-would decline a working mode while every automated check passed. The
-sentence is now one per mode so Plans 2 and 4 can each delete their own.
+The ## Modes table said discover was not yet built. True when it was
+written, false since modes/discover.md landed, and a stale 'not built'
+is worse than a missing one: layer 1 would decline a working mode while
+the check guarding the other direction still passed. Plan 1 saw it
+coming and wrote test_a_mode_that_exists_is_not_still_described_as_not_
+yet_built, red since Task 7. Only the discover row moves; assess and
+interview stay byte-identical for Plans 2 and 4 to flip.
 
-opencli_meta.py joins the library-only skip set: no CLI, nothing runs
-it. Nothing else does, because a skip set is how a real gap gets waved
-through."
+opencli_meta.py is appended to the library-only skip set rather than
+replacing the line, so Plan 4's mock_vocab.py and mock_blocks.py cannot
+delete it and it cannot delete them. Nothing else joins, because a skip
+set is how a real gap gets waved through."
     ```
 
 ---

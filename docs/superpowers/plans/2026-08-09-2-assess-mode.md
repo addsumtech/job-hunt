@@ -161,11 +161,12 @@ Rules that bind every consumer of this file:
 | `modes/assess.md` | Layer 1.5. Defines the `fit-assessment.yaml` row schema, the fetch-integrity thresholds, the complete `posting.yaml` field list, the refusal floor, and the "what to do instead" half. |
 | `docs/superpowers/research/2026-08-09/markets.json` | **Already committed** (`ac404fb`). The sole source for all 38 convention entries. This plan reads it; it does not copy it. |
 | `docs/superpowers/research/2026-08-09/review-{cn,nl_weu,de,us_uk}.md` | Derived in Task 6 Step 1 from `markets.json`'s `review` field, so the four adversarial reviews are readable as prose beside it. |
-| `SKILL.md` | Written by Plan 1. Task 14 rewrites its FIT SNAPSHOT disclaimer sentence; Task 15 extends its gate table and self-check and retracts "assess is not yet built". |
+| `SKILL.md` | Written by Plan 1. Task 14 rewrites its verbatim copy of the FIT SNAPSHOT disclaimer; Task 15 extends its gate table and self-check and gives the `assess` row of its `## Modes` table its real status. |
+| `modes/apply.md` | Written by Plan 1 Task 20 Step 5 from baseline `SKILL.md:78-89`. Task 14 re-points the FIT SNAPSHOT bullet's parenthetical, which lives here and not in `SKILL.md`. |
 | `references/gap-analysis.md` | Migrated by Plan 1. Task 14 rewrites its FIT SNAPSHOT disclaimer, the spec's one flagged rewrite. |
 | `scripts/lossless-allowlist.json` | Created by Plan 1. Task 14 records the flagged rewrite in it by name, keyed on the retired line's hash. |
 | `scripts/tests/required_inline.json` | Written by Plan 1. Task 14 re-points the FIT SNAPSHOT anchor at the rewritten wording. |
-| `scripts/tests/test_skill_structure.py` | Written by Plan 1. Task 15 extends its library-only skip set. |
+| `scripts/tests/test_skill_structure.py` | Written by Plan 1. Task 15 only **checks** its library-only skip set: this plan's seven scripts are all runnable gates, so nothing is appended to it. |
 | `scripts/enter_mode.py` | Written by Plan 1. `modes/assess.md` step 0 runs it; `check_assessment.py` requires its record. |
 | `scripts/vocab.py` | Written by Plan 1. Every closed set in this plan is imported from it. |
 | `requirements.txt` | Created by Plan 1. This plan only reads it. |
@@ -2110,6 +2111,9 @@ off within a week, and then it is not there on the run that mattered.
   exactly what was counted and claims nothing that was not; every counted row is printed
   in the requirement table beside its evidence reference, so the denominator is auditable
   row by row and a reader can object to any single line.
+
+  Exit 2 still writes a receipt, verdict "could_not_run", unless the workspace directory
+  itself is absent -- there is nothing to append to.
   """
   from __future__ import annotations
 
@@ -2285,7 +2289,7 @@ off within a week, and then it is not there on the run that mattered.
 - Consumes: `journal.receipt(...)`, `journal.sha256_file(path)`; `vocab.MARKET_KEYS`.
 - Produces:
   - `MARKET_KEYS = vocab.MARKET_KEYS` — re-exported for readability, **never re-typed**
-  - `SKILL_ROOT` — the repo root, resolved **once** here. `check_assessment.py` imports it rather than re-deriving the same `.parents[1]` walk; one module owns the path, per the shared contract's `paths.py` rule.
+  - `SKILL_ROOT = paths.SKILL_ROOT` — re-exported for readability; `paths.py` owns the value and this module never re-derives it. `check_assessment.py` reads `paths.SKILL_ROOT` directly rather than importing this alias, so there is one owner and no second `.parents[1]` walk anywhere.
   - `CONVENTIONS_DIR = SKILL_ROOT / "references" / "market-conventions"`
   - `PROSE_FIELDS`, `PROPER_NOUNS`, `PROTECTED_TRAITS`
   - `load_market_file(path: pathlib.Path) -> dict`
@@ -4135,9 +4139,9 @@ off within a week, and then it is not there on the run that mattered.
   | the twelve-name `posting.yaml` field list | Plan 1's `check_letter.NO_COMPANY_IN_POSTING`, plus the Step 2 anchor script |
   | the `fit-assessment.yaml` row schema | `ROW_UNSOURCED`, `BAD_VERDICT`, `PROVISIONAL_VERDICT` |
   | `DISCLAIMER_ANCHOR_ZH = "不是对结果的预判"` / `DISCLAIMER_ANCHOR_EN = "not a forecast of the outcome"` | `NO_DISCLAIMER` |
-  | the `## 硬性阻断项` section and its `R<n>` id list | `DISQUALIFIER_AFTER_VERDICT`, `NO_DISQUALIFIER_SECTION` |
-  | the closed strategy set `apply_anyway \| reposition \| skill_sprint \| side_door \| change_track` | `NO_STRATEGY_SECTION`, `STRATEGY_NOT_UNIQUE` |
-  | the 30/60/90 column names 目标 \| 行动 \| 验收标准 and the roadmap's 输出物 column | `NO_ACCEPTANCE_COLUMN` |
+  | the `## 硬性阻断项` / `## Hard blockers` section and its `R<n>` id list | `NO_DISQUALIFIER_SECTION` (the section), `DISQUALIFIER_NOT_NAMED` (the id list — the only finding that enforces that half), `DISQUALIFIER_AFTER_VERDICT` (its position) |
+  | the closed strategy set `apply_anyway \| reposition \| skill_sprint \| side_door \| change_track`, written once under `## 那该怎么办` / `## What to do instead` | `NO_STRATEGY_SECTION`, `STRATEGY_NOT_UNIQUE` |
+  | the 30/60/90 column names 目标 \| 行动 \| 验收标准 (`Goal \| Action \| Acceptance criterion`) and the roadmap's 输出物 (`Deliverable`) column | `NO_ACCEPTANCE_COLUMN` |
   | the 「已过复核期」 stale-review banner | `MISSING_STALE_BANNER` |
 
 **Why this file is layer 1.5 and not a reference.** Entering assess mode loads it unconditionally — the model never has to judge whether it is relevant, there are only four such files, and the choice is deterministic. It has two backstops at once: `check_assessment.py` requires artifact fields that only this file defines, **and** `journal.jsonl` records its content hash, written by `scripts/enter_mode.py` in step 0 and checked by `check_assessment`'s `NO_MODE_ENTRY` / `MODE_FILE_CHANGED`. Both halves, or neither: the field backstop alone cannot tell "the model read this file" from "the model guessed a schema that happens to fit", which is exactly the optional-reference regression this skill's owner has already been bitten by.
@@ -4273,9 +4277,15 @@ off within a week, and then it is not there on the run that mattered.
   - **R5** — 岗位要求本地注册执业资格。
   ```
 
+  Writing in English? The heading is `## Hard blockers`. Those two spellings are the only
+  ones `check_assessment.py` recognises — the section is a heading it has to find, so it
+  is the one place here where the exact string matters.
+
   Write the barrier in your own words, in the reader's language — paraphrase is expected
   and correct. The **id** is the mechanical handle, and it is what `check_assessment.py`
-  looks for (`DISQUALIFIER_AFTER_VERDICT`, `NO_DISQUALIFIER_SECTION`). Keying the check on
+  looks for: `NO_DISQUALIFIER_SECTION` when the section is absent,
+  `DISQUALIFIER_NOT_NAMED` when it is there but does not list a blocking row's id, and
+  `DISQUALIFIER_AFTER_VERDICT` when it renders below the verdict line. Keying the check on
   the posting's own wording instead would fire on every honest translation, and a check
   that cries wolf on correct output is one people stop reading.
 
@@ -4391,7 +4401,8 @@ off within a week, and then it is not there on the run that mattered.
 
   ## 10. When the verdict is 大概率被筛掉 or 硬性阻断: the other half
 
-  A verdict without this half is a door closed with nothing behind it. Produce all three.
+  A verdict without this half is a door closed with nothing behind it. Produce all three,
+  under a `## 那该怎么办` heading — `## What to do instead` if you are writing in English.
 
   **(a) Exactly one strategy**, from this closed set — not two, not a menu:
 
@@ -4404,8 +4415,10 @@ off within a week, and then it is not there on the run that mattered.
   | `change_track` 换方向 | The blocking requirement is structural and not worth closing for this goal |
 
   Write the chosen token literally — `check_assessment.py` counts how many of the five
-  appear in the section and fails on zero (`NO_STRATEGY_SECTION`) and on more than one
-  (`STRATEGY_NOT_UNIQUE`). A menu is not a recommendation; picking is the work.
+  appear **inside that section** and fails on zero (`NO_STRATEGY_SECTION`) and on more
+  than one (`STRATEGY_NOT_UNIQUE`). A menu is not a recommendation; picking is the work.
+  Naming a rejected strategy in the same section counts as a second one, so contrast it
+  in prose above the heading, or name it without its token.
 
   **(b) A 30/60/90 table** with exactly these columns:
 
@@ -4413,11 +4426,14 @@ off within a week, and then it is not there on the run that mattered.
   |---|---|---|
   | ... | ... | ... |
 
-  **(c) A roadmap carrying an 输出物 column.**
+  In English: `| Goal | Action | Acceptance criterion |`.
 
-  `验收标准` and `输出物` are where the entire value of this section sits — they are what
-  turn advice into something checkable, and `NO_ACCEPTANCE_COLUMN` fails the gate when
-  either column header is missing. Every row of both tables must also appear in
+  **(c) A roadmap carrying an 输出物 (`Deliverable`) column.**
+
+  `验收标准` and `输出物` — or `Acceptance criterion` and `Deliverable` — are where the
+  entire value of this section sits. They are what turn advice into something checkable,
+  and `NO_ACCEPTANCE_COLUMN` fails the gate when neither spelling of either column header
+  is present. Every row of both tables must also appear in
   `actions:` in `fit-assessment.yaml`; that list is the single authoritative to-do list,
   and `consistency.py` compares it against the closable gaps.
 
@@ -4493,6 +4509,11 @@ off within a week, and then it is not there on the run that mattered.
                  'red_flags', 'salary_range', 'application_type',
                  'insufficient_evidence', 'how_to_close', 'conventions_rendered',
                  '硬性阻断项', '已过复核期', '验收标准', '输出物',
+                 # Both spellings of every heading and column check_assessment.py keys on.
+                 # An English card is a supported output; a mode file that names only the
+                 # Chinese spelling produces one the gate then reports as defective.
+                 'Hard blockers', '那该怎么办', 'What to do instead',
+                 'Acceptance criterion', 'Deliverable',
                  'apply_anyway', 'reposition', 'skill_sprint', 'side_door', 'change_track']:
       assert needle in t, needle
   assert 'language: en' not in t, 'the posting.yaml list must not carry a language field'
@@ -4530,21 +4551,21 @@ off within a week, and then it is not there on the run that mattered.
   - `lint_no_prediction.scan_text(text, label) -> list[str]`, `lint_no_prediction.target_files(workspace) -> list[pathlib.Path]`
   - `consistency.notices(assessment) -> list[dict]`
   - `count_coverage.coverage(rows) -> dict`, `count_coverage.render_block(assessment, counts, lang) -> str`
-  - `check_conventions.check_file(path, today) -> list[str]`, `check_conventions.conventions_by_id(data) -> dict`, `check_conventions.load_market_file(path) -> dict`, `check_conventions.MARKET_KEYS`, `check_conventions.SKILL_ROOT`, `check_conventions.CONVENTIONS_DIR`
+  - `check_conventions.check_file(path, today) -> list[str]`, `check_conventions.conventions_by_id(data) -> dict`, `check_conventions.load_market_file(path) -> dict`, `check_conventions.MARKET_KEYS`, `check_conventions.CONVENTIONS_DIR` — **not** `check_conventions.SKILL_ROOT`: the root comes from `paths.SKILL_ROOT` directly, so there is one owner and no second walk
   - the anchors defined in `modes/assess.md`
-- Produces: `DISCLAIMER_ANCHORS`, `DISQUALIFIER_HEADING`, `STALE_BANNER`, `STRATEGIES`, `OTHER_HALF_VERDICTS`, `ACCEPTANCE_COLUMNS`, `UPSTREAM_GATES`, `PASSING_VERDICTS`, `check(workspace, market_dir, today, skill_root=None) -> list[str]`, `main(argv=None) -> int`
+- Produces: `DISCLAIMER_ANCHORS`, `VERDICT_MARKERS`, `DISQUALIFIER_HEADINGS`, `STALE_BANNER`, `STRATEGIES`, `STRATEGY_HEADINGS`, `OTHER_HALF_VERDICTS`, `ACCEPTANCE_COLUMNS`, `UPSTREAM_GATES`, `PASSING_VERDICTS`, `check(workspace, market_dir, today, skill_root=None) -> list[str]`, `main(argv=None) -> int`
 
 **What this gate adds on top of the five it composes.** Each of these closes a way the assessment can be internally consistent and still wrong:
 - **`NO_MODE_ENTRY` / `MODE_FILE_CHANGED`** — the content-hash half of the layer-1.5 backstop, mirrored from `check_apply.py`. The artifact-field half alone cannot distinguish "the model read `modes/assess.md`" from "the model produced something shaped like it".
 - **`MISSING_RECEIPT` / `UPSTREAM_FAILED`** — this gate *composes* five others, so it must know they ran. Recomputing their answers instead would make a gate that was never run indistinguishable from a gate that passed, which is the whole reason the journal exists.
 - **`ROW_UNSOURCED`** — a row that claims a match with no resolvable reference. `no_evidence` with an empty list is the honest shape and passes.
 - **`NO_DISCLAIMER`** — the counts without the disclaimer is a count that reads as a prediction.
-- **`NO_DISQUALIFIER_SECTION` / `DISQUALIFIER_NOT_NAMED` / `DISQUALIFIER_AFTER_VERDICT`** — a hard barrier printed after the conclusion has already been read is a barrier nobody registered. Keyed on the `## 硬性阻断项` section and the **row ids** it lists, never on the posting's own wording: a Chinese section that names the barrier correctly is a paraphrase by construction, and a check that demands the English requirement text back fires on every honest translation.
+- **`NO_DISQUALIFIER_SECTION` / `DISQUALIFIER_NOT_NAMED` / `DISQUALIFIER_AFTER_VERDICT`** — a hard barrier printed after the conclusion has already been read is a barrier nobody registered. Keyed on the `## 硬性阻断项` / `## Hard blockers` section and the **row ids** it lists, never on the posting's own wording: a Chinese section that names the barrier correctly is a paraphrase by construction, and a check that demands the English requirement text back fires on every honest translation. Both spellings of the heading, because `count_coverage.py --lang en` makes an English card a supported output and a Chinese-only constant would report a defect on a correct one.
 - **`NOTICE_NOT_ATTACHED`** — a contradiction the code found and the document did not mention is a contradiction the reader averages away.
 - **`COUNT_MISMATCH`** — a number in the document that `count_coverage.py` did not produce is a second, unreconciled number.
 - **`CONVENTION_PARAPHRASED`** — the model restating a convention is exactly how a 「usually」 becomes a 「must」 with nothing to check it against. Compared with **all whitespace removed on both sides**: the tables use YAML block scalars with hard wraps, and demanding the model reproduce the YAML's line breaks would fire on a card rendered character-for-character.
 - **`WARN_EXPIRED_REVIEW_BY` + `MISSING_STALE_BANNER`** — spec §10 is explicit that an expired `review_by` fails CI but at **runtime** renders with a 「已过复核期」 banner rather than refusing. So this gate re-prefixes the lint's hard finding as a warning and requires the banner instead. Left hard, a date passing with no code change stops the skill working.
-- **`NO_STRATEGY_SECTION` / `STRATEGY_NOT_UNIQUE` / `NO_ACCEPTANCE_COLUMN`** — on `likely_screen_out` and `blocked`, spec §5.2 step 10 says the 「那该怎么办」 half is the value: exactly one strategy from the closed set, `验收标准` on the 30/60/90 table, `输出物` on the roadmap. `modes/assess.md` §10 says so too, and until now nothing reported its absence.
+- **`NO_STRATEGY_SECTION` / `STRATEGY_NOT_UNIQUE` / `NO_ACCEPTANCE_COLUMN`** — on `likely_screen_out` and `blocked`, spec §5.2 step 10 says the 「那该怎么办」 half is the value: exactly one strategy from the closed set, `验收标准` on the 30/60/90 table, `输出物` on the roadmap. `modes/assess.md` §10 says so too, and until now nothing reported its absence. The strategy count is scoped to the `## 那该怎么办` / `## What to do instead` section, not the whole file: 「不是 `apply_anyway`，而是 `skill_sprint`」 is a normal way to write a recommendation, and a whole-file count would call it a menu. Each column is a pair — `验收标准` / `Acceptance criterion`, `输出物` / `Deliverable` — for the same reason the heading is.
 - **`REFUSAL_WITH_VERDICT`** — a refusal that still prints a conclusion is not a refusal.
 
 - [ ] **Step 1: Write the failing test**
@@ -4632,6 +4653,16 @@ off within a week, and then it is not there on the run that mattered.
                 "| 补上分布式训练 | 移植到 torchrun | 仓库里有两卡运行日志 |\n\n"
                 "| 阶段 | 输出物 |\n|---|---|\n"
                 "| 第一阶段 | 一份可复现的两卡训练日志 |\n")
+
+  # The same half in English. count_coverage.py has --lang {zh,en}, so this is a supported
+  # output, not a hypothetical one.
+  OTHER_HALF_EN = ("\n## What to do instead\n\n"
+                   "Strategy: `skill_sprint`\n\n"
+                   "| Goal | Action | Acceptance criterion |\n|---|---|---|\n"
+                   "| Close the orchestration gap | Ship a staging deployment | "
+                   "A running deployment a colleague can reach |\n\n"
+                   "| Phase | Deliverable |\n|---|---|\n"
+                   "| Phase one | A reproducible deployment manifest |\n")
 
 
   def _skill_root(tmp_path):
@@ -4971,6 +5002,47 @@ off within a week, and then it is not there on the run that mattered.
                  for f in ca.check(ws, market_dir, TODAY, root))
 
 
+  def test_an_english_card_with_a_knockout_gap_is_quiet(tmp_path):
+      # The quiet case for every constant that keys on a heading or a column name. The
+      # base fixture has R2 as `weighted`, so the disqualifier branch never runs on it —
+      # which is exactly how a Chinese-only constant got shipped once already. Here the
+      # branch runs, the card is English, and a correct card must produce no finding.
+      broken = copy.deepcopy(ASSESSMENT)
+      broken["requirements"][1]["screening"] = "knockout"
+      broken["verdict"] = "blocked"
+      ws, market_dir, root = build(tmp_path, assessment=broken)
+      md = ((ws / "fit-assessment.md").read_text(encoding="utf-8")
+            .replace("## 硬性阻断项", "## Hard blockers")
+            .replace("- **R2** — 该岗位明确要求你已经持有欧盟工作许可。这是法律层面的门槛，"
+                     "不是表述问题。",
+                     "- **R2** — production container orchestration is a hard requirement "
+                     "here and there is nothing in the CV to cite for it.")
+            + OTHER_HALF_EN)
+      (ws / "fit-assessment.md").write_text(md, encoding="utf-8")
+      findings = ca.check(ws, market_dir, TODAY, root)
+      assert not [f for f in findings
+                  if f.startswith("NO_DISQUALIFIER_SECTION")
+                  or f.startswith("DISQUALIFIER_NOT_NAMED")
+                  or f.startswith("NO_STRATEGY_SECTION")
+                  or f.startswith("STRATEGY_NOT_UNIQUE")
+                  or f.startswith("NO_ACCEPTANCE_COLUMN")], findings
+
+
+  def test_a_rejected_strategy_named_outside_the_section_is_not_a_menu(tmp_path):
+      # 「不是 apply_anyway，而是 skill_sprint」 is how a recommendation is normally
+      # written. Counted over the whole file it reads as two strategies; the count is
+      # scoped to the section so that it does not.
+      broken = copy.deepcopy(ASSESSMENT)
+      broken["verdict"] = "likely_screen_out"
+      ws, market_dir, root = build(tmp_path, assessment=broken)
+      md = ((ws / "fit-assessment.md").read_text(encoding="utf-8")
+            + "\n这里不是 `apply_anyway` 的场景。\n" + OTHER_HALF)
+      (ws / "fit-assessment.md").write_text(md, encoding="utf-8")
+      findings = ca.check(ws, market_dir, TODAY, root)
+      assert not [f for f in findings if f.startswith("STRATEGY_NOT_UNIQUE")
+                  or f.startswith("NO_STRATEGY_SECTION")], findings
+
+
   def test_a_roadmap_without_its_deliverable_column_fails(tmp_path):
       broken = copy.deepcopy(ASSESSMENT)
       broken["verdict"] = "likely_screen_out"
@@ -5113,16 +5185,24 @@ off within a week, and then it is not there on the run that mattered.
   GATE = "check_assessment"
   MODE = "assess"
 
+  # Every heading and column name this gate keys on is a PAIR. An English card is a
+  # first-class output here — count_coverage.py has --lang {zh,en} and render_block emits
+  # "apply verdict:" — so a constant that knows only the Chinese spelling reports a defect
+  # on a correct English assessment. A check that cries wolf on ordinary output is worse
+  # than no check: the reader learns to skip the line, and it stops working on the run
+  # that mattered. modes/assess.md §4 and §10 print both spellings for the same reason.
   DISCLAIMER_ANCHORS = ("不是对结果的预判", "not a forecast of the outcome")
   VERDICT_MARKERS = ("投递建议：", "apply verdict:")
-  DISQUALIFIER_HEADING = "## 硬性阻断项"
+  DISQUALIFIER_HEADINGS = ("## 硬性阻断项", "## Hard blockers")
   STALE_BANNER = "已过复核期"
 
-  # The closed set modes/assess.md §10 defines. Exactly one of these, on exactly the two
-  # verdicts below; the two column headers are where the section's whole value sits.
+  # The closed set modes/assess.md §10 defines. Exactly one of these, inside the section
+  # below, on exactly the two verdicts below; the two column headers are where the
+  # section's whole value sits. One spelling of each pair is enough.
   STRATEGIES = ("apply_anyway", "reposition", "skill_sprint", "side_door", "change_track")
+  STRATEGY_HEADINGS = ("## 那该怎么办", "## What to do instead")
   OTHER_HALF_VERDICTS = ("likely_screen_out", "blocked")
-  ACCEPTANCE_COLUMNS = ("验收标准", "输出物")
+  ACCEPTANCE_COLUMNS = (("验收标准", "Acceptance criterion"), ("输出物", "Deliverable"))
 
   # Composition: each of these must have run on THIS workspace and not failed.
   UPSTREAM_GATES = ("evidence_blocks", "count_coverage", "consistency",
@@ -5155,6 +5235,16 @@ off within a week, and then it is not there on the run that mattered.
                       break
                   body.append(later)
               return index, body
+      return None
+
+
+  def _first_section(lines: list[str], headings) -> tuple[int, list[str]] | None:
+      """The first section matching any spelling of the heading. Both spellings are
+      correct output, so trying only one turns a translation into a finding."""
+      for heading in headings:
+          found = _section_lines(lines, heading)
+          if found is not None:
+              return found
       return None
 
 
@@ -5271,12 +5361,13 @@ off within a week, and then it is not there on the run that mattered.
                   if (row or {}).get("screening") == "knockout"
                   and (row or {}).get("match") in ("gap", "no_evidence")]
       if blocking:
-          section = _section_lines(lines, DISQUALIFIER_HEADING)
+          section = _first_section(lines, DISQUALIFIER_HEADINGS)
           if section is None:
               findings.append(
                   f"NO_DISQUALIFIER_SECTION: {len(blocking)} knockout requirement(s) are "
-                  f"not met and there is no '{DISQUALIFIER_HEADING}' section; a wall the "
-                  f"reader is never shown is a wall they walk into")
+                  f"not met and there is no '{DISQUALIFIER_HEADINGS[0]}' / "
+                  f"'{DISQUALIFIER_HEADINGS[1]}' section; a wall the reader is never "
+                  f"shown is a wall they walk into")
           else:
               heading_index, body = section
               named = set(_ROW_ID.findall("\n".join(body)))
@@ -5293,24 +5384,32 @@ off within a week, and then it is not there on the run that mattered.
                       "the verdict line; a wall printed after the conclusion is a wall "
                       "nobody read")
 
-      # 8. The "what to do instead" half, on the two verdicts that require it.
+      # 8. The "what to do instead" half, on the two verdicts that require it. Scoped to
+      #    the section, because that is what the finding names claim and because a
+      #    contrast sentence elsewhere ("not apply_anyway but skill_sprint") is ordinary
+      #    prose, not a menu — counting it as one is the cry-wolf case again.
       if verdict in OTHER_HALF_VERDICTS:
-          chosen = [name for name in STRATEGIES if name in markdown]
+          strategy_section = _first_section(lines, STRATEGY_HEADINGS)
+          body = "\n".join(strategy_section[1]) if strategy_section else ""
+          chosen = [name for name in STRATEGIES if name in body]
           if not chosen:
               findings.append(
                   f"NO_STRATEGY_SECTION: verdict is {verdict} and no strategy from "
-                  f"{STRATEGIES} appears; a verdict without the other half is a door "
+                  f"{STRATEGIES} appears under '{STRATEGY_HEADINGS[0]}' / "
+                  f"'{STRATEGY_HEADINGS[1]}'; a verdict without the other half is a door "
                   f"closed with nothing behind it")
           elif len(chosen) > 1:
               findings.append(
-                  f"STRATEGY_NOT_UNIQUE: {chosen} all appear; pick exactly one. A menu "
-                  f"hands the choice back to the reader, which is the work they asked for")
-          for column in ACCEPTANCE_COLUMNS:
-              if column not in markdown:
+                  f"STRATEGY_NOT_UNIQUE: {chosen} all appear in that section; pick "
+                  f"exactly one. A menu hands the choice back to the reader, which is "
+                  f"the work they asked for")
+          for pair in ACCEPTANCE_COLUMNS:
+              if not any(column in markdown for column in pair):
                   findings.append(
-                      f"NO_ACCEPTANCE_COLUMN: verdict is {verdict} and the '{column}' "
-                      f"column is missing; 验收标准 and 输出物 are what turn advice into "
-                      f"something checkable, and they are the whole value of this section")
+                      f"NO_ACCEPTANCE_COLUMN: verdict is {verdict} and no '{pair[0]}' / "
+                      f"'{pair[1]}' column is present; that column is what turns advice "
+                      f"into something checkable, and it is the whole value of this "
+                      f"section")
 
       # 9. Market conventions: allowlisted by id, rendered verbatim, staleness banner-ed.
       market = assessment.get("market")
@@ -5387,16 +5486,18 @@ off within a week, and then it is not there on the run that mattered.
 - [ ] **Step 4: Run test to verify it passes**
 
   Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests/test_check_assessment.py -q`
-  Expected: PASS (35 passed)
+  Expected: PASS (37 passed)
 
 - [ ] **Step 5: Run the whole suite and read what is still red**
 
   Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests -q`
   Expected: every module in **this** plan green — and `test_skill_structure.py` still failing,
-  with one failure per script this plan added plus one for `modes/assess.md`. That is Plan 1's
-  self-check assertion doing its job; it has been red since Task 1 and Task 15 is what turns it
-  green. Do not "fix" it by editing the skip set. If anything **other** than
-  `test_skill_structure.py` is red, stop here.
+  with exactly **two** failures: `test_the_self_check_names_every_script` and
+  `test_the_self_check_names_every_mode_file`. Both loop over the whole directory *inside* one
+  test function and assert on the first missing name, so seven unnamed scripts still report as
+  one failure, not seven. That is Plan 1's self-check assertion doing its job; it has been red
+  since Task 1 and Task 15 is what turns it green. Do not "fix" it by editing the skip set. If
+  anything **other** than those two is red, stop here.
 
 - [ ] **Step 6: Commit**
   ```
@@ -5412,12 +5513,14 @@ off within a week, and then it is not there on the run that mattered.
 **Files:**
 - Modify: `references/gap-analysis.md`
 - Modify: `SKILL.md`
+- Modify: `modes/apply.md`
 - Modify: `scripts/tests/required_inline.json`
 - Modify: `scripts/lossless-allowlist.json`
 
 **Interfaces:**
 - Consumes: the `job-application-baseline` tag and `scripts/check_skill_lossless.py` (Plan 1 Tasks 2 and 5); `scripts/tests/required_inline.json`'s `{"anchors": [{"text", "source", "why"}]}` shape (Plan 1 Task 17); the allowlist shape `{"_comment", "waived": {sha1_16: reason}, "deleted_files": {}}` (Plan 1 Task 2).
-- Produces: a rewritten FIT SNAPSHOT disclaimer, two `waived` entries recording the retired lines by hash, and a re-pointed anchor.
+- Consumes also, and this decides which file each step edits: Plan 1 Task 20 Step 6's SKILL.md inventory carries `references/gap-analysis.md:249-276` — the FIT SNAPSHOT block **including the REQUIRED disclaimer** — into `SKILL.md` **verbatim**, so after Plan 1 that paragraph exists in two files. Plan 1 Task 20 Step 5 moves baseline `SKILL.md:78-89` into `modes/apply.md`'s `## Step 3 — Gap analysis`, and the inventory has **no** row sourced from `SKILL.md:84`, so the FIT SNAPSHOT bullet is in `modes/apply.md` and nowhere else.
+- Produces: a rewritten FIT SNAPSHOT disclaimer in **both** files that carry it, two `waived` entries recording the retired baseline lines by hash, and a re-pointed anchor.
 
 **Why this is a task and not a line in the migration.** Spec §12 names exactly one rewrite in
 the whole migration and demands it be **a separate, small, readable commit**, kept out of the
@@ -5435,7 +5538,12 @@ them into one" / the `ATS coverage %` label) and `SKILL.md:193`/`:195` ("the ATS
 are about **Judge 1's** ATS-screener output, which apply mode still produces. They remain true,
 they are not what §12 flagged, and rewriting them here would be a second, unflagged rewrite
 smuggled into the diff that exists to prevent exactly that. `gap-analysis.md:256`'s
-`— keyword proxy` label stays for the same reason. Two lines change; both are recorded.
+`— keyword proxy` label stays for the same reason. Two **baseline** lines change, and both
+are recorded — but they are edited in three files, because Plan 1 duplicated the disclaimer
+into `SKILL.md` and moved the bullet into `modes/apply.md`. `check_skill_lossless.py`
+normalizes the whole tree into one corpus: leaving either copy of the disclaimer intact
+would mean the baseline line is still present, the waiver never fires, and the skill goes on
+shipping the paragraph this task exists to retire.
 
 - [ ] **Step 1: Rewrite the disclaimer in `references/gap-analysis.md`**
 
@@ -5455,14 +5563,42 @@ smuggled into the diff that exists to prevent exactly that. `gap-analysis.md:256
   matching means exact-keyword counting is a proxy, and stuffing backfires — and drops the
   arithmetic the skill no longer performs.
 
-- [ ] **Step 2: Re-point the layer-1 sentence in `SKILL.md`**
+- [ ] **Step 2: Apply the identical rewrite to `SKILL.md`'s copy of the same paragraph**
 
-  The FIT SNAPSHOT bullet ends `Include the required disclaimer (keyword proxy, not an ATS
-  prediction).` Replace that parenthetical with `(a count of evidence, not a forecast of the
-  outcome)`. Change nothing else on the line. Layer 1 must not promise a disclaimer whose
-  wording no longer exists.
+  Plan 1's inventory carried `references/gap-analysis.md:249-276` into `SKILL.md`'s FIT
+  SNAPSHOT section verbatim, so the block quote beginning `> ⚠️ The coverage line is a
+  keyword *estimate*, not an ATS pass prediction.` exists there too. Replace it with the
+  **same** replacement text as Step 1, byte for byte.
 
-- [ ] **Step 3: Re-point the anchor**
+  Three separate things break if this copy is left alone, and none of them is cosmetic:
+  the baseline line is still findable in the corpus, so the Step 5 waiver never fires and
+  the lossless check reports fewer waived lines than the task claims; `SKILL.md` — the file
+  every run reads — goes on printing the percentage disclaimer this task exists to retire;
+  and Step 4's anchor, which Plan 1's `test_every_layer1_rule_is_inline_in_skill_md` asserts
+  is `in SKILL.read_text()`, has no phrase in `SKILL.md` to match.
+
+  Verify both copies moved together before going on:
+  ```bash
+  cd /Users/donghanglyu/code_project/job-hunt
+  grep -rn "not an ATS pass prediction" SKILL.md references/ modes/ ; echo "exit $?"
+  grep -c "not a forecast of the outcome" SKILL.md references/gap-analysis.md
+  ```
+  Expected: the first `grep` prints nothing and `exit 1`; the second prints `1` for each
+  file. A hit in the first is a copy still carrying the retired wording.
+
+- [ ] **Step 3: Re-point the layer-1.5 sentence in `modes/apply.md`**
+
+  The FIT SNAPSHOT bullet — baseline `SKILL.md:84`, which Plan 1 Task 20 Step 5 moved into
+  `modes/apply.md`'s `## Step 3 — Gap analysis` — ends `Include the required disclaimer
+  (keyword proxy, not an ATS prediction).` Replace that parenthetical with `(a count of
+  evidence, not a forecast of the outcome)`. Change nothing else on the line.
+
+  Edit it **in `modes/apply.md`**, not in `SKILL.md`: Plan 1's inventory has no row sourced
+  from `SKILL.md:84`, so searching `SKILL.md` for this sentence finds nothing and the edit
+  silently no-ops. A step whose target string does not exist reports success by doing
+  nothing, which is the failure mode this whole plan is built against.
+
+- [ ] **Step 4: Re-point the anchor**
 
   In `scripts/tests/required_inline.json`, the anchor whose `text` is
   `"not an ATS pass prediction"` no longer appears anywhere. Replace that one object with:
@@ -5474,32 +5610,41 @@ smuggled into the diff that exists to prevent exactly that. `gap-analysis.md:256
   Every other anchor is still a verbatim baseline quotation; this is the only one that is not,
   and its `source` field is what keeps that visible.
 
-- [ ] **Step 4: Record both retired lines in the allowlist, by hash**
+- [ ] **Step 5: Record both retired baseline lines in the allowlist, by hash**
 
-  Add to `scripts/lossless-allowlist.json`'s `waived` map. The keys are
-  `sha1(normalize(line))[:16]` as `check_skill_lossless.py` computes them, so editing either
-  line again revokes its waiver and brings it back for review:
+  Add to `scripts/lossless-allowlist.json`'s `waived` map, alongside the nine README lines
+  Plan 1 Task 21 already waived — this is an **append**, not a replacement of the map. The
+  keys are `sha1(normalize(line))[:16]` as `check_skill_lossless.py` computes them, so
+  editing either line again revokes its waiver and brings it back for review:
   ```json
-  "d6da8347c791420b": "references/gap-analysis.md:274 — the FIT SNAPSHOT required disclaimer. Spec §12's single flagged rewrite, performed in its own commit. The paragraph was about keyword coverage PERCENTAGES ('a CV with 8/10 must-haves ... will outperform one with 10/10 forced mentions'), and D2 plus scripts/lint_no_prediction.py mean this skill prints no percentage and no n/m score anywhere a reader sees. Carried verbatim it would be a required disclaimer about a number that is never produced. The replacement keeps both substantive claims — exact-keyword counting is a proxy because matching is semantic, and stuffing backfires — and drops the arithmetic.",
-  "903ea1e8ad127567": "SKILL.md:84 — the FIT SNAPSHOT bullet. Only its trailing parenthetical changed, from '(keyword proxy, not an ATS prediction)' to '(a count of evidence, not a forecast of the outcome)', so layer 1 does not promise a disclaimer whose wording no longer exists. Same rewrite as d6da8347c791420b; the rest of the line moved to modes/apply.md unchanged."
+  "d6da8347c791420b": "references/gap-analysis.md:274 — the FIT SNAPSHOT required disclaimer, rewritten in BOTH files that carry it (references/gap-analysis.md and the verbatim copy Plan 1 put in SKILL.md). Spec §12's single flagged rewrite, performed in its own commit. The paragraph was about keyword coverage PERCENTAGES ('a CV with 8/10 must-haves ... will outperform one with 10/10 forced mentions'), and D2 plus scripts/lint_no_prediction.py mean this skill prints no percentage and no n/m score anywhere a reader sees. Carried verbatim it would be a required disclaimer about a number that is never produced. The replacement keeps both substantive claims — exact-keyword counting is a proxy because matching is semantic, and stuffing backfires — and drops the arithmetic.",
+  "903ea1e8ad127567": "SKILL.md:84 in the baseline — the FIT SNAPSHOT bullet, which Plan 1 Task 20 Step 5 moved into modes/apply.md's '## Step 3 — Gap analysis' and which lives only there now. Only its trailing parenthetical changed, from '(keyword proxy, not an ATS prediction)' to '(a count of evidence, not a forecast of the outcome)', so the pipeline does not promise a disclaimer whose wording no longer exists. Same rewrite as d6da8347c791420b; the rest of the line is unchanged."
   ```
 
-- [ ] **Step 5: Verify the lossless check is still satisfied and the anchor test is green**
+- [ ] **Step 6: Verify the lossless check is still satisfied and the anchor test is green**
   ```
   cd /Users/donghanglyu/code_project/job-hunt
   python3 scripts/check_skill_lossless.py --baseline job-application-baseline
   python3 -m pytest scripts/tests/test_skill_structure.py -q
   ```
-  Expected: the lossless check exits 0 and reports two waived lines — **not zero, and not
-  three**. Zero means a waiver key is wrong and the rewrite is being counted as present; three
-  means something else was rewritten in the same commit, which is the thing this task's
-  separateness exists to prevent. The structure test is green because the anchor now matches.
+  Expected: the lossless check exits 0 and the waived count goes up by **exactly two**.
+  `waived` is cumulative over the whole allowlist, not per-commit: Plan 1 Task 21 waived nine
+  README lines and its Task 22 prints `LOSSLESS: … , 9 waived`, so the number here is
+  **11 waived**. Take `9` from the run Plan 1 actually printed rather than from this
+  sentence, and check the delta — the delta is the claim, the total is bookkeeping.
 
-- [ ] **Step 6: Commit — alone**
+  A delta of **zero** on either key means that baseline line is still findable somewhere in
+  the tree, so it was never "missing" and the waiver never fired: the usual cause is Step 2
+  skipped, leaving `SKILL.md`'s copy of the disclaimer intact. A delta of **three** means
+  something else was rewritten in the same commit, which is the thing this task's
+  separateness exists to prevent. The structure test is green because the anchor now matches
+  `SKILL.md`'s rewritten copy — that is what Step 2 bought.
+
+- [ ] **Step 7: Commit — alone**
   ```
   cd /Users/donghanglyu/code_project/job-hunt
-  git add references/gap-analysis.md SKILL.md scripts/tests/required_inline.json \
-          scripts/lossless-allowlist.json
+  git add references/gap-analysis.md SKILL.md modes/apply.md \
+          scripts/tests/required_inline.json scripts/lossless-allowlist.json
   git commit -m "docs: rewrite the FIT SNAPSHOT disclaimer off keyword percentages
 
 Spec section 12's single flagged rewrite, in its own commit so it is readable and
@@ -5508,10 +5653,15 @@ to read a keyword-coverage percentage; D2 and lint_no_prediction.py mean this sk
 prints no percentage and no n/m score anywhere a reader sees, so carrying it
 verbatim would ship a required disclaimer about a number nobody produces.
 
-Both retired lines are recorded in scripts/lossless-allowlist.json by hash, with
-the reason, so each stays a decision someone made. The required_inline.json anchor
-moves with the wording and its source field records that it is the rewrite rather
-than a baseline quotation."
+The disclaimer is rewritten in both files that carry it — references/gap-analysis.md
+and the verbatim copy Task 20 put in SKILL.md — because check_skill_lossless.py
+compares against the whole tree and one surviving copy would leave the paragraph
+shipping. The bullet that names it lives in modes/apply.md, where Task 20 moved it.
+
+Both retired baseline lines are recorded in scripts/lossless-allowlist.json by hash,
+with the reason, so each stays a decision someone made. The required_inline.json
+anchor moves with the wording and its source field records that it is the rewrite
+rather than a baseline quotation."
   ```
   Nothing else may be in this commit. A rewrite hidden inside a large diff is invisible in
   review, and that invisibility is the whole failure mode `check_skill_lossless.py` exists for.
@@ -5522,11 +5672,11 @@ than a baseline quotation."
 
 **Files:**
 - Modify: `SKILL.md`
-- Modify: `scripts/tests/test_skill_structure.py`
+- Read, and modify only if Plan 1 left an entry out: `scripts/tests/test_skill_structure.py`
 
 **Interfaces:**
-- Consumes: `SKILL.md`'s `## Self-check` section and its gate table, and `scripts/tests/test_skill_structure.py`'s `test_the_self_check_names_every_script` / `..._every_mode_file` / `..._every_reference_file` (all written by Plan 1 Task 17).
-- Produces: seven script rows, one mode row and one reference row in both places, and the retraction of the "assess is not yet built" sentence.
+- Consumes: `SKILL.md`'s `## Self-check` section, its gate table and its `## Modes` table (Plan 1 Task 20 Step 6), and `scripts/tests/test_skill_structure.py`'s `test_the_self_check_names_every_script` / `..._every_mode_file` / `..._every_reference_file` / `test_a_mode_that_exists_is_not_still_described_as_not_yet_built` (all written by Plan 1 Task 17).
+- Produces: seven script rows, one mode row and one reference row in both places, and a rewritten `assess` **row** of the `## Modes` table.
 
 **Why this task exists at all, and why it is last.** Plan 1's structure test walks
 `scripts/*.py`, `modes/*.md`, `references/*.md` and `agents/*.md` and asserts each is named in
@@ -5535,11 +5685,13 @@ suite goes **red the moment this plan's first script lands** and stays red until
 runs — so Task 13 Step 5's "run the whole suite" is not green until now. Plan 1 cannot fix
 this; it runs first. Each later plan carries its own entries.
 
-The second half is a retraction. Plan 1's `SKILL.md` says `discover`, `assess` and `interview`
-are "not yet built in this repo — say so and stop rather than improvising them". Plan 1's own
-guard only fires when the mode file is **absent**, so once `modes/assess.md` exists the stale
-sentence passes every check and layer 1 tells the model to refuse a mode that works. Plan 1
-carries a test that goes red on exactly that, and this task is what turns it green.
+The second half is a retraction. Plan 1's `SKILL.md` ships a `## Modes` **table** whose
+`assess` row reads `` `assess` is not yet built in this repo ``. Plan 1's
+`test_every_mode_named_in_skill_md_has_a_file_or_is_marked_unbuilt` only fires when the mode
+file is **absent**, so once `modes/assess.md` exists the stale row passes that guard and
+layer 1 tells the model to refuse a mode that works. Plan 1 carries the other-direction test,
+`test_a_mode_that_exists_is_not_still_described_as_not_yet_built`, which goes red on exactly
+that, and this task is what turns it green.
 
 - [ ] **Step 1: Extend the gate table**
 
@@ -5575,23 +5727,48 @@ carries a test that goes red on exactly that, and this task is what turns it gre
   walks the other direction, because a checklist that names a file nobody wrote sends the model
   to read nothing and report it as done.
 
-- [ ] **Step 3: Retract "assess is not yet built"**
+- [ ] **Step 3: Give the `assess` row of the `## Modes` table its real status**
 
-  In `SKILL.md`'s Modes row, the sentence naming `discover`, `assess` and `interview` as "not
-  yet built in this repo" now says something false about `assess`. Rewrite it to name only the
-  modes that are still unbuilt at this point in the sequence (`discover` and `interview`), and
-  add `assess` to the list of modes that work. Leave the other two exactly as they are; Plans 3
-  and 4 retract their own.
+  Plan 1 Task 20 Step 6 ships `SKILL.md`'s `## Modes` as a three-column table, one row per
+  mode. Edit **only the `assess` row**, from:
 
-- [ ] **Step 4: Extend the library-only skip set**
+  | `assess` | is this posting worth applying to | `assess` is not yet built in this repo |
+
+  to:
+
+  | `assess` | is this posting worth applying to | live — `modes/assess.md` |
+
+  matching the `apply` row's existing `live — modes/apply.md` phrasing. Leave the `discover`
+  and `interview` rows byte-for-byte alone: Plans 3 and 4 each edit their own row, and a
+  whole-table rewrite here is how one plan's edit silently reverts another's. Leave the
+  paragraph under the table ("For an unbuilt mode: say so and stop…") alone too — it is still
+  true of the two rows that remain unbuilt.
+
+  The test this turns green is Plan 1's
+  `test_a_mode_that_exists_is_not_still_described_as_not_yet_built`, which normalizes
+  whitespace and strips backticks before asserting `"assess is not yet built"` is absent — so
+  the phrase must be gone from the row, not merely re-wrapped.
+
+- [ ] **Step 4: Confirm the library-only skip set — this plan appends nothing to it**
 
   In `scripts/tests/test_skill_structure.py`, `test_the_self_check_names_every_script` skips
-  modules that are imported and never invoked. This plan adds **no** such module — all seven of
-  its scripts are runnable gates and all seven are named in Step 2. But confirm `vocab.py` is in
-  the set alongside `journal.py`, `paths.py` and `rounds.py`, and add it if Plan 1 did not:
+  modules that are imported and never invoked. Plan 1 Task 17 wrote that line and it should
+  already read, exactly:
   ```python
-      skip = {"journal.py", "paths.py", "rounds.py", "vocab.py"}   # imported, never invoked
+      skip = {"journal.py", "paths.py", "rounds.py", "vocab.py"}
   ```
+  This plan adds **no** library-only module — all seven of its scripts are runnable gates and
+  all seven are named in Step 2 — so the correct edit here is **none**. Confirm the four
+  entries are present and move on:
+  ```bash
+  cd /Users/donghanglyu/code_project/job-hunt
+  grep -n 'skip = {' scripts/tests/test_skill_structure.py
+  ```
+  If one of the four is missing, **append** it inside the existing braces rather than
+  replacing the line. Plans 3 and 4 append `opencli_meta.py` and `mock_vocab.py` /
+  `mock_blocks.py` to this same set later; every edit to it must be an append that preserves
+  what is already there, or whichever plan runs last deletes the others' entries.
+
   Do not add a gate to this set to make a failure go away. The set is for modules with no CLI;
   a gate that is skipped here is a gate no self-check will ever name.
 
@@ -5608,14 +5785,15 @@ carries a test that goes red on exactly that, and this task is what turns it gre
 - [ ] **Step 6: Commit**
   ```
   cd /Users/donghanglyu/code_project/job-hunt
-  git add SKILL.md scripts/tests/test_skill_structure.py
+  git add SKILL.md
+  git add scripts/tests/test_skill_structure.py   # only if Step 4 had to append an entry
   git commit -m "assess: name the assess gates in SKILL.md's gate table and self-check
 
 Plan 1's test_skill_structure.py asserts every scripts/*.py, modes/*.md and
 references/*.md is named in the self-check, so the suite has been red since the
 first script of this plan landed. Adds the seven assess gates, modes/assess.md and
-the market-convention tables, and retracts the now-false sentence saying assess is
-not yet built in this repo."
+the market-convention tables, and gives the assess row of SKILL.md's Modes table
+its real status instead of 'not yet built in this repo'."
   ```
 
 
@@ -5625,14 +5803,21 @@ not yet built in this repo."
   `test_skill_structure.py`**, which is red from Task 1 until Task 15 lands.
 - `python3 scripts/check_conventions.py --workspace /tmp/jh-lint --all --today 2026-08-09` exits 0.
 - `python3 scripts/check_skill_lossless.py --baseline job-application-baseline` exits 0 and
-  reports exactly **two** waived lines, both added by Task 14.
+  reports **two more** waived lines than Plan 1's last run did — Plan 1 ends at `9 waived`
+  (its nine deleted README lines), so this plan ends at `11 waived`, the two added by
+  Task 14. The delta is the claim; if it is zero, a copy of the rewritten line is still in
+  the tree.
 - `references/market-conventions/` holds `README.md` and five tables totalling 38 entries (cn 10, nl 9, de 8, uk 5, us 6), with the three dropped ids present in none of them, and each `<key>.yaml` declaring `market: <key>`.
 - `modes/assess.md` defines the `fit-assessment.yaml` row schema, the fetch-integrity thresholds, the twelve-name `posting.yaml` field list including `company`, `salary_range` and `application_type`, the `insufficient_evidence` floor, the `## 硬性阻断项` id list, and the "what to do instead" half — and step 0 of it runs `scripts/enter_mode.py --mode assess`.
 - Every closed set this plan uses is imported from `scripts/vocab.py`; `grep -n 'FIVE_LEVELS\|VERDICT_ZH = {\|MARKET_KEYS = (' scripts/*.py` returns nothing outside `vocab.py`.
 - Every gate writes exactly one receipt on every exit path, verdict `"could_not_run"` on exit 2,
-  and each has a test asserting it. `grep -c 'return 2' scripts/*.py` matches the number of
-  `cannot_run(` call sites.
+  and each has a test asserting it. For each of the seven scripts this plan adds,
+  `grep -c 'return cannot_run(' scripts/<gate>.py` counts that gate's exit-2 paths — **2**
+  each, **3** for `check_conventions.py` — and `grep -c 'return 2' scripts/<gate>.py` is
+  **1**: the single bare `return 2` inside `cannot_run` itself. A second bare `return 2`
+  anywhere is an exit path that leaves no receipt.
 - `SKILL.md` names all seven scripts, `modes/assess.md` and the market-convention files in both
-  its gate table and its `## Self-check`, and no longer says assess is not yet built.
+  its gate table and its `## Self-check`, and the `assess` row of its `## Modes` table reads
+  `live — modes/assess.md`. The `discover` and `interview` rows are untouched.
 - No path under `/private/tmp` appears anywhere in the tree.
 - Every commit stages named paths only. Nothing was pushed.
