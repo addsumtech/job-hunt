@@ -1,0 +1,134 @@
+#!/usr/bin/env python3
+"""Gate: the letter constraints render_letter.py will not enforce.
+
+render_letter passes each body string straight into Markdown, docx and LaTeX
+with no stripping, so '**bold**' prints four asterisks on the PDF and a sender
+name written into `closing` prints twice — the renderer appends it already.
+These are exact string and count checks documented only in prose today, which is
+the same failure class as a format string rendered raw onto a slide.
+
+Misspelling the company or role is called disqualifying in the reference and is
+checked by reading. posting.yaml is a required artifact, so it can be checked by
+comparing.
+
+Exit 0 = clean. Exit 1 = findings. Exit 2 = missing letter.yaml or posting.yaml.
+"""
+from __future__ import annotations
+
+import argparse
+import pathlib
+import re
+import sys
+import unicodedata
+
+import yaml
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import journal
+
+GATE = "check_letter"
+# motivation-letter.md:119 — "250–350 words optimal for the body … 400 words is
+# the hard ceiling". :121 — "3–4 paragraphs total … Never more than 4 unless a
+# specific structure requires it (rare)." A gate that permitted 5 would be
+# enforcing a rule the reference it cites does not contain.
+WORD_MIN, WORD_MAX = 250, 400
+PARA_MIN, PARA_MAX = 3, 4
+
+MARKUP = [
+    ("**", re.compile(r"\*\*")),
+    ("__", re.compile(r"__")),
+    ("`", re.compile(r"`")),
+    ("a leading bullet", re.compile(r"(^|\n)\s*[-*+]\s+")),
+    ("a leading heading", re.compile(r"(^|\n)\s*#{1,6}\s+")),
+]
+_PUNCT = re.compile(r"[^\w\s]", re.UNICODE)
+
+
+def _norm(s) -> str:
+    s = unicodedata.normalize("NFKC", str(s or "")).lower()
+    return " ".join(_PUNCT.sub(" ", s).split())
+
+
+def findings_for(letter: dict, posting: dict) -> list:
+    out = []
+    body = letter.get("body") or []
+    if isinstance(body, str):
+        body = [body]
+
+    for i, para in enumerate(body):
+        hits = [label for label, rx in MARKUP if rx.search(str(para))]
+        if hits:
+            out.append(f"MARKDOWN_IN_BODY: body[{i}] contains "
+                       f"{', '.join(repr(h) for h in hits)} — render_letter prints "
+                       f"body strings verbatim, so this renders literally "
+                       f"(**bold** prints four asterisks)")
+
+    words = sum(len(str(p).split()) for p in body)
+    if not (WORD_MIN <= words <= WORD_MAX):
+        out.append(f"WORD_COUNT: the body is {words} words; the target is "
+                   f"{WORD_MIN}–350 with {WORD_MAX} as the hard ceiling")
+    if not (PARA_MIN <= len(body) <= PARA_MAX):
+        out.append(f"PARA_COUNT: the body has {len(body)} paragraphs; "
+                   f"{PARA_MIN}–{PARA_MAX} is the range (motivation-letter.md: "
+                   f"never a single monolithic block, never more than 4)")
+
+    sender = str((letter.get("sender") or {}).get("name") or "").strip()
+    closing = str(letter.get("closing") or "")
+    if sender and _norm(sender) and _norm(sender) in _norm(closing):
+        out.append(f"NAME_DUPLICATED: closing contains the sender name {sender!r}; "
+                   f"render_letter appends it automatically, so it prints twice")
+
+    posted_company = str(posting.get("company") or "").strip()
+    letter_company = str((letter.get("recipient") or {}).get("company") or "").strip()
+    if not posted_company:
+        out.append("NO_COMPANY_IN_POSTING: posting.yaml has no `company` field, so the "
+                   "letter's recipient cannot be verified — add it to the extracted "
+                   "posting (misspelling the employer is disqualifying)")
+    elif not letter_company:
+        out.append(f"COMPANY_MISMATCH: letter.yaml has no recipient.company; the "
+                   f"posting names {posted_company!r}")
+    else:
+        a, b = _norm(letter_company), _norm(posted_company)
+        if a not in b and b not in a:
+            out.append(f"COMPANY_MISMATCH: recipient.company {letter_company!r} does "
+                       f"not match the posting's company {posted_company!r}")
+
+    role = str(posting.get("role_title") or "").strip()
+    if role and _norm(role) not in _norm(" ".join(str(p) for p in body)):
+        out.append(f"ROLE_NOT_NAMED: the body never names the role {role!r} as the "
+                   f"posting writes it — name it exactly once, early")
+    return out
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--workspace", required=True)
+    ap.add_argument("--letter", default=None, help="default: <workspace>/letter.yaml")
+    ap.add_argument("--posting", default=None, help="default: <workspace>/posting.yaml")
+    args = ap.parse_args(argv)
+    ws = pathlib.Path(args.workspace)
+    if not ws.is_dir():
+        # journal.receipt() would mkdir it, and a gate that creates the
+        # workspace it is auditing has manufactured its own evidence.
+        print(f"cannot run {GATE}: workspace {ws} does not exist", file=sys.stderr)
+        return 2
+    lp = pathlib.Path(args.letter) if args.letter else ws / "letter.yaml"
+    pp = pathlib.Path(args.posting) if args.posting else ws / "posting.yaml"
+    for p in (lp, pp):
+        if not p.exists():
+            journal.receipt(ws, GATE, {}, "could_not_run", [f"MISSING_INPUT: {p}"])
+            print(f"cannot run {GATE}: {p} does not exist", file=sys.stderr)
+            return 2
+    letter = yaml.safe_load(lp.read_text(encoding="utf-8")) or {}
+    posting = yaml.safe_load(pp.read_text(encoding="utf-8")) or {}
+    findings = findings_for(letter, posting)
+    for f in findings:
+        print(f)
+    journal.receipt(ws, GATE,
+                    {lp.name: journal.sha256_file(lp), pp.name: journal.sha256_file(pp)},
+                    "fail" if findings else "pass", findings)
+    return 1 if findings else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
