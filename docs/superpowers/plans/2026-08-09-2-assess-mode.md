@@ -22,7 +22,14 @@ These are copied verbatim from the shared contract. Do not rename, re-sign, or r
             UPPERCASE code, e.g. "UNSOURCED: ...", "STALE: ...", "NO_SOURCE_ID: ...")
   exit 2  = could not run (missing input file); message to stderr
   ```
-- Every gate appends exactly one receipt line to `<workspace>/journal.jsonl` before exiting.
+- Every gate appends **exactly one** receipt line to `<workspace>/journal.jsonl` before exiting,
+  **on every exit path, including exit 2**. On the "could not run" path the verdict string is
+  `"could_not_run"` — never `"error"` — the reason goes to stderr, and the script returns 2.
+  One exception, and only one: if the **workspace directory itself** does not exist there is
+  nothing to append to, so that single case prints to stderr and returns 2 with no receipt, and
+  the script's docstring says so. Every gate in this plan carries a test asserting the exit-2
+  receipt exists. "Could not run" is the case where silence looks most like a clean run, which
+  is the exact risk the journal exists to close.
 - `scripts/journal.py` is written in **Plan 1** and imported by every gate here. Its API:
   ```python
   def append(workspace: pathlib.Path, record: dict) -> None
@@ -32,7 +39,21 @@ These are copied verbatim from the shared contract. Do not rename, re-sign, or r
   def read_receipts(workspace: pathlib.Path, gate: str | None = None) -> list[dict]
   ```
 - `scripts/paths.py` is written in **Plan 1**. `PROFILES_ROOT = pathlib.Path.home() / ".claude" / "job-profiles"`; `profile_dir(name)`, `master_profile(name)`, `search_prefs(name)`, `answer_bank(name)`, `search_dir(name, slug)`, `workspace(name, company, role, date)`.
-- **The ONE verdict vocabulary** — these exact strings, everywhere:
+  Anything that resolves a profile, workspace, answer-bank or search path imports it and calls
+  it — no `.parents[n]` walk, no string join. Every script in this plan is handed `--workspace`
+  explicitly and so resolves no profile path itself; `modes/assess.md` calls
+  `paths.workspace(...)` to build the directory it works in. The one skill-tree-relative path
+  this plan needs (`references/market-conventions/`) is resolved **once**, as
+  `check_conventions.SKILL_ROOT`, and imported from there by `check_assessment.py` rather than
+  re-derived.
+- `scripts/vocab.py` is written in **Plan 1** and holds every closed set this skill uses:
+  `VERDICTS`, `REFUSAL`, `VERDICT_ZH`, `MARKET_KEYS`, `NO_MARKET`, `LEVELS`, `SCREENING`,
+  `MATCH`, `RECENCY`, `EFFORT`, `BANDS`, `CONTRADICTED`, `DEFECT_TAGS`. **No script in this
+  plan re-declares any of them** — not `FIVE_LEVELS`, not a second `VERDICT_ZH`, not a second
+  `MARKET_KEYS`. A closed set spelled out twice is a set that drifts, and the drift stays
+  invisible until two gates disagree about the same word.
+- **The ONE verdict vocabulary** — these exact strings, everywhere, imported from
+  `scripts/vocab.py` and never re-typed:
   `"strong_apply" | "worth_applying" | "stretch" | "likely_screen_out" | "blocked"`.
   Orthogonal refusal state (NOT a sixth level): `"insufficient_evidence"`.
   Human-facing zh labels: 强烈建议投 / 值得投 / 可以冲刺 / 大概率被筛掉 / 硬性阻断 / 证据不足—不出结论.
@@ -46,7 +67,14 @@ These are copied verbatim from the shared contract. Do not rename, re-sign, or r
 - **Evidence block ids:** `"CV-%03d"` and `"JD-%03d"`. Chunking parameters: max 900 chars per block, max 80 blocks per source, split on blank lines or a newline preceding a bullet/number/CJK numeral, over-long paragraphs sentence-split on `[。.!?]`, drop chunks under 8 chars.
 - **Dates:** today is `2026-08-09`. Use it for filenames and any dated example. Never call an unstamped date helper in an example; show the literal date.
 - **Git rules** (violating these is a plan defect): stage NAMED PATHS only — never `git add -A`, never `git add .`. **NEVER push.** Commit locally only. Do not pass `-c user.name` / `-c user.email`.
-- **Journal receipt verdict strings used by this plan:** `"pass"`, `"fail"`, `"reported"` (a script that surfaces findings without judging them), `"produced"` (a script that writes a derived artifact).
+- **Journal receipt verdict strings — the closed set, shared with every other plan:** `"pass"`,
+  `"fail"`, `"could_not_run"`, `"recorded"`. `"recorded"` is what a script writes when it
+  surfaces findings or produces an artifact rather than judging — `evidence_blocks`,
+  `check_evidence_refs`, `consistency`, and `count_coverage` on a clean run. **The same state
+  must never produce two different verdicts:** `check_evidence_refs` writes `"recorded"` on
+  every clean run, `--check-only` or not. Plan 1's `check_apply.PASSING_VERDICTS` is
+  `("pass", "recorded")`, so any string outside this set reads downstream as a failure.
+  `"reported"` and `"produced"` are not used anywhere in this plan.
 - **Testing discipline (non-negotiable):** every check's tests must pin the QUIET case as hard as the firing case. A check that cries wolf on ordinary output is worse than no check, because the reader learns to skip the line and it stops working on the run that mattered. A test that only imports a module proves the button exists, not that pressing it does anything.
 
 ### The `fit-assessment.yaml` schema (authoritative copy — Task 12 writes this into `modes/assess.md`)
@@ -54,7 +82,9 @@ These are copied verbatim from the shared contract. Do not rename, re-sign, or r
 Every script in this plan reads this shape. It is reproduced here so no task has to guess.
 
 ```yaml
-market: cn                      # one of cn | nl | de | uk | us | none
+market: cn                      # vocab.MARKET_KEYS (cn | nl | de | uk | us), or
+                                # vocab.NO_MARKET ("other") when no table applies.
+                                # Never "none" — the sixth token is "other" everywhere.
 verdict: worth_applying         # one of the five, or insufficient_evidence
 provisional: false              # always false in an assessment; discover rows carry true
 effort: evening                 # overall: quick | evening | multi_day | not_closable
@@ -108,7 +138,12 @@ Rules that bind every consumer of this file:
 | `references/market-conventions/README.md` | The rules for adding an entry. This file **is** `check_conventions.py`'s spec. |
 | `references/market-conventions/{cn,nl,de,uk,us}.yaml` | The five hand-written tables. Rendered verbatim, never restated by the model. |
 | `modes/assess.md` | Layer 1.5. Defines the `fit-assessment.yaml` row schema, the fetch-integrity thresholds, the complete `posting.yaml` field list, the refusal floor, and the "what to do instead" half. |
-| `docs/superpowers/research/2026-08-09-market-conventions/` | The durable copy of the research the tables are built from: `markets.json` plus the four adversarial reviews. |
+| `docs/superpowers/research/2026-08-09/markets.json` | **Already committed** (`ac404fb`). The sole source for all 38 convention entries. This plan reads it; it does not copy it. |
+| `docs/superpowers/research/2026-08-09/review-{cn,nl_weu,de,us_uk}.md` | Derived in Task 6 Step 1 from `markets.json`'s `review` field, so the four adversarial reviews are readable as prose beside it. |
+| `SKILL.md` | Written by Plan 1. Task 14 rewrites its FIT SNAPSHOT disclaimer; Task 15 extends its gate table and self-check. |
+| `references/gap-analysis.md` | Migrated by Plan 1. Task 14 rewrites its FIT SNAPSHOT disclaimer, the spec's one flagged rewrite. |
+| `scripts/lossless-allowlist.json` | Created by Plan 1. Task 14 records the flagged rewrite in it by name. |
+| `scripts/tests/test_skill_structure.py` | Written by Plan 1. Task 15 extends its library-only skip set. |
 | `requirements.txt` | Created by Plan 1. This plan only reads it. |
 
 ---
@@ -140,7 +175,9 @@ Rules that bind every consumer of this file:
 
 - [ ] **Step 1: Write the failing test**
 
-  Create `scripts/tests/conftest.py`:
+  Create `scripts/tests/conftest.py` **if it does not already exist** — Plan 3 creates-or-appends
+  to the same file, so if Plan 3 ran first the lines below are already there and you add nothing.
+  Do not overwrite a conftest that exists; check its content, and add only what is missing:
   ```python
   import pathlib
   import sys
@@ -255,10 +292,25 @@ Rules that bind every consumer of this file:
       assert [r["gate"] for r in receipts] == ["evidence_blocks"]
 
 
-  def test_main_exits_two_when_the_posting_source_is_missing(tmp_path, capsys):
+  def test_main_exits_two_and_still_leaves_exactly_one_receipt(tmp_path, capsys):
+      # "Could not run" is the case where silence looks most like a clean run.
       (tmp_path / "cv-source.txt").write_text("something long enough", encoding="utf-8")
       assert eb.main(["--workspace", str(tmp_path)]) == 2
       assert "posting-source.txt" in capsys.readouterr().err
+      receipts = [json.loads(line) for line in
+                  (tmp_path / "journal.jsonl").read_text(encoding="utf-8").splitlines()]
+      assert len(receipts) == 1
+      assert receipts[0]["gate"] == "evidence_blocks"
+      assert receipts[0]["verdict"] == "could_not_run"
+
+
+  def test_a_workspace_that_does_not_exist_writes_no_journal(tmp_path, capsys):
+      # The one documented exception: there is nothing to append to, and creating the
+      # directory would leave a journal for a run that never happened.
+      missing = tmp_path / "nope"
+      assert eb.main(["--workspace", str(missing)]) == 2
+      assert not missing.exists()
+      assert "does not exist" in capsys.readouterr().err
   ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -287,6 +339,11 @@ Rules that bind every consumer of this file:
   Every length here is counted in CHARACTERS. Not bytes, and not latin display columns.
   A nine-character Chinese line is a real line; measuring it in bytes would keep junk and
   measuring it in latin width would silently delete a third of a Chinese posting.
+
+  Exit 2 still writes a receipt, verdict "could_not_run". The single exception is a
+  workspace directory that does not exist: there is nothing to append to, and creating it
+  would leave a journal for a run that never happened, so that case exits 2 silently in
+  the journal and loudly on stderr.
   """
   from __future__ import annotations
 
@@ -300,6 +357,8 @@ Rules that bind every consumer of this file:
   sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
   import journal  # noqa: E402
+
+  GATE = "evidence_blocks"
 
   MAX_BLOCK_CHARS = 900
   MAX_BLOCKS_PER_SOURCE = 80
@@ -394,6 +453,20 @@ Rules that bind every consumer of this file:
           import yaml
           return flatten_yaml_to_text(yaml.safe_load(raw) or {})
       return raw
+
+
+  def cannot_run(workspace: pathlib.Path, reason: str) -> int:
+      """Exactly one receipt on the could-not-run path, then exit 2.
+
+      A skipped gate produces no output, and no output looks exactly like a clean run --
+      so the one state that most needs a receipt is this one. The exception is a
+      workspace directory that is not there: nothing to append to, and conjuring one
+      would leave a journal for a run that never happened.
+      """
+      print(f"cannot run: {reason}", file=sys.stderr)
+      if workspace.is_dir():
+          journal.receipt(workspace, GATE, {}, "could_not_run", [f"NO_INPUT: {reason}"])
+      return 2
 
 
   def main(argv: list[str] | None = None) -> int:
