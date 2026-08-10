@@ -889,7 +889,16 @@ copies disagree."
   - `baseline_docs(spec: str, repo: pathlib.Path) -> dict[str, str]` (relpath → text; raises `BaselineUnavailable`)
   - `build_corpus(skill_dir: pathlib.Path) -> tuple[str, list[pathlib.Path]]`
   - `main(argv=None) -> int`
-  - CI command: `python3 scripts/check_skill_lossless.py --baseline job-application-baseline`
+  - CI command: `python3 scripts/check_skill_lossless.py --baseline 864ad7f`
+
+> **Why the raw SHA and not the `job-application-baseline` tag.** A tag created locally lives in one
+> clone. `job-hunt` has no `origin`, nothing here pushes, and CI checks out a fresh copy — so a tag
+> baseline resolves to `BaselineUnavailable`, exit 2, on every machine but this one, and a check that
+> cannot run looks exactly like a check that passed. `864ad7f` needs no such distribution: Task 2
+> merged `job-application`'s history in, so that commit is an ancestor of `HEAD` and is present in any
+> clone by construction (`git merge-base --is-ancestor 864ad7f HEAD` succeeds; verified 2026-08-10).
+> The tag is still created in Task 2 and is still fine to type by hand locally — it is a readable
+> alias for this SHA, not the thing anything depends on.
 
 - [ ] **Step 1: Write the failing test**
     Create `scripts/tests/test_check_skill_lossless.py`:
@@ -1060,7 +1069,7 @@ copies disagree."
     a skill trigger can reach.
 
         # in CI, against the tag created during the migration
-        python3 scripts/check_skill_lossless.py --baseline job-application-baseline
+        python3 scripts/check_skill_lossless.py --baseline 864ad7f
 
         # against a tree on disk
         python3 scripts/check_skill_lossless.py --baseline /Users/x/.claude/skills/job-application
@@ -1300,7 +1309,7 @@ copies disagree."
     Expected: PASS — `12 passed`
 
 - [ ] **Step 5: Run it for real against the migration**
-    Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 scripts/check_skill_lossless.py --baseline job-application-baseline`
+    Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 scripts/check_skill_lossless.py --baseline 864ad7f`
     Expected: exit 0 and a line reading `LOSSLESS: 1317/1317 baseline lines accounted for across 15 files` (measured against the post-Task-1 baseline tree). The two `.tex` files are not in `CORPUS_SUFFIXES` and are covered by `deleted_files`. If it reports `CONTENT LOST` at this point, the merge in Task 2 lost something; stop and investigate rather than waiving. If it reports a number of files other than 15, `in_corpus` is picking up something it should not.
 
 - [ ] **Step 6: Commit**
@@ -5909,7 +5918,7 @@ same machine signal and mean opposite things to the user."
 - [ ] **Step 8: Find out exactly what the restructure dropped**
     ```bash
     cd /Users/donghanglyu/code_project/job-hunt
-    python3 scripts/check_skill_lossless.py --baseline job-application-baseline \
+    python3 scripts/check_skill_lossless.py --baseline 864ad7f \
         --report /tmp/jh-skill-lost.md ; echo "exit=$?"
     cat /tmp/jh-skill-lost.md
     ```
@@ -5945,7 +5954,7 @@ same machine signal and mean opposite things to the user."
         json.dumps(allow, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"waived {len(keys)} description lines")
     PY
-    python3 scripts/check_skill_lossless.py --baseline job-application-baseline ; echo "exit=$?"
+    python3 scripts/check_skill_lossless.py --baseline 864ad7f ; echo "exit=$?"
     ```
     Expected: `waived 6 description lines`, then `LOSSLESS: … , 6 waived` and `exit=0`. The keys are computed from the report rather than typed, and each waiver keys on a hash of the normalized line — so if anyone later edits one of those six baseline lines the waiver is revoked and the line comes back for review. The `others` assertion is the shape of Task 21 Step 6's "stop" rule, applied one task earlier: a script that waived whatever it found would turn a condensation into a rubber stamp.
 
@@ -6173,7 +6182,7 @@ It also has no record of the workspace layout — so `cv-source.txt`, `coverage.
 - [ ] **Step 6: Find exactly which lines the edit dropped, and waive those and only those**
     ```bash
     cd /Users/donghanglyu/code_project/job-hunt
-    python3 scripts/check_skill_lossless.py --baseline job-application-baseline \
+    python3 scripts/check_skill_lossless.py --baseline 864ad7f \
         --report /tmp/jh-readme-lost.md ; echo "exit=$?"
     cat /tmp/jh-readme-lost.md
     ```
@@ -6234,7 +6243,7 @@ It also has no record of the workspace layout — so `cv-source.txt`, `coverage.
 - [ ] **Step 7: Verify losslessness and the whole suite**
     ```bash
     cd /Users/donghanglyu/code_project/job-hunt
-    python3 scripts/check_skill_lossless.py --baseline job-application-baseline
+    python3 scripts/check_skill_lossless.py --baseline 864ad7f
     python3 -m pytest scripts/tests -q
     ```
     Expected: `LOSSLESS: … , 18 waived` and exit 0; the whole suite passes, including the four new `test_readme.py` cases. Eighteen, not twelve: the script prints the running total for the whole allowlist, and Task 20 Step 8a already waived the six baseline frontmatter-description lines. If it says 12, Task 20's waivers were dropped when this step rewrote the file.
@@ -6371,7 +6380,7 @@ Spec §12 requires `check_skill_lossless.py` to run in CI, and §7's P0 table re
               python-version: '3.11'
           - run: pip install -r requirements.txt pytest
           - run: python3 -m pytest scripts/tests -q
-          - run: python3 scripts/check_skill_lossless.py --baseline job-application-baseline
+          - run: python3 scripts/check_skill_lossless.py --baseline 864ad7f
           - name: market conventions
             run: |
               if [ -f scripts/check_conventions.py ]; then
