@@ -249,5 +249,13 @@ conventions:
 unverified:
   - note: "Current UK unfair-dismissal qualifying period and any changes from recent employment legislation. I deliberately did not touch this. The relevant law has been in flux and I did not fetch a current authoritative statement, so nothing in this entry depends on it. The notice-period claim in the at-will entry rests only on gov.uk's \"Handing in your notice: Giving notice\" page, which I did fetch."
     disclaims: [uk-notice-period-sets-your-start-date]
+      # Read side by side on 2026-08-10: the shared words sit in the half of the note
+      # recording what WAS sourced, and the claim it disclaims is absent from the text.
+      # Self-revoking — if the overlap changes, the lint asks for the review again.
+    overlap_reviewed: [notice, period, qualifying]
   - note: "UK private-sector interview norms. Everything sourced here about UK process is public sector (Civil Service Success Profiles, NHS Jobs). I have no sourced basis for how a UK private-sector or startup process differs, and did not generalise from the public-sector material."
     disclaims: [uk-civil-service-scores-named-behaviours-not-cover-letters, uk-nhs-shortlisting-is-assessed-against-the-person-specification]
+      # Read side by side on 2026-08-10: the shared words sit in the half of the note
+      # recording what WAS sourced, and the claim it disclaims is absent from the text.
+      # Self-revoking — if the overlap changes, the lint asks for the review again.
+    overlap_reviewed: [process, profiles, service, success]

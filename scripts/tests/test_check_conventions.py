@@ -302,3 +302,71 @@ def test_ci_mode_still_fails_on_a_bad_table(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(cck, "MARKET_KEYS", ("cn",))
     assert cck.main(["--ci", "--today", "2026-08-09"]) == 1
     assert "DIGIT_IN_PROSE" in capsys.readouterr().out
+
+
+# overlap_reviewed: a note legitimately names the entry it disclaims, so some token
+# overlap is ordinary. Firing on all of it made 15 WARN lines print on a fully passing
+# run — the "reader learns to skip the line" failure this repo's own testing rule names.
+# The record self-revokes, so the three tests below pin all three states.
+
+def _table_with_unverified(note, reviewed=None, text_en=None):
+    doc = json.loads(json.dumps(GOOD))
+    if text_en is not None:
+        doc["conventions"][0]["text_en"] = text_en
+    item = {"disclaims": [doc["conventions"][0]["id"]], "note": note}
+    if reviewed is not None:
+        item["overlap_reviewed"] = reviewed
+    doc["unverified"] = [item]
+    return doc
+
+
+def _run(tmp_path, doc):
+    p = tmp_path / "cn.yaml"
+    p.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    return cck.check_file(p, TODAY)
+
+
+def test_an_unreviewed_overlap_still_warns_and_names_the_tokens(tmp_path):
+    """The loud half must survive the carve-out, and the message must tell the reader
+    exactly what to record — an instruction without the value is a second lookup."""
+    doc = _table_with_unverified(
+        "Not sourced: whether the structured profile the recruiter sees at registration "
+        "is read before the resume file.")
+    found = [f for f in _run(tmp_path, doc) if "UNVERIFIED_OVERLAP" in f]
+    assert len(found) == 1 and found[0].startswith("WARN_UNVERIFIED_OVERLAP:")
+    assert "overlap_reviewed:" in found[0]
+
+
+def test_a_reviewed_overlap_is_silent(tmp_path):
+    """The quiet case, pinned as hard as the firing one."""
+    doc = _table_with_unverified(
+        "Not sourced: whether the structured profile the recruiter sees at registration "
+        "is read before the resume file.")
+    shared = sorted(cck._tokens(doc["unverified"][0]["note"])
+                    & cck._tokens(f"{doc['conventions'][0]['text_en']} "
+                                  f"{doc['conventions'][0]['text_zh']}"))
+    assert len(shared) >= 3, "fixture must actually overlap or this test proves nothing"
+    doc["unverified"][0]["overlap_reviewed"] = shared
+    assert [f for f in _run(tmp_path, doc) if "UNVERIFIED_OVERLAP" in f] == []
+
+
+def test_a_review_that_no_longer_covers_the_overlap_comes_back(tmp_path):
+    """Self-revoking. Record a review, then change the text so a new word joins the
+    overlap: the stale record must not keep the line quiet, or the carve-out becomes a
+    permanent silence rather than a one-time human judgement."""
+    doc = _table_with_unverified(
+        "Not sourced: whether the structured profile the recruiter sees at registration "
+        "is read before the resume file.")
+    shared = sorted(cck._tokens(doc["unverified"][0]["note"])
+                    & cck._tokens(f"{doc['conventions'][0]['text_en']} "
+                                  f"{doc['conventions'][0]['text_zh']}"))
+    doc["unverified"][0]["overlap_reviewed"] = shared
+    # A word the rendered text already uses, and the note did not: the overlap grows,
+    # so the recorded review no longer describes what a reader would be looking at.
+    doc["unverified"][0]["note"] += " Nor whether the SEC filing wording is current."
+    grown = sorted(cck._tokens(doc["unverified"][0]["note"])
+                   & cck._tokens(f"{doc['conventions'][0]['text_en']} "
+                                 f"{doc['conventions'][0]['text_zh']}"))
+    assert grown != shared, "the edit must actually change the overlap or this proves nothing"
+    found = [f for f in _run(tmp_path, doc) if "UNVERIFIED_OVERLAP" in f]
+    assert len(found) == 1 and found[0].startswith("WARN_UNVERIFIED_OVERLAP_CHANGED:")

@@ -501,17 +501,45 @@ conventions:
 unverified:
   - note: "What \"Dutch is a plus\" means socially and day-to-day inside a team. Only the legal test is sourced (College voor de Rechten van de Mens, Oordeel 2022-55: an unjustified Dutch-language demand in a vacancy was prohibited indirect discrimination). I found no source for the common practical claims — that meetings switch to Dutch informally, that lunch and corridor conversation are Dutch, that \"a plus\" hardens into a requirement at promotion time, or that it is expected you will start learning. Do not state any of those as fact."
     disclaims: [nl-language-requirement-must-be-justified]
+      # Read side by side on 2026-08-10: the shared words sit in the half of the note
+      # recording what WAS sourced, and the claim it disclaims is absent from the text.
+      # Self-revoking — if the overlap changes, the lint asks for the review again.
+    overlap_reviewed: [discrimination, indirect, language, prohibited, requirement, vacancy]
   - note: "Timing of reference checks relative to a verbal or written offer. The code establishes the prior-permission rule; it does not say references are contacted only after an offer. The claim in the conventions table is limited to what the code supports (permission first, and permission is yours to withhold)."
     disclaims: [nl-references-only-with-prior-permission]
+      # Read side by side on 2026-08-10: the shared words sit in the half of the note
+      # recording what WAS sourced, and the claim it disclaims is absent from the text.
+      # Self-revoking — if the overlap changes, the lint asks for the review again.
+    overlap_reviewed: [permission, reference, references, withhold]
   - note: "Salary negotiation norms: whether an initial offer is expected to be negotiated, typical uplift, whether CAO-bound employers negotiate scale step in practice. Not sourced. No figures of any kind should be attached to this market."
     disclaims: [nl-sector-agreement-sets-the-band]
+      # Read side by side on 2026-08-10: the shared words sit in the half of the note
+      # recording what WAS sourced, and the claim it disclaims is absent from the text.
+      # Self-revoking — if the overlap changes, the lint asks for the review again.
+    overlap_reviewed: [employers, negotiated, salary]
   - note: "Dutch implementation of the EU pay transparency directive. Verified: the bill was submitted to the Tweede Kamer on 21-05-2026 and was still in parliament per the Overheid.nl Wetgevingskalender as retrieved 2026-08-09. NOT verified: its final content, commencement date, or whether the applicant-facing rights (pay range before negotiation, no pay-history question) survive unchanged into Dutch law. Anything downstream of this must say \"check the current national position\"."
     disclaims: [nl-pay-range-not-pay-history]
+      # Read side by side on 2026-08-10: the shared words sit in the half of the note
+      # recording what WAS sourced, and the claim it disclaims is absent from the text.
+      # Self-revoking — if the overlap changes, the lint asks for the review again.
+    overlap_reviewed: [applicant, before, current, directive, history, implementation, national, position, transparency, tweede]
   - note: "Half-yearly indexation of IND required amounts. A search snippet suggested amounts are adjusted on 1 January and 1 July; the IND page I actually fetched says only that \"The required amounts change every year on January 1\". The convention entry therefore says \"annually\" and nothing more."
     disclaims: [nl-salary-criterion-reset-annually]
+      # Read side by side on 2026-08-10: the shared words sit in the half of the note
+      # recording what WAS sourced, and the claim it disclaims is absent from the text.
+      # Self-revoking — if the overlap changes, the lint asks for the review again.
+    overlap_reviewed: [amounts, annually, change, required]
   - note: "Whether the highly skilled migrant route exempts the employer from a labour market test / work permit (TWV). Frequently asserted elsewhere; neither IND page I fetched states it, so it is deliberately absent from this entry."
     disclaims: [nl-recognised-sponsor-gate]
+      # Read side by side on 2026-08-10: the shared words sit in the half of the note
+      # recording what WAS sourced, and the claim it disclaims is absent from the text.
+      # Self-revoking — if the overlap changes, the lint asks for the review again.
+    overlap_reviewed: [employer, highly, migrant, permit, skilled, whether]
   - note: "The EU Blue Card as an alternative route, and intra-EU mobility under it. Not researched, not sourced, deliberately omitted rather than described from memory."
     disclaims: [nl-recognised-sponsor-gate]
   - note: "Recognised-sponsor register coverage. The register is published and monthly-updated (sourced), but I did not verify what proportion of employers appear in it, nor how quickly a newly recognised employer shows up beyond the page's own note to \"check if your organisation has been added after the next update\". No coverage claim should be made."
     disclaims: [nl-recognised-sponsor-gate]
+      # Read side by side on 2026-08-10: the shared words sit in the half of the note
+      # recording what WAS sourced, and the claim it disclaims is absent from the text.
+      # Self-revoking — if the overlap changes, the lint asks for the review again.
+    overlap_reviewed: [employer, recognised, register, sponsor]

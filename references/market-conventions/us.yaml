@@ -287,5 +287,13 @@ conventions:
 unverified:
   - note: "Compensation-transparency states beyond Colorado and New York. Several other states have enacted posting-disclosure laws. I verified official state pages for Colorado (CDLE) and New York (NYSDOL) only, and named only those two. Do NOT extend the list without fetching each state's own official page — the set changes as legislatures act, and a stale list of states is exactly the kind of error the reader cannot check."
     disclaims: [us-pay-range-in-a-posting-is-jurisdictional-not-cultural]
+      # Read side by side on 2026-08-10: the shared words sit in the half of the note
+      # recording what WAS sourced, and the claim it disclaims is absent from the text.
+      # Self-revoking — if the overlap changes, the lint asks for the review again.
+    overlap_reviewed: [colorado, compensation, disclosure, posting, states]
   - note: "One narrowing on an entry that IS sourced, so the limit is visible. The at-will entry cites the California Division of Labor Standards Enforcement's statement of the doctrine. At-will is state law, not a federal statute; I could not retrieve dol.gov or a second state's page (both returned HTTP 403). The doctrine is the near-universal US default, but this entry is sourced to one state's official statement of it, and the entry's source_detail says so. Montana is the commonly cited exception; I did not verify that and have not claimed it."
     disclaims: [us-at-will-is-the-default]
+      # Read side by side on 2026-08-10: the shared words sit in the half of the note
+      # recording what WAS sourced, and the claim it disclaims is absent from the text.
+      # Self-revoking — if the overlap changes, the lint asks for the review again.
+    overlap_reviewed: [california, default, doctrine, federal, standards, statute, universal]

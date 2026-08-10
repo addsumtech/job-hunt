@@ -229,12 +229,35 @@ def check_file(path: pathlib.Path, today: datetime.date) -> list[str]:
                 continue
             shared = note_tokens & _tokens(
                 f"{entry.get('text_en', '')} {entry.get('text_zh', '')}")
-            if len(shared) >= 3:
+            if len(shared) < 3:
+                continue
+            # A note legitimately names the entry it is about, so some overlap is
+            # ordinary and firing on all of it would make this line noise — and a line
+            # readers learn to skip has stopped working on the run that mattered.
+            # `overlap_reviewed` records the exact token set a person read side by side
+            # and judged benign (the words sit in the half of the note recording what WAS
+            # sourced, not in a claim the text still makes). It self-revokes: change the
+            # note or the text so a new word enters the overlap and the recorded set no
+            # longer matches, and the warning comes back for re-review.
+            reviewed = item.get("overlap_reviewed")
+            if reviewed is not None and sorted(shared) == sorted(str(t) for t in reviewed):
+                continue
+            if reviewed is not None:
                 findings.append(
-                    f"WARN_UNVERIFIED_OVERLAP: unverified[{index}] disclaims "
-                    f"{target} yet shares {sorted(shared)} with its rendered text; an "
-                    f"assertion the note disclaims must be REMOVED from the text, not "
-                    f"footnoted — the reader never sees this note")
+                    f"WARN_UNVERIFIED_OVERLAP_CHANGED: unverified[{index}] disclaims "
+                    f"{target} and carries overlap_reviewed, but the overlap is now "
+                    f"{sorted(shared)} and not {sorted(str(t) for t in reviewed)}; the "
+                    f"review no longer covers what is there — read them side by side "
+                    f"again and update the list")
+                continue
+            findings.append(
+                f"WARN_UNVERIFIED_OVERLAP: unverified[{index}] disclaims "
+                f"{target} yet shares {sorted(shared)} with its rendered text; an "
+                f"assertion the note disclaims must be REMOVED from the text, not "
+                f"footnoted — the reader never sees this note. If you have read them "
+                f"side by side and the shared words are only in the note's "
+                f"already-sourced half, record that with overlap_reviewed: "
+                f"{sorted(shared)}")
     return findings
 
 

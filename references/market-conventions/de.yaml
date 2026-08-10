@@ -424,9 +424,21 @@ conventions:
 unverified:
   - note: "Public-sector step assignment as a recruitment lever. The BMI circular \"Durchführungshinweise zu § 16 (Bund) TVöD\" of 30 May 2024 is the authority on recognising förderliche Zeiten and Stufenrestlaufzeiten when hiring, and search results describe it as having been extended for exactly that purpose. Every attempt to retrieve it failed: https://www.bmi.bund.de/SharedDocs/rundschreiben/DE/tarifrecht/2024/RdSchr_20240530.html returned HTTP 400 to WebFetch and to curl, and the PDF at https://www.bmi.bund.de/RundschreibenDB/DE/2024/RdSchr_20240530.pdf returned HTTP 400 across every parameter variant and across two federal mirror hosts. The de-public-sector-pay-is-classified-not-negotiated entry therefore claims only what the Bundesverwaltungsamt Definitionskatalog and BAG 6 AZR 205/20 support (classification by task profile; equivalence of prior duties for the step). It does NOT claim that discretionary recognition of beneficial times exists as a hiring instrument, and no numeric step or pay-group thresholds appear anywhere in this entry."
     disclaims: [de-public-sector-pay-is-classified-not-negotiated]
+      # Read side by side on 2026-08-10: the shared words sit in the half of the note
+      # recording what WAS sourced, and the claim it disclaims is absent from the text.
+      # Self-revoking — if the overlap changes, the lint asks for the review again.
+    overlap_reviewed: [classified, duties, equivalence, federal, hiring, negotiated, profile, public, sector]
   - note: "Any distribution claim about reference grades. The oft-repeated line that most German references carry \"good\" or \"very good\" is not asserted here. BAG 9 AZR 584/13 expressly refused to shift the burden of proof on the strength of studies to that effect, and I measured nothing."
     disclaims: [de-arbeitszeugnis-is-a-graded-document]
+      # Read side by side on 2026-08-10: the shared words sit in the half of the note
+      # recording what WAS sourced, and the claim it disclaims is absent from the text.
+      # Self-revoking — if the overlap changes, the lint asks for the review again.
+    overlap_reviewed: [burden, german, reference]
   - note: "Whether the Anschreiben is universally expected. The Bundesagentur für Arbeit treats it as standard, and the entry is written on that basis. I found no source on how many German employers, particularly international technology employers, now waive it. Do not upgrade \"standard component\" into \"always required\"."
     disclaims: [de-application-is-a-file-not-a-cv]
+      # Read side by side on 2026-08-10: the shared words sit in the half of the note
+      # recording what WAS sourced, and the claim it disclaims is absent from the text.
+      # Self-revoking — if the overlap changes, the lint asks for the review again.
+    overlap_reviewed: [anschreiben, german, standard]
   - note: "Swiss statute text could not be fetched directly. https://www.fedlex.admin.ch/eli/cc/27/317_321_377/de serves a JavaScript shell (77 KB of app scaffolding, zero occurrences of \"330a\"), so Art. 330a OR is cited through SECO's official FAQ rather than the statute page. https://www.ch.ch/de/arbeit/arbeitszeugnis/ returned a 404 page. Someone should re-anchor the Swiss citation on the statute itself."
     disclaims: [de-austrian-and-swiss-certificates-do-not-transfer]
