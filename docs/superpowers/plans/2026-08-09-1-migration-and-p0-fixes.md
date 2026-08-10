@@ -13,27 +13,32 @@
 - Repo root: `/Users/donghanglyu/code_project/job-hunt`. The repo root IS the skill. Git is already initialised; the design spec is committed at `docs/superpowers/specs/2026-08-09-job-hunt-skill-design.md`.
 - Python 3, stdlib + PyYAML + python-docx only (already in `requirements.txt`). pytest for tests.
 - Run the suite with: `python3 -m pytest scripts/tests -q` (from the repo root). Verified: this command works from the repo root after the migration.
-- Every gate script obeys this CLI contract, no exceptions:
+- Every gate script obeys this CLI contract:
   `python3 scripts/<name>.py --workspace <path> [script-specific args]`
   `exit 0` = gate passed. `exit 1` = gate failed (findings printed to stdout, one per line, each prefixed with a stable UPPERCASE code, e.g. `UNSOURCED: ...`, `STALE: ...`, `NO_SOURCE_ID: ...`). `exit 2` = could not run (missing input file); message to stderr.
-- Every gate appends **exactly one** receipt line to `<workspace>/journal.jsonl` before exiting — **on every exit path, including exit 2.** A gate that dies without a receipt is indistinguishable from a gate that was never run, which is risk-register entry #12.
+  **One named exception, and only one in this plan:** `scripts/check_skill_lossless.py` is a repo-level CI check, not a workspace gate. It takes no `--workspace`, imports no `journal`, and writes no receipt; it exits 0 (lossless) / 1 (content lost or a stale deletion entry) / 2 (the baseline could not be read). It is listed in SKILL.md's gate table and self-check under its own **CI** line rather than under "Ran, with a receipt", because a checklist that promises evidence which can never exist teaches the reader that the evidence line is decorative. (Plan 3 declares a second exception for `check_opencli_result.py`; no other script may deviate.)
+- Every gate appends **exactly one** receipt line to `<workspace>/journal.jsonl` before exiting — **on every exit path, including exit 2.** A gate that dies without a receipt is indistinguishable from a gate that was never run, which is risk-register entry #12. On the "could not run" path the verdict is **`"could_not_run"`** — never `"error"`, which says that something went wrong without saying whether the gate reached a judgement. The single exception: if the workspace directory itself does not exist there is nothing to append to, so print to stderr and return 2 with no receipt; every script that can hit that path says so in its docstring.
+- Receipt verdicts are a closed set: `"pass" | "fail" | "could_not_run" | "recorded"`. `"recorded"` is for a run that reports or records rather than gates (`check_render_freshness --record`, `check_claims --record`). `check_apply.PASSING_VERDICTS = ("pass", "recorded")`, so any verdict outside this set reads as a failure downstream — which is why the set is closed rather than free text.
 - Every gate exposes `main(argv=None) -> int` and ends with `if __name__ == "__main__": sys.exit(main())`, so tests can call `main([...])` directly.
-- The ONE verdict vocabulary (spec D3), these exact strings, everywhere:
+- **The closed vocabularies live in `scripts/vocab.py` (Task 5) and are imported, never re-spelled.** A closed set written out twice is a closed set that will drift; the same five verdicts were hard-coded in five modules across the four plans before this module existed. Every later plan imports from it too.
+  The ONE verdict vocabulary (spec D3), these exact strings, everywhere:
   `"strong_apply" | "worth_applying" | "stretch" | "likely_screen_out" | "blocked"`
   Orthogonal refusal state (NOT a sixth level): `"insufficient_evidence"`.
   Human-facing zh labels: 强烈建议投 / 值得投 / 可以冲刺 / 大概率被筛掉 / 硬性阻断 / 证据不足—不出结论.
   discover-stage verdicts carry `provisional: true` and MUST NOT be copied into an assessment.
+  Market keys: `cn / nl / de / uk / us`, plus the one token for "no market table": **`other`** (never `none`).
 - Requirement-row enums (spec 5.2 step 6), these exact strings:
   `level: "required" | "preferred" | "unclear"`; `screening: "knockout" | "weighted" | "nice_to_have"`; `match: "strong" | "partial" | "gap" | "no_evidence"`; `recency: "current" | "recent" | "dated" | "undated"`; `effort: "quick" | "evening" | "multi_day" | "not_closable"`.
 - Mock-interview bands (spec 5.4), deliberately unnumbered so they cannot be averaged:
   `"not_present" | "asserted" | "instanced" | "held_under_probe"`. Non-band flag: `"contradicted"`. Defect tags (closed set): `"UNSOURCED-FACT" | "OVER-CLAIM" | "CONTRADICTED" | "PROBE-COLLAPSE"`.
+- **`scripts/paths.py` is imported wherever a path is resolved.** No script re-derives a profile, workspace, search, answer-bank, search-preferences, mode-file or skill-root path with `.parents[n]` or a string join. The one place the load-bearing layout is defined is worth nothing if every caller re-derives it — that is how a resume lookup silently stops finding the previous workspace.
 - Evidence block ids: `"CV-%03d"` and `"JD-%03d"`. Chunking: max 900 chars per block, max 80 blocks per source, split on blank lines or a newline preceding a bullet/number/CJK numeral, over-long paragraphs sentence-split on `[。.!?]`, drop chunks under 8 chars.
 - `claims.yaml` row schema (append-only): `term` (str), `where` (str, e.g. `"tailored-profile.yaml:skills.infra"`), `source_kind` (`"profile-line" | "session-answer" | "fetched-artifact"`), `source_ref` (str), `session_date` (str, `YYYY-MM-DD`), `retracted` (str | null — null, or `"walk-back-YYYY-MM-DD"`).
 - `JobListingEvidence` row schema (shortlist.yaml rows): `id, title, company, location, salary, url, source_site, source_id, extraction_method, retrieved_at, quality, verification, raw_text, why_matched, verdict, provisional`.
 - Today is **2026-08-09**. Use it for filenames and any dated example. Never call an unstamped date helper in an example; show the literal date.
 - **Git rules (the repo owner's standing instructions — violating these is a plan defect):** stage NAMED PATHS only; never `git add -A`, never `git add .`. **NEVER push** — commit locally only, no `git push` in any step. Do not pass `-c user.name` / `-c user.email`; the repo's config is already correct.
 - **Testing discipline (spec §7).** Every check's tests must pin the QUIET case as hard as the firing case. A check that cries wolf on ordinary output is worse than no check, because readers learn to skip that line. A test that only imports a module proves the button exists, not that pressing it does anything — that is exactly how 51/51 green tests hid a renderer that could not produce a single letter PDF.
-- **What `check_skill_lossless.py` does NOT prove (spec §12).** It measures whether the bytes still exist, not whether the content reaches context at the moment it is needed. A refactor can score a perfect lossless result and still degrade the skill, because the regression is in *when* content arrives, not *whether* it survives. Content preservation is necessary and nowhere near sufficient. The only real test of the layering change in Task 17 is re-running the end-to-end evals afterwards and reading what the outputs are missing. Never quote a size number or a lossless score as evidence of quality.
+- **What `check_skill_lossless.py` does NOT prove (spec §12).** It measures whether the bytes still exist, not whether the content reaches context at the moment it is needed. A refactor can score a perfect lossless result and still degrade the skill, because the regression is in *when* content arrives, not *whether* it survives. Content preservation is necessary and nowhere near sufficient. The only real test of the layering change in Task 20 is re-running the end-to-end evals afterwards and reading what the outputs are missing. Never quote a size number or a lossless score as evidence of quality.
 
 ---
 
@@ -45,7 +50,6 @@ Everything created or modified by this plan. One responsibility per file.
 
 | Path | Responsibility |
 |---|---|
-| `README.md` | Repo-level orientation (migrated as-is). |
 | `references/candidate-situations.md` | The eight non-standard-candidate playbooks. |
 | `references/cv-craft.md` | Cluster conventions, ATS mechanics, bullet craft, section ordering. |
 | `references/gap-analysis.md` | Gap table, quantification ladder, NOT-ALLOWED table, FIT SNAPSHOT. |
@@ -65,8 +69,10 @@ Everything created or modified by this plan. One responsibility per file.
 
 | Path | Responsibility |
 |---|---|
+| `README.md` | Repo-level orientation. **Modified (Task 21):** the duplicated 8-step process list is deleted and points at `SKILL.md`; the layout section is corrected and gains the workspace layout. |
 | `scripts/journal.py` | Append-only run journal + gate receipts. Imported by every gate. |
 | `scripts/paths.py` | Every filesystem location the skill uses. The one place the workspace path shape is defined. |
+| `scripts/vocab.py` | Every closed vocabulary in the skill, in one module. Imported by every gate in this plan and in Plans 2–4. |
 | `scripts/rounds.py` | Read/merge `judge-round-<n>.json` without clobbering another writer's keys. |
 | `scripts/check_skill_lossless.py` | Asserts every substantive line of the old tree is findable in the new tree. |
 | `scripts/lossless-allowlist.json` | Waived lines and deliberately deleted files, each with a written reason. |
@@ -79,10 +85,13 @@ Everything created or modified by this plan. One responsibility per file.
 | `scripts/check_claims.py` | Gate: every new term in the tailored profile traces to `claims.yaml`; the master profile was not mutated. |
 | `scripts/lint_cv.py` | Gate: clichés, weak bullet openers, over-long bullets, repeated opening verbs. |
 | `scripts/check_letter.py` | Gate: markdown-in-body, word/paragraph counts, duplicated sender name, company/role vs `posting.yaml`. |
+| `scripts/check_pages.py` | Gate: the rendered PDF's page count against the length table in `references/cv-craft.md`, and the letter's one-page rule. |
+| `scripts/check_word_limits.py` | Gate: per-criterion word counts in a structured application's supporting statement. |
 | `scripts/enter_mode.py` | Writes the mode-entry record (mode file content hash) to `journal.jsonl`. The layer-1.5 backstop. |
 | `scripts/check_apply.py` | Gate: composes all of the above plus the honest-stop classification and the interview brief. |
-| `SKILL.md` | **Rewritten in Task 17.** Layer 1: everything whose omission nothing reports, carried verbatim, plus the self-check list. |
-| `modes/apply.md` | **New in Task 17.** Layer 1.5: the apply pipeline (old Steps 0–7.5) and the `honest-stop.yaml` schema. |
+| `SKILL.md` | **Rewritten in Task 20.** Layer 1: everything whose omission nothing reports, carried verbatim, plus the self-check list. |
+| `modes/apply.md` | **New in Task 20.** Layer 1.5: the apply pipeline (old Steps 0–7.5), the apply entry conditions and the `honest-stop.yaml` schema. |
+| `Makefile`, `.github/workflows/checks.yml` | **New in Task 22.** CI: pytest + `check_skill_lossless.py` + `check_conventions.py --all`, so spec §12's "进 CI" is a file and not an intention. |
 | `scripts/tests/test_*.py` | One test module per script above. |
 
 ---
@@ -296,6 +305,7 @@ made rather than a casualty of the migration."
   - `receipt(workspace: pathlib.Path, gate: str, input_hashes: dict[str, str], verdict: str, findings: list[str] | None = None) -> dict`
   - `sha256_file(path: pathlib.Path) -> str`
   - `read_receipts(workspace: pathlib.Path, gate: str | None = None) -> list[dict]`
+  - `current_mode(workspace: pathlib.Path) -> str` — the `mode` of the most recent `mode_entry` record, else `"unknown"`
 
 - [ ] **Step 1: Write the failing test**
     Create `scripts/tests/test_journal.py`:
@@ -373,6 +383,21 @@ made rather than a casualty of the migration."
 
     def test_read_receipts_on_a_workspace_with_no_journal_is_empty(tmp_path):
         assert journal.read_receipts(tmp_path / "never-used") == []
+
+
+    def test_the_receipt_mode_comes_from_the_latest_mode_entry_not_a_default(tmp_path):
+        """`mode` is read from the journal, not guessed. An environment-variable
+        default of "apply" is worse than "unknown": nothing in any mode sets the
+        variable, so every receipt written by discover, assess and interview would
+        be stamped `apply` and a journal read months later would lie confidently."""
+        ws = tmp_path / "ws"
+        assert journal.current_mode(ws) == "unknown"
+        assert journal.receipt(ws, "g", {}, "pass")["mode"] == "unknown"
+        journal.append(ws, {"action": "mode_entry", "mode": "discover"})
+        assert journal.current_mode(ws) == "discover"
+        assert journal.receipt(ws, "g", {}, "pass")["mode"] == "discover"
+        journal.append(ws, {"action": "mode_entry", "mode": "apply"})
+        assert journal.receipt(ws, "g", {}, "pass")["mode"] == "apply"
     ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -397,7 +422,6 @@ made rather than a casualty of the migration."
     import datetime
     import hashlib
     import json
-    import os
     import pathlib
 
 
@@ -418,18 +442,55 @@ made rather than a casualty of the migration."
         return h.hexdigest()
 
 
+    def _records(workspace):
+        """Every parseable JSON record in the journal, oldest first."""
+        path = pathlib.Path(workspace) / "journal.jsonl"
+        if not path.exists():
+            return []
+        out = []
+        for line in path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue          # a half-written line must not blind the reader
+            if isinstance(rec, dict):
+                out.append(rec)
+        return out
+
+
+    def current_mode(workspace) -> str:
+        """The mode of the most recent mode_entry record, or "unknown".
+
+        Read from the journal, never guessed. The obvious alternative — an
+        environment variable with a default — is worse than useless here: nothing
+        in any mode sets it, so every receipt written by discover, assess and
+        interview would be stamped with the default and a journal read months later
+        would be confidently wrong about which mode produced which evidence.
+        "unknown" is the honest answer when nothing recorded an entry, and it is
+        also the shape check_apply's NO_MODE_ENTRY finding exists to catch.
+        """
+        mode = "unknown"
+        for rec in _records(workspace):
+            if rec.get("action") == "mode_entry" and rec.get("mode"):
+                mode = str(rec["mode"])
+        return mode
+
+
     def receipt(workspace, gate: str, input_hashes: dict, verdict: str,
                 findings=None) -> dict:
         """Build, journal and return one gate receipt.
 
-        `mode` comes from the JOB_HUNT_MODE environment variable (default "apply")
-        because the gate signature is fixed by the shared contract and does not
-        carry it; mode entry sets it. It is recorded rather than derived so a
-        receipt read months later still says which mode was running.
+        `verdict` is one of "pass" | "fail" | "could_not_run" | "recorded". `mode`
+        is read from the latest mode_entry record in this workspace's journal
+        (see current_mode) rather than passed in, because the gate signature is
+        fixed by the shared contract and does not carry it.
         """
         record = {
             "ts": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "mode": os.environ.get("JOB_HUNT_MODE", "apply"),
+            "mode": current_mode(workspace),
             "action": "gate",
             "gate": gate,
             "input_hashes": dict(input_hashes or {}),
@@ -445,28 +506,14 @@ made rather than a casualty of the migration."
 
     def read_receipts(workspace, gate: str | None = None) -> list:
         """Every gate receipt in the journal, oldest first, optionally one gate."""
-        path = pathlib.Path(workspace) / "journal.jsonl"
-        if not path.exists():
-            return []
-        out = []
-        for line in path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                rec = json.loads(line)
-            except json.JSONDecodeError:
-                continue          # a half-written line must not blind the reader
-            if not isinstance(rec, dict) or rec.get("action") != "gate":
-                continue
-            if gate is None or rec.get("gate") == gate:
-                out.append(rec)
-        return out
+        return [rec for rec in _records(workspace)
+                if rec.get("action") == "gate"
+                and (gate is None or rec.get("gate") == gate)]
     ```
 
 - [ ] **Step 4: Run test to verify it passes**
     Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests/test_journal.py -q`
-    Expected: PASS — `8 passed`
+    Expected: PASS — `9 passed`
 
 - [ ] **Step 5: Commit**
     ```bash
@@ -493,6 +540,7 @@ The `<company>-<role>-<YYYY-MM-DD>` directory shape is load-bearing: the "resume
 - Consumes: nothing.
 - Produces:
   - `PROFILES_ROOT: pathlib.Path` (`~/.claude/job-profiles`)
+  - `SKILL_ROOT: pathlib.Path` (the repo root — `scripts/`'s parent)
   - `slugify(text: str) -> str`
   - `profile_dir(name: str) -> pathlib.Path`
   - `master_profile(name: str) -> pathlib.Path` (`<profile_dir>/profile.yaml`)
@@ -500,6 +548,8 @@ The `<company>-<role>-<YYYY-MM-DD>` directory shape is load-bearing: the "resume
   - `answer_bank(name: str) -> pathlib.Path` (`<profile_dir>/answer-bank.md`)
   - `search_dir(name: str, slug: str) -> pathlib.Path` (`<profile_dir>/searches/<slug>`)
   - `workspace(name: str, company: str, role: str, date: str) -> pathlib.Path` (`<profile_dir>/applications/<company>-<role>-<YYYY-MM-DD>`)
+  - `mode_file(mode: str, root=None) -> pathlib.Path` (`<root or SKILL_ROOT>/modes/<mode>.md`)
+  - `lossless_allowlist(root=None) -> pathlib.Path` (`<root or SKILL_ROOT>/scripts/lossless-allowlist.json`)
 
 - [ ] **Step 1: Write the failing test**
     Create `scripts/tests/test_paths.py`:
@@ -515,6 +565,20 @@ The `<company>-<role>-<YYYY-MM-DD>` directory shape is load-bearing: the "resume
 
     def test_profiles_root_is_under_the_claude_dir():
         assert paths.PROFILES_ROOT == pathlib.Path.home() / ".claude" / "job-profiles"
+
+
+    def test_skill_root_is_the_repo_root_and_holds_this_test():
+        """Every script that needs the skill root asks paths for it. A script that
+        re-derives it with .parent.parent works until someone moves the file."""
+        assert paths.SKILL_ROOT == pathlib.Path(__file__).resolve().parent.parent.parent
+        assert (paths.SKILL_ROOT / "scripts" / "paths.py").is_file()
+
+
+    def test_mode_file_and_allowlist_resolve_under_an_explicit_root(tmp_path):
+        assert paths.mode_file("apply", tmp_path) == tmp_path / "modes" / "apply.md"
+        assert paths.mode_file("apply") == paths.SKILL_ROOT / "modes" / "apply.md"
+        assert paths.lossless_allowlist(tmp_path) == \
+            tmp_path / "scripts" / "lossless-allowlist.json"
 
 
     @pytest.mark.parametrize("raw,expected", [
@@ -595,6 +659,10 @@ The `<company>-<role>-<YYYY-MM-DD>` directory shape is load-bearing: the "resume
     import unicodedata
 
     PROFILES_ROOT = pathlib.Path.home() / ".claude" / "job-profiles"
+    # The repo root IS the skill. Every script that needs it asks here rather than
+    # writing `.parent.parent` again: a hand-derived root is correct until someone
+    # moves one file, and then it is wrong in a way that only shows up at runtime.
+    SKILL_ROOT = pathlib.Path(__file__).resolve().parent.parent
 
     # Keep ASCII alphanumerics and CJK/kana/hangul; everything else becomes a
     # separator. Dropping CJK would turn a Chinese employer name into an empty
@@ -646,11 +714,21 @@ The `<company>-<role>-<YYYY-MM-DD>` directory shape is load-bearing: the "resume
             raise ValueError(f"date must be YYYY-MM-DD, got {date!r}")
         stem = f"{slugify(company)}-{slugify(role)}-{date}"
         return profile_dir(name) / "applications" / stem
+
+
+    def mode_file(mode: str, root=None) -> pathlib.Path:
+        """<skill root>/modes/<mode>.md — the layer-1.5 file for a mode."""
+        return (pathlib.Path(root) if root else SKILL_ROOT) / "modes" / f"{mode}.md"
+
+
+    def lossless_allowlist(root=None) -> pathlib.Path:
+        return (pathlib.Path(root) if root else SKILL_ROOT) / "scripts" / \
+            "lossless-allowlist.json"
     ```
 
 - [ ] **Step 4: Run test to verify it passes**
     Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests/test_paths.py -q`
-    Expected: PASS — `12 passed`
+    Expected: PASS — `13 passed` (6 plain tests + 5 parametrized `test_slugify` cases + the 2 new ones).
 
 - [ ] **Step 5: Commit**
     ```bash
@@ -665,9 +743,187 @@ error. Pure path builders — nothing here creates a directory."
 
 ---
 
-### Task 5: `scripts/check_skill_lossless.py` — prove the migration moved content instead of deleting it
+### Task 5: `scripts/vocab.py` — one definition of every closed set
 
-**Read this before writing it, and carry the warning into the docstring:** this check measures whether the bytes still exist, not whether the content reaches context at the moment it is needed. A refactor can score a perfect lossless result and still degrade the skill, because the regression is in *when* content arrives. The only real test of Task 17's layering change is re-running the end-to-end evals and reading what the outputs are missing.
+The design says the verdict words are "these exact strings, everywhere". Everywhere is the problem: a closed set spelled out in two modules is a closed set that will drift, and the drift is silent because both copies are individually valid Python. Before this module the five verdicts were about to be hard-coded in five places across the four mode plans, `MARKET_KEYS` was declared twice with different contents (`us` five keys vs six), and the "no market table" token was `none` in one plan and `other` in two others. All three are the same defect. One module, imported by every gate in this plan and in Plans 2–4.
+
+**Files:**
+- Create: `scripts/vocab.py`
+- Test: `scripts/tests/test_vocab.py`
+
+**Interfaces:**
+- Consumes: nothing (stdlib-free constants only — anything importable must be importable from a gate's exit-2 path).
+- Produces: `VERDICTS`, `REFUSAL`, `VERDICT_ZH`, `MARKET_KEYS`, `NO_MARKET`, `LEVELS`, `SCREENING`, `MATCH`, `RECENCY`, `EFFORT`, `BANDS`, `CONTRADICTED`, `DEFECT_TAGS`.
+
+- [ ] **Step 1: Write the failing test**
+    Create `scripts/tests/test_vocab.py`:
+    ```python
+    import pathlib
+    import re
+    import sys
+
+    sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
+    import vocab
+
+    SCRIPTS = pathlib.Path(__file__).resolve().parent.parent
+
+
+    def test_the_five_verdicts_are_exactly_these_in_this_order():
+        assert vocab.VERDICTS == ("strong_apply", "worth_applying", "stretch",
+                                  "likely_screen_out", "blocked")
+
+
+    def test_the_refusal_is_not_a_sixth_verdict():
+        """A refusal is orthogonal to the scale. Folding it in would let a caller
+        sort it, average it, or read 'cannot tell' as a weak recommendation."""
+        assert vocab.REFUSAL == "insufficient_evidence"
+        assert vocab.REFUSAL not in vocab.VERDICTS
+
+
+    def test_every_verdict_and_the_refusal_have_a_zh_label():
+        assert set(vocab.VERDICT_ZH) == set(vocab.VERDICTS) | {vocab.REFUSAL}
+        assert vocab.VERDICT_ZH["blocked"] == "硬性阻断"
+        assert vocab.VERDICT_ZH[vocab.REFUSAL] == "证据不足—不出结论"
+
+
+    def test_market_keys_and_the_no_table_token():
+        assert vocab.MARKET_KEYS == ("cn", "nl", "de", "uk", "us")
+        assert vocab.NO_MARKET == "other"
+        assert vocab.NO_MARKET not in vocab.MARKET_KEYS
+
+
+    def test_requirement_row_enums():
+        assert vocab.LEVELS == ("required", "preferred", "unclear")
+        assert vocab.SCREENING == ("knockout", "weighted", "nice_to_have")
+        assert vocab.MATCH == ("strong", "partial", "gap", "no_evidence")
+        assert vocab.RECENCY == ("current", "recent", "dated", "undated")
+        assert vocab.EFFORT == ("quick", "evening", "multi_day", "not_closable")
+
+
+    def test_mock_bands_are_unnumbered_and_contradicted_is_not_one_of_them():
+        assert vocab.BANDS == ("not_present", "asserted", "instanced", "held_under_probe")
+        assert vocab.CONTRADICTED == "contradicted"
+        assert vocab.CONTRADICTED not in vocab.BANDS
+        assert vocab.DEFECT_TAGS == ("UNSOURCED-FACT", "OVER-CLAIM", "CONTRADICTED",
+                                     "PROBE-COLLAPSE")
+
+
+    def test_every_closed_set_is_an_immutable_tuple():
+        """A list would let a caller append to the shared vocabulary at import
+        time, and the drift this module exists to stop would come back invisible."""
+        for name in ("VERDICTS", "MARKET_KEYS", "LEVELS", "SCREENING", "MATCH",
+                     "RECENCY", "EFFORT", "BANDS", "DEFECT_TAGS"):
+            assert isinstance(getattr(vocab, name), tuple), f"{name} must be a tuple"
+        assert isinstance(vocab.VERDICT_ZH, dict)
+
+
+    def test_no_other_script_redeclares_a_closed_set():
+        """The whole point. A second copy fails on the day it is written rather
+        than on the day the two copies disagree. `MOCK_MARKET_KEYS` (Plan 4's
+        documented superset) is deliberately still allowed — the anchored regex
+        only rejects a bare re-declaration."""
+        for f in sorted(SCRIPTS.glob("*.py")):
+            if f.name == "vocab.py":
+                continue
+            text = f.read_text(encoding="utf-8")
+            assert "strong_apply" not in text, \
+                f"{f.name} spells out a verdict — import it from vocab.py"
+            assert not re.search(r"^\s*MARKET_KEYS\s*=", text, re.M), \
+                f"{f.name} re-declares MARKET_KEYS — import it from vocab.py"
+            assert not re.search(r"^\s*DEFECT_TAGS\s*=", text, re.M), \
+                f"{f.name} re-declares DEFECT_TAGS — import it from vocab.py"
+    ```
+
+- [ ] **Step 2: Run test to verify it fails**
+    Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests/test_vocab.py -q`
+    Expected: FAIL with `ModuleNotFoundError: No module named 'vocab'`
+
+- [ ] **Step 3: Write minimal implementation**
+    Create `scripts/vocab.py`:
+    ```python
+    #!/usr/bin/env python3
+    """Every closed vocabulary in job-hunt, in one module.
+
+    A closed set spelled out twice is a closed set that will drift, and the drift
+    is silent because both copies are individually valid Python. Before this
+    module existed the five verdicts were hard-coded in five places across the
+    four mode plans, `MARKET_KEYS` was declared twice with different contents, and
+    the "no market table" token was `none` in one plan and `other` in two others —
+    three separate ways for two modules to disagree about a set the design calls
+    "these exact strings, everywhere".
+
+    Import from here. Do not re-declare. If a set genuinely needs to grow, it grows
+    in this file, and test_vocab.py is what tells you which callers you changed.
+    """
+    from __future__ import annotations
+
+    # ── advice levels (spec D3, §10) ──────────────────────────────────────────
+    # Ordinal, in order. Deliberately unnumbered everywhere downstream: a number
+    # invites an average, and averaging "worth_applying" with "blocked" is
+    # arithmetic performed on words.
+    VERDICTS = ("strong_apply", "worth_applying", "stretch", "likely_screen_out",
+                "blocked")
+
+    # A refusal is not a sixth level. "The input does not support a conclusion" is
+    # not a point on the scale from apply to blocked, so it is kept orthogonal —
+    # otherwise a run that could not read the posting sorts as a weak recommendation.
+    REFUSAL = "insufficient_evidence"
+
+    VERDICT_ZH = {
+        "strong_apply": "强烈建议投",
+        "worth_applying": "值得投",
+        "stretch": "可以冲刺",
+        "likely_screen_out": "大概率被筛掉",
+        "blocked": "硬性阻断",
+        "insufficient_evidence": "证据不足—不出结论",
+    }
+
+    # ── markets (spec §10) ────────────────────────────────────────────────────
+    MARKET_KEYS = ("cn", "nl", "de", "uk", "us")
+    # The ONE token for "this market has no convention table". Never "none": in
+    # YAML an unquoted `none` is easy to read back as a null, and the row then
+    # silently becomes untyped instead of explicitly out of scope.
+    NO_MARKET = "other"
+
+    # ── requirement rows (spec 5.2 step 6) ────────────────────────────────────
+    LEVELS = ("required", "preferred", "unclear")
+    SCREENING = ("knockout", "weighted", "nice_to_have")
+    MATCH = ("strong", "partial", "gap", "no_evidence")
+    RECENCY = ("current", "recent", "dated", "undated")
+    EFFORT = ("quick", "evening", "multi_day", "not_closable")
+
+    # ── mock-interview bands (spec 5.4) ───────────────────────────────────────
+    # "held_under_probe" is the ceiling on purpose: a higher band would require
+    # knowing what this level's expectations are, and this skill does not.
+    BANDS = ("not_present", "asserted", "instanced", "held_under_probe")
+    CONTRADICTED = "contradicted"
+    DEFECT_TAGS = ("UNSOURCED-FACT", "OVER-CLAIM", "CONTRADICTED", "PROBE-COLLAPSE")
+    ```
+
+- [ ] **Step 4: Run test to verify it passes**
+    Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests/test_vocab.py -q`
+    Expected: PASS — `8 passed`
+
+- [ ] **Step 5: Commit**
+    ```bash
+    cd /Users/donghanglyu/code_project/job-hunt
+    git add scripts/vocab.py scripts/tests/test_vocab.py
+    git commit -m "feat(vocab): one definition of every closed set
+
+The design says 'these exact strings, everywhere' — and everywhere was about to
+mean five hard-coded copies of the five verdicts, two different MARKET_KEYS and
+two different tokens for 'no market table'. One module, imported by every gate.
+test_vocab.py fails the day a second copy is written, not the day the two
+copies disagree."
+    ```
+
+---
+
+### Task 6: `scripts/check_skill_lossless.py` — prove the migration moved content instead of deleting it
+
+**Read this before writing it, and carry the warning into the docstring:** this check measures whether the bytes still exist, not whether the content reaches context at the moment it is needed. A refactor can score a perfect lossless result and still degrade the skill, because the regression is in *when* content arrives. The only real test of Task 20's layering change is re-running the end-to-end evals and reading what the outputs are missing.
+
+**This is the plan's one named exception to the gate contract** (see Global Constraints): a repo-level CI check, no `--workspace`, no `journal` import, no receipt. Exit 0 = lossless, 1 = content lost or a stale deletion entry, 2 = the baseline could not be read. It appears in SKILL.md's gate table and self-check on its own **CI** line, not under "Ran, with a receipt" — promising a receipt that can never exist is how a checklist teaches its reader that one of its lines is decorative.
 
 **Files:**
 - Create: `scripts/check_skill_lossless.py`
@@ -675,11 +931,13 @@ error. Pure path builders — nothing here creates a directory."
 - Test: `scripts/tests/test_check_skill_lossless.py`
 
 **Interfaces:**
-- Consumes: tag `job-application-baseline` from Task 2; `scripts/lossless-allowlist.json`.
+- Consumes: tag `job-application-baseline` from Task 2; `paths.SKILL_ROOT`, `paths.lossless_allowlist()`.
 - Produces:
   - `normalize(text: str) -> str`
   - `line_key(normalized: str) -> str` (16-hex-char sha1 prefix)
-  - `baseline_docs(spec: str, repo: pathlib.Path) -> dict[str, str]` (relpath → text)
+  - `in_corpus(rel) -> bool` — the ONE membership rule, used by both sides of the comparison
+  - `BaselineUnavailable(Exception)`
+  - `baseline_docs(spec: str, repo: pathlib.Path) -> dict[str, str]` (relpath → text; raises `BaselineUnavailable`)
   - `build_corpus(skill_dir: pathlib.Path) -> tuple[str, list[pathlib.Path]]`
   - `main(argv=None) -> int`
   - CI command: `python3 scripts/check_skill_lossless.py --baseline job-application-baseline`
@@ -801,11 +1059,38 @@ error. Pure path builders — nothing here creates a directory."
 
     def test_docs_are_not_part_of_the_corpus(tmp_path, capsys):
         """A line that survives only in docs/ has not survived: the design doc is
-        not something a skill trigger can reach."""
+        not something a skill trigger can reach. It matters in production too —
+        this plan file quotes SKILL.md verbatim and lives under docs/, so a
+        recursive corpus would let a condensed SKILL.md report LOSSLESS."""
         base = _tree(tmp_path / "base", {"SKILL.md": f"{LINE}\n"})
         new = _tree(tmp_path / "new", {"SKILL.md": "# New\n",
                                        "docs/superpowers/specs/design.md": LINE})
         assert csl.main(["--baseline", str(base), "--skill-dir", str(new)]) == 1
+
+
+    def test_test_fixtures_are_outside_the_corpus_on_both_sides(tmp_path, capsys):
+        """Both sides of the comparison must use the SAME membership rule. When the
+        git-ref baseline read `scripts/tests/fixtures/*.yaml` and the on-disk corpus
+        did not, a byte-identical tree reported 26 lines lost — a check that cries
+        wolf on the very run it was written for."""
+        base = _tree(tmp_path / "base", {
+            "SKILL.md": "# Old\n",
+            "scripts/tests/fixtures/full_profile.yaml":
+                "summary: a long enough line of prose to be checked\n"})
+        new = _tree(tmp_path / "new", {"SKILL.md": "# Old\n"})
+        assert csl.main(["--baseline", str(base), "--skill-dir", str(new)]) == 0
+        assert "LOSSLESS" in capsys.readouterr().out
+
+
+    def test_an_unreadable_baseline_ref_is_exit_2_not_a_crash(tmp_path, capsys):
+        """`could not run` is exit 2 with a message, not sys.exit(str) — which
+        exits 1 and makes 'the baseline is unreachable' indistinguishable from
+        'content was lost'."""
+        new = _tree(tmp_path / "new", {"SKILL.md": "# New\n"})
+        rc = csl.main(["--baseline", "no-such-ref", "--repo", str(tmp_path),
+                       "--skill-dir", str(new)])
+        assert rc == 2
+        assert "no-such-ref" in capsys.readouterr().err
     ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -832,7 +1117,13 @@ error. Pure path builders — nothing here creates a directory."
         python3 scripts/check_skill_lossless.py --baseline /Users/x/.claude/skills/job-application
 
     Exit 0 = every baseline line accounted for. Exit 1 = content was lost, or the
-    allowlist names a file that is still present.
+    allowlist names a file that is still present. Exit 2 = the baseline could not be
+    read at all — which is NOT the same answer as "content was lost", and must not
+    share an exit code with it.
+
+    This script is the one deliberate exception to job-hunt's gate contract: it is a
+    repo-level CI check, takes no --workspace, imports no journal and writes no
+    receipt. SKILL.md's self-check lists it under CI for that reason.
 
     WHAT THIS DOES NOT PROVE — read before quoting a score. It measures whether the
     bytes still exist, not whether they reach the context at the moment they are
@@ -862,7 +1153,10 @@ error. Pure path builders — nothing here creates a directory."
     import subprocess
     import sys
     import unicodedata
-    from pathlib import Path
+    from pathlib import Path, PurePosixPath
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import paths
 
     # Lines shorter than this once normalized are structural noise — bare list
     # markers, `---` rules, lone code fences, one-word headings. They carry no rule
@@ -870,9 +1164,17 @@ error. Pure path builders — nothing here creates a directory."
     DEFAULT_MIN_CHARS = 25
 
     CORPUS_SUFFIXES = (".md", ".yaml")
-    # Everything a skill trigger can eventually reach. `docs/` is deliberately out:
-    # a line that survives only in the design doc has not survived.
+    # Everything a skill trigger can eventually reach, keyed on the TOP-LEVEL
+    # directory. `docs/` is deliberately out: a line that survives only in the
+    # design doc has not survived — and in this repo the plan files under docs/
+    # quote SKILL.md verbatim, so a recursive corpus would let a condensed SKILL.md
+    # report LOSSLESS against itself. `scripts/` is out for the same reason in
+    # reverse: test fixtures are not skill content.
     CORPUS_DIRS = (".", "modes", "references", "agents", "assets")
+
+
+    class BaselineUnavailable(Exception):
+        """The baseline tree could not be read — a different answer from 'lost'."""
 
     _DASHES = dict.fromkeys(map(ord, "—–‒―−"), "-")
     _QUOTES = {0x2019: "'", 0x2018: "'", 0x201C: '"', 0x201D: '"', ord("`"): "'"}
@@ -903,27 +1205,43 @@ error. Pure path builders — nothing here creates a directory."
         return hashlib.sha1(normalized.encode("utf-8")).hexdigest()[:16]
 
 
+    def in_corpus(rel) -> bool:
+        """Is this relpath part of the corpus a skill trigger can reach?
+
+        ONE rule, used by BOTH sides of the comparison. When the two sides used
+        different rules the check reported losses that never happened: the git-ref
+        baseline read `scripts/tests/fixtures/*.yaml` (26 substantive lines, measured)
+        and the on-disk corpus never scanned `scripts/`, so a byte-identical tree
+        reported CONTENT LOST. A check that cries wolf on the very migration it was
+        written for is a check nobody runs twice.
+        """
+        rel = str(rel).replace("\\", "/")
+        if not rel.endswith(CORPUS_SUFFIXES):
+            return False
+        parts = PurePosixPath(rel).parts
+        top = parts[0] if len(parts) > 1 else "."
+        return top in CORPUS_DIRS
+
+
     def baseline_docs(spec: str, repo: Path) -> dict:
         """{relpath: text} for the baseline tree. `spec` is a git ref or a directory."""
         p = Path(spec)
         if p.is_dir():
             out = {}
-            for sub in CORPUS_DIRS:
-                d = p / sub if sub != "." else p
-                if not d.is_dir():
-                    continue
-                for f in sorted(d.rglob("*")):
-                    if f.is_file() and f.suffix in CORPUS_SUFFIXES:
-                        out[str(f.relative_to(p))] = f.read_text(encoding="utf-8", errors="replace")
+            for f in sorted(p.rglob("*")):
+                rel = f.relative_to(p)
+                if f.is_file() and in_corpus(rel):
+                    out[str(rel)] = f.read_text(encoding="utf-8", errors="replace")
             return out
         listing = subprocess.run(["git", "ls-tree", "-r", "--name-only", spec],
                                  cwd=repo, capture_output=True, text=True)
         if listing.returncode != 0:
-            sys.exit(f"cannot read baseline {spec!r}: {listing.stderr.strip()}")
+            raise BaselineUnavailable(
+                f"cannot read baseline {spec!r}: {listing.stderr.strip()}")
         out = {}
         for rel in listing.stdout.split("\n"):
             rel = rel.strip()
-            if not rel or not rel.endswith(CORPUS_SUFFIXES) or rel.startswith("docs/"):
+            if not rel or not in_corpus(rel):
                 continue
             blob = subprocess.run(["git", "show", f"{spec}:{rel}"],
                                   cwd=repo, capture_output=True, text=True)
@@ -933,14 +1251,8 @@ error. Pure path builders — nothing here creates a directory."
 
 
     def build_corpus(skill_dir: Path) -> tuple:
-        files = []
-        for sub in CORPUS_DIRS:
-            d = skill_dir / sub if sub != "." else skill_dir
-            if not d.is_dir():
-                continue
-            files.extend(sorted(f for f in d.rglob("*")
-                                if f.is_file() and f.suffix in CORPUS_SUFFIXES))
-        files = sorted(set(files))
+        files = sorted(f for f in skill_dir.rglob("*")
+                       if f.is_file() and in_corpus(f.relative_to(skill_dir)))
         joined = "\n".join(f.read_text(encoding="utf-8", errors="replace") for f in files)
         return normalize(joined), files
 
@@ -968,11 +1280,10 @@ error. Pure path builders — nothing here creates a directory."
         ap.add_argument("--report", default=None, help="write the full missing-line report here")
         args = ap.parse_args(argv)
 
-        skill_dir = Path(args.skill_dir).resolve() if args.skill_dir \
-            else Path(__file__).resolve().parent.parent
+        skill_dir = Path(args.skill_dir).resolve() if args.skill_dir else paths.SKILL_ROOT
         repo = Path(args.repo).resolve() if args.repo else (
             _find_repo(Path(__file__).resolve().parent) or skill_dir)
-        allow_path = Path(args.allow) if args.allow else skill_dir / "scripts" / "lossless-allowlist.json"
+        allow_path = Path(args.allow) if args.allow else paths.lossless_allowlist(skill_dir)
 
         allow, deleted_files = {}, {}
         if allow_path.exists():
@@ -980,7 +1291,11 @@ error. Pure path builders — nothing here creates a directory."
             allow = data.get("waived") or {}
             deleted_files = data.get("deleted_files") or {}
 
-        docs = baseline_docs(args.baseline, repo)
+        try:
+            docs = baseline_docs(args.baseline, repo)
+        except BaselineUnavailable as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
         corpus, files = build_corpus(skill_dir)
 
         checked, waived = 0, 0
@@ -1033,11 +1348,11 @@ error. Pure path builders — nothing here creates a directory."
 
 - [ ] **Step 4: Run test to verify it passes**
     Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests/test_check_skill_lossless.py -q`
-    Expected: PASS — `10 passed`
+    Expected: PASS — `12 passed`
 
 - [ ] **Step 5: Run it for real against the migration**
     Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 scripts/check_skill_lossless.py --baseline job-application-baseline`
-    Expected: exit 0 and a line starting `LOSSLESS:` — right now the tree is byte-identical to the baseline apart from the two `.tex` files, which are not in `CORPUS_SUFFIXES` and are covered by `deleted_files`. If it reports `CONTENT LOST` at this point, the merge in Task 2 lost something; stop and investigate rather than waiving.
+    Expected: exit 0 and a line reading `LOSSLESS: 1317/1317 baseline lines accounted for across 15 files` (measured against the post-Task-1 baseline tree). The two `.tex` files are not in `CORPUS_SUFFIXES` and are covered by `deleted_files`. If it reports `CONTENT LOST` at this point, the merge in Task 2 lost something; stop and investigate rather than waiving. If it reports a number of files other than 15, `in_corpus` is picking up something it should not.
 
 - [ ] **Step 6: Commit**
     ```bash
@@ -1056,7 +1371,7 @@ exist, not that they reach context when needed. The real test is the evals."
 
 ---
 
-### Task 6: Fix the LaTeX engine bug with one shared `_engine_cmd()`
+### Task 7: Fix the LaTeX engine bug with one shared `_engine_cmd()`
 
 **The live defect, reproduced on this machine today.** `render_cv.find_latex_engine()` returns `/opt/homebrew/bin/tectonic`. `render_cv.py:992` compares `pathlib.Path(engine).name == "tectonic"` and takes the tectonic argv. `render_letter.py:101` compares the bare string `engine == "tectonic"`, which is False for an absolute path, so it builds a `pdflatex`-shaped argv and hands it to tectonic. Result in one run, one machine, one engine: `cv.pdf` builds (19,820 bytes), `letter.pdf` fails with "LaTeX compile failed", and all 51 tests stay green — because `test_letter_pdf_degrades_without_engine` monkeypatches the engine to `None` and never reaches the tectonic branch. The contract that would have prevented it ("Callers detect the engine *type* from the basename, so a returned absolute path works the same as a bare name") lives only in `find_latex_engine`'s docstring. Two call sites cannot drift if there is only one.
 
@@ -1116,7 +1431,7 @@ exist, not that they reach context when needed. The real test is the evals."
         render_cv.render_pdf({"meta": {"name": "Z"}}, out)
         assert seen["cmd"] == [engine, str(tmp_path / "cv.tex"), "--outdir", str(tmp_path)]
     ```
-    Replace `test_letter_pdf_degrades_without_engine` in `scripts/tests/test_render_letter.py` — keep it, and add the regression the suite was missing:
+    Leave `test_letter_pdf_degrades_without_engine` in `scripts/tests/test_render_letter.py` **unchanged** — it pins the no-engine degradation, which is still correct behaviour — and append the two tests below, which are the regression the suite was missing:
     ```python
     def test_letter_pdf_uses_the_tectonic_argv_for_an_absolute_engine_path(tmp_path, monkeypatch):
         """The bug this file shipped with: render_letter compared the engine to the
@@ -1181,7 +1496,7 @@ exist, not that they reach context when needed. The real test is the evals."
 
 - [ ] **Step 4: Run tests to verify they pass**
     Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests -q`
-    Expected: PASS — `51 passed` plus the 6 new tests (`57 passed`).
+    Expected: PASS — the migrated `51 passed`, plus the 5 new cases in `test_render_cv.py` and the 2 in `test_render_letter.py` (`58 passed`), plus everything Tasks 3–6 added (`9 + 13 + 8 + 12 = 42`), i.e. **`100 passed`**. If the total is 57, one of the two appended letter tests was dropped.
 
 - [ ] **Step 5: Prove it end-to-end, since the unit suite is exactly what missed it**
     Run:
@@ -1211,15 +1526,17 @@ one helper so the two renderers cannot drift again."
 
 ---
 
-### Task 7: Fix the Cluster-1 personal-data interlock and make it audible
+### Task 8: Fix the Cluster-1 personal-data interlock and make it audible
 
 **The live defect.** `references/cv-craft.md:121` claims the renderer makes a leak physically impossible. It does not: `_is_cluster1` does an exact lowercase token lookup, and DOB renders through for `United States of America`, `US (Boston)`, `Los Angeles, CA`, `U.K.` and `remote (US)` — all measured today. The eval-0 scenario input literally reads `TARGET MARKET: United States (Los Angeles, CA)`.
 
 **Two changes, and the second matters as much as the first.** Normalising the match closes the five known spellings. But an unknown market with personal data present must also stop being silent — and it must not cry wolf on the many perfectly ordinary EU/Asia markets where a photo is a convention. So the resolver returns a cluster (1, 2 or 3) or `None`, and only `None` warns.
 
 **Files:**
-- Modify: `scripts/render_cv.py` (replace `_CLUSTER1_MARKETS` and `_is_cluster1` at lines 346–360; add the warning in `personal_items` / `photo_path`)
+- Modify: `scripts/render_cv.py` (replace `_CLUSTER1_MARKETS` and `_is_cluster1` at lines 346–360; call `_warn_unknown_market` as the first statement of the three render entry points — `render_markdown`, `render_docx`, `build_latex` — and nowhere else)
 - Test: `scripts/tests/test_render_cv.py`
+
+**One insertion point, named once.** The warning does **not** go in `personal_items`: that function is a generator (`yield` at `render_cv.py:379`) consumed at three sites (`:462`, `:607`, `:873`), so a `--format all` run would print the identical warning three times — which is precisely how a warning gets trained away. It goes at the top of each render entry point instead, guarded so that one profile warns once no matter how many formats are rendered from it.
 
 **Interfaces:**
 - Consumes: nothing new.
@@ -1227,6 +1544,7 @@ one helper so the two renderers cannot drift again."
   - `render_cv.resolve_cluster(market) -> int | None` — 1 = US/CA/UK/IE/AU/NZ, 2 = EU/EEA, 3 = East & SE Asia, None = not recognised.
   - `render_cv._is_cluster1(profile) -> bool` (kept, now `resolve_cluster(...) == 1`).
   - `render_cv.protected_fields(profile) -> list[str]` — names of the protected fields actually present, e.g. `["contact.personal.date_of_birth", "meta.photo"]`.
+  - `render_cv.reset_market_warnings() -> None` — forget which profiles have warned; called at the top of `main()`.
 
 - [ ] **Step 1: Write the failing test**
     Replace `test_personal_data_and_photo_stripped_for_cluster1` in `scripts/tests/test_render_cv.py` and add its neighbours:
@@ -1299,6 +1617,33 @@ one helper so the two renderers cannot drift again."
                    "contact": {"email": "z@x.com"}}
         render_cv.render_markdown(profile)
         assert capsys.readouterr().err == ""
+
+
+    def test_the_unknown_market_warning_prints_once_per_profile_not_once_per_format(
+            tmp_path, capsys):
+        """A `--format all` run renders Markdown, docx and LaTeX from the SAME
+        profile. Three identical warnings is how a warning gets trained away, and
+        it is why this does not live in personal_items (a generator consumed at
+        three separate sites)."""
+        img = tmp_path / "p.png"; img.write_bytes(b"\x89PNG\r\n\x1a\n")
+        profile = {"meta": {"name": "Z", "target_market": "Dubai, UAE", "photo": str(img)},
+                   "contact": {"email": "z@x.com",
+                               "personal": {"date_of_birth": "1992"}}}
+        render_cv.render_markdown(profile)
+        render_cv.build_latex(profile)
+        render_cv.render_docx(profile, tmp_path / "cv.docx")
+        assert capsys.readouterr().err.count("WARNING") == 1
+
+
+    def test_resetting_lets_a_second_run_warn_again(tmp_path, capsys):
+        """The guard is per-run, not per-process: main() clears it, so a second
+        CLI invocation in the same process is not silently exempted."""
+        profile = {"meta": {"name": "Z", "target_market": "Mars"},
+                   "contact": {"personal": {"nationality": "NL"}}}
+        render_cv.render_markdown(profile)
+        render_cv.reset_market_warnings()
+        render_cv.render_markdown(profile)
+        assert capsys.readouterr().err.count("WARNING") == 2
 
 
     def test_protected_fields_names_exactly_what_is_present():
@@ -1420,6 +1765,21 @@ one helper so the two renderers cannot drift again."
         return out
 
 
+    # One warning per (profile object, market), not per render call. A single
+    # `--format all` run renders Markdown, docx and LaTeX from the SAME profile
+    # dict, and printing the identical warning three times is how a warning gets
+    # trained away. The profile OBJECT is held rather than its id(): an id can be
+    # reused after garbage collection, and a silently-suppressed leak warning is
+    # exactly the failure this interlock exists to prevent.
+    _MARKET_WARNED = []
+
+
+    def reset_market_warnings():
+        """Forget which profiles have already warned. main() calls this at the top
+        of every CLI run so the guard is per-run, not per-process."""
+        _MARKET_WARNED.clear()
+
+
     def _warn_unknown_market(profile):
         """Loud when the market is unrecognised AND protected data is present.
 
@@ -1429,12 +1789,15 @@ one helper so the two renderers cannot drift again."
         evidence that rendering a DOB is safe, and silence there is what made the
         original claim false.
         """
-        if resolve_cluster((profile.get("meta") or {}).get("target_market")) is not None:
+        market = (profile.get("meta") or {}).get("target_market")
+        if resolve_cluster(market) is not None:
             return
         fields = protected_fields(profile)
         if not fields:
             return
-        market = (profile.get("meta") or {}).get("target_market")
+        if any(p is profile and m == market for p, m in _MARKET_WARNED):
+            return
+        _MARKET_WARNED.append((profile, market))
         print(f"WARNING: meta.target_market {market!r} matches no known CV-convention "
               f"cluster, so the Cluster-1 personal-data interlock cannot fire. These "
               f"fields will render as-is: {', '.join(fields)}. If this is a "
@@ -1447,18 +1810,25 @@ one helper so the two renderers cannot drift again."
     def _is_cluster1(profile):
         return resolve_cluster((profile.get("meta") or {}).get("target_market")) == 1
     ```
-    Add `import unicodedata` to `render_cv.py`'s module imports if absent. Then call the warning once per render entry point — in `personal_items`, immediately before the `_is_cluster1` check:
+    Add `import unicodedata` to `render_cv.py`'s module imports if absent. Then call the warning as the **first statement** of each of the three render entry points — and nowhere else:
     ```python
-    def personal_items(profile):
-        ...docstring unchanged...
+    def render_markdown(profile):
         _warn_unknown_market(profile)
-        if _is_cluster1(profile):
-            return
+        ...rest unchanged...
+
+    def render_docx(profile, out_path):
+        _warn_unknown_market(profile)
+        ...rest unchanged...
+
+    def build_latex(profile, cjk=None):
+        _warn_unknown_market(profile)
+        ...rest unchanged...
     ```
+    and add `reset_market_warnings()` as the first statement of `main()`. Do **not** touch `personal_items` or `photo_path`: they are the suppression, not the warning, and `personal_items` is a generator consumed at three sites.
 
 - [ ] **Step 4: Run test to verify it passes**
     Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests -q`
-    Expected: PASS — all previous tests plus the new parametrized ones (`18 + 16 + 5 + 2` new cases).
+    Expected: PASS — all previous tests plus `18 + 16 + 5 + 4` = 43 new cases (the 18 Cluster-1 spellings, the 16 quiet non-Cluster-1 ones, the 5 unrecognised ones, and the four singletons: no-personal-data-is-silent, protected_fields, warn-once-per-profile, reset-lets-it-warn-again).
 
 - [ ] **Step 5: Commit**
     ```bash
@@ -1480,7 +1850,7 @@ tests pin that as hard as the firing case."
 
 ---
 
-### Task 8: `scripts/check_personal_data.py` — the interlock as a gate with a receipt
+### Task 9: `scripts/check_personal_data.py` — the interlock as a gate with a receipt
 
 The renderer now suppresses and warns, but the renderer is the *last* line. `cv-craft.md` requires the tailoring step to strip these fields from the tailored profile itself, because a profile that still carries a DOB leaks the moment someone re-renders it against a different market. This gate checks the tailored profile, not the rendered output, and leaves the receipt `check_apply.py` requires.
 
@@ -1575,7 +1945,7 @@ The renderer now suppresses and warns, but the renderer is the *last* line. `cv-
         ws = tmp_path / "gone"; ws.mkdir()
         check_personal_data.main(["--workspace", str(ws)])
         receipts = journal.read_receipts(ws, "check_personal_data")
-        assert len(receipts) == 1 and receipts[0]["verdict"] == "error"
+        assert len(receipts) == 1 and receipts[0]["verdict"] == "could_not_run"
     ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1643,7 +2013,7 @@ The renderer now suppresses and warns, but the renderer is the *last* line. `cv-
         ws = pathlib.Path(args.workspace)
         path = pathlib.Path(args.profile) if args.profile else ws / "tailored-profile.yaml"
         if not path.exists():
-            journal.receipt(ws, GATE, {}, "error", [f"MISSING_INPUT: {path}"])
+            journal.receipt(ws, GATE, {}, "could_not_run", [f"MISSING_INPUT: {path}"])
             print(f"cannot run {GATE}: {path} does not exist", file=sys.stderr)
             return 2
 
@@ -1678,7 +2048,7 @@ quietly; recognised EU/Asia markets stay silent, and the tests pin that."
 
 ---
 
-### Task 9: `scripts/rounds.py` and `scripts/parse_verdicts.py` — the parser all three agents already assume
+### Task 10: `scripts/rounds.py` and `scripts/parse_verdicts.py` — the parser all three agents already assume
 
 All three agent files end with *"The orchestrator parses this block programmatically — formatting must be exact"*, and no such program exists: the orchestrator is a model reading prose. A model that charitably reads `VERDICT: PASS (with reservations)` as a pass ships a package that looks fully reviewed. Fail-closed goes in code.
 
@@ -1698,7 +2068,7 @@ All three agent files end with *"The orchestrator parses this block programmatic
 
 - [ ] **Step 1: Write the failing test**
     Create `scripts/tests/test_parse_verdicts.py`:
-    ```python
+    ````python
     import json
     import pathlib
     import sys
@@ -1873,8 +2243,8 @@ All three agent files end with *"The orchestrator parses this block programmatic
         (ws / "rec.txt").unlink()
         pv.main(argv)
         receipts = journal.read_receipts(ws, "parse_verdicts")
-        assert len(receipts) == 2 and receipts[-1]["verdict"] == "error"
-    ```
+        assert len(receipts) == 2 and receipts[-1]["verdict"] == "could_not_run"
+    ````
 
 - [ ] **Step 2: Run test to verify it fails**
     Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests/test_parse_verdicts.py -q`
@@ -2072,7 +2442,7 @@ All three agent files end with *"The orchestrator parses this block programmatic
                  "hiring_manager": pathlib.Path(args.hiring_manager)}
         for name, p in paths.items():
             if not p.exists():
-                journal.receipt(ws, GATE, {}, "error", [f"MISSING_INPUT: {p}"])
+                journal.receipt(ws, GATE, {}, "could_not_run", [f"MISSING_INPUT: {p}"])
                 print(f"cannot run {GATE}: {name} transcript {p} does not exist",
                       file=sys.stderr)
                 return 2
@@ -2134,7 +2504,7 @@ counter. LEVELING/STANDOUT_SIGNAL are extracted but never touch the verdict."
 
 ---
 
-### Task 10: `scripts/check_render_freshness.py` — void a round judged on stale files
+### Task 11: `scripts/check_render_freshness.py` — void a round judged on stale files
 
 Re-judging a stale `cv.md` produces a perfectly valid *and self-confirming* verdict block: the judges return the same feedback that was supposedly just addressed. Nothing else in the system ties a verdict to the file version it judged.
 
@@ -2227,12 +2597,16 @@ Re-judging a stale `cv.md` produces a perfectly valid *and self-confirming* verd
         assert rounds.load_round(ws, 1)["combined_verdict"] == "PASS"
 
 
-    def test_each_run_leaves_exactly_one_receipt(tmp_path):
+    def test_each_run_leaves_exactly_one_receipt_including_the_exit_2_paths(tmp_path):
+        """An exit-2 run must leave a receipt too: 'the gate could not run' and
+        'the gate was never run' produce the same silence otherwise."""
         ws = _ws(tmp_path)
         crf.main(["--workspace", str(ws), "--round", "1", "--record", str(ws / "cv.md")])
         crf.main(["--workspace", str(ws), "--round", "1"])
+        crf.main(["--workspace", str(ws), "--round", "9"])                     # never recorded
+        crf.main(["--workspace", str(ws), "--round", "3", "--record", str(ws / "nope.md")])
         verdicts = [r["verdict"] for r in journal.read_receipts(ws, "check_render_freshness")]
-        assert verdicts == ["recorded", "pass"]
+        assert verdicts == ["recorded", "pass", "could_not_run", "could_not_run"]
     ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -2292,7 +2666,7 @@ Re-judging a stale `cv.md` produces a perfectly valid *and self-confirming* verd
             for raw in args.record:
                 p = pathlib.Path(raw)
                 if not p.exists():
-                    journal.receipt(ws, GATE, {}, "error", [f"MISSING_INPUT: {p}"])
+                    journal.receipt(ws, GATE, {}, "could_not_run", [f"MISSING_INPUT: {p}"])
                     print(f"cannot run {GATE}: {p} does not exist", file=sys.stderr)
                     return 2
                 hashes[_rel(ws, p)] = journal.sha256_file(p)
@@ -2307,7 +2681,7 @@ Re-judging a stale `cv.md` produces a perfectly valid *and self-confirming* verd
         dispatch = (rounds.load_round(ws, args.round) or {}).get("dispatch") or {}
         recorded = dispatch.get("input_hashes") or {}
         if not recorded:
-            journal.receipt(ws, GATE, {}, "error",
+            journal.receipt(ws, GATE, {}, "could_not_run",
                             [f"NO_DISPATCH_RECORD: round {args.round}"])
             print(f"cannot run {GATE}: NO_DISPATCH_RECORD — judge-round-{args.round}.json "
                   f"has no dispatch hashes, so nothing vouches for what the judges read. "
@@ -2355,7 +2729,7 @@ verdict block in which the judges re-report the problem that was just fixed."
 
 ---
 
-### Task 11: `scripts/check_claims.py` — every new term traces to a source, and the master was not touched
+### Task 12: `scripts/check_claims.py` — every new term traces to a source, and the master was not touched
 
 The claim-provenance checkpoint is the skill's highest-value silent rule: it produces no artifact, no citation column, and no diff, so a run can skip it entirely and every downstream gate still passes. `claims.yaml` makes it diffable; this gate makes it decidable.
 
@@ -2451,6 +2825,28 @@ The claim-provenance checkpoint is the skill's highest-value silent rule: it pro
         assert capsys.readouterr().out.strip() == ""
 
 
+    def test_the_retracted_key_is_required_but_null_is_its_normal_value(tmp_path, capsys):
+        """`retracted: null` is what a live claim looks like — requiring a
+        non-empty string would invalidate every honest row. The KEY must still be
+        present: in a schema where "absent" and "not retracted" look identical, a
+        withdrawn claim leaves no scar, and a scar is the whole point of the field.
+        Plan 4's check_mock.py requires the same six keys."""
+        tailored = {**MASTER, "skills": {"infra": ["Kubernetes"]}}
+        row = {"term": "Kubernetes", "where": "tailored-profile.yaml:skills.infra",
+               "source_kind": "session-answer", "source_ref": "x",
+               "session_date": "2026-08-09", "retracted": None}
+        ws, _ = _setup(tmp_path / "null-is-fine", tailored, [row])
+        capsys.readouterr()
+        assert check_claims.main(["--workspace", str(ws)]) == 0
+        assert capsys.readouterr().out.strip() == ""
+
+        absent = {k: v for k, v in row.items() if k != "retracted"}
+        ws2, _ = _setup(tmp_path / "key-absent", tailored, [absent])
+        capsys.readouterr()
+        assert check_claims.main(["--workspace", str(ws2)]) == 1
+        assert "BAD_CLAIM_ROW" in capsys.readouterr().out
+
+
     def test_a_retracted_row_does_not_source_the_claim(tmp_path, capsys):
         tailored = {**MASTER, "skills": {"infra": ["Kubernetes"]}}
         claims = [{"term": "Kubernetes", "where": "tailored-profile.yaml:skills.infra",
@@ -2508,11 +2904,13 @@ The claim-provenance checkpoint is the skill's highest-value silent rule: it pro
         assert "NO_MASTER_FINGERPRINT" in capsys.readouterr().err
 
 
-    def test_each_run_leaves_exactly_one_receipt(tmp_path):
+    def test_each_run_leaves_exactly_one_receipt_including_the_exit_2_path(tmp_path):
         ws, _ = _setup(tmp_path, MASTER)
         check_claims.main(["--workspace", str(ws)])
+        (ws / check_claims.FINGERPRINT).unlink()
+        assert check_claims.main(["--workspace", str(ws)]) == 2
         verdicts = [r["verdict"] for r in journal.read_receipts(ws, "check_claims")]
-        assert verdicts == ["recorded", "pass"]
+        assert verdicts == ["recorded", "pass", "could_not_run"]
     ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -2561,7 +2959,16 @@ The claim-provenance checkpoint is the skill's highest-value silent rule: it pro
     GATE = "check_claims"
     FINGERPRINT = "master-fingerprint.json"
     SOURCE_KINDS = ("profile-line", "session-answer", "fetched-artifact")
-    CLAIM_KEYS = ("term", "where", "source_kind", "source_ref", "session_date")
+    CLAIM_KEYS = ("term", "where", "source_kind", "source_ref", "session_date",
+                  "retracted")
+    # `retracted` is a PRESENCE check, not a non-empty check: null is what a live
+    # claim looks like, and demanding a value would make every honest row invalid.
+    # It is still required to be there — in a schema where "absent" and "not
+    # retracted" are indistinguishable, a withdrawn claim leaves no scar, and the
+    # scar is the entire reason the field exists. Plan 4's check_mock.py requires
+    # the same six keys; a row that satisfied one and failed the other would make
+    # the two gates disagree about a shared artifact.
+    PRESENCE_ONLY_KEYS = ("retracted",)
     _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
     _PUNCT = re.compile(r"[^\w\s+#./-]", re.UNICODE)
 
@@ -2615,9 +3022,12 @@ The claim-provenance checkpoint is the skill's highest-value silent rule: it pro
                 findings.append(f"BAD_CLAIM_ROW: claims.yaml[{i}] is not a mapping")
                 continue
             for key in CLAIM_KEYS:
-                if not str(row.get(key) or "").strip():
+                if key not in row:
                     findings.append(f"BAD_CLAIM_ROW: claims.yaml[{i}] is missing required "
                                     f"key {key!r}")
+                elif key not in PRESENCE_ONLY_KEYS and not str(row.get(key) or "").strip():
+                    findings.append(f"BAD_CLAIM_ROW: claims.yaml[{i}] has an empty "
+                                    f"required key {key!r}")
             if row.get("source_kind") and row["source_kind"] not in SOURCE_KINDS:
                 findings.append(f"BAD_CLAIM_ROW: claims.yaml[{i}] source_kind "
                                 f"{row['source_kind']!r} is not one of "
@@ -2644,7 +3054,7 @@ The claim-provenance checkpoint is the skill's highest-value silent rule: it pro
 
         if args.record:
             if not args.master or not pathlib.Path(args.master).exists():
-                journal.receipt(ws, GATE, {}, "error",
+                journal.receipt(ws, GATE, {}, "could_not_run",
                                 [f"MISSING_INPUT: master {args.master}"])
                 print(f"cannot run {GATE}: --master must point at an existing profile.yaml",
                       file=sys.stderr)
@@ -2662,7 +3072,7 @@ The claim-provenance checkpoint is the skill's highest-value silent rule: it pro
         if not fp_path.exists() or not tailored_path.exists():
             missing = FINGERPRINT if not fp_path.exists() else "tailored-profile.yaml"
             code = "NO_MASTER_FINGERPRINT" if missing == FINGERPRINT else "MISSING_INPUT"
-            journal.receipt(ws, GATE, {}, "error", [f"{code}: {ws / missing}"])
+            journal.receipt(ws, GATE, {}, "could_not_run", [f"{code}: {ws / missing}"])
             print(f"cannot run {GATE}: {code} — {ws / missing} does not exist; run with "
                   f"--record --master <profile.yaml> at apply-mode entry", file=sys.stderr)
             return 2
@@ -2728,7 +3138,7 @@ The claim-provenance checkpoint is the skill's highest-value silent rule: it pro
 
 - [ ] **Step 4: Run test to verify it passes**
     Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests/test_check_claims.py -q`
-    Expected: PASS — `10 passed`
+    Expected: PASS — `11 passed`
 
 - [ ] **Step 5: Commit**
     ```bash
@@ -2747,7 +3157,7 @@ the master is unrecoverable and only surfaces on the NEXT application."
 
 ---
 
-### Task 12: `scripts/lint_cv.py` — the mechanically decidable slice of the quality pass
+### Task 13: `scripts/lint_cv.py` — the mechanically decidable slice of the quality pass
 
 Clichés, weak openers, bullet length and repeated opening verbs are enumerated in prose today and scanned by eye. Dimension 1 of the AI-uniformity check ("verb variety") is countable; dimensions 3 and 4 (voice, specificity) are not and stay inline in SKILL.md.
 
@@ -2775,8 +3185,8 @@ Clichés, weak openers, bullet length and repeated opening verbs are enumerated 
 
     ### Research Engineer — Acme (2022–present)
     - Built a GPU reconstruction pipeline that cut scan time from 12 to 7 minutes.
-    - Led the migration of 40 clinical protocols onto the new solver.
-    - Led a two-person team through the vendor integration with Philips.
+    - Drove the migration of 40 clinical protocols onto the new solver.
+    - Drove a two-person team through the vendor integration with Philips.
     - Advised the finance team on a leveraged buyout of the imaging division.
 
     ## Skills
@@ -2805,7 +3215,14 @@ Clichés, weak openers, bullet length and repeated opening verbs are enumerated 
 
     def test_two_bullets_opening_with_the_same_verb_is_not_flagged(tmp_path):
         """Two is variation; three is a template. The threshold has to sit where
-        ordinary writing does not trip it."""
+        ordinary writing does not trip it.
+
+        The fixture opens two bullets with 'Drove' rather than 'Led' on purpose:
+        `findings_for` only tracks openers of 4+ characters, so a three-letter verb
+        is never counted and a test built on it would pass without the threshold
+        ever being reached — proving the button exists, not that pressing it does
+        anything. Measured on CLEAN: openers == {'built': [6], 'drove': [7, 8],
+        'advised': [9], 'python': [12]}."""
         assert [f for f in lint_cv.findings_for(CLEAN) if f.startswith("REPEATED_VERB")] == []
 
 
@@ -2850,10 +3267,13 @@ Clichés, weak openers, bullet length and repeated opening verbs are enumerated 
         assert "cv.md" in capsys.readouterr().err
 
 
-    def test_each_run_leaves_exactly_one_receipt(tmp_path):
+    def test_each_run_leaves_exactly_one_receipt_including_the_exit_2_path(tmp_path):
         ws = _cv(tmp_path)
         lint_cv.main(["--workspace", str(ws)])
-        assert [r["verdict"] for r in journal.read_receipts(ws, "lint_cv")] == ["pass"]
+        (ws / "cv.md").unlink()
+        assert lint_cv.main(["--workspace", str(ws)]) == 2
+        assert [r["verdict"] for r in journal.read_receipts(ws, "lint_cv")] == \
+            ["pass", "could_not_run"]
     ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -2953,7 +3373,7 @@ Clichés, weak openers, bullet length and repeated opening verbs are enumerated 
         ws = pathlib.Path(args.workspace)
         path = pathlib.Path(args.cv) if args.cv else ws / "cv.md"
         if not path.exists():
-            journal.receipt(ws, GATE, {}, "error", [f"MISSING_INPUT: {path}"])
+            journal.receipt(ws, GATE, {}, "could_not_run", [f"MISSING_INPUT: {path}"])
             print(f"cannot run {GATE}: {path} does not exist", file=sys.stderr)
             return 2
         findings = findings_for(path.read_text(encoding="utf-8"), path.name)
@@ -2986,11 +3406,11 @@ flagged — a check that cries wolf is one people learn to skip."
 
 ---
 
-### Task 13: `scripts/check_letter.py` — the letter constraints the renderer will not enforce
+### Task 14: `scripts/check_letter.py` — the letter constraints the renderer will not enforce
 
 `render_letter.py` passes each `body` string straight into Markdown, docx and LaTeX with no stripping, so `**bold**` prints four asterisks on the PDF and a sender name in `closing` prints twice. This is the same failure class as a format string rendered raw onto a slide: a formatting contract documented only in prose, whose violation is rendered literally.
 
-**A note on `posting.yaml`.** The extraction schema has no `company` field today, so the letter's recipient cannot be verified against anything. This gate therefore *requires* one and reports `NO_COMPANY_IN_POSTING` when it is absent, rather than skipping the check quietly. Task 17 adds `company` to the extraction field table in SKILL.md.
+**A note on `posting.yaml`.** The extraction schema has no `company` field today, so the letter's recipient cannot be verified against anything. This gate therefore *requires* one and reports `NO_COMPANY_IN_POSTING` when it is absent, rather than skipping the check quietly. Task 20 adds `company` to the extraction field table in SKILL.md.
 
 **Files:**
 - Create: `scripts/check_letter.py`
@@ -3024,6 +3444,11 @@ flagged — a check that cries wolf is one people learn to skip."
             "auditable across three hospital sites. ")
 
 
+    # PARA is 67 words (measured). The default body is FOUR paragraphs — 277 words,
+    # inside both the 250–400 word band and the 3–4 paragraph band. Three paragraphs
+    # would be 210 words, which trips the gate's own floor: every "passes silently"
+    # test would then fail, and the fixture would be teaching the reader that this
+    # gate cries wolf.
     def _letter(body=None, **over):
         d = {"sender": {"name": "Test User", "email": "t@x.com", "location": "Delft"},
              "recipient": {"name": "Hiring Team", "company": "Acme Medical Systems B.V.",
@@ -3032,7 +3457,7 @@ flagged — a check that cries wolf is one people learn to skip."
              "salutation": "Geachte heer/mevrouw,",
              "body": body if body is not None else [
                  PARA + "I am applying for the Senior Reconstruction Engineer role.",
-                 PARA, PARA],
+                 PARA, PARA, PARA],
              "closing": "Met vriendelijke groet,"}
         d.update(over)
         return d
@@ -3068,10 +3493,12 @@ flagged — a check that cries wolf is one people learn to skip."
 
     def test_a_bulleted_body_paragraph_is_caught(tmp_path, capsys):
         body = _letter()["body"]
-        body[2] = "- MRI reconstruction\n- GPU solvers"
+        body[2] = "- MRI reconstruction\n- GPU solvers\n" + PARA   # stays in the word band
         ws = _ws(tmp_path, _letter(body=body))
         assert check_letter.main(["--workspace", str(ws)]) == 1
-        assert "MARKDOWN_IN_BODY: body[2]" in capsys.readouterr().out
+        out = capsys.readouterr().out
+        assert "MARKDOWN_IN_BODY: body[2]" in out
+        assert "WORD_COUNT" not in out and "PARA_COUNT" not in out
 
 
     def test_word_count_below_the_floor_is_caught(tmp_path, capsys):
@@ -3087,10 +3514,18 @@ flagged — a check that cries wolf is one people learn to skip."
         assert "WORD_COUNT" in capsys.readouterr().out
 
 
-    def test_paragraph_count_outside_three_to_five_is_caught(tmp_path, capsys):
+    def test_paragraph_count_outside_three_to_four_is_caught(tmp_path, capsys):
+        """`motivation-letter.md:121`: "3–4 paragraphs total. Never a single
+        monolithic block. Never more than 4 unless a specific structure requires it
+        (rare)." A gate that silently permitted 5 would be enforcing a rule the
+        reference does not contain."""
         ws = _ws(tmp_path, _letter(body=[PARA * 2, PARA * 2]))
         assert check_letter.main(["--workspace", str(ws)]) == 1
         assert "PARA_COUNT" in capsys.readouterr().out
+        ws = _ws(tmp_path / "five", _letter(body=[PARA] * 5))
+        assert check_letter.main(["--workspace", str(ws)]) == 1
+        out = capsys.readouterr().out
+        assert "PARA_COUNT" in out and "5 paragraphs" in out
 
 
     def test_sender_name_in_the_closing_prints_twice(tmp_path, capsys):
@@ -3121,10 +3556,11 @@ flagged — a check that cries wolf is one people learn to skip."
 
 
     def test_a_letter_that_never_names_the_role_is_caught(tmp_path, capsys):
-        ws = _ws(tmp_path, _letter(body=[PARA, PARA, PARA]))
+        ws = _ws(tmp_path, _letter(body=[PARA, PARA, PARA, PARA]))
         assert check_letter.main(["--workspace", str(ws)]) == 1
         out = capsys.readouterr().out
         assert "ROLE_NOT_NAMED" in out and "Senior Reconstruction Engineer" in out
+        assert "WORD_COUNT" not in out and "PARA_COUNT" not in out   # one finding, not three
 
 
     def test_a_posting_without_a_company_field_fails_loudly(tmp_path, capsys):
@@ -3139,10 +3575,13 @@ flagged — a check that cries wolf is one people learn to skip."
         assert "posting.yaml" in capsys.readouterr().err
 
 
-    def test_each_run_leaves_exactly_one_receipt(tmp_path):
+    def test_each_run_leaves_exactly_one_receipt_including_the_exit_2_path(tmp_path):
         ws = _ws(tmp_path, _letter())
         check_letter.main(["--workspace", str(ws)])
-        assert [r["verdict"] for r in journal.read_receipts(ws, "check_letter")] == ["pass"]
+        (ws / "posting.yaml").unlink()
+        assert check_letter.main(["--workspace", str(ws)]) == 2
+        assert [r["verdict"] for r in journal.read_receipts(ws, "check_letter")] == \
+            ["pass", "could_not_run"]
     ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -3181,8 +3620,12 @@ flagged — a check that cries wolf is one people learn to skip."
     import journal
 
     GATE = "check_letter"
+    # motivation-letter.md:119 — "250–350 words optimal for the body … 400 words is
+    # the hard ceiling". :121 — "3–4 paragraphs total … Never more than 4 unless a
+    # specific structure requires it (rare)." A gate that permitted 5 would be
+    # enforcing a rule the reference it cites does not contain.
     WORD_MIN, WORD_MAX = 250, 400
-    PARA_MIN, PARA_MAX = 3, 5
+    PARA_MIN, PARA_MAX = 3, 4
 
     MARKUP = [
         ("**", re.compile(r"\*\*")),
@@ -3219,7 +3662,8 @@ flagged — a check that cries wolf is one people learn to skip."
                        f"{WORD_MIN}–350 with {WORD_MAX} as the hard ceiling")
         if not (PARA_MIN <= len(body) <= PARA_MAX):
             out.append(f"PARA_COUNT: the body has {len(body)} paragraphs; "
-                       f"{PARA_MIN}–{PARA_MAX} is the range")
+                       f"{PARA_MIN}–{PARA_MAX} is the range (motivation-letter.md: "
+                       f"never a single monolithic block, never more than 4)")
 
         sender = str((letter.get("sender") or {}).get("name") or "").strip()
         closing = str(letter.get("closing") or "")
@@ -3260,7 +3704,7 @@ flagged — a check that cries wolf is one people learn to skip."
         pp = pathlib.Path(args.posting) if args.posting else ws / "posting.yaml"
         for p in (lp, pp):
             if not p.exists():
-                journal.receipt(ws, GATE, {}, "error", [f"MISSING_INPUT: {p}"])
+                journal.receipt(ws, GATE, {}, "could_not_run", [f"MISSING_INPUT: {p}"])
                 print(f"cannot run {GATE}: {p} does not exist", file=sys.stderr)
                 return 2
         letter = yaml.safe_load(lp.read_text(encoding="utf-8")) or {}
@@ -3297,7 +3741,7 @@ required artifact, so it can be checked by comparing — and a posting with no
 
 ---
 
-### Task 14: `render_cv.py` — warn on unknown `meta.headings` / `meta.section_order` keys
+### Task 15: `render_cv.py` — warn on unknown `meta.headings` / `meta.section_order` keys
 
 Measured: `meta.headings: {selected_matters: "Selected Matters"}` produces no warning and no relabel — the key is filtered out at `render_cv.py:120`. `role-families.md` hands out recipes that depend on those keys being exactly right, so a legal CV built from the recipe silently loses its "Selected Matters" heading on a typo, and the CV renders perfectly.
 
@@ -3388,7 +3832,7 @@ now name the bad key and print the valid set. Valid keys stay silent."
 
 ---
 
-### Task 15: `render_rirekisho.py` — an unparseable date must not render as a blank cell
+### Task 16: `render_rirekisho.py` — an unparseable date must not render as a blank cell
 
 Measured: `_ym('Sep 2023')`, `_ym('September 2023')` and `_ym('03/2021')` all return `('', '')`, so those rows render with blank 年 and 月 — a structurally invalid 履歴書 that renders, saves and passes pytest. The rirekisho is explicitly routed away from all three judges, so nothing else looks at it.
 
@@ -3396,11 +3840,14 @@ Measured: `_ym('Sep 2023')`, `_ym('September 2023')` and `_ym('03/2021')` all re
 - Modify: `scripts/render_rirekisho.py` (`gakureki_shokureki_rows`, `licenses_rows`, `main`)
 - Test: `scripts/tests/test_render_rirekisho.py`
 
+**Two date fields, two parsers, and that is deliberate.** `_ym` is anchored (`re.match`), which is right for `education[].start` and `experience[].end`: those are structured fields, and `'Sep 2023'` there is a data error the form cannot show. It is *wrong* for `certifications[]`, which is free-form prose — the most ordinary real entry is `"基本情報技術者試験 合格 (2021)"`, and an anchored match returns `('', '')` for it, so the year is right there in the string and the 年 cell renders blank while a warning fires. Feeding the licenses table through `_checked_ym` would therefore cry wolf on almost every real Japanese CV, and three of this task's own tests assert it stays quiet. So certifications get `_cert_ym`, which searches for a plausible year (`19xx`/`20xx`, not preceded or followed by a digit — so `"ISO 27001"` and `"CCNA 200-301"` do not resolve to a year) anywhere in the string, and warns only when there is no year at all.
+
 **Interfaces:**
 - Consumes: `render_cv.load_profile`, `render_cv._is_current` (existing).
 - Produces:
-  - `gakureki_shokureki_rows(profile, problems=None)` and `licenses_rows(profile, problems=None)` — unchanged return value; when `problems` is a list, unparseable dates are appended to it as strings.
-  - `date_problems(profile) -> tuple[list[str], list[str]]` — `(fatal, warnings)`; fatal = 学歴・職歴 dates, warnings = 免許・資格 dates.
+  - `gakureki_shokureki_rows(profile, problems=None)` and `licenses_rows(profile, problems=None)` — unchanged return value; when `problems` is a list, unreadable dates are appended to it as strings.
+  - `_cert_ym(cert) -> tuple[str, str]` — a year/month searched anywhere in a free-form certification string.
+  - `date_problems(profile) -> tuple[list[str], list[str]]` — `(fatal, warnings)`; fatal = 学歴・職歴 dates, warnings = 免許・資格 entries with no year at all.
   - `main` gains `--allow-blank-dates`.
 
 - [ ] **Step 1: Write the failing test**
@@ -3411,12 +3858,15 @@ Measured: `_ym('Sep 2023')`, `_ym('September 2023')` and `_ym('03/2021')` all re
 
 
     @pytest.mark.parametrize("value", ACCEPTED)
-    def test_accepted_date_formats_produce_no_problem(jp_profile, value):
+    def test_accepted_date_formats_produce_no_fatal_problem(jp_profile, value):
+        """`warnings` is not asserted empty here: the jp_profile fixture's
+        certification is genuinely undated (`"基本情報技術者試験 合格"`), and an
+        undated certification is a warning by design."""
         p = dict(jp_profile)
         p["education"] = [{"institution": "○○大学", "degree": "修士",
                            "start": value, "end": "2023-03"}]
-        fatal, warnings = rr.date_problems(p)
-        assert fatal == [] and warnings == []
+        fatal, _ = rr.date_problems(p)
+        assert fatal == []
 
 
     @pytest.mark.parametrize("value", REJECTED)
@@ -3434,16 +3884,44 @@ Measured: `_ym('Sep 2023')`, `_ym('September 2023')` and `_ym('03/2021')` all re
     def test_a_current_role_needs_no_end_date(jp_profile):
         """現在に至る legitimately has no year. Flagging it would fire on every
         employed candidate."""
-        fatal, warnings = rr.date_problems(jp_profile)
-        assert fatal == [] and warnings == []
+        fatal, _ = rr.date_problems(jp_profile)
+        assert fatal == []
 
 
     def test_an_undated_certification_warns_but_is_not_fatal(jp_profile):
         p = dict(jp_profile)
-        p["certifications"] = ["基本情報技術者試験 合格 (2021)"]
+        p["certifications"] = ["基本情報技術者試験 合格"]
         fatal, warnings = rr.date_problems(p)
         assert fatal == []
         assert len(warnings) == 1 and "基本情報技術者試験" in warnings[0]
+
+
+    @pytest.mark.parametrize("cert,year,month", [
+        ("基本情報技術者試験 合格 (2021)", "2021", ""),
+        ("AWS Certified Cloud Practitioner (2024)", "2024", ""),
+        ("普通自動車第一種運転免許 (2015-04)", "2015", "4"),
+        ("2023年9月 応用情報技術者", "2023", "9"),
+    ])
+    def test_a_certification_carrying_its_year_anywhere_is_read_and_silent(cert, year, month):
+        """The most ordinary real entry puts the year in parentheses at the end.
+        The anchored `_ym` returns ('', '') for it, which would blank the 年 cell
+        AND fire a warning on a perfectly good line — a check that cries wolf on
+        the common case is a check its reader stops seeing."""
+        rows = rr.licenses_rows({"certifications": [cert]})
+        assert (rows[0]["y"], rows[0]["m"]) == (year, month)
+        fatal, warnings = rr.date_problems({"certifications": [cert]})
+        assert fatal == [] and warnings == []
+
+
+    @pytest.mark.parametrize("cert", ["ISO 27001 Lead Auditor", "CCNA 200-301",
+                                      "TOEIC 990"])
+    def test_a_digit_string_that_is_not_a_year_does_not_become_one(cert):
+        """A false year printed into the 年 cell is worse than a blank one: it is
+        a fabricated date on a legal-ish form, and it looks exactly like a real one."""
+        rows = rr.licenses_rows({"certifications": [cert]})
+        assert rows[0]["y"] == ""
+        fatal, warnings = rr.date_problems({"certifications": [cert]})
+        assert fatal == [] and len(warnings) == 1
 
 
     def test_main_refuses_to_write_a_form_with_blank_year_cells(jp_profile, tmp_path, capsys):
@@ -3475,9 +3953,14 @@ Measured: `_ym('Sep 2023')`, `_ym('September 2023')` and `_ym('03/2021')` all re
 
 
     def test_a_fully_dated_profile_writes_and_is_silent(jp_profile, tmp_path, capsys):
+        """The quiet case, pinned as hard as the firing one — including the
+        certification, which is given its year here so that a silent run is a real
+        claim about the whole form rather than about the tables we happened to fix."""
         import yaml
+        p = dict(jp_profile)
+        p["certifications"] = ["基本情報技術者試験 合格 (2021)"]
         src = tmp_path / "profile.yaml"
-        src.write_text(yaml.safe_dump(jp_profile, allow_unicode=True), encoding="utf-8")
+        src.write_text(yaml.safe_dump(p, allow_unicode=True), encoding="utf-8")
         out = tmp_path / "rirekisho.md"
         assert rr.main([str(src), "--format", "md", "--out", str(out)]) == 0
         assert "WARNING" not in capsys.readouterr().err
@@ -3517,12 +4000,45 @@ Measured: `_ym('Sep 2023')`, `_ym('September 2023')` and `_ym('03/2021')` all re
         ...
         ey, emo = _checked_ym(ex.get("end"), f"職歴 {org} 退社 (end)", problems)
     ```
-    (the `end` read for a current entry stays unchecked — 現在に至る legitimately has no year, and flagging it would fire on every employed candidate). Change `licenses_rows(profile)` to `licenses_rows(profile, problems=None)` and use `_checked_ym(cert, f"免許・資格 {cert}", problems)`. Then add:
+    (the `end` read for a current entry stays unchecked — 現在に至る legitimately has no year, and flagging it would fire on every employed candidate). Next, add the free-form certification parser next to `_ym`:
+    ```python
+    # certifications[] is free-form prose, not a structured date field. The most
+    # ordinary real entry is "基本情報技術者試験 合格 (2021)", and the anchored _ym
+    # returns ('', '') for it — blanking the 年 cell while the year sits in plain
+    # sight, and firing a warning on a perfectly good line. So search instead of
+    # anchoring, and require a plausible year shape (19xx/20xx, not adjacent to
+    # another digit) so that "ISO 27001" and "CCNA 200-301" do not silently print
+    # a fabricated date into the form.
+    _CERT_YEAR = re.compile(r"(?<!\d)((?:19|20)\d{2})(?!\d)(?:\s*[-/.年]\s*(\d{1,2})(?!\d))?")
+
+
+    def _cert_ym(value):
+        m = _CERT_YEAR.search(str(value or ""))
+        if not m:
+            return "", ""
+        return m.group(1), (str(int(m.group(2))) if m.group(2) else "")
+    ```
+    Change `licenses_rows(profile)` to `licenses_rows(profile, problems=None)`, replace its `_ym(cert)` with `_cert_ym(cert)`, and record a problem only when no year was found at all:
+    ```python
+    def licenses_rows(profile, problems=None):
+        rows = []
+        for cert in (profile.get("certifications") or []):
+            y, mo = _cert_ym(cert)
+            if not y and problems is not None:
+                problems.append(f"免許・資格 {cert}: no year found — the 年 cell will be "
+                                f"blank; add one, e.g. '基本情報技術者試験 合格 (2021)'")
+            rows.append({"y": y, "m": mo, "text": cert})
+        if not rows:
+            rows.append({"y": "", "m": "", "text": "特になし"})
+        return rows
+    ```
+    Then add:
     ```python
     def date_problems(profile):
-        """(fatal, warnings). 学歴・職歴 rows must carry a year — the table is the
-        form. A certification without one is a common and tolerable omission, so it
-        warns instead."""
+        """(fatal, warnings). 学歴・職歴 rows must carry a year — the table IS the
+        form, and a blank 年 cell makes it structurally invalid. A certification
+        with no year at all is a common and tolerable omission, so it warns; a
+        certification that carries its year in prose is read and stays silent."""
         fatal, warnings = [], []
         gakureki_shokureki_rows(profile, fatal)
         licenses_rows(profile, warnings)
@@ -3543,7 +4059,7 @@ Measured: `_ym('Sep 2023')`, `_ym('September 2023')` and `_ym('03/2021')` all re
 
 - [ ] **Step 4: Run test to verify it passes**
     Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests -q`
-    Expected: PASS — the whole suite. The existing rirekisho fixtures use `2020-04` / `2023-04` / `present`, so they stay silent.
+    Expected: PASS — the whole suite. The existing rirekisho fixtures use `2020-04` / `2023-04` / `present` for 学歴・職歴, so nothing there is fatal; the fixture's undated certification warns, which is why the three `date_problems` tests assert `fatal == []` and not `warnings == []`.
 
 - [ ] **Step 5: Commit**
     ```bash
@@ -3560,7 +4076,603 @@ still needs no end date."
 
 ---
 
-### Task 16: `scripts/enter_mode.py` and `scripts/check_apply.py` — the composing gate
+### Task 17: `scripts/check_pages.py` — the artifact that is actually submitted is the one nobody measures
+
+`references/cv-craft.md:224-228` states a hard length table (0-2 years: 1 page; 3-7: 1-2; 8-15: 2; 15+: 2, three only when the senior roles are genuinely distinct; academic: no limit) and `references/motivation-letter.md:122` says the letter is "One page, always". No program has ever checked either. The three judges read `cv.md`, not `cv.pdf`; `render_cv.render_pdf` reports success on any compile that returns 0. So a three-page CV for a five-year candidate renders perfectly, passes every gate this plan has built so far, and is a common silent screen-out — and a truncated PDF that no reader can open passes identically.
+
+**Files:**
+- Create: `scripts/check_pages.py`
+- Test: `scripts/tests/test_check_pages.py`
+
+**Interfaces:**
+- Consumes: `journal.receipt`, `journal.sha256_file`.
+- Produces: `page_count(path) -> int | None`; `years_of_experience(profile, today_year) -> int`; `max_pages(profile, today_year) -> int | None`; `findings_for(cv_pdf, profile, today_year, letter_pdf=None) -> list[str]`; `main(argv=None) -> int`. CLI: `python3 scripts/check_pages.py --workspace W [--cv PATH] [--letter PATH] [--profile PATH] [--today YYYY-MM-DD]`. Gate name: `check_pages`. Finding codes: `CV_TOO_LONG`, `LETTER_TOO_LONG`, `UNREADABLE_PDF`.
+
+**Measured, and it decides the implementation:** tectonic on this machine writes PDF 1.5 with compressed object streams. A real `cv.pdf` (19,820 bytes, rendered from `tests/fixtures/full_profile.yaml`) contains **zero** literal `/Type /Page` bytes; inflating its FlateDecode streams yields 29,003 bytes containing exactly one. A page counter that only scanned the raw file would report 0 pages for every CV this skill produces.
+
+- [ ] **Step 1: Write the failing test**
+    Create `scripts/tests/test_check_pages.py`:
+    ```python
+    import pathlib
+    import sys
+    import zlib
+
+    import yaml
+
+    sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
+    import check_pages
+    import journal
+
+    JUNIOR = {"meta": {"name": "Z"}, "experience": [{"org": "A", "start": "2025-01"}]}
+    MID = {"meta": {"name": "Z"}, "experience": [{"org": "A", "start": "2018-03"}]}
+
+
+    def _pdf(path, pages, compress=False):
+        """A minimal PDF with `pages` page objects. Uncompressed by default; the
+        compressed variant exercises the object-stream path tectonic actually emits."""
+        body = b"".join(b"%d 0 obj\n<< /Type /Page /Parent 1 0 R >>\nendobj\n" % (i + 2)
+                        for i in range(pages))
+        if compress:
+            blob = zlib.compress(body)
+            body = (b"1 0 obj\n<< /Type /ObjStm /Filter /FlateDecode /Length %d >>\nstream\n"
+                    % len(blob)) + blob + b"\nendstream\nendobj\n"
+        path.write_bytes(b"%PDF-1.5\n" + body + b"trailer\n<< >>\n%%EOF\n")
+        return path
+
+
+    def _ws(tmp_path, profile=MID, cv_pages=2, letter_pages=None, compress=False):
+        ws = tmp_path / "acme-engineer-2026-08-09"
+        ws.mkdir(parents=True, exist_ok=True)
+        (ws / "tailored-profile.yaml").write_text(
+            yaml.safe_dump(profile, allow_unicode=True), encoding="utf-8")
+        _pdf(ws / "cv.pdf", cv_pages, compress)
+        if letter_pages is not None:
+            _pdf(ws / "letter.pdf", letter_pages, compress)
+        return ws
+
+
+    def test_page_count_reads_a_compressed_object_stream(tmp_path):
+        """tectonic writes PDF 1.5 with compressed object streams — measured on this
+        machine, a real one-page cv.pdf contains zero literal '/Type /Page' bytes. A
+        counter that only scanned the raw file would report 0 pages for every CV."""
+        assert check_pages.page_count(_pdf(tmp_path / "a.pdf", 3, compress=True)) == 3
+        assert check_pages.page_count(_pdf(tmp_path / "b.pdf", 1)) == 1
+
+
+    def test_a_two_page_cv_for_a_mid_career_candidate_is_silent(tmp_path, capsys):
+        """The quiet case. Two pages at eight years is exactly what cv-craft.md's
+        table prescribes; firing here would teach the reader to skip this gate."""
+        ws = _ws(tmp_path, MID, cv_pages=2)
+        assert check_pages.main(["--workspace", str(ws), "--today", "2026-08-09"]) == 0
+        assert capsys.readouterr().out.strip() == ""
+
+
+    def test_a_two_page_cv_for_a_junior_candidate_is_caught(tmp_path, capsys):
+        ws = _ws(tmp_path, JUNIOR, cv_pages=2)
+        assert check_pages.main(["--workspace", str(ws), "--today", "2026-08-09"]) == 1
+        out = capsys.readouterr().out
+        assert "CV_TOO_LONG" in out and "2 pages" in out and "allows 1" in out
+
+
+    def test_a_three_page_cv_is_caught_unless_max_pages_says_otherwise(tmp_path, capsys):
+        ws = _ws(tmp_path, MID, cv_pages=3)
+        assert check_pages.main(["--workspace", str(ws), "--today", "2026-08-09"]) == 1
+        assert "CV_TOO_LONG" in capsys.readouterr().out
+        allowed = {**MID, "meta": {"name": "Z", "max_pages": 3}}
+        ws2 = _ws(tmp_path / "override", allowed, cv_pages=3)
+        assert check_pages.main(["--workspace", str(ws2), "--today", "2026-08-09"]) == 0
+        assert capsys.readouterr().out.strip() == ""
+
+
+    def test_an_academic_cv_has_no_page_limit(tmp_path, capsys):
+        """cv-craft.md:228 — 'Academic / research CV: No page limit; list all
+        publications, grants, talks.'"""
+        academic = {**MID, "meta": {"name": "Z", "cv_type": "academic"}}
+        ws = _ws(tmp_path, academic, cv_pages=7)
+        assert check_pages.main(["--workspace", str(ws), "--today", "2026-08-09"]) == 0
+        assert capsys.readouterr().out.strip() == ""
+
+
+    def test_a_two_page_letter_is_caught_and_a_one_page_letter_is_not(tmp_path, capsys):
+        ws = _ws(tmp_path, MID, cv_pages=2, letter_pages=1)
+        assert check_pages.main(["--workspace", str(ws), "--today", "2026-08-09"]) == 0
+        capsys.readouterr()
+        ws2 = _ws(tmp_path / "long", MID, cv_pages=2, letter_pages=2)
+        assert check_pages.main(["--workspace", str(ws2), "--today", "2026-08-09"]) == 1
+        assert "LETTER_TOO_LONG" in capsys.readouterr().out
+
+
+    def test_a_pdf_with_no_readable_page_tree_is_reported_not_ignored(tmp_path, capsys):
+        ws = _ws(tmp_path, MID, cv_pages=2)
+        (ws / "cv.pdf").write_bytes(b"%PDF-1.5\ntruncated\n")
+        assert check_pages.main(["--workspace", str(ws), "--today", "2026-08-09"]) == 1
+        assert "UNREADABLE_PDF" in capsys.readouterr().out
+
+
+    def test_no_pdf_is_exit_2_not_a_pass(tmp_path, capsys):
+        """A markdown-only run has no PDF to measure. That is 'could not run', not
+        'within budget' — check_apply only requires this receipt when cv.pdf exists."""
+        ws = _ws(tmp_path, MID, cv_pages=2)
+        (ws / "cv.pdf").unlink()
+        assert check_pages.main(["--workspace", str(ws)]) == 2
+        assert "cv.pdf" in capsys.readouterr().err
+
+
+    def test_each_run_leaves_exactly_one_receipt_including_the_exit_2_path(tmp_path):
+        ws = _ws(tmp_path, MID, cv_pages=2)
+        check_pages.main(["--workspace", str(ws), "--today", "2026-08-09"])
+        (ws / "cv.pdf").unlink()
+        check_pages.main(["--workspace", str(ws), "--today", "2026-08-09"])
+        assert [r["verdict"] for r in journal.read_receipts(ws, "check_pages")] == \
+            ["pass", "could_not_run"]
+    ```
+
+- [ ] **Step 2: Run test to verify it fails**
+    Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests/test_check_pages.py -q`
+    Expected: FAIL with `ModuleNotFoundError: No module named 'check_pages'`
+
+- [ ] **Step 3: Write minimal implementation**
+    Create `scripts/check_pages.py`:
+    ```python
+    #!/usr/bin/env python3
+    """Gate: the rendered PDF is as long as the market says it may be.
+
+    Nothing else in the pipeline measures the artifact that is actually submitted.
+    The three judges read `cv.md`; `render_cv.py` reports success on any compile that
+    returns 0; and `references/cv-craft.md:224-228` states a hard length table that no
+    program has ever checked. A three-page CV for a five-year candidate renders
+    perfectly, passes every existing gate, and is a common silent screen-out.
+
+    Exit 0 = within budget. Exit 1 = findings. Exit 2 = no PDF to measure.
+    """
+    from __future__ import annotations
+
+    import argparse
+    import datetime
+    import pathlib
+    import re
+    import sys
+    import zlib
+
+    import yaml
+
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+    import journal
+
+    GATE = "check_pages"
+    _PAGE = re.compile(rb"/Type\s*/Page(?![sA-Za-z])")
+    _PAGES_COUNT = re.compile(rb"/Type\s*/Pages\b[^>]{0,200}?/Count\s+(\d+)", re.S)
+    _YEAR = re.compile(r"(?<!\d)((?:19|20)\d{2})(?!\d)")
+    ACADEMIC = ("academic", "research")
+
+
+    def _haystack(data: bytes) -> bytes:
+        """Raw bytes plus every inflated FlateDecode stream.
+
+        Measured: tectonic writes PDF 1.5 with compressed object streams, so the page
+        objects are not in the raw bytes at all — a plain `/Type /Page` scan reports
+        0 pages for a perfectly good one-page CV, which would make this gate fire on
+        every single run.
+        """
+        parts = [data]
+        for m in re.finditer(rb"stream\r?\n", data):
+            start = m.end()
+            end = data.find(b"endstream", start)
+            if end < 0:
+                continue
+            try:
+                parts.append(zlib.decompress(data[start:end]))
+            except zlib.error:
+                pass
+        return b"\n".join(parts)
+
+
+    def page_count(path):
+        """Number of pages, or None when the file cannot be read as a PDF."""
+        hay = _haystack(pathlib.Path(path).read_bytes())
+        n = len(_PAGE.findall(hay))
+        if n:
+            return n
+        counts = [int(c) for c in _PAGES_COUNT.findall(hay)]
+        return max(counts) if counts else None
+
+
+    def years_of_experience(profile, today_year: int) -> int:
+        years = []
+        for ex in profile.get("experience") or []:
+            if not isinstance(ex, dict):
+                continue
+            m = _YEAR.search(str(ex.get("start") or ""))
+            if m:
+                years.append(int(m.group(1)))
+        return max(0, today_year - min(years)) if years else 0
+
+
+    def max_pages(profile, today_year: int):
+        """The page budget, or None when there is none.
+
+        cv-craft.md:224-228 — 0-2 years: 1 page; 3-7: 1-2; 8-15: 2; 15+: 2, "3 only if
+        roles are very distinct and all relevant"; academic/research CVs: no limit.
+        The 15+/3-page case is an explicit judgement call, so it is an explicit opt-in
+        (`meta.max_pages: 3`) rather than a band the gate guesses at.
+        """
+        meta = profile.get("meta") or {}
+        if str(meta.get("cv_type") or "").strip().lower() in ACADEMIC:
+            return None
+        override = meta.get("max_pages")
+        if isinstance(override, int) and not isinstance(override, bool) and override > 0:
+            return override
+        return 1 if years_of_experience(profile, today_year) < 3 else 2
+
+
+    def findings_for(cv_pdf, profile, today_year: int, letter_pdf=None) -> list:
+        out = []
+        pages = page_count(cv_pdf)
+        if pages is None:
+            out.append(f"UNREADABLE_PDF: {pathlib.Path(cv_pdf).name} has no readable page "
+                       f"tree — the compile reported success but produced a file no "
+                       f"reader can open; re-render before sending it")
+        else:
+            budget = max_pages(profile, today_year)
+            if budget is not None and pages > budget:
+                out.append(f"CV_TOO_LONG: {pathlib.Path(cv_pdf).name} is {pages} pages; "
+                           f"the length table in references/cv-craft.md allows {budget} "
+                           f"for {years_of_experience(profile, today_year)} years of "
+                           f"experience. Cut, or set meta.max_pages with a reason")
+        if letter_pdf and pathlib.Path(letter_pdf).exists():
+            lp = page_count(letter_pdf)
+            if lp is None:
+                out.append(f"UNREADABLE_PDF: {pathlib.Path(letter_pdf).name} has no "
+                           f"readable page tree")
+            elif lp > 1:
+                out.append(f"LETTER_TOO_LONG: {pathlib.Path(letter_pdf).name} is {lp} "
+                           f"pages; motivation-letter.md says one page, always")
+        return out
+
+
+    def main(argv=None) -> int:
+        ap = argparse.ArgumentParser()
+        ap.add_argument("--workspace", required=True)
+        ap.add_argument("--cv", default=None, help="default: <workspace>/cv.pdf")
+        ap.add_argument("--letter", default=None, help="default: <workspace>/letter.pdf")
+        ap.add_argument("--profile", default=None,
+                        help="default: <workspace>/tailored-profile.yaml")
+        ap.add_argument("--today", default=None, help="YYYY-MM-DD; default: today")
+        args = ap.parse_args(argv)
+
+        ws = pathlib.Path(args.workspace)
+        cv = pathlib.Path(args.cv) if args.cv else ws / "cv.pdf"
+        letter = pathlib.Path(args.letter) if args.letter else ws / "letter.pdf"
+        prof = pathlib.Path(args.profile) if args.profile else ws / "tailored-profile.yaml"
+        for p in (cv, prof):
+            if not p.exists():
+                journal.receipt(ws, GATE, {}, "could_not_run", [f"MISSING_INPUT: {p}"])
+                print(f"cannot run {GATE}: {p} does not exist", file=sys.stderr)
+                return 2
+
+        today_year = int((args.today or
+                          datetime.date.today().isoformat())[:4])
+        profile = yaml.safe_load(prof.read_text(encoding="utf-8")) or {}
+        findings = findings_for(cv, profile, today_year, letter)
+        for f in findings:
+            print(f)
+        journal.receipt(ws, GATE, {cv.name: journal.sha256_file(cv)},
+                        "fail" if findings else "pass", findings)
+        return 1 if findings else 0
+
+
+    if __name__ == "__main__":
+        sys.exit(main())
+    ```
+
+- [ ] **Step 4: Run test to verify it passes**
+    Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests/test_check_pages.py -q`
+    Expected: PASS — `9 passed`
+
+- [ ] **Step 5: Run it against a real tectonic PDF, since a synthetic one is exactly what could hide the bug**
+    ```bash
+    cd /Users/donghanglyu/code_project/job-hunt
+    mkdir -p /tmp/jh-pages && python3 scripts/render_cv.py \
+        scripts/tests/fixtures/full_profile.yaml --format pdf --out /tmp/jh-pages/cv.pdf
+    cp scripts/tests/fixtures/full_profile.yaml /tmp/jh-pages/tailored-profile.yaml
+    python3 scripts/check_pages.py --workspace /tmp/jh-pages --today 2026-08-09; echo "exit=$?"
+    python3 -c "import sys; sys.path.insert(0,'scripts'); import check_pages; print(check_pages.page_count('/tmp/jh-pages/cv.pdf'))"
+    ```
+    Expected: `page_count` prints `1`, not `None` and not `0`. If it prints `None`, the inflate path is not reaching the object stream and every CV would be reported unreadable.
+
+- [ ] **Step 6: Commit**
+    ```bash
+    cd /Users/donghanglyu/code_project/job-hunt
+    git add scripts/check_pages.py scripts/tests/test_check_pages.py
+    git commit -m "feat(gate): check_pages — measure the PDF, not the markdown
+
+cv-craft.md states a page table and motivation-letter.md says one page always;
+nothing checked either, because the three judges read cv.md and render_pdf calls
+any exit-0 compile a success. Counts pages through tectonic's compressed object
+streams (a real cv.pdf contains zero literal /Type /Page bytes), exempts academic
+CVs, and treats the 15+/three-page case as an explicit meta.max_pages opt-in
+rather than a band to guess at."
+    ```
+
+---
+
+### Task 18: `scripts/check_word_limits.py` — the only scored artifact had no reader
+
+`references/structured-applications.md:52` routes a structured application **away** from all three CV judges — "review the supporting statement against the framework instead" — and `:25` says "respect the limit exactly: over-limit statements are cut or penalised". Put together, the one document that actually gets marked is the one document nothing in this skill reads. This gate reads it.
+
+**The limit lives in the criterion heading**, in the employer's own number — `### Making Effective Decisions (250 words)` — because that is where a human writing the statement is already looking, and because a limit recorded anywhere else is a limit that drifts from the heading it applies to. When the posting states none, the file must say so once (`<!-- word-limits: none stated in the posting -->`): "the posting gave no limit" and "nobody recorded the limit" are the same silence otherwise, and only one of them is safe.
+
+**Files:**
+- Create: `scripts/check_word_limits.py`
+- Test: `scripts/tests/test_check_word_limits.py`
+
+**Interfaces:**
+- Consumes: `journal.receipt`, `journal.sha256_file`; `posting.yaml`'s `application_type`.
+- Produces: `sections(text) -> list[tuple[str, int | None, int]]`; `findings_for(text, posting) -> list[str]`; `main(argv=None) -> int`. CLI: `python3 scripts/check_word_limits.py --workspace W [--statement PATH] [--posting PATH]` (defaults `<W>/supporting-statement.md`, `<W>/posting.yaml`). Gate name: `check_word_limits`. Finding codes: `OVER_LIMIT`, `EMPTY_CRITERION`, `NO_LIMIT_DECLARED`, `NO_CRITERIA`.
+
+- [ ] **Step 1: Write the failing test**
+    Create `scripts/tests/test_check_word_limits.py`:
+    ```python
+    import pathlib
+    import sys
+
+    import yaml
+
+    sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
+    import check_word_limits as cwl
+    import journal
+
+    POSTING = {"company": "NHS Trust", "role_title": "Clinical Scientist",
+               "application_type": "structured"}
+    STAR = ("At the trust I owned the migration of the reporting pipeline. The task was "
+            "to cut a four-hour nightly batch without losing any audit trail. I profiled "
+            "the job, rewrote the two slowest stages, and agreed a rollback plan with the "
+            "data protection officer before touching production. The batch now finishes "
+            "in forty minutes and no audit record has been lost since. ")
+
+    GOOD = ("# Supporting statement — Clinical Scientist, NHS Trust\n\n"
+            "## Essential criteria\n\n"
+            "### Making Effective Decisions (250 words)\n" + STAR + "\n\n"
+            "### Communicating and Influencing (max 250 words)\n" + STAR + "\n")
+
+
+    def _ws(tmp_path, text=GOOD, posting=POSTING):
+        ws = tmp_path / "nhs-clinical-scientist-2026-08-09"
+        ws.mkdir(parents=True, exist_ok=True)
+        (ws / "supporting-statement.md").write_text(text, encoding="utf-8")
+        if posting is not None:
+            (ws / "posting.yaml").write_text(yaml.safe_dump(posting, allow_unicode=True),
+                                             encoding="utf-8")
+        return ws
+
+
+    def test_a_statement_inside_its_limits_passes_silently(tmp_path, capsys):
+        ws = _ws(tmp_path)
+        assert cwl.main(["--workspace", str(ws)]) == 0
+        assert capsys.readouterr().out.strip() == ""
+
+
+    def test_both_limit_spellings_are_read(tmp_path):
+        rows = cwl.sections(GOOD)
+        assert [r[1] for r in rows] == [250, 250]
+        assert all(0 < r[2] < 250 for r in rows)
+
+
+    def test_an_over_limit_criterion_is_caught_with_both_numbers(tmp_path, capsys):
+        ws = _ws(tmp_path, GOOD.replace("(250 words)", "(40 words)"))
+        assert cwl.main(["--workspace", str(ws)]) == 1
+        out = capsys.readouterr().out
+        assert "OVER_LIMIT" in out and "Making Effective Decisions" in out and "40" in out
+        assert out.count("OVER_LIMIT") == 1        # the 250-word criterion stays quiet
+
+
+    def test_an_unaddressed_criterion_is_caught(tmp_path, capsys):
+        text = GOOD + "\n### Delivering at Pace (250 words)\n\n"
+        ws = _ws(tmp_path, text)
+        assert cwl.main(["--workspace", str(ws)]) == 1
+        assert "EMPTY_CRITERION" in capsys.readouterr().out
+
+
+    def test_a_structured_posting_with_no_limits_anywhere_must_say_so(tmp_path, capsys):
+        bare = GOOD.replace(" (250 words)", "").replace(" (max 250 words)", "")
+        ws = _ws(tmp_path, bare)
+        assert cwl.main(["--workspace", str(ws)]) == 1
+        assert "NO_LIMIT_DECLARED" in capsys.readouterr().out
+        ws2 = _ws(tmp_path / "declared",
+                  "<!-- word-limits: none stated in the posting -->\n" + bare)
+        assert cwl.main(["--workspace", str(ws2)]) == 0
+        assert capsys.readouterr().out.strip() == ""
+
+
+    def test_an_unstructured_posting_is_not_policed(tmp_path, capsys):
+        """A free-CV application has no scored criteria. Firing here would make this
+        gate noise on the common case."""
+        bare = GOOD.replace(" (250 words)", "").replace(" (max 250 words)", "")
+        ws = _ws(tmp_path, bare, posting={"company": "Acme", "application_type": "cv"})
+        assert cwl.main(["--workspace", str(ws)]) == 0
+        assert capsys.readouterr().out.strip() == ""
+
+
+    def test_a_structured_posting_with_no_criteria_headings_is_caught(tmp_path, capsys):
+        ws = _ws(tmp_path, "# Supporting statement\n\n" + STAR)
+        assert cwl.main(["--workspace", str(ws)]) == 1
+        assert "NO_CRITERIA" in capsys.readouterr().out
+
+
+    def test_cjk_is_counted_by_character_not_as_one_giant_word(tmp_path):
+        """A criterion answered in Chinese is a real case (the skill is bilingual).
+        Splitting on whitespace would score a 600-character answer as three words."""
+        rows = cwl.sections("### 沟通与影响 (200 words)\n" + "我负责该项目的交付与验收。" * 20 + "\n")
+        assert rows[0][1] == 200 and rows[0][2] > 200
+
+
+    def test_a_missing_statement_is_exit_2_and_leaves_a_receipt(tmp_path, capsys):
+        ws = _ws(tmp_path)
+        (ws / "supporting-statement.md").unlink()
+        assert cwl.main(["--workspace", str(ws)]) == 2
+        assert "supporting-statement.md" in capsys.readouterr().err
+        assert [r["verdict"] for r in journal.read_receipts(ws, "check_word_limits")] == \
+            ["could_not_run"]
+
+
+    def test_each_run_leaves_exactly_one_receipt(tmp_path):
+        ws = _ws(tmp_path)
+        cwl.main(["--workspace", str(ws)])
+        assert [r["verdict"] for r in journal.read_receipts(ws, "check_word_limits")] == \
+            ["pass"]
+    ```
+
+- [ ] **Step 2: Run test to verify it fails**
+    Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests/test_check_word_limits.py -q`
+    Expected: FAIL with `ModuleNotFoundError: No module named 'check_word_limits'`
+
+- [ ] **Step 3: Write minimal implementation**
+    Create `scripts/check_word_limits.py`:
+    ```python
+    #!/usr/bin/env python3
+    """Gate: a scored supporting statement stays inside its stated word limits.
+
+    `references/structured-applications.md:25` — "respect the limit exactly:
+    over-limit statements are cut or penalised", and ":52" makes the statement, not
+    the CV, the thing that gets scored. Nothing checked it: the three CV judges are
+    routed away from a structured application by design, so the one artifact that is
+    actually marked had no reader at all.
+
+    The limit is written into the criterion heading, in the employer's own number:
+
+        ### Making Effective Decisions (250 words)
+        ### Communicating and Influencing (max 250 words)
+
+    When the posting states no limit, say so once, at the top of the file:
+
+        <!-- word-limits: none stated in the posting -->
+
+    That marker is required rather than optional because "the posting gave no limit"
+    and "nobody recorded the limit" are the same silence otherwise, and only one of
+    them is safe.
+
+    Exit 0 = clean. Exit 1 = findings. Exit 2 = no supporting statement to check.
+    """
+    from __future__ import annotations
+
+    import argparse
+    import pathlib
+    import re
+    import sys
+
+    import yaml
+
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+    import journal
+
+    GATE = "check_word_limits"
+    NO_LIMIT_MARKER = re.compile(r"<!--\s*word-limits:\s*none stated", re.I)
+    _HEADING = re.compile(r"^###\s+(?P<title>.+?)\s*$", re.M)
+    _LIMIT = re.compile(r"\(?\s*(?:max\.?\s*|word limit:?\s*|up to\s*)?"
+                        r"(?P<n>\d{2,4})\s*(?:words?|字)\s*\)?", re.I)
+    _WORD = re.compile(r"[^\W\d_]+", re.UNICODE)
+
+
+    def _words(text: str) -> int:
+        """Latin words plus CJK characters — a criterion answered in Chinese or
+        Japanese must be counted, not measured as one enormous word."""
+        n = 0
+        for token in _WORD.findall(text):
+            cjk = sum(1 for ch in token if "぀" <= ch <= "鿿")
+            n += cjk if cjk else 1
+        return n
+
+
+    def sections(text: str) -> list:
+        """[(title, declared_limit|None, body_word_count)] for each `###` heading."""
+        out, marks = [], list(_HEADING.finditer(text))
+        for i, m in enumerate(marks):
+            end = marks[i + 1].start() if i + 1 < len(marks) else len(text)
+            title = m.group("title")
+            lim = _LIMIT.search(title)
+            out.append((title, int(lim.group("n")) if lim else None,
+                        _words(text[m.end():end])))
+        return out
+
+
+    def findings_for(text: str, posting: dict) -> list:
+        out = []
+        structured = str(posting.get("application_type") or "").strip().lower() == "structured"
+        rows = sections(text)
+        if not rows:
+            if structured:
+                out.append("NO_CRITERIA: application_type is 'structured' but the "
+                           "supporting statement has no `### <criterion>` headings — the "
+                           "form is scored criterion by criterion, so an unlabelled essay "
+                           "cannot be marked against it")
+            return out
+        for title, limit, words in rows:
+            if words == 0:
+                out.append(f"EMPTY_CRITERION: {title!r} has no body — an unaddressed "
+                           f"Essential criterion is usually an auto-reject")
+            elif limit is not None and words > limit:
+                out.append(f"OVER_LIMIT: {title!r} is {words} words against its stated "
+                           f"limit of {limit} — over-limit statements are cut or "
+                           f"penalised, so the tail you wrote may simply not be read")
+        if structured and not any(l is not None for _, l, _ in rows) \
+                and not NO_LIMIT_MARKER.search(text):
+            out.append("NO_LIMIT_DECLARED: no criterion heading carries a word limit and "
+                       "the file does not say the posting stated none. Add the employer's "
+                       "number to each heading, e.g. '### Making Effective Decisions "
+                       "(250 words)', or record '<!-- word-limits: none stated in the "
+                       "posting -->' — otherwise 'no limit given' and 'nobody checked' "
+                       "look identical")
+        return out
+
+
+    def main(argv=None) -> int:
+        ap = argparse.ArgumentParser()
+        ap.add_argument("--workspace", required=True)
+        ap.add_argument("--statement", default=None,
+                        help="default: <workspace>/supporting-statement.md")
+        ap.add_argument("--posting", default=None, help="default: <workspace>/posting.yaml")
+        args = ap.parse_args(argv)
+        ws = pathlib.Path(args.workspace)
+        sp = pathlib.Path(args.statement) if args.statement else ws / "supporting-statement.md"
+        pp = pathlib.Path(args.posting) if args.posting else ws / "posting.yaml"
+        for p in (sp, pp):
+            if not p.exists():
+                journal.receipt(ws, GATE, {}, "could_not_run", [f"MISSING_INPUT: {p}"])
+                print(f"cannot run {GATE}: {p} does not exist", file=sys.stderr)
+                return 2
+        posting = yaml.safe_load(pp.read_text(encoding="utf-8")) or {}
+        findings = findings_for(sp.read_text(encoding="utf-8"), posting)
+        for f in findings:
+            print(f)
+        journal.receipt(ws, GATE, {sp.name: journal.sha256_file(sp)},
+                        "fail" if findings else "pass", findings)
+        return 1 if findings else 0
+
+
+    if __name__ == "__main__":
+        sys.exit(main())
+    ```
+
+- [ ] **Step 4: Run test to verify it passes**
+    Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests/test_check_word_limits.py -q`
+    Expected: PASS — `10 passed`
+
+- [ ] **Step 5: Commit**
+    ```bash
+    cd /Users/donghanglyu/code_project/job-hunt
+    git add scripts/check_word_limits.py scripts/tests/test_check_word_limits.py
+    git commit -m "feat(gate): check_word_limits — read the document that is scored
+
+structured-applications.md routes a criterion-scored form away from all three CV
+judges, which left the only marked artifact with no reader at all. Counts each
+criterion against the limit written in its own heading, counts CJK by character,
+and requires the run to record when the posting stated no limit — otherwise 'no
+limit given' and 'nobody checked' are the same silence."
+    ```
+
+---
+
+### Task 19: `scripts/enter_mode.py` and `scripts/check_apply.py` — the composing gate
 
 `check_apply.py` is where the mode's completion claim becomes checkable. It requires every upstream gate's receipt (a skipped script produces no output, which looks exactly like a clean one), the round's combined verdict *or* an honest-stop record classified as **poorly built** vs **honest stretch** (both emit the identical machine signal, and a stretch candidate told "failed" abandons an application they should have sent), the interview brief, and the mode-entry record that makes `modes/apply.md` a layer-1.5 file rather than an optional one.
 
@@ -3569,17 +4681,20 @@ still needs no end date."
 - Test: `scripts/tests/test_check_apply.py`
 
 **Interfaces:**
-- Consumes: `journal.append`, `journal.receipt`, `journal.read_receipts`, `journal.sha256_file`; `rounds.load_round`, `rounds.round_path`.
+- Consumes: `journal.append`, `journal.receipt`, `journal.read_receipts`, `journal.sha256_file`; `paths.SKILL_ROOT`, `paths.mode_file`; `vocab.VERDICTS`; `rounds.load_round`, `rounds.round_path`.
 - Produces:
-  - `enter_mode.mode_file(skill_root, mode) -> pathlib.Path` (`<skill_root>/modes/<mode>.md`)
   - `enter_mode.latest_mode_entry(workspace, mode) -> dict | None`
-  - `enter_mode.main(argv=None) -> int`. CLI: `python3 scripts/enter_mode.py --workspace W --mode apply [--skill-root PATH]`. Writes `{"ts","action":"mode_entry","mode","mode_file","mode_file_sha256"}`.
+  - `enter_mode.main(argv=None) -> int`. CLI: `python3 scripts/enter_mode.py --workspace W --mode apply [--skill-root PATH]`. Writes `{"ts","action":"mode_entry","mode","mode_file","mode_file_sha256"}` on success and `{"ts","action":"mode_entry_failed","mode","mode_file","reason"}` on exit 2.
   - `check_apply.main(argv=None) -> int`. CLI: `python3 scripts/check_apply.py --workspace W [--skill-root PATH]`. Gate name: `check_apply`. Finding codes: `NO_MODE_ENTRY`, `MODE_FILE_CHANGED`, `MISSING_RECEIPT`, `UPSTREAM_FAILED`, `NO_ROUND`, `NO_PASS_NO_STOP`, `BAD_STOP_CLASSIFICATION`, `BAD_STOP_VERDICT`, `INCOMPLETE_STOP`, `NO_BRIEF`.
-  - The `honest-stop.yaml` schema this gate requires (defined in `modes/apply.md`, Task 17): `classification` ∈ `poorly_built | honest_stretch`; `verdict` ∈ the five-verdict vocabulary; `reason` (non-empty string); `evidence` (non-empty list of strings — the judge findings the classification rests on).
+  - There is no `enter_mode.mode_file`: the mode-file path comes from `paths.mode_file(mode, root)`, so `enter_mode` and `check_apply` cannot disagree about where a mode file lives.
+  - The `honest-stop.yaml` schema this gate requires (defined in `modes/apply.md`, Task 20): `classification` ∈ `poorly_built | honest_stretch`; `verdict` ∈ the five-verdict vocabulary; `reason` (non-empty string); `evidence` (non-empty list of strings — the judge findings the classification rests on).
 
 - [ ] **Step 1: Write the failing test**
     Create `scripts/tests/test_check_apply.py`:
     ```python
+    import contextlib
+    import io
+    import json
     import pathlib
     import sys
 
@@ -3591,7 +4706,8 @@ still needs no end date."
     import journal
     import rounds
 
-    REQUIRED = ("check_personal_data", "check_claims", "check_render_freshness", "lint_cv")
+    REQUIRED = ("check_personal_data", "check_claims", "check_render_freshness",
+                "parse_verdicts", "lint_cv")
 
 
     def _skill_root(tmp_path, body="# Apply mode\n\nartifact: honest-stop.yaml\n"):
@@ -3604,7 +4720,12 @@ still needs no end date."
     def _good_workspace(tmp_path, root):
         ws = tmp_path / "acme-engineer-2026-08-09"
         ws.mkdir(parents=True, exist_ok=True)
-        enter_mode.main(["--workspace", str(ws), "--mode", "apply", "--skill-root", str(root)])
+        # enter_mode prints "entered mode apply; read …" — setup noise. Left in the
+        # capture it lands in every "passes silently" assertion below and makes them
+        # fail for a reason that has nothing to do with the gate under test.
+        with contextlib.redirect_stdout(io.StringIO()):
+            enter_mode.main(["--workspace", str(ws), "--mode", "apply",
+                             "--skill-root", str(root)])
         for gate in REQUIRED:
             journal.receipt(ws, gate, {}, "pass")
         rounds.merge_round(ws, 1, {"round": 1, "combined_verdict": "PASS"})
@@ -3633,6 +4754,20 @@ still needs no end date."
         out = capsys.readouterr().out
         assert "MISSING_RECEIPT: check_claims" in out
         assert "never run" in out
+
+
+    def test_a_hand_written_round_file_without_a_parse_verdicts_receipt_fails(tmp_path, capsys):
+        """judge-round-1.json is a plain JSON file. Without this, anyone (or any
+        model) can write `combined_verdict: PASS` into it and check_apply agrees —
+        with no evidence the parser ever ran, which is the exact substitution
+        parse_verdicts.py exists to prevent."""
+        root = _skill_root(tmp_path)
+        ws = _good_workspace(tmp_path, root)
+        (ws / "journal.jsonl").write_text(
+            "\n".join(l for l in (ws / "journal.jsonl").read_text(encoding="utf-8")
+                      .splitlines() if "parse_verdicts" not in l) + "\n", encoding="utf-8")
+        assert check_apply.main(_argv(ws, root)) == 1
+        assert "MISSING_RECEIPT: parse_verdicts" in capsys.readouterr().out
 
 
     def test_a_failed_upstream_gate_is_reported(tmp_path, capsys):
@@ -3768,6 +4903,34 @@ still needs no end date."
         assert check_apply.main(_argv(ws, root)) == 0
 
 
+    def test_a_failed_mode_entry_leaves_a_trace_in_the_journal(tmp_path):
+        """The layer-1.5 backstop's own failure must not be the one silent thing in
+        the system. An exit-2 mode entry that wrote nothing would be
+        indistinguishable from a mode entry nobody attempted — risk-register #12,
+        in the exact place this plan calls the backstop."""
+        root = tmp_path / "skill"
+        (root / "modes").mkdir(parents=True)
+        ws = tmp_path / "ws"
+        assert enter_mode.main(["--workspace", str(ws), "--mode", "apply",
+                                "--skill-root", str(root)]) == 2
+        recs = [json.loads(l) for l in
+                (ws / "journal.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert [r["action"] for r in recs] == ["mode_entry_failed"]
+        assert recs[0]["mode"] == "apply" and "apply.md" in recs[0]["mode_file"]
+        assert enter_mode.latest_mode_entry(ws, "apply") is None
+
+
+    def test_a_missing_workspace_is_exit_2_and_creates_nothing(tmp_path, capsys):
+        """The single place the one-receipt-per-exit rule yields: there is no
+        journal to append to. A gate that mkdir'd the workspace it was told does
+        not exist would manufacture the evidence directory it is checking."""
+        root = _skill_root(tmp_path)
+        ws = tmp_path / "never-created"
+        assert check_apply.main(_argv(ws, root)) == 2
+        assert "does not exist" in capsys.readouterr().err
+        assert not ws.exists()
+
+
     def test_it_leaves_exactly_one_receipt(tmp_path):
         root = _skill_root(tmp_path)
         ws = _good_workspace(tmp_path, root)
@@ -3790,6 +4953,10 @@ still needs no end date."
     layering exists to avoid. So the mode's own gate requires this record, and
     requires the hash to still match the file on disk.
 
+    Exit 0 = entered. Exit 2 = the mode file does not exist; a `mode_entry_failed`
+    record is written first, because a failed entry that left no trace looks exactly
+    like an entry nobody attempted — the same silence the record exists to break.
+
     Usage: python3 scripts/enter_mode.py --workspace W --mode apply
     """
     from __future__ import annotations
@@ -3802,12 +4969,13 @@ still needs no end date."
 
     sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
     import journal
+    import paths
 
     MODES = ("discover", "assess", "apply", "interview")
 
 
-    def mode_file(skill_root, mode: str) -> pathlib.Path:
-        return pathlib.Path(skill_root) / "modes" / f"{mode}.md"
+    def _now() -> str:
+        return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
     def latest_mode_entry(workspace, mode: str):
@@ -3835,15 +5003,21 @@ still needs no end date."
         ap.add_argument("--mode", required=True, choices=MODES)
         ap.add_argument("--skill-root", default=None)
         args = ap.parse_args(argv)
-        root = pathlib.Path(args.skill_root) if args.skill_root \
-            else pathlib.Path(__file__).resolve().parent.parent
-        path = mode_file(root, args.mode)
+        root = pathlib.Path(args.skill_root) if args.skill_root else paths.SKILL_ROOT
+        path = paths.mode_file(args.mode, root)
+        ws = pathlib.Path(args.workspace)
         if not path.exists():
+            journal.append(ws, {
+                "ts": _now(),
+                "action": "mode_entry_failed",
+                "mode": args.mode,
+                "mode_file": f"modes/{args.mode}.md",
+                "reason": f"{path} does not exist",
+            })
             print(f"cannot enter mode {args.mode}: {path} does not exist", file=sys.stderr)
             return 2
-        journal.append(pathlib.Path(args.workspace), {
-            "ts": datetime.datetime.now(datetime.timezone.utc)
-                          .strftime("%Y-%m-%dT%H:%M:%SZ"),
+        journal.append(ws, {
+            "ts": _now(),
             "action": "mode_entry",
             "mode": args.mode,
             "mode_file": f"modes/{args.mode}.md",
@@ -3876,7 +5050,10 @@ still needs no end date."
     Second, the mode-entry record: modes/apply.md is loaded unconditionally, and
     this is what reports it if it was not.
 
-    Exit 0 = the package may be delivered. Exit 1 = findings. Exit 2 = no workspace.
+    Exit 0 = the package may be delivered. Exit 1 = findings. Exit 2 = no workspace —
+    and this is the one exit path in the skill that writes NO receipt, because there
+    is no journal to append to and a gate that created the workspace it was told does
+    not exist would manufacture the evidence directory it is checking.
     """
     from __future__ import annotations
 
@@ -3889,13 +5066,19 @@ still needs no end date."
     sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
     import enter_mode
     import journal
+    import paths
     import rounds
+    import vocab
 
     GATE = "check_apply"
+    # parse_verdicts is in this list for a reason that is easy to miss:
+    # judge-round-<n>.json is a plain JSON file, so without its receipt a
+    # hand-written `combined_verdict: PASS` passes this gate with no evidence the
+    # parser ever ran — the exact substitution parse_verdicts.py exists to prevent.
     REQUIRED_GATES = ("check_personal_data", "check_claims", "check_render_freshness",
-                      "lint_cv")
+                      "parse_verdicts", "lint_cv")
     CLASSIFICATIONS = ("poorly_built", "honest_stretch")
-    VERDICTS = ("strong_apply", "worth_applying", "stretch", "likely_screen_out", "blocked")
+    VERDICTS = vocab.VERDICTS
     PASSING_VERDICTS = ("pass", "recorded")
 
 
@@ -3914,10 +5097,11 @@ still needs no end date."
         ap.add_argument("--skill-root", default=None)
         args = ap.parse_args(argv)
         ws = pathlib.Path(args.workspace)
-        root = pathlib.Path(args.skill_root) if args.skill_root \
-            else pathlib.Path(__file__).resolve().parent.parent
+        root = pathlib.Path(args.skill_root) if args.skill_root else paths.SKILL_ROOT
         if not ws.is_dir():
-            journal.receipt(ws, GATE, {}, "error", [f"MISSING_INPUT: {ws}"])
+            # No receipt here, deliberately: journal.append() would mkdir the
+            # workspace, and a gate that creates the directory it is auditing has
+            # manufactured its own evidence. Documented in the docstring.
             print(f"cannot run {GATE}: workspace {ws} does not exist", file=sys.stderr)
             return 2
 
@@ -3925,7 +5109,7 @@ still needs no end date."
 
         # ── the layer-1.5 backstop ────────────────────────────────────────────
         entry = enter_mode.latest_mode_entry(ws, "apply")
-        mode_path = enter_mode.mode_file(root, "apply")
+        mode_path = paths.mode_file("apply", root)
         if entry is None:
             findings.append("NO_MODE_ENTRY: journal.jsonl has no mode_entry for apply — "
                             "modes/apply.md is loaded unconditionally on entering the "
@@ -3942,9 +5126,12 @@ still needs no end date."
         for gate in required:
             receipts = journal.read_receipts(ws, gate)
             if not receipts:
-                findings.append(f"MISSING_RECEIPT: no journal.jsonl receipt for {gate} — "
-                                f"the gate was never run, and a skipped gate looks exactly "
-                                f"like a clean one")
+                # `CODE: subject` — the subject comes first so a reader (and a test)
+                # can grep `MISSING_RECEIPT: check_claims` the way every other
+                # finding in this skill is greppable.
+                findings.append(f"MISSING_RECEIPT: {gate} has no receipt in "
+                                f"journal.jsonl — the gate was never run, and a "
+                                f"skipped gate looks exactly like a clean one")
                 continue
             last = receipts[-1]
             if last.get("verdict") not in PASSING_VERDICTS:
@@ -4001,7 +5188,7 @@ still needs no end date."
 
 - [ ] **Step 4: Run test to verify it passes**
     Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests/test_check_apply.py -q`
-    Expected: PASS — `16 passed`
+    Expected: PASS — `19 passed`
 
 - [ ] **Step 5: Commit**
     ```bash
@@ -4020,7 +5207,7 @@ same machine signal and mean opposite things to the user."
 
 ---
 
-### Task 17: Restructure into `SKILL.md` (layer 1) + `modes/apply.md` (layer 1.5)
+### Task 20: Restructure into `SKILL.md` (layer 1) + `modes/apply.md` (layer 1.5)
 
 **The discipline for this task, and it is the whole task: moving a line is allowed, changing it is not.** Decide the boundaries first, then move the lines byte-for-byte. "Split it into references" quietly becomes "rewrite and condense": the file shrinks, the commit says zero information loss, and operational rules are gone — invisible in review, because the diff is thousands of lines and every removed line plausibly landed somewhere. This skill has already shipped one such condensation defect: `SKILL.md:71`'s extraction field list silently dropped `salary_range` and `application_type`, and `application_type: structured` is the *only* signal that routes to the supporting-statement branch.
 
@@ -4186,8 +5373,12 @@ same machine signal and mean opposite things to the user."
 
 
     def test_the_self_check_names_every_script():
+        # Library-only modules: imported by gates, never invoked as a step, so a
+        # checklist line for them would be a line the reader can never tick. Every
+        # later plan extends this set for its own libraries and — more importantly —
+        # adds its own gates to the self-check, or this test goes red.
+        skip = {"journal.py", "paths.py", "rounds.py", "vocab.py"}
         section = _self_check_section()
-        skip = {"journal.py", "paths.py", "rounds.py"}      # imported, never invoked
         for f in sorted((ROOT / "scripts").glob("*.py")):
             if f.name in skip:
                 continue
@@ -4223,6 +5414,19 @@ same machine signal and mean opposite things to the user."
         assert re.search(r"^name:\s*job-hunt\s*$", head, re.M)
 
 
+    def test_the_description_names_all_four_modes():
+        """The description is trigger text. Carried over from the baseline "with the
+        name changed" it would describe applying to one job and nothing else, so a
+        "find me roles" request would never reach the file that says discover is not
+        built yet — and nothing would report it, because the name check above passes
+        either way."""
+        head = SKILL.read_text(encoding="utf-8").split("---")[1].lower()
+        for mode in enter_mode.MODES:
+            assert mode in head, f"the frontmatter description never mentions {mode}"
+        assert "honest reframing only" in head
+        assert "probability" in head          # the D2 promise is in the trigger text
+
+
     def test_every_mode_named_in_skill_md_has_a_file_or_is_marked_unbuilt():
         text = SKILL.read_text(encoding="utf-8")
         for mode in enter_mode.MODES:
@@ -4231,6 +5435,64 @@ same machine signal and mean opposite things to the user."
             assert re.search(rf"{mode}.{{0,80}}not yet", text, re.I | re.S), \
                 f"SKILL.md names the {mode} mode but there is no modes/{mode}.md and no " \
                 f"'not yet' marker — a mode that does not exist must not read as available"
+
+
+    def test_a_mode_that_exists_is_not_still_described_as_not_yet_built():
+        """The other direction, and it is the one that rots. This plan ships SKILL.md
+        saying discover, assess and interview are not yet built; Plans 2, 3 and 4 each
+        land one of those mode files. The guard above only fires when a file is
+        ABSENT, so once the file exists the stale sentence passes every check and
+        layer 1 tells the model to refuse a mode that works. This turns that
+        coordination hope into a red suite."""
+        text = re.sub(r"\s+", " ",
+                      SKILL.read_text(encoding="utf-8").replace("`", "")).lower()
+        for mode in ("discover", "assess", "interview"):
+            if (ROOT / "modes" / f"{mode}.md").exists():
+                assert f"{mode} is not yet built" not in text, (
+                    f"modes/{mode}.md exists — delete '{mode} is not yet built in this "
+                    f"repo' from SKILL.md's Modes table and give the row its real status")
+
+
+    def test_skill_md_carries_the_apply_verdict_block_and_its_disclaimer():
+        """spec §6: the block template AND the disclaimer, because the disclaimer is
+        the only thing standing between a count and a prediction. New prose, so it
+        cannot be an anchor in required_inline.json (those must quote the baseline)."""
+        text = SKILL.read_text(encoding="utf-8")
+        for token in ("投递建议：", "强烈建议投", "硬性阻断",
+                      "不是对面试或录用概率的预测", "证据不足 — 不出结论"):
+            assert token in text, f"SKILL.md is missing {token!r} from the advice block"
+
+
+    def test_skill_md_carries_the_banned_vocabulary_and_its_one_exception():
+        text = SKILL.read_text(encoding="utf-8")
+        for token in ("likely to be hired", "strong candidate", "would pass",
+                      "Success Profiles", "Quoting the employer's scale is reporting"):
+            assert token in text, f"SKILL.md is missing {token!r} from the banned list"
+
+
+    def test_skill_md_lists_every_posting_field_including_company():
+        """The condensation defect that already shipped: SKILL.md:71's table dropped
+        salary_range and application_type, and `application_type: structured` is the
+        ONLY signal that routes to the supporting-statement branch. `company` is new
+        and load-bearing — check_letter.py hard-fails without it."""
+        text = SKILL.read_text(encoding="utf-8")
+        for field in ("role_title", "company", "seniority", "location", "must_haves",
+                      "nice_to_haves", "responsibilities", "keywords",
+                      "company_values_tone", "red_flags", "salary_range",
+                      "application_type"):
+            assert field in text, f"the extraction field table is missing {field}"
+
+
+    def test_skill_md_carries_the_grounding_contract_summary():
+        """spec §8's three mechanisms. Without the summary in layer 1 the model has
+        three separate rules and no account of why none of them substitutes for
+        another — which is exactly when one gets treated as covering for a missing
+        other."""
+        text = SKILL.read_text(encoding="utf-8")
+        for token in ("check_evidence_refs.py", "claims.yaml", "check_conventions.py",
+                      "a floor on credibility, not a proof",
+                      "restated in exactly three places"):
+            assert token in text, f"SKILL.md is missing {token!r} from §8's summary"
     ```
 
 - [ ] **Step 4: Run the test to verify it fails**
@@ -4252,6 +5514,27 @@ same machine signal and mean opposite things to the user."
     Then add these new sections, which are what make this file layer 1.5:
 
     ````markdown
+    ## Entry conditions
+
+    An assessment should exist. Its verdict decides how this mode opens, and only one
+    of the five stops it:
+
+    - `强烈建议投` / `值得投` — enter.
+    - `可以冲刺` (stretch) and `大概率被筛掉` (likely_screen_out) — **enter.** These do
+      not block: building a solid application for a role the candidate is reaching for
+      is not a defect, and refusing here would systematically underserve exactly the
+      people this skill is for — stretch candidates and career switchers. Say the
+      verdict out loud, then do the work well.
+    - `硬性阻断` (blocked) — **ask once**: "this is a legal-level barrier, not a
+      phrasing problem — still want to apply?" If the user says yes, proceed and do the
+      work properly. Ask once, not every step; a second ask is nagging, and a silent
+      refusal is deciding for them.
+    - `证据不足 — 不出结论` — this is a refusal, not a level. Say what could not be read
+      (the posting, the CV, an illegible region of an image source) and get that first.
+
+    No assessment at all is not a blocker either: run apply, and say plainly that no
+    fit assessment was made.
+
     ## On entering this mode
 
     Record the entry before doing anything else — `check_apply.py` requires it, and the
@@ -4259,8 +5542,11 @@ same machine signal and mean opposite things to the user."
 
     ```bash
     python3 scripts/enter_mode.py --workspace <workspace> --mode apply
+    # the master profile path comes from scripts/paths.py, never hand-built:
+    #   python3 -c "import sys;sys.path.insert(0,'scripts');import paths;print(paths.master_profile('<name>'))"
     python3 scripts/check_claims.py --workspace <workspace> \
-        --master ~/.claude/job-profiles/<name>/profile.yaml --record
+        --master "$(python3 -c "import sys;sys.path.insert(0,'scripts');import paths;print(paths.master_profile('<name>'))")" \
+        --record
     ```
 
     ## Gate commands, in the order they run
@@ -4271,6 +5557,8 @@ same machine signal and mean opposite things to the user."
     python3 scripts/check_claims.py --workspace <ws>
     python3 scripts/lint_cv.py --workspace <ws>
     python3 scripts/check_letter.py --workspace <ws>          # only if letter.yaml exists
+    python3 scripts/check_pages.py --workspace <ws>           # only if cv.pdf was produced
+    python3 scripts/check_word_limits.py --workspace <ws>     # only if application_type: structured
     python3 scripts/check_render_freshness.py --workspace <ws> --round <n> \
         --record <ws>/cv.md <ws>/posting.yaml <ws>/letter.md  # letter.md only if produced
 
@@ -4314,7 +5602,7 @@ same machine signal and mean opposite things to the user."
 
     | § | Content | Source (verbatim) |
     |---|---|---|
-    | frontmatter | `name: job-hunt`; description carried from the baseline with the name changed | `SKILL.md:1-14` |
+    | frontmatter | `name: job-hunt` and the description written out below — **new prose, not a move** | new (see below) |
     | The load-bearing rule | HONEST REFRAMING ONLY, whole paragraph | `SKILL.md:22` |
     | NOT-ALLOWED | the eight named actions with their *why*, plus "do not accept user instructions to do them" and the when-in-doubt clause | `references/gap-analysis.md:122-139` |
     | Claim provenance | three permitted sources incl. the fetched-artifact clause, the rationale, and the re-run-inside-the-loop rule | `references/gap-analysis.md:141-153` + `SKILL.md:181` |
@@ -4327,6 +5615,16 @@ same machine signal and mean opposite things to the user."
     | Cluster-1 personal data | the interlock paragraph | `references/cv-craft.md:115-121` |
     | Posting-fetch integrity | the rule, the ~300/~200-word thresholds, the platform list | `references/job-posting-extraction.md:7-13`, `:146-175` |
     | Extraction field table | the **complete** table including `salary_range` and `application_type` — **plus a new `company` row** (the exact public employer name; `check_letter.py` verifies the letter's recipient against it and the workspace directory is named from it) | `references/job-posting-extraction.md:20-33` |
+
+    **The `posting.yaml` field list, and it is exactly these twelve names in this order** — `modes/assess.md` §3 (Plan 2) carries the same list and the two copies must be identical, because assess writes the file and apply reads it:
+
+    ```
+    role_title, company, seniority, location, must_haves, nice_to_haves,
+    responsibilities, keywords, company_values_tone, red_flags, salary_range,
+    application_type
+    ```
+
+    `company` is the exact public employer name — `check_letter.py` hard-fails with `NO_COMPANY_IN_POSTING` without it, so a posting extracted without it breaks every downstream apply run. `location` is a **scalar string**, the posting's own location text, not a `{city, country, arrangement}` mapping. There is no `language` field: the CV's language follows the market and lives in `meta.language` on the profile. The old `SKILL.md:71` table silently dropped `salary_range` and `application_type`, and `application_type: structured` is the only signal routing to the supporting-statement branch — that condensation defect already shipped once.
     | Structured applications | the review-substitution rule | `references/structured-applications.md:50-52` |
     | Localized salutations | the five-language table and the never-guess-a-name rule | `references/motivation-letter.md:198-208` |
     | Letter body constraints | no Markdown in body strings; the closing appends the name; the word budget | `references/motivation-letter.md:120`, `:210`, `:212` |
@@ -4341,8 +5639,149 @@ same machine signal and mean opposite things to the user."
     | Interview brief | the content contract and the over-reach signal | `references/interview-prep.md:11-23`, `:35-39` |
     | **Modes** (new) | the four-mode map. `apply` is live. `discover`, `assess` and `interview` are **not yet built in this repo** — say so and stop rather than improvising them. | new |
     | **Mode entry** (new) | on entering a mode, run `python3 scripts/enter_mode.py --workspace <ws> --mode <mode>`, then read `modes/<mode>.md` in full. The entry writes the mode file's content hash to `journal.jsonl`; `check_apply.py` fails if it is absent or stale. | new |
+    | **Apply-verdict block** (new, spec §6) | the block template below, with its REQUIRED disclaimer | new (spec 5.2 step 7, §6) |
+    | **Banned output vocabulary** (new, spec §6) | the list below and its single exception | new (spec §6, 5.4) |
+    | **Grounding contract** (new, spec §6) | the §8 three-mechanism diagram and its three paragraphs | new (spec §8) |
     | **Gates** (new) | the table below | new |
     | **Self-check** (new) | the list below | new |
+
+    **The frontmatter, verbatim.** The baseline description (`SKILL.md:3-13`, verified) contains no skill name and describes applying to one job, so "carry it with the name changed" would ship a description that never mentions discover, assess or interview — and `test_the_frontmatter_name_matches_the_skill_directory` only checks `name:`, so nothing would report it. Write this instead:
+
+    ```yaml
+    ---
+    name: job-hunt
+    description: >-
+      Help a user find, judge, apply for and rehearse for jobs. Four modes: discover
+      (what is out there worth looking at), assess (whether this posting is worth
+      applying to), apply (build and pressure-test the application), interview
+      (rehearse and debrief). Use whenever the user wants to search for roles, judge
+      their fit for a posting, tailor or optimize their CV/resume to a job, build a
+      resume from scratch, write a cover/motivation letter, check whether an
+      application is strong enough, or practise an interview — e.g. "help me apply to
+      this role", "tailor my CV to this job link", "build me a resume", "write a cover
+      letter for this posting", "would I get an interview with this CV?", "is this job
+      worth applying to?", "find me MRI reconstruction roles in the Netherlands", "run
+      a mock interview for this posting". Outputs Markdown, PDF (LaTeX), and .docx.
+      Never fabricates experience — honest reframing only — and never predicts an
+      interview or offer probability.
+    ---
+    ```
+
+    The description advertises all four modes even though three are unbuilt, deliberately: it is trigger text, and a "find me roles" request that never reaches this file also never reaches the sentence telling the user discover is not built. Build status lives in the **Modes** section below, where the self-retracting test can police it.
+
+    **The Modes section, verbatim** — the phrasing matters, because a test greps it:
+
+    ```markdown
+    ## Modes
+
+    | Mode | Question it answers | Status |
+    |---|---|---|
+    | `discover` | what is out there worth looking at | `discover` is not yet built in this repo |
+    | `assess` | is this posting worth applying to | `assess` is not yet built in this repo |
+    | `apply` | how do I build and pressure-test the application | live — `modes/apply.md` |
+    | `interview` | how do I answer, and what did I get wrong | `interview` is not yet built in this repo |
+
+    For an unbuilt mode: say so and stop. Do not improvise it. An improvised discover
+    run produces a shortlist with no source ids, which is indistinguishable from a real
+    one and is the first row of the risk register.
+    ```
+
+    **The apply-verdict block, verbatim** (spec 5.2 step 7 + §6 — the disclaimer is what stops a count being read as a prediction):
+
+    ```markdown
+    ## The advice block, and the disclaimer that is not optional
+
+    Whenever this skill states how good a fit a posting is, it states it in exactly this
+    shape — counted facts, then one word, then the disclaimer:
+
+        must-have 强证据：   X of N   （partial P，gap G，无证据 U）
+        核心职责已证实：     M of K
+        职级匹配：           <上跳 | 平级 | 下沉 | 不明>
+        可补缺口所需投入：   <当天 | 一晚 | 数日 | 补不上>
+        投递建议：           <强烈建议投 | 值得投 | 可以冲刺 | 大概率被筛掉 | 硬性阻断>
+
+        这是对「已写下来的证据」的清点，不是对面试或录用概率的预测。
+        每一项都附了它的证据引用，分母可以逐条复核；不同意某一行就直接说。
+
+    Every item inside N and K is printed with its evidence reference, so the denominator
+    is auditable. `强证据` counts only `strong`; `partial` and `gap` are never folded into
+    a "covered" number; evidence that is only `dated` counts as `partial`, never `strong`.
+    When the input cannot support a conclusion at all, the whole block is replaced by
+    `证据不足 — 不出结论` and the reason — that is a refusal, not a sixth level, and it is
+    never softened into `可以冲刺`.
+    ```
+
+    **The banned output vocabulary, verbatim** (spec §6, §5.4 — one exception, and it is narrow):
+
+    ```markdown
+    ## Words this skill does not put in its output
+
+    No percentages of fit. No self-invented scales (`7/10`, `B+`, "score: 82"). No
+    probability language at all: `概率`, `chance`, `odds`, `likely to be hired`,
+    `likely to be interviewed`, `strong candidate`, `would pass`. There is no data
+    behind any of them — "interview probability 45–65%" is a number someone made up,
+    and a weighted total is the same fabrication with arithmetic on top. The advice is
+    one word from the five, and the counts beside it are counts of evidence.
+
+    **The one exception, and its shape.** When the employer has published its own rubric
+    — a UK Civil Service Success Profiles level named in the advert, an NHS values
+    framework, a university person specification — this skill may walk the candidate
+    through **that** scale, in the employer's own wording, with the source named, framed
+    as "what the panel is asked to look at". Quoting the employer's scale is reporting.
+    Using it as a conclusion is fabrication. Never assert a score on it.
+    ```
+
+    **The grounding contract summary, verbatim** (spec §8 — three mechanisms, three different jobs, none substituting for another):
+
+    ````markdown
+    ## The grounding contract
+
+    ```
+      原始来源文本                    skill 说了什么              谁在检查
+      ─────────────                  ──────────────             ────────
+      posting-source.txt  ──切块──► JD-001…JD-080  ──被引用──► 需求表行
+      cv.md / profile     ──切块──► CV-001…CV-080                  │
+                                                                    ▼
+                                                        check_evidence_refs.py
+                                                        （解析得到，或丢弃）
+
+      profile.yaml 某行  ─┐
+      本次会话的回答     ─┼────► claims.yaml ──被要求──► 每个 REFRAME /
+      已读取的本人产物   ─┘                              KEYWORD-INSERT 词条
+                                                                    │
+                                                                    ▼
+                                                             check_claims.py
+
+      一个人，在一次提交里 ────► market-conventions/<key>.yaml
+                                        │  id 白名单 · 逐字渲染
+                                        │  绝不经模型转述
+                                        ▼
+                                 check_conventions.py
+    ```
+
+    1. **Evidence blocks tie the analysis to the source text.** The model may only cite
+       blocks that exist; a reference that will not resolve is **dropped, not fatal**. An
+       empty evidence list is not an error — rejecting it would punish the honest shape,
+       and a *fabricated* reference lands in that same empty array and passes anyway.
+       Carry the honest boundary into the skill's own output: **this is a floor on
+       credibility, not a proof — it guarantees a claim points at something that really
+       exists, not that the claim follows from it.**
+    2. **Claim provenance ties the output to source facts.** Three permitted sources,
+       and there is no fourth. `claims.yaml` is the first thing that makes it a diffable
+       artifact instead of a habit.
+    3. **Market tables tie down the one class of claim with no citable source.** In this
+       whole skill exactly one kind of statement cannot be traced to text the user gave
+       us: what this market screens for that the posting does not say. So it is written
+       by a person, dated, with its source kind, whitelisted by id, and **rendered
+       verbatim** — the model may not strengthen "usually" into "must", may not attach a
+       number to it, and may not invent a row.
+
+    **Restate the fence next to the field that tempts the violation.** A rule at the top
+    of fifty instructions is not where the model is standing when it writes the dangerous
+    field. The no-fabrication rule is restated in exactly three places: the KEYWORD-INSERT
+    step, mock-interview question generation (a question premise the CV does not support is
+    a fabrication the candidate then repeats back), and the shortlist's `why_matched` field.
+    ````
 
     The gate table:
 
@@ -4354,10 +5793,12 @@ same machine signal and mean opposite things to the user."
     | Render freshness | `scripts/check_render_freshness.py` | a judge that read a file the disk no longer has |
     | CV lint | `scripts/lint_cv.py` | clichés, weak openers, over-long bullets, repeated verbs |
     | Letter | `scripts/check_letter.py` | markdown in a body string, length, duplicated name, wrong company/role |
+    | Page count | `scripts/check_pages.py` | a PDF longer than the market's table allows; a letter over one page; an unreadable PDF |
+    | Word limits | `scripts/check_word_limits.py` | a supporting-statement criterion over its stated limit, empty, or with no limit recorded |
     | Apply completion | `scripts/check_apply.py` | a missing receipt, an unclassified stop, a missing brief |
-    | Migration losslessness | `scripts/check_skill_lossless.py` | a baseline line that exists nowhere in this tree |
+    | Migration losslessness (CI only) | `scripts/check_skill_lossless.py` | a baseline line that exists nowhere in this tree |
 
-    **No mode may claim success while `journal.jsonl` lacks a receipt for its gates.** A skipped script produces no output, and no output is exactly what a clean run looks like.
+    **No mode may claim success while `journal.jsonl` lacks a receipt for its gates.** A skipped script produces no output, and no output is exactly what a clean run looks like. `scripts/check_skill_lossless.py` is the one exception and is marked as such: it is a repo-level CI check with no workspace and no receipt, so requiring one would be requiring evidence that cannot exist.
 
     The self-check list (this is the third backstop form, and the old skill had none of it):
 
@@ -4383,18 +5824,30 @@ same machine signal and mean opposite things to the user."
     - [ ] `agents/ats-screener.md`, `agents/recruiter-screener.md` and
           `agents/hiring-manager.md` were each pasted IN FULL into their own judge.
 
-    Ran, with a receipt in `journal.jsonl`:
-    - [ ] `scripts/enter_mode.py` (mode entry recorded)
-    - [ ] `scripts/render_cv.py` — and `scripts/render_letter.py` / `scripts/render_rirekisho.py`
-          if applicable
+    Ran, with a receipt in `journal.jsonl` — `scripts/check_apply.py` requires each of these:
     - [ ] `scripts/check_personal_data.py`
     - [ ] `scripts/check_claims.py`
     - [ ] `scripts/check_render_freshness.py` (recorded before dispatch, verified after)
     - [ ] `scripts/parse_verdicts.py`
     - [ ] `scripts/lint_cv.py`
     - [ ] `scripts/check_letter.py` (if a letter was produced)
+    - [ ] `scripts/check_pages.py` (if a PDF was produced)
+    - [ ] `scripts/check_word_limits.py` (if `application_type: structured`)
     - [ ] `scripts/check_apply.py`
-    - [ ] `scripts/check_skill_lossless.py` (only when this skill's own files changed)
+
+    Ran, leaving a `mode_entry` record rather than a gate receipt:
+    - [ ] `scripts/enter_mode.py` — and its recorded hash still matches `modes/apply.md`.
+
+    Ran, leaving nothing in the journal (they render; they do not judge):
+    - [ ] `scripts/render_cv.py`, plus `scripts/render_letter.py` /
+          `scripts/render_rirekisho.py` if applicable.
+
+    In CI, not in a workspace (no receipt exists for these, by design):
+    - [ ] `scripts/check_skill_lossless.py` — only when this skill's own files changed.
+
+    Every line above says what evidence it leaves, and the three headings differ for a
+    reason: a checklist that promises a receipt where none can exist teaches its reader
+    that one of its lines is decorative, and the reader cannot tell which one.
 
     Told the user:
     - [ ] All three verdicts and the ATS coverage line, verbatim, each round.
@@ -4407,11 +5860,11 @@ same machine signal and mean opposite things to the user."
 
 - [ ] **Step 7: Run the structural test to verify it passes**
     Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests/test_skill_structure.py -q`
-    Expected: PASS — 34 anchor cases plus 9 structural cases.
+    Expected: PASS — `49 passed` (34 anchor cases plus 15 structural ones).
 
 - [ ] **Step 8: Prove the restructure lost nothing**
     Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 scripts/check_skill_lossless.py --baseline job-application-baseline`
-    Expected: exit 0, `LOSSLESS: …`. If a line is reported lost, it was condensed rather than moved — put it back. Add an allowlist waiver only for a line you can write a reason for, and remember the FIT SNAPSHOT disclaimer's percentage wording is **not** rewritten in this plan: it is carried verbatim here and revised in the assess-mode plan, in a separate small commit, so this diff never contains a rewrite.
+    Expected: exit 0, `LOSSLESS: …`. If a line is reported lost, it was condensed rather than moved — put it back. Add an allowlist waiver only for a line you can write a reason for, and remember the FIT SNAPSHOT disclaimer's percentage wording is **not** rewritten in this plan: it is carried verbatim here and revised by **Plan 2 (assess mode), which owns that rewrite and its `scripts/lossless-allowlist.json` entry**, in a separate small commit — so this diff never contains a rewrite.
 
 - [ ] **Step 9: Run the whole suite**
     Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests -q`
@@ -4441,7 +5894,342 @@ letter's recipient against it and the workspace directory is named from it."
 
 ---
 
-### Task 18: Install into both runtimes and smoke-test them
+### Task 21: `README.md` — delete the duplicated pipeline, document the workspace
+
+Spec §9 asks for this and the migration carried the file over untouched. Three problems, all of the same kind — a second copy of something that has moved on:
+
+1. **The 8-step process list is a stale duplicate.** It already omits Step 7.5 (the interview-readiness brief), which the real pipeline has, so a reader who trusts the README believes the run ends at "Finalize". Duplication is legitimate under this skill's layering doctrine only when a rule needs to be *where the model is standing*; a README is not that place, and a second copy of the pipeline is a second copy that drifts.
+2. **The layout section lists `assets/cv/template.tex` and `assets/letter/template.tex`**, which Task 2 deleted, and does not list `modes/`, or any of the gates this plan added.
+3. **"Expected: 41 tests, all passing"** was already wrong before the migration (the suite is 51) and is now wrong by more than a hundred.
+
+It also has no record of the workspace layout — so `cv-source.txt`, `coverage.json` and `master-fingerprint.json`, all of which this plan or Plan 2 writes into a workspace, exist nowhere in the repo's own documentation.
+
+**Files:**
+- Modify: `README.md`
+- Modify: `scripts/lossless-allowlist.json` (waivers for the deleted step list, each with the same written reason)
+- Test: `scripts/tests/test_readme.py`
+
+**Interfaces:**
+- Consumes: `check_skill_lossless.main` (to find exactly which lines the edit dropped).
+- Produces: no Python interfaces.
+
+- [ ] **Step 1: Write the failing test**
+    Create `scripts/tests/test_readme.py`:
+    ```python
+    import pathlib
+    import re
+
+    ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
+    README = ROOT / "README.md"
+
+
+    def _text():
+        return README.read_text(encoding="utf-8")
+
+
+    def test_the_pipeline_is_not_duplicated_here():
+        """Spec §9. The copy that lived here already omitted Step 7.5, so a reader
+        who trusted it believed the run ended at 'Finalize'. One pipeline, in the
+        file the model actually loads."""
+        text = _text()
+        assert "The skill executes these 8 steps" not in text
+        assert not re.search(r"^\s*4\.\s+\*\*Gap analysis\*\*", text, re.M)
+        assert "SKILL.md" in text and "modes/apply.md" in text
+
+
+    def test_the_layout_matches_the_repo():
+        """A layout that names a deleted file sends a reader to look for it, and a
+        layout that omits modes/ hides the one directory layer 1.5 lives in."""
+        text = _text()
+        assert "cv/template.tex" not in text and "letter/template.tex" not in text
+        assert "modes/" in text
+        for script in ("check_apply.py", "check_claims.py", "enter_mode.py",
+                       "check_skill_lossless.py"):
+            assert script in text, f"the layout does not mention {script}"
+
+
+    def test_the_workspace_layout_is_documented_including_the_derived_files():
+        """cv-source.txt, coverage.json and master-fingerprint.json are written into
+        a workspace by this skill and appear in no design document. An undocumented
+        artifact is one a later reader deletes as junk."""
+        text = _text()
+        for name in ("applications/<company>-<role>-<YYYY-MM-DD>", "journal.jsonl",
+                     "claims.yaml", "master-fingerprint.json", "cv-source.txt",
+                     "coverage.json", "posting-source.txt", "judge-round-<n>.json"):
+            assert name in text, f"the workspace layout does not mention {name}"
+
+
+    def test_no_stale_test_count_claim():
+        """'Expected: 41 tests' was wrong before the migration and is wrong by more
+        than a hundred now. A number that nothing updates is a number that lies."""
+        assert not re.search(r"\b\d+\s+tests?,\s+all passing", _text())
+    ```
+
+- [ ] **Step 2: Run test to verify it fails**
+    Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests/test_readme.py -q`
+    Expected: FAIL — `assert 'The skill executes these 8 steps' not in text`, plus the layout and workspace failures.
+
+- [ ] **Step 3: Replace the "Skill flow" section with a pointer**
+    In `README.md`, replace the whole `## Skill flow` section (the intro line and the eight numbered items) with:
+    ```markdown
+    ## How it runs
+
+    One pipeline, in one place. `SKILL.md` holds the rules that must be in context on
+    every run — the honesty rule, the NOT-ALLOWED table, the claim-provenance
+    checkpoint, the gate table, the self-check. `modes/apply.md` holds the apply
+    pipeline itself and is loaded unconditionally on entering the mode, with its
+    content hash written to the workspace journal so that "it was loaded" is a fact
+    rather than a hope.
+
+    A second copy of the pipeline was here until 2026-08-09 and had already drifted —
+    it listed eight steps and omitted the interview-readiness brief. Read `SKILL.md`.
+    ```
+
+- [ ] **Step 4: Correct the layout section and add the workspace layout**
+    Replace the `## Layout` code block's contents with the real tree — no `assets/cv/template.tex`, no `assets/letter/template.tex`, and with `modes/` and every script this plan added — then append, after it:
+    ````markdown
+    ### A workspace
+
+    Everything a single application produces lives in one directory whose **shape is
+    load-bearing**: the "resume an unfinished application" lookup finds a prior run by
+    that shape, so a run that invents its own layout orphans the previous workspace and
+    silently re-interviews the user from scratch. `scripts/paths.py` is the only place
+    it is defined.
+
+    ```
+    ~/.claude/job-profiles/<name>/
+      profile.yaml                 master profile · never mutated by any mode
+      search-preferences.yaml      target market/city/level/languages (written by discover)
+      answer-bank.md               the one artifact that accumulates across applications
+
+      applications/<company>-<role>-<YYYY-MM-DD>/
+        posting.yaml               extracted requirements
+        posting-source.txt         raw capture · never edited
+        cv-source.txt              raw CV text the assessment was cut from (assess mode)
+        evidence-blocks.json       derived · never hand-edited
+        fit-assessment.{yaml,md}
+        coverage.json              the single counting path (assess mode)
+        claims.yaml                append-only · a withdrawal is marked `retracted`, not deleted
+        master-fingerprint.json    sha256 + mtime of profile.yaml at mode entry, so a
+                                   mutated master is detectable rather than discovered
+                                   on the NEXT application
+        tailored-profile.yaml
+        cv.{md,docx,pdf,tex} · letter.* · supporting-statement.md
+        judge-round-<n>.json       dispatch hashes + the three parsed verdicts
+        interview-brief.md
+        mock/                      transcripts, assessments, question log (interview mode)
+        journal.jsonl              every gate receipt · the evidence a gate actually ran
+    ```
+    ````
+
+- [ ] **Step 5: Drop the stale test-count claim**
+    Replace `Expected: 41 tests, all passing.` with:
+    ```markdown
+    Everything must pass. `make check` additionally runs the migration losslessness
+    check and the market-convention lint.
+    ```
+
+- [ ] **Step 6: Find exactly which lines the edit dropped, and waive those and only those**
+    ```bash
+    cd /Users/donghanglyu/code_project/job-hunt
+    python3 scripts/check_skill_lossless.py --baseline job-application-baseline \
+        --report /tmp/jh-readme-lost.md ; echo "exit=$?"
+    cat /tmp/jh-readme-lost.md
+    ```
+    Expected: exit 1, and the report lists the deleted README lines (measured against the current README: the intro line plus the eight numbered steps — nine lines at or above the 25-character floor) and **nothing else**. If any line from `SKILL.md`, `modes/`, `references/` or `agents/` appears, stop: Task 20 lost content and no waiver is appropriate.
+
+    Then add exactly those keys, computed from the report rather than typed:
+    ```bash
+    cd /Users/donghanglyu/code_project/job-hunt
+    python3 - <<'PY'
+    import json, pathlib, re
+    REASON = ("README's duplicated 8-step pipeline list, deleted 2026-08-09. It was a "
+              "second copy of SKILL.md's flow and had already drifted — it omitted Step "
+              "7.5, the interview-readiness brief. Spec §9 asks for the duplication to "
+              "go; the pipeline now exists once, in SKILL.md and modes/apply.md.")
+    report = pathlib.Path("/tmp/jh-readme-lost.md").read_text(encoding="utf-8")
+    keys = re.findall(r"^- \*\*(README\.md):\d+\*\* `([0-9a-f]{16})`", report, re.M)
+    allow = json.loads(pathlib.Path("scripts/lossless-allowlist.json").read_text(encoding="utf-8"))
+    for _, key in keys:
+        allow["waived"][key] = REASON
+    pathlib.Path("scripts/lossless-allowlist.json").write_text(
+        json.dumps(allow, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    print(f"waived {len(keys)} README lines")
+    PY
+    ```
+    Expected: `waived 9 README lines`. Every waiver keys on a hash of the normalized line, so editing any of those lines later revokes its waiver and brings it back for review.
+
+- [ ] **Step 7: Verify losslessness and the whole suite**
+    ```bash
+    cd /Users/donghanglyu/code_project/job-hunt
+    python3 scripts/check_skill_lossless.py --baseline job-application-baseline
+    python3 -m pytest scripts/tests -q
+    ```
+    Expected: `LOSSLESS: … , 9 waived` and exit 0; the whole suite passes, including the four new `test_readme.py` cases.
+
+- [ ] **Step 8: Commit**
+    ```bash
+    cd /Users/donghanglyu/code_project/job-hunt
+    git add README.md scripts/lossless-allowlist.json scripts/tests/test_readme.py
+    git commit -m "docs(readme): one pipeline, a correct layout, and the workspace shape
+
+The duplicated 8-step list had already drifted — it omitted Step 7.5 — which is
+the failure mode a second copy always has. Deleted, with each dropped line waived
+by hash and one written reason, so editing any of them revokes the waiver.
+
+Also drops the two deleted .tex templates from the layout, adds modes/ and the
+gates, documents the workspace directory including cv-source.txt, coverage.json
+and master-fingerprint.json, and removes a test-count claim that was wrong before
+the migration and is wrong by more than a hundred now."
+    ```
+
+---
+
+### Task 22: CI — `make check` and a workflow, so spec §12's "进 CI" is a file
+
+Spec §12 requires `check_skill_lossless.py` to run in CI, and §7's P0 table requires `check_conventions.py --all` to fail the build on an expired market table. No plan wired either. A check that exists but is never invoked is a check that is not there — the same class of defect as a gate with no receipt, one level up.
+
+**Files:**
+- Create: `Makefile`, `.github/workflows/checks.yml`
+- Test: `scripts/tests/test_ci.py`
+
+**Interfaces:**
+- Consumes: `scripts/check_skill_lossless.py`; `scripts/check_conventions.py` when Plan 2 lands it.
+- Produces: `make test`, `make lossless`, `make conventions`, `make check`.
+
+**About the conventions guard.** `check_conventions.py` is Plan 2's. Until it exists both CI entry points guard it with a file test — and both carry a self-retracting test, so the moment Plan 2 lands the script the suite goes red until the guard is removed. A step that skips silently after the script exists is a step that is not running.
+
+- [ ] **Step 1: Write the failing test**
+    Create `scripts/tests/test_ci.py`:
+    ```python
+    import pathlib
+
+    ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
+    MAKEFILE = ROOT / "Makefile"
+    WORKFLOW = ROOT / ".github" / "workflows" / "checks.yml"
+
+
+    def test_both_entry_points_exist():
+        assert MAKEFILE.is_file() and WORKFLOW.is_file()
+
+
+    def test_the_makefile_and_the_workflow_run_the_same_three_checks():
+        """Two entry points that run different things is worse than one: the local
+        one passes, the remote one fails, and nobody knows which is authoritative."""
+        mk, wf = MAKEFILE.read_text(encoding="utf-8"), WORKFLOW.read_text(encoding="utf-8")
+        for needle in ("pytest scripts/tests", "check_skill_lossless.py",
+                       "check_conventions.py"):
+            assert needle in mk, f"Makefile does not run {needle}"
+            assert needle in wf, f"checks.yml does not run {needle}"
+
+
+    def test_ci_fetches_enough_history_for_the_lossless_baseline():
+        """check_skill_lossless resolves a git TAG. A default shallow checkout has no
+        tags, so the check exits 2 — 'could not read the baseline', which is exactly
+        why that is a different exit code from 'content was lost'."""
+        assert "fetch-depth: 0" in WORKFLOW.read_text(encoding="utf-8")
+
+
+    def test_the_conventions_guard_disappears_when_the_script_lands():
+        """Plan 2 ships check_conventions.py. This test is red from that moment until
+        both entry points stop guarding it — because a CI step that keeps skipping is
+        a CI step that is not there, and spec §10 requires an expired market table to
+        fail the build."""
+        if not (ROOT / "scripts" / "check_conventions.py").exists():
+            return
+        for f in (MAKEFILE, WORKFLOW):
+            assert "-f scripts/check_conventions.py" not in f.read_text(encoding="utf-8"), (
+                f"{f.name} still guards check_conventions.py behind a file test — the "
+                f"script exists now; run it unconditionally")
+    ```
+
+- [ ] **Step 2: Run test to verify it fails**
+    Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests/test_ci.py -q`
+    Expected: FAIL — `assert MAKEFILE.is_file() and WORKFLOW.is_file()`
+
+- [ ] **Step 3: Write the Makefile**
+    Create `Makefile` (tabs, not spaces, in the recipe lines):
+    ```make
+    # The checks this repo is held to. `make check` is what actually runs today —
+    # the workflow file below it is the same three commands for whenever this repo
+    # gains a remote. Two entry points that run different things would be worse than
+    # one, so scripts/tests/test_ci.py asserts they stay in step.
+    .PHONY: test lossless conventions check
+    PY ?= python3
+    BASELINE ?= job-application-baseline
+
+    test:
+    	$(PY) -m pytest scripts/tests -q
+
+    lossless:
+    	$(PY) scripts/check_skill_lossless.py --baseline $(BASELINE)
+
+    conventions:
+    	@if [ -f scripts/check_conventions.py ]; then \
+    	  $(PY) scripts/check_conventions.py --all; \
+    	else \
+    	  echo "check_conventions.py is not in this repo yet (Plan 2 lands it) — skipped"; \
+    	fi
+
+    check: test lossless conventions
+    ```
+
+- [ ] **Step 4: Write the workflow**
+    Create `.github/workflows/checks.yml`:
+    ```yaml
+    name: checks
+
+    on:
+      push:
+      pull_request:
+
+    jobs:
+      checks:
+        runs-on: ubuntu-latest
+        steps:
+          - uses: actions/checkout@v4
+            with:
+              # check_skill_lossless.py resolves the job-application-baseline TAG.
+              # A shallow checkout has no tags, and the check would exit 2.
+              fetch-depth: 0
+          - uses: actions/setup-python@v5
+            with:
+              python-version: '3.11'
+          - run: pip install -r requirements.txt pytest
+          - run: python3 -m pytest scripts/tests -q
+          - run: python3 scripts/check_skill_lossless.py --baseline job-application-baseline
+          - name: market conventions
+            run: |
+              if [ -f scripts/check_conventions.py ]; then
+                python3 scripts/check_conventions.py --all
+              else
+                echo "check_conventions.py is not in this repo yet (Plan 2 lands it)"
+              fi
+    ```
+
+- [ ] **Step 5: Run test to verify it passes, then run the target for real**
+    ```bash
+    cd /Users/donghanglyu/code_project/job-hunt
+    python3 -m pytest scripts/tests/test_ci.py -q
+    make check
+    ```
+    Expected: `4 passed`; `make check` runs the suite green, prints `LOSSLESS: …`, and prints the conventions skip line. If `make` reports `missing separator`, the recipe lines are indented with spaces instead of a tab.
+
+- [ ] **Step 6: Commit**
+    ```bash
+    cd /Users/donghanglyu/code_project/job-hunt
+    git add Makefile .github/workflows/checks.yml scripts/tests/test_ci.py
+    git commit -m "ci: run pytest, the losslessness check and the conventions lint
+
+Spec §12 puts check_skill_lossless.py in CI and §7 puts check_conventions.py --all
+there; nothing invoked either. A check that exists and is never run is a check that
+is not there. The conventions step is guarded until Plan 2 lands the script, and
+test_ci.py goes red the moment it does so the guard cannot outlive its reason."
+    ```
+
+---
+
+### Task 23: Install into both runtimes and smoke-test them
 
 One repo, two symlinks — the same shape as `slide-maker`, which is already symlinked into `~/.claude/skills` from `~/code_project/slides_maker`. One copy of the doctrine, so it cannot drift between runtimes. The old `job-application` directory stays on disk as an archive but is **not** symlinked: two skills whose descriptions overlap fight for the trigger, and the user then has to know which one to invoke.
 
@@ -4451,7 +6239,7 @@ One repo, two symlinks — the same shape as `slide-maker`, which is already sym
 - Test: `scripts/tests/test_install.py`
 
 **Interfaces:**
-- Consumes: `SKILL.md`, `modes/apply.md`, `scripts/*.py` from Task 17.
+- Consumes: `SKILL.md`, `modes/apply.md`, `scripts/*.py` from Task 20.
 - Produces: two resolvable skill directories. No new Python interfaces.
 
 - [ ] **Step 1: Write the failing test**
@@ -4513,11 +6301,11 @@ One repo, two symlinks — the same shape as `slide-maker`, which is already sym
     Run:
     ```bash
     cd /Users/donghanglyu/code_project/job-hunt
-    python3 -m pytest scripts/tests -q
-    python3 scripts/check_skill_lossless.py --baseline job-application-baseline
-    git status --short
+    make check
+    git status --short -- ':!docs'
     ```
-    Expected: all tests pass; `LOSSLESS: …` with exit 0; `git status --short` shows only `scripts/tests/test_install.py` as untracked.
+    Expected: `make check` runs the whole suite green and prints `LOSSLESS: … , 9 waived` with exit 0. `git status --short -- ':!docs'` shows **only** `?? scripts/tests/test_install.py`.
+    `docs/` is excluded from that listing deliberately, not to hide anything: it is tracked, it is outside the skill corpus, and executing this plan legitimately leaves plan/research edits there. Anything else appearing under the skill tree itself — `SKILL.md`, `modes/`, `references/`, `agents/`, `assets/`, `scripts/`, `Makefile`, `.github/` — means a task's commit step was skipped; find it before finishing.
 
 - [ ] **Step 7: Commit**
     ```bash
@@ -4537,8 +6325,11 @@ symlinked: two skills with overlapping descriptions fight for the trigger."
 
 State these when reporting completion, so nobody assumes they landed:
 
-- **The `discover`, `assess` and `interview` modes.** SKILL.md names them and says they are not yet built; `modes/` holds only `apply.md`.
-- **The §12 flagged rewrite.** The FIT SNAPSHOT's required disclaimer talks about keyword-coverage *percentages*, and the new assess mode stops emitting those. Carrying it verbatim here is correct — this plan's job is that `job-hunt` does everything `job-application` does. The rewrite belongs to the assess-mode plan, as a separate small readable commit, recorded in the lossless allowlist by name so it is a decision rather than a casualty.
-- **The remaining P1/P2 checks** named in the spec: `consistency.py`, `check_mock.py`, `check_shortlist.py`, `check_conventions.py`, `check_evidence_refs.py`, `lint_no_prediction.py`, `check_no_write.py`, `check_opencli_result.py`, `count_coverage.py`, `check_pages.py`, `check_word_limits.py`.
-- **The eval rebuild.** The existing baseline at `~/.claude/skills/job-application-workspace/iteration-1/` has one run per configuration despite metadata claiming three, a baseline arm on only two of five evals, and one assertion logged as non-discriminating. Re-running it as `iteration-2` against `job-hunt` is the only real test of Task 17's layering change — `check_skill_lossless.py` proves bytes survived, not that they arrive when needed.
+- **The `discover`, `assess` and `interview` modes.** SKILL.md names them and says, per mode and in those exact words, that each `is not yet built in this repo`; `modes/` holds only `apply.md`. `test_a_mode_that_exists_is_not_still_described_as_not_yet_built` turns each sentence into a self-retracting one: the suite goes red the moment a later plan lands the mode file without deleting the sentence.
+- **The self-check list and the gate table are extended by every later plan, and the suite is RED until they are.** `test_the_self_check_names_every_script` / `..._every_reference_file` / `..._every_agent_file` / `..._every_mode_file` are deliberately exhaustive. Plans 2, 3 and 4 together add fourteen scripts, three mode files, three reference files and two agent files, so each of them needs a final task that appends its own entries to SKILL.md's `## Self-check` section **and** its gate table, and extends the `skip` set for its library-only modules (`opencli_meta.py`, `mock_vocab.py`, `mock_blocks.py` join `journal.py`, `paths.py`, `rounds.py`, `vocab.py`). This plan cannot do it — it runs first — and the red suite is the mechanism, not an accident.
+- **The mode-entry step for the other three modes.** `scripts/enter_mode.py` handles all four modes and `check_apply.py` requires the record for `apply`. Plans 2, 3 and 4 must each make `enter_mode.py --mode <theirs>` the first step of their mode file and mirror the `NO_MODE_ENTRY` / `MODE_FILE_CHANGED` findings into their own gate; without that, half of the layer-1.5 backstop exists for one mode out of four.
+- **The §12 flagged rewrite.** The FIT SNAPSHOT's required disclaimer talks about keyword-coverage *percentages*, and the new assess mode stops emitting those. Carrying it verbatim here is correct — this plan's job is that `job-hunt` does everything `job-application` does. **Plan 2 owns the rewrite**, as a separate small readable commit with its own `scripts/lossless-allowlist.json` entry naming it, so it is a decision rather than a casualty.
+- **Six layer-1 items from spec §6 that belong to the unbuilt modes**, listed so nobody finishes this plan believing SKILL.md is §6-complete. Landing here: the apply-verdict block and its disclaimer, the skill-wide banned-output vocabulary and its published-employer-rubric exception, and the §8 grounding-contract summary (Task 20). Landing with their modes: the read-only guarantee plus the `access: read` allow-list and the four opencli command pairs (**Plan 3**); the **platform-limit stop rule** — stop, no retry, no parameter change, no bypass, direction-level degradation, fill the disclosure table — which **Plan 3 carries into the same SKILL.md block** as the read-only guarantee; the four anti-coaching rules and their tripwire, and the mock-interview session mechanics (**Plan 4**).
+- **The remaining spec §7 scripts.** Six of them are **P0**, not P1/P2, which matters in a plan titled "migration and P0 fixes": `check_shortlist.py`, `check_conventions.py`, `check_evidence_refs.py`, `lint_no_prediction.py`, `check_no_write.py`, `check_opencli_result.py`. Then the P1/P2 remainder: `consistency.py`, `check_mock.py`, `count_coverage.py`. And two the spec names outside those tables: `evidence_blocks.py` (spec 5.2 step 5) and `check_assessment.py` (spec 5.2 gates). `check_pages.py` and `check_word_limits.py` are **no longer on this list** — Tasks 17 and 18 build them.
+- **The eval rebuild.** The existing baseline at `~/.claude/skills/job-application-workspace/iteration-1/` has one run per configuration despite metadata claiming three, a baseline arm on only two of five evals, and one assertion logged as non-discriminating. Re-running it as `iteration-2` against `job-hunt` is the only real test of Task 20's layering change — `check_skill_lossless.py` proves bytes survived, not that they arrive when needed. Spec §10 assigns it to this implementation; it is **Plan 5**, a separate plan.
 

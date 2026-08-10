@@ -4,23 +4,28 @@
 
 **Goal:** Give `job-hunt` a live, read-only job-discovery mode that runs through `opencli` and cannot deliver a shortlist it did not actually retrieve.
 
-**Architecture:** Three layers. `scripts/check_opencli_result.py` is a wrapper that turns one adapter invocation into a classification (`ok | platform_limit | not_logged_in | no_auth_adapter | transport`) and one `adapter_call` line in `journal.jsonl`; `scripts/check_no_write.py` and `scripts/check_shortlist.py` are gates that read those lines back and refuse a run that ran a write command, fabricated a row, or said "no results" when in fact every adapter died. `modes/discover.md` (layer 1.5, loaded unconditionally on entering the mode) defines the `shortlist.yaml` row schema that the gates require, and `references/{discovery-sources.md,source-policy.md,risk-control-signals.yaml}` carry the per-adapter catalogue, the single source standard, and the machine-readable stop signals.
+**Architecture:** Three layers. `scripts/check_opencli_result.py` is a wrapper that turns one adapter invocation into a classification (`ok | platform_limit | not_logged_in | no_auth_adapter | transport`) and one `adapter_call` line in `journal.jsonl`; `scripts/check_no_write.py` and `scripts/check_shortlist.py` are gates that read those lines back and refuse a run that ran a write command, fabricated a row, listed more rows than were retrieved, rendered a band without saying it came from a card, or said "no results" when in fact every adapter died. `modes/discover.md` (layer 1.5, loaded unconditionally on entering the mode, entry recorded with its content hash by `scripts/enter_mode.py`) defines the `search-preferences.yaml`, `brief.yaml` and `shortlist.yaml` schemas that the gates require, and `references/{discovery-sources.md,source-policy.md,risk-control-signals.yaml}` carry the per-adapter catalogue, the single source standard, and the machine-readable stop signals. SKILL.md (layer 1) carries only what has to be there when it is needed: the four command pairs, the exit-code rule, the write ban, the platform-limit stop rule, and the two triggers.
 
 **Tech Stack:** Python 3 (stdlib + PyYAML), pytest, `opencli` v1.8.6 (read commands only), Markdown + YAML skill files.
 
 ## Global Constraints
 
 - Repo root is `/Users/donghanglyu/code_project/job-hunt`. **Every path in this plan is relative to that root.**
-- **Prerequisite: Plan 1 has landed.** `scripts/journal.py` and `scripts/paths.py` must already exist. If they do not, stop and run Plan 1 first — do not stub them, do not reimplement them, do not change their signatures.
+- **Prerequisite: Plan 1 has landed.** `scripts/journal.py`, `scripts/paths.py`, `scripts/vocab.py` and `scripts/enter_mode.py` must already exist. If any does not, stop and run Plan 1 first — do not stub them, do not reimplement them, do not change their signatures.
 - Python 3, stdlib + **PyYAML** only in this plan. `python-docx` is not used here. If `python3 -c 'import yaml'` fails, stop — do not vendor a YAML parser.
 - Run tests with: `python3 -m pytest scripts/tests -q`
-- **Gate CLI contract, no exceptions.** `python3 scripts/<name>.py --workspace <path> [args]`; exit `0` = passed, exit `1` = failed with findings printed to stdout one per line each prefixed with a stable UPPERCASE code, exit `2` = could not run with the message on stderr. Each gate appends exactly one receipt line to `<workspace>/journal.jsonl` before exiting.
-- **Receipt verdict vocabulary used by this plan's gates:** `"pass"` | `"fail"` | `"could_not_run"`. On exit 2, write the receipt if the workspace directory exists; if the workspace directory itself is missing there is nothing to append to, so print to stderr and exit 2 without a receipt.
-- **`scripts/check_opencli_result.py` is a wrapper, NOT a gate.** Its exit codes are deliberately different: `0` = classified (the classification is printed to stdout as one JSON object), `2` = could not classify. It writes an `action: "adapter_call"` record via `journal.append`, never a gate receipt. Reason: a `not_logged_in` adapter is information the mode acts on, not a failure of the run; giving it exit 1 would make every honest degraded run look like a broken one.
+- **Gate CLI contract, one named exception (`check_opencli_result.py`, below).** `python3 scripts/<name>.py --workspace <path> [args]`; exit `0` = passed, exit `1` = failed with findings printed to stdout one per line each prefixed with a stable UPPERCASE code, exit `2` = could not run with the message on stderr. Each gate appends exactly one receipt line to `<workspace>/journal.jsonl` before exiting.
+- **Receipt verdict vocabulary, closed:** `"pass"` | `"fail"` | `"could_not_run"` | `"recorded"`. This plan's two gates use only the first three; `"recorded"` belongs to reporting scripts in other plans. **Never `"error"`.**
+- **Exit-2 discipline, identical in every gate.** On the "could not run" path write EXACTLY ONE receipt with verdict `"could_not_run"`, print the reason to stderr, return 2. The single exception: if the workspace directory itself does not exist there is nothing to append to, so print to stderr and return 2 **with no receipt** — and say that in the script's own docstring, because a reader who finds no receipt needs to know which of the two cases they are in. Every gate carries a test asserting the exit-2 receipt exists, and a test asserting the missing-workspace path writes none.
+- **`scripts/check_opencli_result.py` is a wrapper, NOT a gate — the one named exception to the contract above.** Its exit codes are deliberately different: `0` = classified (the classification is printed to stdout as one JSON object), `2` = could not classify. There is no exit 1. It writes an `action: "adapter_call"` record via `journal.append`, never a gate receipt. Reason: a `not_logged_in` adapter is information the mode acts on, not a failure of the run; giving it exit 1 would make every honest degraded run look like a broken one. **No other script in this plan may deviate**, and this deviation is named here so a later reader does not read it as a contract breach.
 - **The five classification strings, exact:** `"ok"` | `"platform_limit"` | `"not_logged_in"` | `"no_auth_adapter"` | `"transport"`.
-- **The ONE verdict vocabulary, exact:** `"strong_apply"` | `"worth_applying"` | `"stretch"` | `"likely_screen_out"` | `"blocked"`. Orthogonal refusal state (not a sixth level): `"insufficient_evidence"`. zh labels: 强烈建议投 / 值得投 / 可以冲刺 / 大概率被筛掉 / 硬性阻断 / 证据不足—不出结论. **Every discover-stage verdict carries `provisional: true` and MUST NOT be copied into an assessment.**
-- **Top three verdict levels** (the only ones a detail page may be fetched for): `strong_apply`, `worth_applying`, `stretch`.
-- **`JobListingEvidence` row fields, exact and complete:** `id, title, company, location, salary, url, source_site, source_id, extraction_method, retrieved_at, quality, verification, raw_text, why_matched, verdict, provisional`. Do not add or rename fields.
+- **The ONE verdict vocabulary lives in `scripts/vocab.py` (Plan 1) and is never re-spelled here.** `check_shortlist.py` does `from vocab import EFFORT, VERDICTS`; it declares no verdict tuple of its own. For the reader: `vocab.VERDICTS` is `("strong_apply", "worth_applying", "stretch", "likely_screen_out", "blocked")`, ordinal, strongest first; `vocab.REFUSAL` is `"insufficient_evidence"`, an orthogonal refusal state and **not** a sixth level. zh labels live in `vocab.VERDICT_ZH`. **Every discover-stage verdict carries `provisional: true` and MUST NOT be copied into an assessment.**
+- **Top three verdict levels** (the only ones a detail page may be fetched for): `VERDICTS[:3]` — `strong_apply`, `worth_applying`, `stretch`. Derived, never re-listed, so a change to the vocabulary cannot leave the cap behind.
+- **`JobListingEvidence` base fields, exact and complete:** `id, title, company, location, salary, url, source_site, source_id, extraction_method, retrieved_at, quality, verification, raw_text`. **Do not add or rename a base field.**
+- **The shortlist row is this skill's own schema on top of those base fields**, and it adds exactly three: `why_matched`, `verdict`, `provisional`, `effort`. Seventeen fields in total. `effort` is one of `vocab.EFFORT` (`quick` | `evening` | `multi_day` | `not_closable`) and exists so that D3's *within-a-band, order by effort-to-close* rule is implementable rather than merely stated. `check_shortlist.REQUIRED_ROW_FIELDS` is the single enumeration of all seventeen.
+- **`scripts/paths.py` is imported wherever a profile, workspace, search directory or `search-preferences.yaml` path is resolved** — `paths.search_prefs(name)`, `paths.search_dir(name, slug)`. No script and no mode file re-derives one of those with `.parents[n]` or a string join. (The gates themselves take `--workspace` as an argument and resolve nothing; the mode file is where the spine paths are named.) The **skill root** is not a spine path and `paths.py` does not model it, so `check_opencli_result.py` and `check_shortlist.py` derive it from `__file__` exactly as Plan 1's own `enter_mode.py` does — and both take an explicit override (`--signals-file`, `--skill-root`) so a test never depends on where the module happens to sit.
+- **Mode entry is the first thing `modes/discover.md` instructs.** `python3 scripts/enter_mode.py --workspace <ws> --mode discover` writes the `mode_entry` record and the mode file's content hash; `check_shortlist.py` fails with `NO_MODE_ENTRY` / `MODE_FILE_CHANGED` if it is absent or stale. That record is also what makes `journal.receipt` stamp this run's receipts `"mode": "discover"` instead of `"unknown"`.
+- **Expect one known-red window.** From Task 1 until Task 10, Plan 1's `scripts/tests/test_skill_structure.py` is FAILING, because it asserts `SKILL.md`'s `## Self-check` section names every `scripts/*.py`, every `references/*.md` and every `modes/*.md` in the tree — and this plan adds files before it registers them. That is why the per-task steps run only their own module and the **full** suite is not run until Task 10, which does the registration. Do not "fix" it by deleting the assertion.
 - **READ-ONLY.** No step in this plan may run an `opencli` command whose published `access:` is `write`. No login attempt on any site, ever, including in the dry run. There is no "confirm then send" path (spec D7).
 - **No fabricated facts.** Every claim about opencli behaviour written into a doc must be marked either measured (with the date `2026-08-09` and the exact command) or explicitly unverified. Do not invent a risk-control string and present it as observed.
 - Today is **2026-08-09**. Use that literal date in filenames and examples; never call an unstamped date helper in an example.
@@ -42,9 +47,9 @@
 | `scripts/check_no_write.py` | Gate. Fails if any invocation recorded in `journal.jsonl` resolves to `access: write`, or if its access cannot be resolved at all (fail closed). |
 | `scripts/check_shortlist.py` | Gate. Per-row provenance (Task 3) and run-level honesty: shortfall, empty-result disambiguation, disclosure block, source report, detail-fetch cap (Task 4). |
 | `references/discovery-sources.md` | Layer 2. Per-adapter flags, measured login state, identity field, detail command, caps, risk-control strings, degraded-fallback field list. Trigger + backstop live in SKILL.md and `check_shortlist.py`. |
-| `references/source-policy.md` | The ONE source standard (green/yellow/red) that the skill actually obeys. Replaces the retired `job-search-coach` policy. |
-| `modes/discover.md` | Layer 1.5. The mode file: entry conditions, the auth probe, bilingual queries, the `shortlist.yaml` schema (defined nowhere else), the provisional stamp rule, the platform-limit stop rule, the degraded disclosure block, the self-check list. |
-| `SKILL.md` | **Modified** — a marked block is appended carrying the four inlined command pairs and the evaluable trigger for `references/discovery-sources.md`. |
+| `references/source-policy.md` | The ONE source standard (green/yellow/red) that the skill actually obeys. Replaces the retired `job-search-coach` policy. Trigger + backstop live in SKILL.md and `check_shortlist.py`'s cap findings. |
+| `modes/discover.md` | Layer 1.5. The mode file: the mode-entry command, entry conditions, the `search-preferences.yaml` schema and the interview that fills it, the auth probe, bilingual queries, the `brief.yaml` and `shortlist.yaml` schemas (defined nowhere else), the provisional stamp rule for BOTH outputs, the platform-limit stop rule, the degraded disclosure block, the self-check list. |
+| `SKILL.md` | **Modified twice** — Task 5 appends a marked block carrying the four inlined command pairs, the six-clause platform-limit stop rule and the evaluable trigger for `references/discovery-sources.md`; Task 6 adds the trigger for `references/source-policy.md`; Task 10 registers everything in the `## Self-check` section and the gate table and retracts the "discover is not yet built" sentence. |
 | `scripts/tests/conftest.py` | Puts `scripts/` on `sys.path` so tests can `import check_shortlist`. |
 | `scripts/tests/discover_fixtures.py` | Builds a **valid** discover workspace out of the real 2026-08-09 51job capture. Every test mutates exactly one thing away from valid. |
 | `scripts/tests/test_*.py` | One test module per deliverable, each pinning the quiet case as hard as the firing case. |
@@ -74,7 +79,9 @@
 
 - [ ] **Step 1: Create the test bootstrap**
 
-    If `scripts/tests/conftest.py` already exists (Plan 1 may have created it), open it and make sure it contains the `sys.path` insert below; **add the lines, do not overwrite the file**. If it does not exist, create it with exactly this content:
+    First: `mkdir -p scripts/tests references` — the file below lands inside `scripts/tests`, so the directory has to exist before it is written.
+
+    Then, if `scripts/tests/conftest.py` already exists (Plan 1 may have created it), open it and make sure it contains the `sys.path` insert below; **add the lines, do not overwrite the file**. If it does not exist, create it with exactly this content:
 
     ```python
     """Put scripts/ on sys.path so tests can import the gate modules directly."""
@@ -85,8 +92,6 @@
     if str(SCRIPTS) not in sys.path:
         sys.path.insert(0, str(SCRIPTS))
     ```
-
-    Then: `mkdir -p scripts/tests references`
 
 - [ ] **Step 2: Write the signal data file**
 
@@ -344,6 +349,28 @@
         assert loud["classification"] == "platform_limit"
         assert loud["signal_id"] == "http-429-rate-limited"
         assert "do not retry" in loud["remedy"]
+
+
+    def test_a_signal_outside_error_message_still_fires():
+        """The rule is 'matched against the STDERR of a failed call', not 'matched
+        against the message field we happened to extract from it'. A body that
+        carries the wall while `message` carries only a generic sentence is the
+        exact shape a real risk-control page would take, and searching only the
+        extracted message would classify it `transport` and let the round continue
+        against a platform that just asked us to stop."""
+        signals = coc.load_signals(SIGNALS_FILE)
+        stderr = (
+            "ok: false\n"
+            "error:\n"
+            "  code: COMMAND_EXEC\n"
+            "  message: 'boss request failed'\n"
+            "  body: '请完成安全验证后重试'\n"
+            "  exitCode: 1\n"
+        )
+        r = coc.classify("boss", "search", 1, "", stderr, AUTH_ROWS, signals)
+        assert r["error_message"] == "boss request failed"   # extraction unchanged
+        assert r["classification"] == "platform_limit"
+        assert r["signal_id"] == "security-verification-cn"
 
 
     def test_transport_is_the_default_for_an_unrecognised_failure():
@@ -608,8 +635,17 @@
                         )
                 return result
 
+            # Matched against the WHOLE stderr of the failed call, not just the
+            # message we extracted from it. `references/risk-control-signals.yaml`
+            # states the rule that way for a reason: a real risk-control body puts
+            # the wall in a `body:`/`detail:` field while `message:` stays generic,
+            # and a search over `message` alone would classify that as `transport`
+            # and let the round carry on. Searching stderr cannot cry wolf either —
+            # a successful call has EMPTY stderr, and we are already inside the
+            # `exit_code != 0` branch.
+            haystack = f"{message}\n{stderr_text or ''}"
             for signal in signals:
-                if signal["site"] in ("*", site) and signal["regex"].search(message):
+                if signal["site"] in ("*", site) and signal["regex"].search(haystack):
                     result["classification"] = "platform_limit"
                     result["signal_id"] = signal["id"]
                     result["remedy"] = (
@@ -757,7 +793,7 @@
 - [ ] **Step 6: Run the test to verify it passes**
 
     Run: `python3 -m pytest scripts/tests/test_check_opencli_result.py -q`
-    Expected: PASS (17 passed)
+    Expected: PASS (16 passed)
 
 - [ ] **Step 7: Commit**
 
@@ -958,10 +994,29 @@ which is empty on success, so they cannot fire on job rows."
         assert "UNPARSABLE_JOURNAL_LINE:" in capsys.readouterr().out
 
 
-    def test_missing_journal_exits_2(tmp_path, capsys):
+    def test_missing_journal_exits_2_and_still_leaves_a_receipt(tmp_path, capsys):
+        # Exit-2 discipline: the workspace exists, so exactly one receipt is
+        # written, with verdict could_not_run. A gate that exits silently is
+        # indistinguishable from a gate nobody ran.
         (tmp_path / "raw" / "opencli-help").mkdir(parents=True)
         assert run(tmp_path) == 2
         assert "journal.jsonl" in capsys.readouterr().err
+        lines = (tmp_path / "journal.jsonl").read_text(
+            encoding="utf-8").strip().splitlines()
+        assert len(lines) == 1
+        receipt = json.loads(lines[0])
+        assert receipt["gate"] == "check_no_write"
+        assert receipt["verdict"] == "could_not_run"
+
+
+    def test_a_missing_workspace_directory_exits_2_with_no_receipt(tmp_path, capsys):
+        # The ONE case with no receipt: there is no directory to append to. The
+        # gate's docstring says so, and this pins it, so the two exit-2 shapes
+        # stay distinguishable to whoever reads the journal afterwards.
+        missing = tmp_path / "nope"
+        assert cnw.main(["--workspace", str(missing), "--no-fetch"]) == 2
+        assert "workspace not found" in capsys.readouterr().err
+        assert not missing.exists()
 
 
     def test_exactly_one_receipt_is_appended(tmp_path):
@@ -1093,6 +1148,11 @@ which is empty on success, so they cannot fire on job rows."
     that were journaled. It proves nothing about a command nobody recorded. The
     load-bearing half of the guarantee is that no write command appears anywhere in
     this skill's instructions and every command the mode file names is access: read.
+
+    Exit codes: 0 = passed, 1 = findings on stdout, 2 = could not run. On exit 2 one
+    receipt with verdict "could_not_run" is appended — EXCEPT when the workspace
+    directory itself does not exist, because then there is nothing to append to. If
+    you find no receipt at all, that is the case you are in.
     """
     from __future__ import annotations
 
@@ -1232,7 +1292,7 @@ which is empty on success, so they cannot fire on job rows."
 - [ ] **Step 5: Run the test to verify it passes**
 
     Run: `python3 -m pytest scripts/tests/test_check_no_write.py -q`
-    Expected: PASS (11 passed)
+    Expected: PASS (12 passed)
 
 - [ ] **Step 6: Commit**
 
@@ -1262,8 +1322,8 @@ States its own bound: it cannot see a command nobody journaled."
 - Consumes: `journal.receipt`, `journal.sha256_file` (Plan 1)
 - Produces:
   - `check_shortlist.GATE: str` = `"check_shortlist"`
-  - `check_shortlist.REQUIRED_ROW_FIELDS: tuple[str, ...]` (Task 7's mode-file test imports this)
-  - `check_shortlist.VERDICTS`, `TOP_THREE`, `EXTRACTION_METHODS`, `QUALITIES`, `VERIFICATIONS`, `MIN_SOURCE_ID_LEN`
+  - `check_shortlist.REQUIRED_ROW_FIELDS: tuple[str, ...]` — all **seventeen** row fields (Task 7's mode-file test imports this)
+  - `check_shortlist.VERDICTS` and `check_shortlist.EFFORT` — **re-exported from `scripts/vocab.py`, not declared here**; plus `TOP_THREE` (`VERDICTS[:3]`, derived), `EXTRACTION_METHODS`, `QUALITIES`, `VERIFICATIONS`, `MIN_SOURCE_ID_LEN`
   - `check_shortlist.load_raw_texts(workspace) -> dict[str, dict[str, str]]` — `{site: {filename: text}}`
   - `check_shortlist.check_rows(shortlist: dict, raw_texts: dict) -> list[str]`
   - `check_shortlist.main(argv=None) -> int`
@@ -1378,7 +1438,8 @@ States its own bound: it cannot see a command nobody journaled."
                          "薪资区间内；raw city 西安 在 brief.locations 内。raw degree 为「博士」，"
                          "档案为硕士，已计入分档。仅卡片信息，未取详情。"),
          "verdict": "worth_applying",
-         "provisional": True},
+         "provisional": True,
+         "effort": "evening"},
         {"id": "51job-173199597",
          "title": "高级AI算法工程师(J10032)",
          "company": "拓荆键科（海宁）半导体设备",
@@ -1397,7 +1458,8 @@ States its own bound: it cannot see a command nobody journaled."
          "why_matched": ("brief.target_titles 命中「算法工程师」；详情页 description 点名 "
                          "Python/C++ 与档案主线一致；raw degree 硕士 与档案一致。"),
          "verdict": "strong_apply",
-         "provisional": True},
+         "provisional": True,
+         "effort": "quick"},
     ]
 
     SHORTLIST = {
@@ -1684,12 +1746,68 @@ States its own bound: it cannot see a command nobody journaled."
         assert "BAD_ENUM" in codes(captured.out)
 
 
-    def test_a_missing_shortlist_exits_2(tmp_path, capsys):
+    def test_a_bad_effort_value_fires(tmp_path, capsys):
+        # effort is what makes D3's "within a band, order by effort-to-close"
+        # implementable instead of merely stated, so it is enum-checked like the
+        # rest rather than left as free text nobody can sort on.
         workspace = fx.build_workspace(tmp_path)
+        data = fx.load_shortlist(workspace)
+        data["rows"][0]["effort"] = "a weekend maybe"
+        fx.save_shortlist(workspace, data)
+        code, captured = run(workspace, capsys)
+        assert code == 1
+        assert "BAD_ENUM" in codes(captured.out)
+        assert "not_closable" in captured.out
+
+
+    def test_a_duplicated_source_id_fires(tmp_path, capsys):
+        # Count conservation from the row side: one retrieved posting may not be
+        # listed twice to pad the shortlist toward target_count.
+        import copy
+        workspace = fx.build_workspace(tmp_path)
+        data = fx.load_shortlist(workspace)
+        clone = copy.deepcopy(data["rows"][0])
+        clone["id"] = "51job-173198362-b"
+        data["rows"].append(clone)
+        fx.save_shortlist(workspace, data)
+        code, captured = run(workspace, capsys)
+        assert code == 1
+        assert "DUPLICATE_SOURCE_ID" in codes(captured.out)
+
+
+    def test_the_row_vocabulary_is_the_one_in_scripts_vocab(tmp_path):
+        # R1: no closed set is spelled out twice. If check_shortlist ever grows its
+        # own copy of the verdicts, this fails rather than drifting quietly.
+        import vocab
+        assert cs.VERDICTS is vocab.VERDICTS
+        assert cs.EFFORT is vocab.EFFORT
+        assert cs.TOP_THREE == ("strong_apply", "worth_applying", "stretch")
+        assert len(cs.REQUIRED_ROW_FIELDS) == 17
+        assert "effort" in cs.REQUIRED_ROW_FIELDS
+
+
+    def test_a_missing_shortlist_exits_2_and_still_leaves_a_receipt(tmp_path, capsys):
+        import json
+        workspace = fx.build_workspace(tmp_path)
+        before = len((workspace / "journal.jsonl").read_text(
+            encoding="utf-8").strip().splitlines())
         (workspace / "shortlist.yaml").unlink()
         code, captured = run(workspace, capsys)
         assert code == 2
         assert "shortlist.yaml" in captured.err
+        lines = (workspace / "journal.jsonl").read_text(
+            encoding="utf-8").strip().splitlines()
+        assert len(lines) == before + 1
+        receipt = json.loads(lines[-1])
+        assert receipt["gate"] == "check_shortlist"
+        assert receipt["verdict"] == "could_not_run"
+
+
+    def test_a_missing_workspace_directory_exits_2_with_no_receipt(tmp_path, capsys):
+        missing = tmp_path / "nope"
+        assert cs.main(["--workspace", str(missing)]) == 2
+        assert "workspace not found" in capsys.readouterr().err
+        assert not missing.exists()
 
 
     def test_a_receipt_is_written_on_pass_and_on_fail(tmp_path, capsys):
@@ -1731,6 +1849,11 @@ States its own bound: it cannot see a command nobody journaled."
     field has the right shape — so shape is not what gets checked. What gets checked
     is that each row's identifier appears VERBATIM in a raw capture from the site it
     claims, because that is the one thing a fabricated row cannot do.
+
+    Exit codes: 0 = passed, 1 = findings on stdout, 2 = could not run. On exit 2 one
+    receipt with verdict "could_not_run" is appended — EXCEPT when the workspace
+    directory itself does not exist, because then there is nothing to append to. If
+    you find no receipt at all, that is the case you are in.
     """
     from __future__ import annotations
 
@@ -1743,18 +1866,26 @@ States its own bound: it cannot see a command nobody journaled."
     import yaml  # noqa: E402
 
     import journal  # noqa: E402  (Plan 1)
+    from vocab import EFFORT, VERDICTS  # noqa: E402  (Plan 1 — the ONE vocabulary)
 
     GATE = "check_shortlist"
 
+    # The seventeen fields of a shortlist row: the thirteen JobListingEvidence base
+    # fields, plus the four this skill adds on top of them. This tuple is the single
+    # enumeration — modes/discover.md documents the same seventeen and the mode-doc
+    # test asserts every one of them is findable there.
     REQUIRED_ROW_FIELDS = (
         "id", "title", "company", "location", "salary", "url", "source_site",
         "source_id", "extraction_method", "retrieved_at", "quality",
         "verification", "raw_text", "why_matched", "verdict", "provisional",
+        "effort",
     )
 
-    VERDICTS = ("strong_apply", "worth_applying", "stretch", "likely_screen_out",
-                "blocked")
-    TOP_THREE = ("strong_apply", "worth_applying", "stretch")
+    # VERDICTS and EFFORT are imported, never re-spelled: a second copy of a closed
+    # set is a second thing to forget to update. VERDICTS is ordinal, strongest
+    # first, so the detail-fetch cap is a slice of it rather than a third list that
+    # could silently disagree with the other two.
+    TOP_THREE = VERDICTS[:3]
     EXTRACTION_METHODS = ("adapter_search", "adapter_detail", "user_paste",
                           "public_page")
     QUALITIES = ("complete", "partial", "card_only")
@@ -1851,12 +1982,32 @@ States its own bound: it cannot see a command nobody journaled."
                     "an assessment — assess always recomputes.")
             for field, allowed in (("extraction_method", EXTRACTION_METHODS),
                                    ("quality", QUALITIES),
-                                   ("verification", VERIFICATIONS)):
+                                   ("verification", VERIFICATIONS),
+                                   ("effort", EFFORT)):
                 if field in row and row.get(field) not in allowed:
                     findings.append(
                         f"BAD_ENUM: {label} {field}={row.get(field)!r} is not one of "
                         f"{', '.join(allowed)}")
             findings.extend(_check_provenance(label, row, site, raw_texts))
+
+        # One retrieved row may not become two shortlist rows. Without this, count
+        # conservation is decorative: the source report can honestly say "2 rows
+        # returned" while the shortlist below it lists the same posting three times.
+        seen = {}
+        for index, row in enumerate(shortlist.get("rows") or []):
+            if not isinstance(row, dict):
+                continue
+            key = (str(row.get("source_site") or "").strip(),
+                   str(row.get("source_id") or "").strip())
+            if not key[1]:
+                continue
+            if key in seen:
+                findings.append(
+                    f"DUPLICATE_SOURCE_ID: row {index} (id={row.get('id')!r}) repeats "
+                    f"source_id {key[1]!r} from row {seen[key]} on the same site — one "
+                    "retrieved row became two shortlist rows")
+            else:
+                seen[key] = index
         return findings
 
 
@@ -1909,7 +2060,7 @@ States its own bound: it cannot see a command nobody journaled."
 - [ ] **Step 5: Run the test to verify it passes**
 
     Run: `python3 -m pytest scripts/tests/test_check_shortlist_rows.py -q`
-    Expected: PASS (15 passed)
+    Expected: PASS (19 passed)
 
 - [ ] **Step 6: Commit**
 
@@ -1922,9 +2073,14 @@ States its own bound: it cannot see a command nobody journaled."
 Every row's source_id must appear VERBATIM in a raw/<site>-*.json
 capture from the site it claims, and its url (minus tracking params)
 must have been returned by an adapter. Verdicts are checked against the
-one five-level vocabulary and must carry provisional: true. Fixtures
-are the real 2026-08-09 51job rows, and the valid workspace is asserted
-silent so the gate cannot start crying wolf unnoticed."
+one five-level vocabulary — imported from scripts/vocab.py, never
+re-spelled, with the detail-fetch cap derived as VERDICTS[:3] so it
+cannot drift — and must carry provisional: true. effort joins the row
+schema so that ordering a band by effort-to-close is implementable
+rather than merely specified. One retrieved posting may not become two
+rows (DUPLICATE_SOURCE_ID). Fixtures are the real 2026-08-09 51job rows,
+and the valid workspace is asserted silent so the gate cannot start
+crying wolf unnoticed."
     ```
 
 ---
@@ -1940,7 +2096,11 @@ silent so the gate cannot start crying wolf unnoticed."
 - Produces:
   - `check_shortlist.EMPTINESS_PHRASES: tuple[str, ...]`
   - `check_shortlist.DISCLOSURE_LABELS: tuple[str, ...]` (Task 7's mode-file test imports this)
+  - `check_shortlist.PROVISIONAL_STAMP: str` — `"基于卡片信息的初判"`, the reader-facing half of the stamp
+  - `check_shortlist.MAX_ROWS_PER_ROUND_CEILING: int`, `check_shortlist.MAX_PAGES_PER_SITE_CEILING: int` — the enforceable half of `references/source-policy.md`
+  - `check_shortlist._check_caps(brief) -> list[str]`
   - `check_shortlist.check_run(workspace, shortlist, brief, md_text, calls) -> list[str]`
+  - New finding codes: `SOURCE_REPORT_COUNT_MISMATCH`, `MD_MISSING_PROVISIONAL_STAMP`, `CAP_MISSING`, `CAP_ABOVE_CEILING`
 
 **Why this is a separate task:** per-row provenance answers "is this row real"; the run-level layer answers "is this *run's story* real" — the shortfall, the empty-result disambiguation, the disclosure block, the source report, and the detail-fetch cap. A reviewer can accept one and reject the other.
 
@@ -2080,6 +2240,100 @@ silent so the gate cannot start crying wolf unnoticed."
         assert "active overwrite" in captured.out
 
 
+    def test_a_partially_missing_disclosure_block_names_the_missing_lines(
+            tmp_path, capsys):
+        # The middle branch: some labels present, some absent. All-absent gives
+        # DEGRADED_WITHOUT_DISCLOSURE and a blank answer gives DISCLOSURE_INCOMPLETE;
+        # this one was the only path with no test in either direction, which is how
+        # a half-filled disclosure block would have shipped silently.
+        dropped = ("收到限制信号后重试：", "绕过任何平台控制：")
+        trimmed = "\n".join(line for line in DISCLOSURE_OK.splitlines()
+                            if not any(label in line for label in dropped))
+        workspace = make_empty(tmp_path, [DEAD_CALL], trimmed)
+        code, captured = run(workspace, capsys)
+        assert code == 1
+        assert "DISCLOSURE_INCOMPLETE" in codes(captured.out)
+        assert "DEGRADED_WITHOUT_DISCLOSURE" not in codes(captured.out)
+        for label in dropped:
+            assert label in captured.out
+
+
+    def test_the_markdown_must_carry_the_card_based_stamp(tmp_path, capsys):
+        # spec §5.1 step 6: 不带这个戳就不许渲染. The YAML half is MISSING_PROVISIONAL;
+        # this is the half the reader actually sees.
+        workspace = fx.build_workspace(tmp_path)
+        text = (workspace / "shortlist.md").read_text(encoding="utf-8")
+        fx.write_md(workspace, text.replace("基于卡片信息的初判", "候选"))
+        code, captured = run(workspace, capsys)
+        assert code == 1
+        assert "MD_MISSING_PROVISIONAL_STAMP" in codes(captured.out)
+
+
+    def test_an_over_reported_rows_returned_fires(tmp_path, capsys):
+        workspace = fx.build_workspace(tmp_path)
+        data = fx.load_shortlist(workspace)
+        data["sources"][0]["rows_returned"] = 25
+        fx.save_shortlist(workspace, data)
+        code, captured = run(workspace, capsys)
+        assert code == 1
+        assert "SOURCE_REPORT_COUNT_MISMATCH" in codes(captured.out)
+        assert "more rows than the adapter returned" in captured.out
+
+
+    def test_more_shortlist_rows_than_the_site_returned_fires(tmp_path, capsys):
+        # The failure this bounds: one raw row becoming three shortlist rows.
+        workspace = fx.build_workspace(tmp_path)
+        data = fx.load_shortlist(workspace)
+        data["sources"][0]["rows_returned"] = 1
+        fx.save_shortlist(workspace, data)
+        code, captured = run(workspace, capsys)
+        assert code == 1
+        assert "SOURCE_REPORT_COUNT_MISMATCH" in codes(captured.out)
+        assert "De-duplication removes rows" in captured.out
+
+
+    def test_a_hidden_second_invocation_fires(tmp_path, capsys):
+        workspace = fx.build_workspace(tmp_path)
+        fx.write_journal(workspace, list(fx.JOURNAL) + [dict(fx.JOURNAL[0])])
+        code, captured = run(workspace, capsys)
+        assert code == 1
+        assert "SOURCE_REPORT_COUNT_MISMATCH" in codes(captured.out)
+        assert "invocations=1" in captured.out
+
+
+    def test_an_understated_empty_identity_count_fires(tmp_path, capsys):
+        workspace = fx.build_workspace(tmp_path)
+        records = [dict(fx.JOURNAL[0], empty_identity_rows=[0],
+                        needs_detail_recovery=True), fx.JOURNAL[1]]
+        fx.write_journal(workspace, records)
+        code, captured = run(workspace, capsys)
+        assert code == 1
+        assert "SOURCE_REPORT_COUNT_MISMATCH" in codes(captured.out)
+        assert "needs_detail_recovery" in captured.out
+
+
+    def test_a_brief_missing_the_yellow_caps_fires(tmp_path, capsys):
+        workspace = fx.build_workspace(tmp_path)
+        brief = fx.load_brief(workspace)
+        del brief["max_pages_per_site"]
+        fx.save_brief(workspace, brief)
+        code, captured = run(workspace, capsys)
+        assert code == 1
+        assert "CAP_MISSING" in codes(captured.out)
+        assert "references/source-policy.md" in captured.out
+
+
+    def test_a_cap_above_the_yellow_ceiling_fires(tmp_path, capsys):
+        workspace = fx.build_workspace(tmp_path)
+        brief = fx.load_brief(workspace)
+        brief["max_pages_per_site"] = 12
+        fx.save_brief(workspace, brief)
+        code, captured = run(workspace, capsys)
+        assert code == 1
+        assert "CAP_ABOVE_CEILING" in codes(captured.out)
+        assert "references/source-policy.md" in captured.out
+
+
     def test_qualified_prose_about_no_matches_with_rows_present_is_quiet(
             tmp_path, capsys):
         # "no matching senior roles in Utrecht" alongside two real rows is a
@@ -2137,12 +2391,17 @@ silent so the gate cannot start crying wolf unnoticed."
         assert "NO_TRIGGER_SECTION" in codes(captured.out)
 
 
-    def test_a_missing_brief_exits_2(tmp_path, capsys):
+    def test_a_missing_brief_exits_2_and_still_leaves_a_receipt(tmp_path, capsys):
+        import json
         workspace = fx.build_workspace(tmp_path)
         (workspace / "brief.yaml").unlink()
         code, captured = run(workspace, capsys)
         assert code == 2
         assert "brief.yaml" in captured.err
+        receipt = json.loads((workspace / "journal.jsonl").read_text(
+            encoding="utf-8").strip().splitlines()[-1])
+        assert receipt["gate"] == "check_shortlist"
+        assert receipt["verdict"] == "could_not_run"
 
 
     def test_a_used_site_with_no_source_report_entry_fires(tmp_path, capsys):
@@ -2211,7 +2470,7 @@ silent so the gate cannot start crying wolf unnoticed."
 - [ ] **Step 2: Run the test to verify it fails**
 
     Run: `python3 -m pytest scripts/tests/test_check_shortlist_run.py -q`
-    Expected: FAIL — several tests fail with `assert 0 == 1` (the run-level findings do not exist yet); `test_a_missing_brief_exits_2` fails with `assert 0 == 2`.
+    Expected: FAIL — several tests fail with `assert 0 == 1` (the run-level findings do not exist yet); `test_a_missing_brief_exits_2_and_still_leaves_a_receipt` fails with `assert 0 == 2`; `test_a_hidden_second_invocation_fires` and `test_an_understated_empty_identity_count_fires` fail on `assert 0 == 1` because `fx.write_journal` exists but nothing reads the counts back yet.
 
 - [ ] **Step 3: Add the run-level layer**
 
@@ -2235,6 +2494,18 @@ silent so the gate cannot start crying wolf unnoticed."
     # an omission.
     DISCLOSURE_LABELS = ("本次会话已登录：", "Adapter 返回：", "收到限制信号后重试：",
                          "绕过任何平台控制：", "取得真实岗位：", "降级输出类型：")
+
+    # The reader-facing half of the provisional stamp (spec §5.1 step 6: a discover
+    # verdict 不带这个戳就不许渲染). `provisional: true` in shortlist.yaml is the
+    # machine half, and nobody reading the round ever sees it — shortlist.md is what
+    # the user actually reads, so that is where the claim has to be qualified.
+    PROVISIONAL_STAMP = "基于卡片信息的初判"
+
+    # The yellow-tier round caps from references/source-policy.md, as numbers,
+    # because a cap enforced by a paragraph is not a cap. brief.yaml must carry both
+    # and neither may exceed these. This is that reference file's named backstop.
+    MAX_ROWS_PER_ROUND_CEILING = 25
+    MAX_PAGES_PER_SITE_CEILING = 2
     ```
 
     Add these functions above `_fail_to_run`:
@@ -2297,11 +2568,77 @@ silent so the gate cannot start crying wolf unnoticed."
                     f"SOURCE_REPORT_CONTRADICTS_JOURNAL: sources[{site}] reports "
                     f"classification {entry.get('classification')!r} but "
                     f"journal.jsonl recorded {sorted(x for x in recorded if x)}")
+
+            # ---- 条数守恒 (spec §5.1) --------------------------------------
+            # Each of these fires in ONE direction only — the dishonest one. The
+            # opposite direction is either impossible or harmless, and a check that
+            # also fires on the harmless case is a check people learn to ignore.
+            reported_rows = entry.get("rows_returned")
+            retrieved = sum(int(c.get("row_count") or 0) for c in matching)
+            if isinstance(reported_rows, int) and reported_rows > retrieved:
+                findings.append(
+                    f"SOURCE_REPORT_COUNT_MISMATCH: sources[{site}] reports "
+                    f"rows_returned={reported_rows} but journal.jsonl recorded "
+                    f"{retrieved} row(s) across {len(matching)} adapter_call(s). A "
+                    "run may not report more rows than the adapter returned.")
+            site_rows = [r for r in rows if isinstance(r, dict)
+                         and str(r.get("source_site") or "").strip() == site]
+            if isinstance(reported_rows, int) and len(site_rows) > reported_rows:
+                findings.append(
+                    f"SOURCE_REPORT_COUNT_MISMATCH: {len(site_rows)} shortlist rows "
+                    f"cite source_site {site!r} but sources[{site}] reports only "
+                    f"rows_returned={reported_rows}. De-duplication removes rows; "
+                    "nothing adds them.")
+            reported_calls = entry.get("invocations")
+            if isinstance(reported_calls, int) and reported_calls < len(matching):
+                findings.append(
+                    f"SOURCE_REPORT_COUNT_MISMATCH: sources[{site}] reports "
+                    f"invocations={reported_calls} but journal.jsonl recorded "
+                    f"{len(matching)}. Under-reporting invocations is how a retry "
+                    "after a stop-signal disappears from the disclosure block.")
+            reported_empty = entry.get("identity_field_empty_rows")
+            observed_empty = sum(len(c.get("empty_identity_rows") or [])
+                                 for c in matching)
+            if isinstance(reported_empty, int) and reported_empty < observed_empty:
+                findings.append(
+                    f"SOURCE_REPORT_COUNT_MISMATCH: sources[{site}] reports "
+                    f"identity_field_empty_rows={reported_empty} but journal.jsonl "
+                    f"recorded {observed_empty}. Under-reporting a blank identity "
+                    "field hides exactly the gap needs_detail_recovery exists to "
+                    "surface.")
+
             for name in entry.get("raw_files") or []:
                 if not (workspace / name).is_file():
                     findings.append(
                         f"SOURCE_REPORT_MISSING_RAW: sources[{site}] names "
                         f"{name!r}, which does not exist")
+        return findings
+
+
+    def _check_caps(brief):
+        """The yellow-tier caps in references/source-policy.md, as a check.
+
+        This is that reference file's named backstop: its two numbers are the only
+        part of the policy a program can decide, and without them the trigger in
+        SKILL.md would point at a file nothing reports you for skipping.
+        """
+        findings = []
+        for field, ceiling in (("max_rows_per_round", MAX_ROWS_PER_ROUND_CEILING),
+                               ("max_pages_per_site", MAX_PAGES_PER_SITE_CEILING)):
+            value = brief.get(field)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                findings.append(
+                    f"CAP_MISSING: brief.yaml has no positive integer `{field}`. "
+                    "The yellow-tier caps are what keep pagination and detail "
+                    "fan-out inside references/source-policy.md; a round without "
+                    "them is an uncapped one.")
+            elif value > ceiling:
+                findings.append(
+                    f"CAP_ABOVE_CEILING: brief.yaml {field}={value} exceeds the "
+                    f"yellow-tier ceiling of {ceiling} in "
+                    "references/source-policy.md. Read that file before raising "
+                    "it: the cap is the whole difference between two pages a human "
+                    "asked for and a crawl.")
         return findings
 
 
@@ -2356,6 +2693,16 @@ silent so the gate cannot start crying wolf unnoticed."
                 f"SHORTFALL_NO_REASON: brief.target_count is {target} but the "
                 f"shortlist has {len(rows)} rows and shortfall_reason is empty. "
                 "Write the reason — never pad the count.")
+
+        findings.extend(_check_caps(brief))
+
+        if rows and PROVISIONAL_STAMP not in md_text:
+            findings.append(
+                "MD_MISSING_PROVISIONAL_STAMP: shortlist.md renders rows without the "
+                f"「{PROVISIONAL_STAMP}」 label. `provisional: true` in shortlist.yaml "
+                "is the machine half of the stamp and no reader ever sees it; this is "
+                "the half they do see, and a discover verdict may not be rendered "
+                "without it.")
 
         if not rows:
             lowered = md_text.lower()
@@ -2423,7 +2770,7 @@ silent so the gate cannot start crying wolf unnoticed."
 - [ ] **Step 5: Run both shortlist test modules to verify they pass**
 
     Run: `python3 -m pytest scripts/tests/test_check_shortlist_rows.py scripts/tests/test_check_shortlist_run.py -q`
-    Expected: PASS (33 passed)
+    Expected: PASS (45 passed — 19 from the rows module, 26 from this one)
 
 - [ ] **Step 6: Commit**
 
@@ -2435,9 +2782,13 @@ silent so the gate cannot start crying wolf unnoticed."
 Reads journal.jsonl and refuses 'no results' wording unless at least one
 adapter exited 0 — all-adapters-died and found-nothing are otherwise the
 same shape. Also: shortfall needs a written reason, a degraded run needs
-its pre-filled disclosure block, the source report may not contradict the
-receipts, and a detail fetch outside the top three verdict levels needs a
-named exception. Both empty-result branches have a quiet twin test."
+its pre-filled disclosure block, the source report may not contradict OR
+out-count the receipts (条数守恒, each check firing only in the dishonest
+direction), shortlist.md may not render a band without the
+「基于卡片信息的初判」 stamp because the YAML flag is not a disclosure
+anyone reads, brief.yaml must carry both yellow-tier caps, and a detail
+fetch outside the top three verdict levels needs a named exception. Both
+empty-result branches and all three disclosure branches have tests."
     ```
 
 ---
@@ -2453,9 +2804,11 @@ named exception. Both empty-result branches have a quiet twin test."
 - Consumes: `references/risk-control-signals.yaml` (Task 1)
 - Produces:
   - `references/discovery-sources.md` containing exactly one fenced ` ```yaml ` block whose top-level key is `adapters:`, with one entry per site keyed by site name, each carrying `identity_field`, `detail_command`, `login_state_2026_08_09`, `runtime_verified`, `search_command`, `pagination`, `caps`.
-  - `SKILL.md` containing the markers `<!-- BEGIN discover-inserts (plan 3) -->` / `<!-- END discover-inserts (plan 3) -->`.
+  - `SKILL.md` containing the markers `<!-- BEGIN discover-inserts (plan 3) -->` / `<!-- END discover-inserts (plan 3) -->`, the four command pairs, the six-clause platform-limit stop rule, and the trigger for `references/discovery-sources.md`.
 
 **The trigger and its backstop.** The trigger sentence in SKILL.md is evaluable without having read the reference: *"you are in discover mode and about to call an adapter other than the four in the table above"*. The backstop is `check_shortlist.py`'s `SOURCE_REPORT_MISSING` — `shortlist.yaml`'s `sources:` entry needs that adapter's `identity_field` and `detail_command`, and for a non-inlined adapter those values exist nowhere else in the tree.
+
+**Why the stop rule is in this block and not in a reference.** Spec §6 lists 平台限制停止规则 among the things that may not leave SKILL.md, with the reason stated plainly: *每平台的触发串是数据；这条教条不是*. Plan 1 rewrites SKILL.md out of migrated `job-application` content, which contains no opencli material at all, so if this task does not carry the rule, nothing does — and the one file that would have carried it, `references/discovery-sources.md`, is a file you only open when you are already about to call an unfamiliar adapter. **Keep the sentence one line long wherever it is written.** The trigger is asserted as a substring, so a line break dropped into the middle of it silently deletes the assertion while leaving a paragraph that still reads correctly to a human — which is exactly the class of defect this whole plan is built against.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2555,16 +2908,36 @@ named exception. Both empty-result branches have a quiet twin test."
             assert site in text
 
 
-    def test_skill_md_states_the_exit_code_rule_and_the_write_ban():
+    def test_the_trigger_sentence_survives_line_wrapping_in_both_files():
+        # It is one evaluable sentence, and it is load-bearing in two files. A
+        # newline dropped into the middle of it deletes the assertion above
+        # without deleting the paragraph a reader sees, which is the worst
+        # possible failure shape for a layer-2 trigger.
+        phrase = "about to call an adapter other than the four"
+        assert phrase in SKILL.read_text(encoding="utf-8")
+        assert phrase in SOURCES.read_text(encoding="utf-8")
+
+
+    def test_skill_md_states_the_exit_code_rule_the_write_ban_and_the_stop_rule():
         text = SKILL.read_text(encoding="utf-8")
         assert "branch on the exit code before you read stdout" in text
         assert "access:` is `write" in text
+        # spec §6 lists the platform-limit stop rule as layer-1 content: the
+        # per-platform trigger strings are data, this dogma is not. All six
+        # clauses, because dropping any one of them is how "stop" quietly becomes
+        # "stop, then try a smaller limit".
+        assert "Stop that site for that round." in text
+        assert "Do not retry." in text
+        assert "Do not change parameters and retry" in text
+        assert "Do not route around it" in text
+        assert "direction-level degraded output" in text
+        assert "disclosure table" in text
     ````
 
 - [ ] **Step 2: Run the test to verify it fails**
 
     Run: `python3 -m pytest scripts/tests/test_discovery_docs.py -q`
-    Expected: FAIL — every test errors with `FileNotFoundError: .../references/discovery-sources.md`
+    Expected: FAIL, in **two different shapes** — do not read the mixture as a broken bootstrap. The seven tests that read `references/discovery-sources.md` error with `FileNotFoundError`; `test_skill_md_carries_the_discovery_trigger` and `test_skill_md_states_the_exit_code_rule_the_write_ban_and_the_stop_rule` fail with plain `AssertionError`, because Plan 1 already created `SKILL.md` and it simply does not carry this block yet. `test_the_trigger_sentence_survives_line_wrapping_in_both_files` fails on the SKILL.md assertion first.
 
 - [ ] **Step 3: Write the catalogue**
 
@@ -2573,8 +2946,9 @@ named exception. Both empty-result branches have a quiet twin test."
     ````markdown
     # Discovery sources — the opencli adapter catalogue
 
-    **Read this when you are in discover mode and about to call an adapter other than
-    the four inlined in SKILL.md (51job, indeed, linkedin, boss).** You cannot fill in
+    **Read this when you are in discover mode and
+    about to call an adapter other than the four in the table above** — the four
+    inlined in SKILL.md, which are 51job, indeed, linkedin and boss. You cannot fill in
     `shortlist.yaml`'s `sources:` entry for such an adapter without the
     `identity_field` and `detail_command` below, and `check_shortlist.py` fails the run
     with `SOURCE_REPORT_MISSING` when that entry is absent.
@@ -2794,19 +3168,43 @@ named exception. Both empty-result branches have a quiet twin test."
     Never run a command whose published `access:` is `write` —
     `check_no_write.py` reads that field out of the tool itself.
 
-    **READ `references/discovery-sources.md` when you are in discover mode and about to
-    call an adapter other than the four in the table above** (upwork, nowcoder,
-    1point3acres, maimai, or any site added later). It carries that adapter's flags, its
-    measured login state, its identity field and its detail command — and
-    `shortlist.yaml`'s `sources:` entry cannot be filled in without them, so
-    `check_shortlist.py` fails the run with `SOURCE_REPORT_MISSING` if you skipped it.
+    ### When a platform says stop, stop
+
+    A platform limit is any refusal the platform itself put up: a risk-control or
+    captcha body, a rate-limit, or a refusal on a site `opencli auth status` says you
+    are logged into. When one appears, all six of these apply at once, and the last
+    two are what make the first four checkable:
+
+    1. **Stop that site for that round.**
+    2. Do not retry.
+    3. Do not change parameters and retry — a smaller `--limit`, a different city or a
+       fresh `--window` is still a retry.
+    4. Do not route around it — no other adapter, no public mirror, no logged-in
+       session standing in for a logged-out one.
+    5. Emit the **direction-level degraded output** instead: 3-5 目标方向, no `rows:`,
+       so it cannot claim a posting exists.
+    6. Fill in the disclosure table, whose answers ship pre-filled as 否 precisely so
+       that concealing a retry has to be an active overwrite rather than an omission.
+
+    The per-platform trigger strings are data and live in
+    `references/risk-control-signals.yaml`; **this rule is not data and does not live
+    in a reference file**, because the moment it needs to be applied is the moment
+    nobody is going to go and look it up.
+
+    **READ `references/discovery-sources.md` when you are in discover mode and
+    about to call an adapter other than the four in the table above** (upwork,
+    nowcoder, 1point3acres, maimai, or any site added later). It carries that
+    adapter's flags, its measured login state, its identity field and its detail
+    command — and `shortlist.yaml`'s `sources:` entry cannot be filled in without
+    them, so `check_shortlist.py` fails the run with `SOURCE_REPORT_MISSING` if you
+    skipped it.
     <!-- END discover-inserts (plan 3) -->
     ```
 
 - [ ] **Step 5: Run the test to verify it passes**
 
     Run: `python3 -m pytest scripts/tests/test_discovery_docs.py -q`
-    Expected: PASS (9 passed)
+    Expected: PASS (10 passed)
 
 - [ ] **Step 6: Commit**
 
@@ -2815,9 +3213,13 @@ named exception. Both empty-result branches have a quiet twin test."
     git add references/discovery-sources.md SKILL.md scripts/tests/test_discovery_docs.py
     git commit -m "discover: per-adapter catalogue with a trigger you can evaluate unread
 
-SKILL.md inlines the four command pairs actually used and says exactly
-when to open references/discovery-sources.md: when about to call an
-adapter other than those four. Backstop is SOURCE_REPORT_MISSING — a
+SKILL.md inlines the four command pairs actually used, the six-clause
+platform-limit stop rule (spec 6: the trigger strings are data, the rule
+is not), and says exactly when to open references/discovery-sources.md:
+when about to call an adapter other than those four. The trigger sentence
+is kept on one line in both files that carry it, because it is asserted
+as a substring and a line break would delete the assertion silently.
+Backstop is SOURCE_REPORT_MISSING — a
 non-inlined adapter's identity_field and detail_command exist nowhere
 else. Every runtime claim is tagged runtime_verified true/false; only
 51job, indeed and 1point3acres were ever executed."
@@ -2829,11 +3231,18 @@ else. Every runtime claim is tagged runtime_verified true/false; only
 
 **Files:**
 - Create: `references/source-policy.md`
+- Modify: `SKILL.md` (add the source-policy trigger inside the existing `discover-inserts` marker block)
 - Test: `scripts/tests/test_source_policy.py`
 
 **Interfaces:**
-- Consumes: `check_shortlist.TOP_THREE` and `check_shortlist.EXTRACTION_METHODS` (Task 3) — the policy's detail-fetch cap and the gate's `DETAIL_FETCH_OUT_OF_BAND` must name the same three verdicts, and the policy's metadata table must list the same extraction methods the gate accepts.
-- Produces: `references/source-policy.md` with exactly one `## Green`, one `## Yellow`, one `## Red` section.
+- Consumes: `check_shortlist.TOP_THREE`, `check_shortlist.EXTRACTION_METHODS`, `check_shortlist.MAX_ROWS_PER_ROUND_CEILING`, `check_shortlist.MAX_PAGES_PER_SITE_CEILING` (Tasks 3-4) — the policy's detail-fetch cap and the gate's `DETAIL_FETCH_OUT_OF_BAND` must name the same three verdicts, the policy's two numeric ceilings must be the numbers `_check_caps` enforces, and the policy's metadata table must list the same extraction methods the gate accepts.
+- Produces: `references/source-policy.md` with exactly one `## Green`, one `## Yellow`, one `## Red` section; `SKILL.md` carrying its trigger.
+
+**This file's trigger and its backstop (the thing every layer-2 file needs).** Until now `references/source-policy.md` had neither: its only pointer was inside `modes/discover.md`'s own self-check, which is a pointer you only reach if you already opened the mode file, and nothing anywhere reported skipping it. Both halves are added here.
+
+- **Trigger, evaluable without having read the file:** *read it before the first live retrieval of any run — before the first `opencli` adapter call — and again before agreeing to page further, fetch more detail pages, or work while the user is away.* A model can decide "am I about to make my first live call, or has the user just asked for more pages?" without knowing anything about the file's contents.
+- **Backstop:** `check_shortlist.py`'s `CAP_MISSING` and `CAP_ABOVE_CEILING` (Task 4). The two round caps are the only part of the policy a program can decide, and `brief.yaml` cannot satisfy them by accident: a round with no caps, or caps above the yellow ceiling, fails the gate and the finding text names this file.
+- **Honest bound, carried into the residual-risk list:** the caps are a backstop for *one* section. Nothing reports a run that quietly did something Red. The load-bearing half there remains that no Red action appears anywhere in this skill's instructions, and `check_no_write.py` covers the one Red line a script can see.
 
 **Why this rewrite exists (spec D5/D6).** The retired `job-search-coach` policy put "auto-scroll or page through large result sets", "automatically opening many detail pages" and "hidden/internal API calls on logged-in job boards" in **Red**. The owner then chose opencli as the primary discovery path, and opencli's cookie-strategy read commands are precisely those three things. Two standards would mean shipping a policy the skill violates on every run, so pagination and detail fetch move to **Yellow with hard caps** and the caps are enforced by `check_shortlist.py` rather than by good intentions. Red keeps everything that is about defeating a control the platform put up on purpose.
 
@@ -2903,6 +3312,22 @@ else. Every runtime claim is tagged runtime_verified true/false; only
                 f"the detail-fetch cap must name {verdict} exactly as "
                 "check_shortlist.DETAIL_FETCH_OUT_OF_BAND does")
         assert "DETAIL_FETCH_OUT_OF_BAND" in yellow
+        # The two numbers are the enforceable half of this file. If the prose and
+        # the gate ever disagree, the run passes a cap the policy did not set.
+        assert str(cs.MAX_ROWS_PER_ROUND_CEILING) in yellow
+        assert str(cs.MAX_PAGES_PER_SITE_CEILING) in yellow
+        assert "CAP_ABOVE_CEILING" in yellow
+
+
+    def test_skill_md_carries_this_files_trigger_and_names_its_backstop():
+        # Every layer-2 file needs a trigger a model can evaluate WITHOUT having
+        # read it, plus something that reports skipping it. This file had neither
+        # until now: its only pointer lived inside modes/discover.md's self-check,
+        # which you only reach once you have already opened the mode file.
+        text = (REPO / "SKILL.md").read_text(encoding="utf-8")
+        assert "references/source-policy.md" in text
+        assert "before the first live retrieval of any run" in text
+        assert "CAP_ABOVE_CEILING" in text
 
 
     def test_the_policy_does_not_ban_the_adapters_the_skill_uses():
@@ -2932,7 +3357,7 @@ else. Every runtime claim is tagged runtime_verified true/false; only
 - [ ] **Step 2: Run the test to verify it fails**
 
     Run: `python3 -m pytest scripts/tests/test_source_policy.py -q`
-    Expected: FAIL — every test errors with `FileNotFoundError: .../references/source-policy.md`
+    Expected: FAIL, in **two shapes**. Seven tests error with `FileNotFoundError: .../references/source-policy.md`; `test_there_is_exactly_one_source_policy_file` fails with a plain `AssertionError: [] == ['source-policy.md']` because the glob finds nothing rather than raising; and `test_skill_md_carries_this_files_trigger_and_names_its_backstop` fails with `AssertionError` against a `SKILL.md` that Plan 1 already created.
 
 - [ ] **Step 3: Write the policy**
 
@@ -2973,10 +3398,13 @@ else. Every runtime claim is tagged runtime_verified true/false; only
 
     - opencli read commands on a **logged-in** adapter (`boss`, `linkedin`) in a session
       the user is present for.
-    - **Pagination** within the round cap. `max_rows_per_round` (brief.yaml; default 25)
-      and `max_pages_per_site` (brief.yaml; default 2). Never above the adapter's own
-      documented `--limit` ceiling — indeed caps at 25, 51job at 50, linkedin at 100,
-      upwork at 50.
+    - **Pagination** within the round cap. `brief.yaml` must carry `max_rows_per_round`
+      and `max_pages_per_site`, and these are **ceilings, not defaults**: at most 25
+      rows per site per round and at most 2 pages per site. `check_shortlist.py`
+      enforces both with `CAP_MISSING` (the brief left one out) and
+      `CAP_ABOVE_CEILING` (the brief raised one) — the cap is a check, not a promise.
+      Also never above the adapter's own documented `--limit` ceiling — indeed caps at
+      25, 51job at 50, linkedin at 100, upwork at 50.
     - **Detail-page fetch**, and only for rows whose provisional verdict is
       `strong_apply`, `worth_applying` or `stretch`. `likely_screen_out` and `blocked`
       rows stay card-level and are labelled 未取详情. The user may name an individual
@@ -3049,16 +3477,33 @@ else. Every runtime claim is tagged runtime_verified true/false; only
     nothing checking it.
     ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [ ] **Step 4: Add this file's trigger to SKILL.md**
+
+    Insert these lines into `SKILL.md` **inside** the existing
+    `<!-- BEGIN discover-inserts (plan 3) --> … <!-- END discover-inserts (plan 3) -->`
+    block, immediately before the `references/discovery-sources.md` trigger paragraph.
+    Do not create a second marker block, and do not touch anything outside the markers.
+
+    ```markdown
+    **READ `references/source-policy.md` before the first live retrieval of any run**
+    — before the first `opencli` adapter call — and again before agreeing to page
+    further, to fetch more detail pages, or to work while the user is away. It is the
+    ONE source standard: what is green, what is yellow-with-caps, and what is never
+    done whatever the user asks. Its two round caps are enforced rather than
+    suggested: `brief.yaml` must carry `max_rows_per_round` and `max_pages_per_site`,
+    and `check_shortlist.py` fails the run with `CAP_MISSING` or `CAP_ABOVE_CEILING`.
+    ```
+
+- [ ] **Step 5: Run the test to verify it passes**
 
     Run: `python3 -m pytest scripts/tests/test_source_policy.py -q`
-    Expected: PASS (9 passed)
+    Expected: PASS (10 passed)
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
     ```bash
     cd /Users/donghanglyu/code_project/job-hunt
-    git add references/source-policy.md scripts/tests/test_source_policy.py
+    git add references/source-policy.md SKILL.md scripts/tests/test_source_policy.py
     git commit -m "discover: one source policy, and one the skill actually obeys
 
 Pagination and detail fetch move from Red to Yellow with caps that a
@@ -3067,7 +3512,12 @@ strong_apply/worth_applying/stretch). Red keeps captcha and fingerprint
 evasion, proxies, multi-account rotation, unattended operation, batch
 outreach, unsourced openness claims, and every access: write command.
 The changelog names the cookie-strategy line honestly instead of quietly
-dropping it, and says outright that account risk is not zero."
+dropping it, and says outright that account risk is not zero.
+
+Also gives the file the two things every layer-2 file needs and this one
+had neither of: a SKILL.md trigger you can evaluate before opening it
+(before the first live retrieval of any run) and a named backstop
+(CAP_MISSING / CAP_ABOVE_CEILING on brief.yaml's two round caps)."
     ```
 
 ---
@@ -3079,8 +3529,10 @@ dropping it, and says outright that account risk is not zero."
 - Test: `scripts/tests/test_discover_mode_doc.py`
 
 **Interfaces:**
-- Consumes: `check_shortlist.REQUIRED_ROW_FIELDS`, `check_shortlist.VERDICTS`, `check_shortlist.TOP_THREE`, `check_shortlist.DISCLOSURE_LABELS`, `check_shortlist.EXTRACTION_METHODS`, `check_shortlist.QUALITIES`, `check_shortlist.VERIFICATIONS` (Tasks 3-4); `check_opencli_result.CLASSIFICATIONS` (Task 1)
-- Produces: `modes/discover.md` — the **only** definition of the `brief.yaml` and `shortlist.yaml` schemas. Nothing else in the tree defines them, which is what makes the gates' field requirements a backstop for having read this file.
+- Consumes: `check_shortlist.REQUIRED_ROW_FIELDS`, `check_shortlist.VERDICTS`, `check_shortlist.EFFORT`, `check_shortlist.TOP_THREE`, `check_shortlist.DISCLOSURE_LABELS`, `check_shortlist.PROVISIONAL_STAMP`, `check_shortlist.EXTRACTION_METHODS`, `check_shortlist.QUALITIES`, `check_shortlist.VERIFICATIONS` (Tasks 3-4); `check_opencli_result.CLASSIFICATIONS` (Task 1); `scripts/enter_mode.py` and `scripts/paths.py` (Plan 1) as the commands and helpers the file instructs
+- Produces: `modes/discover.md` — the **only** definition of the `brief.yaml`, `shortlist.yaml` and `search-preferences.yaml` schemas. Nothing else in the tree defines them, which is what makes the gates' field requirements a backstop for having read this file.
+
+**Three things this task settles that were previously loose ends.** (1) `search-preferences.yaml` is in the spec's shared spine (§4.3) and `modes/assess.md` already branches on its contents, but no plan created it — discover owns it, so it is defined here, with the interview that fills it. (2) The mode-entry command is step zero, which gives layer 1.5 the **second** half of its backstop (spec §4.2: the gate requires a field only this file defines, *and* `journal.jsonl` records this file's hash) — the gate half lands in Task 8. (3) `insufficient_evidence` stops being described as a shortlist row: the gate rejects it, so instructing it would have been instructing an output the run's own gate refuses.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3172,17 +3624,26 @@ dropping it, and says outright that account risk is not zero."
     def test_the_no_fabrication_rule_is_restated_at_why_matched():
         # spec §8: the fence is repeated in exactly three places, and the
         # shortlist's why_matched field is one of them.
+        #
+        # Anchored on the DEFINITION, not on the first mention of the word. The
+        # first mention is Step 0's "Write how, per row, in `why_matched`", and a
+        # window measured from there is satisfied by the unrelated "Never pad the
+        # count." two paragraphs later — so the earlier version of this test passed
+        # with the entire fence paragraph deleted.
         body = text()
-        index = body.find("why_matched")
-        assert index != -1
-        window = body[index:index + 2600]
-        assert "绝不" in window or "never" in window.lower()
+        anchor = "**`why_matched` is one of exactly three places"
+        index = body.find(anchor)
+        assert index != -1, "the why_matched fence paragraph is gone"
+        window = body[index:index + 700]
+        assert "绝不" in window
+        assert "write a reason that the card does not support" in body
 
 
     def test_every_script_and_reference_this_mode_uses_is_named():
         body = text()
-        for name in ("scripts/check_opencli_result.py", "scripts/check_no_write.py",
-                     "scripts/check_shortlist.py", "references/discovery-sources.md",
+        for name in ("scripts/enter_mode.py", "scripts/check_opencli_result.py",
+                     "scripts/check_no_write.py", "scripts/check_shortlist.py",
+                     "scripts/paths.py", "references/discovery-sources.md",
                      "references/source-policy.md",
                      "references/risk-control-signals.yaml"):
             assert name in body, f"{name} is not named in the self-check list"
@@ -3207,6 +3668,60 @@ dropping it, and says outright that account risk is not zero."
         body = text()
         assert "searches/<YYYY-MM-DD>-<slug>" in body
         assert "raw/<site>-<n>.json" in body
+        # R4: the spine paths are resolved through scripts/paths.py, never
+        # rebuilt by hand, so the resume-an-unfinished-run lookup keeps working.
+        assert "paths.search_dir(" in body
+        assert "paths.search_prefs(" in body
+
+
+    def test_the_mode_entry_command_is_the_first_thing_the_file_asks_for():
+        # Layer 1.5's second backstop (spec §4.2): the gate requires a field only
+        # this file defines, AND journal.jsonl records this file's content hash.
+        # Without the second half, "loaded unconditionally" is a hope.
+        body = text()
+        assert "scripts/enter_mode.py --workspace <ws> --mode discover" in body
+        assert "NO_MODE_ENTRY" in body
+        assert "MODE_FILE_CHANGED" in body
+        entry = body.index("scripts/enter_mode.py")
+        for later in ("## Step 0", "opencli auth status"):
+            assert body.index(later) > entry, (
+                f"{later!r} comes before the mode-entry command; entry is step zero")
+
+
+    def test_the_search_preferences_schema_is_defined_here():
+        # spec §4.3 puts search-preferences.yaml in the shared spine and §5.2 has
+        # assess branch on it. discover owns writing it, so discover defines it —
+        # a schema two modes read and no mode defines is a schema that drifts.
+        body = text()
+        assert "search-preferences.yaml" in body
+        for field in ("target_market", "locations", "seniority", "work_models",
+                      "languages", "salary_floor", "avoid", "experience_track"):
+            assert field in body, f"search-preferences field {field!r} is defined nowhere"
+        assert "cn / nl / de / uk / us / other" in body
+        assert "asked, never inferred" in body
+
+
+    def test_the_effort_vocabulary_is_defined_here():
+        body = text()
+        for value in cs.EFFORT:
+            assert value in body, f"effort value {value!r} is listed nowhere"
+        assert "order by effort" in body.lower()
+
+
+    def test_insufficient_evidence_is_never_a_shortlist_row():
+        # A refusal state is not a listing. check_shortlist.VERDICTS is the five
+        # levels, so a row carrying it fires BAD_VERDICT — a mode file that asks
+        # for one would be instructing an output its own gate rejects.
+        body = text()
+        assert "insufficient_evidence" in body          # it IS named…
+        assert "dropped from the shortlist" in body     # …as a drop, not a row
+        assert "the row is `insufficient_evidence`" not in body
+
+
+    def test_the_card_based_stamp_is_required_in_the_rendered_markdown_too():
+        body = text()
+        assert cs.PROVISIONAL_STAMP in body
+        assert "MD_MISSING_PROVISIONAL_STAMP" in body
     ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -3229,6 +3744,24 @@ dropping it, and says outright that account risk is not zero."
     chains into `apply`. Thirty rows do not become thirty CVs; the whole point of
     ranking a shortlist is to let a person choose.
 
+    ## On entering this mode — before anything else
+
+    ```bash
+    python3 scripts/enter_mode.py --workspace <ws> --mode discover
+    ```
+
+    This writes a `mode_entry` record carrying **this file's content hash** into
+    `journal.jsonl`. It is not bookkeeping: it is the half of the layer-1.5 backstop
+    that a gate can see. `check_shortlist.py` fails the run with `NO_MODE_ENTRY` when
+    the record is absent, and with `MODE_FILE_CHANGED` when the hash no longer matches
+    the file on disk — meaning what was read is not what is now here, so re-enter and
+    re-read. It is also what makes every receipt in this run stamped
+    `"mode": "discover"` instead of `"unknown"`.
+
+    Then read this file in full. Both halves matter: the gate below requires
+    `shortlist.yaml` fields that are defined nowhere else, and the hash proves the
+    definition you followed is the definition on disk.
+
     ## Entry conditions (any one)
 
     1. The user wants to find or compare roles.
@@ -3246,7 +3779,11 @@ dropping it, and says outright that account risk is not zero."
 
     | Reads | Writes |
     |---|---|
-    | `profile.yaml`, `search-preferences.yaml` | `searches/<YYYY-MM-DD>-<slug>/` and nothing else |
+    | `profile.yaml` (never modified by any mode) | `searches/<YYYY-MM-DD>-<slug>/`, plus `search-preferences.yaml` — the one spine file discover owns |
+
+    Discover is the **only** mode that writes `search-preferences.yaml`. `assess` reads
+    it and must not create it: a file two modes write is a file whose contents nobody
+    can account for.
 
     Workspace layout — **the path shape is load-bearing**, the resume-an-unfinished-run
     feature finds work by this shape:
@@ -3260,11 +3797,53 @@ dropping it, and says outright that account risk is not zero."
       raw/<site>-<n>.err         adapter stderr for the same call
       raw/opencli-help/<site>.yaml   the adapter's own metadata for this run
       raw/auth-status.json       the auth probe output
-      journal.jsonl              adapter_call records + gate receipts
+      journal.jsonl              mode_entry + adapter_call records + gate receipts
     ```
+
+    **Resolve both spine paths through `scripts/paths.py`, never by hand:**
+    `paths.search_dir(<name>, "<YYYY-MM-DD>-<slug>")` for the workspace above and
+    `paths.search_prefs(<name>)` for the preferences file below. One module owns the
+    layout, and a run that string-joins its own version orphans the previous workspace
+    with no error anywhere.
 
     `raw/*` is where every downstream claim's provenance chain terminates. Edit it and
     source tracing becomes theatre.
+
+    ## The shared search preferences — asked once, reused, confirmed
+
+    `paths.search_prefs(<name>)` → `~/.claude/job-profiles/<name>/search-preferences.yaml`.
+    Discover **owns** this file: it is the only mode that writes it, and `assess` reads
+    it to avoid asking for the target market once per posting.
+
+    ```yaml
+    updated: "2026-08-09"
+    target_market: cn                    # cn / nl / de / uk / us / other
+    locations: ["上海", "西安"]           # cities or regions, in the market's own language
+    seniority: mid                       # new_grad|junior|mid|senior|unknown
+    work_models: ["onsite", "hybrid"]    # remote|hybrid|onsite
+    languages: ["Chinese", "English"]    # languages the user can work in
+    salary_floor: {currency: CNY, amount: 30000, period: month}   # or null
+    avoid: ["外包", "销售导向岗位"]
+    experience_track: "medical imaging / MRI reconstruction"
+    ```
+
+    **Every field here is asked, never inferred.** Reading a salary floor off a past
+    payslip, an avoid-list off a CV, or a target market off the language someone happens
+    to be typing in produces a file that looks like the user's preferences and is not —
+    and because it is reused across every later round, one wrong inference quietly
+    steers months of searching.
+
+    - **First run** (the file does not exist): ask the eight questions above, in the
+      user's language, in one pass. `salary_floor: null` is a legitimate answer and the
+      only correct one if the user declines — never substitute a market median.
+      `target_market: other` is likewise legitimate: markets outside `cn/nl/de/uk/us`
+      have no convention data, and saying so beats borrowing a neighbour's.
+    - **Later runs:** read it, show the user what it says, and **confirm once per
+      session** — not once per posting. Re-ask whenever this round's locations sit in a
+      different market than `target_market`.
+    - Rewriting it is an explicit act with the user watching. Bump `updated` when you do.
+    - `brief.yaml` below is this round's *narrowing* of these preferences, not a copy of
+      them: preferences are durable, a brief is one round.
 
     ## Step 0 — state the trigger reason BEFORE searching
 
@@ -3393,8 +3972,9 @@ dropping it, and says outright that account risk is not zero."
 
     ## Step 6 — normalise, then de-duplicate
 
-    Every row becomes one `JobListingEvidence` entry. This schema is defined here and
-    nowhere else; `check_shortlist.py` requires all sixteen fields.
+    Every row becomes one `JobListingEvidence` entry plus this skill's four additions
+    (`why_matched`, `verdict`, `provisional`, `effort`). This schema is defined here and
+    nowhere else; `check_shortlist.py` requires all seventeen fields.
 
     ```yaml
     - id: 51job-173198362              # <site>-<source_id>, stable within the search
@@ -3413,10 +3993,19 @@ dropping it, and says outright that account risk is not zero."
       why_matched: "…"                 # see the rule below
       verdict: worth_applying          # the five levels, nothing else
       provisional: true                # always true in discover
+      effort: evening                  # quick|evening|multi_day|not_closable
     ```
 
     - `quality`: `card_only` = search row only; `partial` = search row with fields
       recovered by a detail call; `complete` = the detail page was fetched.
+    - `effort`: how much work the row's *closable* gaps would take, from the card you
+      actually have — `quick` (rewording and reordering what is already true),
+      `evening` (one focused session: a small demo, a short write-up),
+      `multi_day`, `not_closable` (the gap is a hard disqualifier or years of
+      experience). It is what makes the within-band ordering in Step 7 a rule rather
+      than a sentiment, so it is a closed vocabulary the gate checks (`BAD_ENUM`), not
+      free text. Estimate it from the card and say so; do not pretend a card told you
+      more than it did.
     - `verification`: `fresh_verified` only when a detail call in **this** session
       returned the posting; `collected_unverified` for a card; `stale_possible` when the
       source's own posting date is older than `brief.max_age_days`.
@@ -3438,16 +4027,31 @@ dropping it, and says outright that account risk is not zero."
 
     `strong_apply` · `worth_applying` · `stretch` · `likely_screen_out` · `blocked`
 
-    Within a level, order by how much work the closable gaps would take.
+    Within a level, **order by effort** — `quick` first, then `evening`, `multi_day`,
+    `not_closable` — using each row's `effort` field. Ordering by effort-to-close is
+    what turns a band into a plan: two `worth_applying` rows are not equally worth the
+    user's next hour.
 
     **Every discover verdict carries `provisional: true` and may not be rendered without
-    it** (`MISSING_PROVISIONAL`). The stamp is load-bearing: discover has a card,
-    `assess` has the full JD and evidence blocks. Using one vocabulary without marking
-    the confidence source would be passing card data off as a completed assessment.
+    it.** That is two obligations, and both are checked:
+
+    - in `shortlist.yaml`, the field itself (`MISSING_PROVISIONAL`);
+    - in `shortlist.md`, the words **「基于卡片信息的初判」** on the section that renders
+      the rows (`MD_MISSING_PROVISIONAL_STAMP`). A YAML boolean is not a disclosure —
+      nobody reading the round ever sees it, and `shortlist.md` is what they read.
+
+    The stamp is load-bearing: discover has a card, `assess` has the full JD and
+    evidence blocks. Using one vocabulary without marking the confidence source would be
+    passing card data off as a completed assessment.
     **规则：discover 的档位永不被带进 assess——assess 一律重算。**
 
-    If a card cannot support a level at all, the row is `insufficient_evidence` and does
-    not get a verdict-shaped answer. That is a refusal state, not a sixth level.
+    If a card cannot support any level at all, the card is **dropped from the shortlist**
+    and counted in `shortfall_reason` — name it there, with what was missing. It does
+    **not** become a row carrying `insufficient_evidence`: that is an orthogonal refusal
+    state, not a sixth level and not a listing, and `check_shortlist.py` would reject
+    such a row with `BAD_VERDICT`. A shortlist row asserts "this posting exists and here
+    is what I make of it"; a card you cannot read supports the first half and not the
+    second, so it belongs in the shortfall, not in the list.
 
     ## Step 8 — detail fetch, top three only
 
@@ -3491,7 +4095,10 @@ dropping it, and says outright that account risk is not zero."
     them, which is why `SOURCE_REPORT_MISSING` is that file's backstop.
 
     `shortlist.md` carries `## §0 来源与读取质量`, `## §0.1 触发原因`, and — when the run
-    is degraded — `## §0.2 披露`.
+    is degraded — `## §0.2 披露`. The section that lists the rows carries the stamp in
+    its own heading, e.g. `## §1 候选（全部为基于卡片信息的初判 · provisional）`, and each
+    row shows its band and its `effort`. Rows below the top three are labelled
+    **未取详情**.
 
     ## Degraded output — when no real postings could be retrieved
 
@@ -3533,11 +4140,17 @@ dropping it, and says outright that account risk is not zero."
 
     | Finding | What it means | What to do |
     |---|---|---|
+    | `NO_MODE_ENTRY` | `journal.jsonl` has no `mode_entry` for discover | run `scripts/enter_mode.py --workspace <ws> --mode discover` and read this file — it was not loaded |
+    | `MODE_FILE_CHANGED` | this file changed after the run entered the mode | what you read is not what is on disk. Re-enter and re-read. |
     | `SOURCE_ID_NOT_IN_RAW` | a row's identifier is in no capture from that site | delete the row. It was not retrieved. Do not "fix" it by editing `raw/`. |
     | `URL_NOT_FROM_ADAPTER` | the URL was assembled, not returned | replace it with the adapter's URL or drop the field |
+    | `DUPLICATE_SOURCE_ID` | one retrieved posting appears as two rows | delete the duplicate; de-duplication removes rows, nothing adds them |
+    | `SOURCE_REPORT_COUNT_MISMATCH` | the source report claims more than the receipts recorded | the receipts are right. Never reconcile by editing `raw/` or the journal. |
     | `EMPTY_RESULT_UNSUPPORTED` | "no results" wording with no adapter that exited 0 | rewrite as "every adapter failed", and emit the disclosure block |
     | `DEGRADED_WITHOUT_DISCLOSURE` | degraded run with no disclosure block | add the block, answers pre-filled 否 |
+    | `MD_MISSING_PROVISIONAL_STAMP` | `shortlist.md` renders rows without 「基于卡片信息的初判」 | add the stamp to the section heading. The YAML flag is not a disclosure. |
     | `DETAIL_FETCH_OUT_OF_BAND` | a detail fetch below the top three verdicts | remove it, or record a named exception with a reason |
+    | `CAP_MISSING` / `CAP_ABOVE_CEILING` | `brief.yaml`'s round caps are absent or raised | read `references/source-policy.md`; the caps are its enforceable half |
     | `SHORTFALL_NO_REASON` | fewer rows than `target_count`, no reason written | write the reason. Never pad. |
     | `SOURCE_REPORT_CONTRADICTS_JOURNAL` | `sources:` disagrees with the receipts | the receipts are right; fix the report |
     | `WRITE_COMMAND` | a write command was journaled | stop. Tell the user exactly what ran. It cannot be undone. |
@@ -3545,13 +4158,22 @@ dropping it, and says outright that account risk is not zero."
 
     ## Self-check before reporting the round
 
-    - [ ] `brief.yaml` written **before** the first adapter call, with `trigger_reason`.
+    - [ ] `scripts/enter_mode.py --mode discover` run **first**, and this file read in full.
+    - [ ] `search-preferences.yaml` read via `paths.search_prefs(<name>)`; written on
+          first run from answers the user gave, never from inference; confirmed once
+          this session.
+    - [ ] `brief.yaml` written **before** the first adapter call, with `trigger_reason`
+          and both round caps.
     - [ ] `raw/opencli-help/<site>.yaml` saved for every site called.
     - [ ] `raw/auth-status.json` saved; `unknown` re-probed with `--full`.
     - [ ] Every adapter call classified by `scripts/check_opencli_result.py`.
     - [ ] Queries generated in both languages of the market.
     - [ ] Identity field asserted non-empty on every row; `indeed` rows recovered.
-    - [ ] Every row carries `provisional: true`; no verdict copied into an assessment.
+    - [ ] Every row carries `provisional: true` **and** `shortlist.md` carries
+          「基于卡片信息的初判」; no verdict copied into an assessment.
+    - [ ] Every row carries an `effort` value, and rows are ordered by it within a band.
+    - [ ] Cards that could not support any level were dropped and named in
+          `shortfall_reason` — not listed as `insufficient_evidence` rows.
     - [ ] Detail fetched only for `strong_apply` / `worth_applying` / `stretch`.
     - [ ] `references/source-policy.md` re-read if any action felt like it might be
           yellow or red; `references/risk-control-signals.yaml` consulted on any failure.
@@ -3565,7 +4187,7 @@ dropping it, and says outright that account risk is not zero."
 - [ ] **Step 4: Run the test to verify it passes**
 
     Run: `python3 -m pytest scripts/tests/test_discover_mode_doc.py -q`
-    Expected: PASS (14 passed)
+    Expected: PASS (19 passed)
 
 - [ ] **Step 5: Commit**
 
@@ -3574,25 +4196,282 @@ dropping it, and says outright that account risk is not zero."
     git add modes/discover.md scripts/tests/test_discover_mode_doc.py
     git commit -m "discover: the mode file, with the row schema the gates require
 
-modes/discover.md is layer 1.5 and the only definition of brief.yaml and
-shortlist.yaml, so the gates' field requirements are a backstop for
-having read it. Carries the trigger-reason-first rule, the three auth
+modes/discover.md is layer 1.5 and the only definition of brief.yaml,
+shortlist.yaml and search-preferences.yaml, so the gates' field
+requirements are a backstop for having read it. Carries the mode-entry
+command as step zero, the trigger-reason-first rule, the three auth
 states and the empty-string trap, bilingual query generation and why it
-matters, the provisional stamp that is never carried into assess, the
-top-three detail cap, the absolute platform-limit stop, the pre-filled
-disclosure block, and a self-check naming every script and reference."
+matters, the provisional stamp in BOTH outputs (the YAML flag is not a
+disclosure — nobody reads it), effort-to-close as the within-band
+ordering key, the top-three detail cap, the absolute platform-limit
+stop, the pre-filled disclosure block, and a self-check naming every
+script and reference.
+
+search-preferences.yaml is defined here because discover owns it: spec
+4.3 puts it in the shared spine and assess branches on it, and until now
+no mode created it. Every field is asked, never inferred — it is reused
+across every later round, so one wrong inference steers months of
+searching.
+
+A card that cannot support any level is DROPPED and named in
+shortfall_reason. It used to be described as an insufficient_evidence
+row, which check_shortlist rejects with BAD_VERDICT: the file was
+instructing an output its own gate refuses."
     ```
 
 ---
 
-### Task 8: end-to-end — hermetic chain, then a live read-only dry run
+### Task 8: the layer-1.5 mode-entry backstop
+
+**Files:**
+- Modify: `scripts/check_shortlist.py` (add `_check_mode_entry` and the `--skill-root` flag)
+- Modify: `scripts/tests/discover_fixtures.py` (the valid workspace now records the mode entry)
+- Test: `scripts/tests/test_check_shortlist_mode_entry.py`
+
+**Interfaces:**
+- Consumes: `enter_mode.latest_mode_entry(workspace, mode)`, `enter_mode.mode_file(skill_root, mode)`, `journal.sha256_file` (Plan 1); `modes/discover.md` (Task 7)
+- Produces:
+  - `check_shortlist.MODE: str` = `"discover"`
+  - `check_shortlist._check_mode_entry(workspace, skill_root) -> list[str]`
+  - Finding codes `NO_MODE_ENTRY`, `MODE_FILE_CHANGED`
+  - `discover_fixtures.mode_entry_record() -> dict`; `discover_fixtures.write_journal(workspace, records, mode_entry=True)`
+
+**Why this is its own task, after the mode file exists.** Spec §4.2 says layer 1.5 avoids the slides_maker regression because it has **two** backstops at once: the mode's gate requires an artifact field defined only in the mode file, **and** `journal.jsonl` records that file's content hash. Tasks 3-4 built the first half. Only `apply` had the second; `discover` had a mode file nothing could prove was read. It lands here rather than in Task 3 for a mechanical reason: the fixture has to hash `modes/discover.md`, which does not exist until Task 7.
+
+- [ ] **Step 1: Write the failing test**
+
+    Create `scripts/tests/test_check_shortlist_mode_entry.py`:
+
+    ```python
+    """The second half of the layer-1.5 backstop (spec §4.2).
+
+    A mode file is only 'loaded unconditionally' if something reports that it was
+    not. `check_shortlist` requires the mode_entry record, and requires the hash in
+    it to still match the file on disk — otherwise what was read is not what is
+    here, and the schema the run followed is not the schema being enforced.
+    """
+    import hashlib
+    import pathlib
+
+    import check_shortlist as cs
+    import discover_fixtures as fx
+
+    REPO = pathlib.Path(__file__).resolve().parents[2]
+
+
+    def run(workspace, capsys):
+        code = cs.main(["--workspace", str(workspace)])
+        return code, capsys.readouterr()
+
+
+    def test_a_workspace_that_entered_the_mode_is_quiet(tmp_path, capsys):
+        # THE quiet twin. build_workspace records the entry the way
+        # scripts/enter_mode.py does, so the backstop cannot start firing on an
+        # ordinary run without every other shortlist test going red at once.
+        workspace = fx.build_workspace(tmp_path)
+        code, captured = run(workspace, capsys)
+        assert code == 0
+        assert captured.out == ""
+
+
+    def test_no_mode_entry_fires(tmp_path, capsys):
+        workspace = fx.build_workspace(tmp_path)
+        fx.write_journal(workspace, fx.JOURNAL, mode_entry=False)
+        code, captured = run(workspace, capsys)
+        assert code == 1
+        assert captured.out.startswith("NO_MODE_ENTRY:")
+        assert "scripts/enter_mode.py" in captured.out
+
+
+    def test_a_mode_file_changed_after_entry_fires(tmp_path, capsys):
+        workspace = fx.build_workspace(tmp_path)
+        stale = dict(fx.mode_entry_record(),
+                     mode_file_sha256=hashlib.sha256(b"an older draft").hexdigest())
+        fx.write_journal(workspace, [stale] + list(fx.JOURNAL), mode_entry=False)
+        code, captured = run(workspace, capsys)
+        assert code == 1
+        assert "MODE_FILE_CHANGED:" in captured.out
+        assert "re-enter" in captured.out
+
+
+    def test_the_hash_is_read_from_the_real_mode_file():
+        # If this ever passes against a file that is not modes/discover.md, the
+        # check is measuring nothing.
+        record = fx.mode_entry_record()
+        expected = hashlib.sha256(
+            (REPO / "modes" / "discover.md").read_bytes()).hexdigest()
+        assert record["mode_file_sha256"] == expected
+    ```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+    Run: `python3 -m pytest scripts/tests/test_check_shortlist_mode_entry.py -q`
+    Expected: FAIL — `AttributeError: module 'discover_fixtures' has no attribute 'mode_entry_record'` on three of the four, and `assert 0 == 1` on `test_no_mode_entry_fires`.
+
+- [ ] **Step 3: Teach the fixture to record the mode entry**
+
+    In `scripts/tests/discover_fixtures.py`, add these near the top, after the imports:
+
+    ```python
+    import hashlib
+
+    REPO = pathlib.Path(__file__).resolve().parents[2]
+    MODE_FILE = REPO / "modes" / "discover.md"
+
+
+    def mode_entry_record():
+        """The record scripts/enter_mode.py writes on entering discover.
+
+        The hash is computed from the real modes/discover.md rather than pinned, so
+        editing the mode file never turns every shortlist test red for a reason
+        that has nothing to do with the shortlist.
+        """
+        return {"ts": "2026-08-09T14:01:00Z", "action": "mode_entry",
+                "mode": "discover", "mode_file": "modes/discover.md",
+                "mode_file_sha256": hashlib.sha256(
+                    MODE_FILE.read_bytes()).hexdigest()}
+    ```
+
+    Then replace `write_journal` with the version below, and replace the journal-writing
+    loop at the end of `build_workspace` with a single call to it:
+
+    ```python
+    def write_journal(workspace, records, mode_entry=True):
+        """Rewrite journal.jsonl, keeping the workspace valid in every other respect.
+
+        The mode_entry record is prepended by default: a test that mutates the
+        adapter history is not also trying to assert that the mode was never
+        entered, and if it had to remember to re-add the entry every time, the
+        NO_MODE_ENTRY finding would show up in half the suite as noise.
+        """
+        head = []
+        if mode_entry and not any(
+                isinstance(r, dict) and r.get("action") == "mode_entry"
+                for r in records):
+            head = [mode_entry_record()]
+        with (workspace / "journal.jsonl").open("w", encoding="utf-8") as handle:
+            for record in head + list(records):
+                handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+    ```
+
+    In `build_workspace`, this:
+
+    ```python
+        with (workspace / "journal.jsonl").open("w", encoding="utf-8") as handle:
+            for record in JOURNAL:
+                handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+        return workspace
+    ```
+
+    becomes:
+
+    ```python
+        write_journal(workspace, JOURNAL)
+        return workspace
+    ```
+
+- [ ] **Step 4: Add the check to the gate**
+
+    In `scripts/check_shortlist.py`, add the import next to the existing ones:
+
+    ```python
+    import enter_mode  # noqa: E402  (Plan 1)
+    ```
+
+    Add the constant directly below `GATE`:
+
+    ```python
+    MODE = "discover"
+    ```
+
+    Add this function directly above `_fail_to_run`:
+
+    ```python
+    def _check_mode_entry(workspace, skill_root):
+        """modes/discover.md is layer 1.5, and this is what reports it was not read.
+
+        Mirrors check_apply.py deliberately: the same two findings, the same
+        meaning, in the gate that belongs to this mode. Four modes with four
+        different words for the same failure would be four things to learn.
+        """
+        findings = []
+        entry = enter_mode.latest_mode_entry(workspace, MODE)
+        mode_path = enter_mode.mode_file(skill_root, MODE)
+        if entry is None:
+            findings.append(
+                "NO_MODE_ENTRY: journal.jsonl has no mode_entry for discover. "
+                "modes/discover.md is loaded unconditionally on entering the mode — "
+                "it is the only definition of the brief, shortlist and preferences "
+                "schemas — and this record is the only thing that reports it was "
+                "not. Run `python3 scripts/enter_mode.py --workspace <ws> --mode "
+                "discover`, then read the file.")
+        elif (mode_path.is_file()
+              and entry.get("mode_file_sha256") != journal.sha256_file(mode_path)):
+            findings.append(
+                "MODE_FILE_CHANGED: modes/discover.md changed after this run entered "
+                "the mode, so the schema that was read is not the schema on disk. "
+                "re-enter the mode and re-read it before trusting this shortlist.")
+        return findings
+    ```
+
+    In `main`, add the flag next to `--workspace`:
+
+    ```python
+        parser.add_argument("--skill-root", type=pathlib.Path,
+                            default=pathlib.Path(__file__).resolve().parent.parent,
+                            help="repo root holding modes/ (default: this script's parent)")
+    ```
+
+    and change the line that builds the findings list from
+
+    ```python
+        findings = check_rows(shortlist, raw_texts)
+    ```
+
+    to
+
+    ```python
+        findings = _check_mode_entry(workspace, args.skill_root)
+        findings.extend(check_rows(shortlist, raw_texts))
+    ```
+
+- [ ] **Step 5: Run all four shortlist modules to verify they pass**
+
+    Run: `python3 -m pytest scripts/tests/test_check_shortlist_rows.py scripts/tests/test_check_shortlist_run.py scripts/tests/test_check_shortlist_mode_entry.py scripts/tests/test_discover_mode_doc.py -q`
+    Expected: PASS (68 passed — 19 rows, 26 run, 4 mode-entry, 19 mode-doc). If the rows or run modules went red instead, the fixture is no longer recording the entry: fix the fixture, never the assertion.
+
+- [ ] **Step 6: Commit**
+
+    ```bash
+    cd /Users/donghanglyu/code_project/job-hunt
+    git add scripts/check_shortlist.py scripts/tests/discover_fixtures.py \
+            scripts/tests/test_check_shortlist_mode_entry.py
+    git commit -m "discover: require the mode-entry record, and that its hash still matches
+
+Spec 4.2 gives layer 1.5 two backstops at once — the gate requires a
+field only the mode file defines, AND journal.jsonl records that file's
+content hash. discover had the first and not the second, so nothing
+could tell a run that read modes/discover.md from one that improvised
+the schema and happened to get the field names right.
+
+NO_MODE_ENTRY and MODE_FILE_CHANGED are worded to match check_apply's:
+four modes with four different words for one failure would be four
+things to learn. The fixture records the entry the way enter_mode.py
+does, so the quiet case is structural rather than aspirational."
+    ```
+
+---
+
+### Task 9: end-to-end — hermetic chain, then a live read-only dry run
 
 **Files:**
 - Test: `scripts/tests/test_discover_e2e.py`
 
 **Interfaces:**
-- Consumes: `scripts/check_opencli_result.py`, `scripts/check_no_write.py`, `scripts/check_shortlist.py` (Tasks 1-4) run as subprocesses via their CLIs; `discover_fixtures.build_workspace` (Task 3)
+- Consumes: `scripts/check_opencli_result.py`, `scripts/check_no_write.py`, `scripts/check_shortlist.py` (Tasks 1-4 and 8) run as subprocesses via their CLIs; `scripts/enter_mode.py` (Plan 1); `discover_fixtures.build_workspace` (Tasks 3 and 8)
 - Produces: nothing importable — this task's deliverable is the proof that the three CLIs compose.
+
+**One detail worth stating, because it looks like an arbitrary choice and is not.** The hermetic test classifies the **detail** capture, not the search one. Re-classifying the search would append a second `51job search` record, and `sources[51job]` honestly reports `invocations: 1` / `rows_returned: 2` — so `SOURCE_REPORT_COUNT_MISMATCH` would fire, correctly, and the composition test would be red for a reason that has nothing to do with composition. Classifying the detail call exercises the same round trip against a record the source report does not claim.
 
 **The live leg is read-only.** `51job` has **no auth adapter**: it is absent from
 `opencli auth status` and exposes no `login` command. Do not attempt a login on any
@@ -3636,14 +4515,14 @@ round tiny.
     def test_the_whole_chain_passes_on_a_real_capture(tmp_path):
         workspace = fx.build_workspace(tmp_path)
 
+        detail = workspace / "raw" / "51job-detail-173199597.json"
         classify = run("check_opencli_result.py",
                        "--workspace", str(workspace),
-                       "--site", "51job", "--command", "search",
+                       "--site", "51job", "--command", "detail",
                        "--exit-code", "0",
-                       "--stdout-file", str(workspace / "raw" / "51job-1.json"),
-                       "--stderr-file", str(workspace / "raw" / "51job-1.err"),
+                       "--stdout-file", str(detail),
                        "--command-line",
-                       "opencli 51job search 算法工程师 --limit 25 -f json")
+                       "opencli 51job detail 173199597 --window background -f json")
         assert classify.returncode == 0, classify.stderr
         assert json.loads(classify.stdout)["classification"] == "ok"
 
@@ -3702,6 +4581,7 @@ round tiny.
             "why_matched": "标题与 brief.target_titles 高度一致",
             "verdict": "strong_apply",
             "provisional": True,
+            "effort": "quick",
         })
         fx.save_shortlist(workspace, data)
 
@@ -3712,17 +4592,45 @@ round tiny.
         assert "URL_NOT_FROM_ADAPTER" in codes
     ```
 
-- [ ] **Step 2: Run the test to verify it fails, then passes**
+- [ ] **Step 2: Prove the test can fail — the negative control**
+
+    Everything before this task watched a test go red before it went green. This one cannot: Tasks 1-4 and 8 are already done, so it passes the first time it runs, and a typo in `assert sum(...) == 3` or an assertion aimed at the wrong stream would be indistinguishable from a real pass. Break the chain on purpose and watch it report:
+
+    ```bash
+    cd /Users/donghanglyu/code_project/job-hunt
+    mv scripts/check_shortlist.py scripts/check_shortlist.py.off
+    python3 -m pytest scripts/tests/test_discover_e2e.py -q ; echo "rc=$?"
+    mv scripts/check_shortlist.py.off scripts/check_shortlist.py
+    ```
+
+    Expected: **FAIL** — all three tests fail on the `check_shortlist.py` subprocess, which exits non-zero with `can't open file … check_shortlist.py`. If any of the three still PASSES with the gate removed, that test is not running the gate: fix it before continuing. Then confirm the file is back: `git status --short scripts/` must be empty.
+
+- [ ] **Step 3: Run the test to verify it passes**
 
     Run: `python3 -m pytest scripts/tests/test_discover_e2e.py -q`
-    Expected: PASS immediately if Tasks 1-4 are complete. If it FAILS, the failure is real — fix the script, not the test. Do **not** proceed to the live leg with a failing chain.
+    Expected: PASS (3 passed). If it FAILS, the failure is real — fix the script, not the test. Do **not** proceed to the live leg with a failing chain.
 
-- [ ] **Step 3: Run the full suite**
+- [ ] **Step 4: Run every module this plan created**
 
-    Run: `python3 -m pytest scripts/tests -q`
-    Expected: PASS, no failures, no errors.
+    Run:
 
-- [ ] **Step 4: Live read-only dry run against 51job**
+    ```bash
+    python3 -m pytest scripts/tests/test_check_opencli_result.py \
+        scripts/tests/test_check_no_write.py \
+        scripts/tests/test_check_shortlist_rows.py \
+        scripts/tests/test_check_shortlist_run.py \
+        scripts/tests/test_check_shortlist_mode_entry.py \
+        scripts/tests/test_discovery_docs.py \
+        scripts/tests/test_source_policy.py \
+        scripts/tests/test_discover_mode_doc.py \
+        scripts/tests/test_discover_e2e.py -q
+    ```
+
+    Expected: PASS (119 passed — 16 + 12 + 19 + 26 + 4 + 10 + 10 + 19 + 3).
+
+    **Not the whole suite yet, and that is deliberate.** `scripts/tests/test_skill_structure.py` is still red: Plan 1 asserts `SKILL.md`'s `## Self-check` section names every script, reference and mode file in the tree, and this plan has added eight of them without registering any. Task 10 does the registration and then runs the whole suite. Do not delete the assertion to make this step green.
+
+- [ ] **Step 5: Live read-only dry run against 51job**
 
     Run exactly this. It touches only a temp directory and only `access: read` commands.
 
@@ -3730,6 +4638,10 @@ round tiny.
     cd /Users/donghanglyu/code_project/job-hunt
     export WS="$(mktemp -d)/2026-08-09-dryrun-51job"
     mkdir -p "$WS/raw/opencli-help"
+
+    # Step zero of the mode, exercised for real: without it check_shortlist below
+    # exits 1 with NO_MODE_ENTRY, which is the backstop doing its job.
+    python3 scripts/enter_mode.py --workspace "$WS" --mode discover
 
     opencli 51job --help -f yaml > "$WS/raw/opencli-help/51job.yaml"
     opencli auth status -f json  > "$WS/raw/auth-status.json"
@@ -3758,7 +4670,7 @@ round tiny.
     `opencli doctor`, record its output, and stop. **Do not weaken any test, do not
     fabricate a capture, and do not attempt a login on any site.**
 
-- [ ] **Step 5: Build the dry-run artefacts from the real rows**
+- [ ] **Step 6: Build the dry-run artefacts from the real rows**
 
     ```bash
     python3 - "$WS" <<'PY'
@@ -3792,6 +4704,9 @@ round tiny.
         "why_matched": "闸门演练工作区：brief.target_titles 命中「算法工程师」；raw city 命中 上海。",
         "verdict": "worth_applying",
         "provisional": True,
+        # Likewise a rehearsal value. In a real round effort is estimated per row
+        # from the card, and it is what orders rows inside a band.
+        "effort": "evening",
     } for r in rows_raw]
 
     brief = {
@@ -3833,7 +4748,12 @@ round tiny.
         "|---|---|---|---|---|---|---|\n"
         f"| 51job | search | read | 无 auth adapter | {len(rows)} | `title` | ok |\n\n"
         "原始捕获：`raw/51job-1.json`。\n\n"
-        "## §0.1 触发原因\n\n闸门演练：验证三个脚本在真实 adapter 输出上串得起来。\n",
+        "## §0.1 触发原因\n\n闸门演练：验证三个脚本在真实 adapter 输出上串得起来。\n\n"
+        # The reader-facing half of the provisional stamp. Without it
+        # check_shortlist exits 1 with MD_MISSING_PROVISIONAL_STAMP -- which is
+        # the point: even the rehearsal workspace cannot render a band without
+        # saying what it is based on.
+        "## §1 候选（全部为基于卡片信息的初判 · provisional）\n",
         encoding="utf-8")
     print("rows:", len(rows), [r["source_id"] for r in rows])
     PY
@@ -3841,7 +4761,7 @@ round tiny.
 
     Expected: `rows: 3` and three numeric ids.
 
-- [ ] **Step 6: Prove the gates pass live, then prove they catch a corrupted row**
+- [ ] **Step 7: Prove the gates pass live, then prove they catch a corrupted row**
 
     ```bash
     python3 scripts/check_no_write.py  --workspace "$WS"; echo "no_write=$?"
@@ -3869,7 +4789,7 @@ round tiny.
     is committed — the committed evidence is the classification line and the two exit
     codes, recorded in the commit message below.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
     Fill the placeholders with what actually happened; if the live leg did not reach
     `ok`, say so plainly and paste the verbatim classification instead.
@@ -3881,7 +4801,10 @@ round tiny.
 
 The three CLIs compose: the wrapper's adapter_call record is the record
 the gates read back, and a hand-corrupted source_id and a hand-added
-fabricated row are both caught through the real command lines.
+fabricated row are both caught through the real command lines. The
+composition test cannot be trusted without a negative control, because
+by this point it passes on its first run — so it was watched failing
+with check_shortlist.py moved aside before it was believed.
 
 Live dry run 2026-08-09, read-only, no login attempted:
   opencli 51job search 算法工程师 --area 上海 --page 1 --limit 3 --window background -f json
@@ -3891,15 +4814,232 @@ Live dry run 2026-08-09, read-only, no login attempted:
 
 ---
 
+### Task 10: register everything in SKILL.md, and retract "discover is not yet built"
+
+**Files:**
+- Modify: `SKILL.md` (the `## Self-check` section, the gate table, the Modes row)
+- Modify: `scripts/tests/test_skill_structure.py` (Plan 1) — extend the library-only skip set
+- Test: `scripts/tests/test_discover_registration.py`
+
+**Interfaces:**
+- Consumes: Plan 1's `test_skill_structure.py` assertions (`test_the_self_check_names_every_script`, `..._every_reference_file`, `..._every_mode_file`, `test_every_path_the_self_check_names_exists`, `test_every_mode_named_in_skill_md_has_a_file_or_is_marked_unbuilt`)
+- Produces: a green full suite, and a `SKILL.md` that no longer tells the model to refuse a mode that works.
+
+**Why this exists and why it is last.** Plan 1's structural test asserts that `SKILL.md`'s `## Self-check` section names **every** `scripts/*.py`, `references/*.md` and `modes/*.md` in the tree. Those assertions are correct and stay — a checklist that silently stops covering new files is the exact failure the self-check was added to prevent. But it means every plan that adds files must also register them, and this plan adds eight. Until now nothing in Plans 2-4 did, so the suite would have gone red from Plan 2 onward and stayed red, which trains everyone to ignore it.
+
+The second half is the same defect in prose. `SKILL.md` says `discover` is **not yet built in this repo — say so and stop rather than improvising**. That sentence was true when Plan 1 wrote it. It is false the moment Task 7 lands, and a stale one costs more than a missing one: layer 1 would be instructing the model to refuse a mode that works, and every automated check would pass.
+
+- [ ] **Step 1: Write the failing test**
+
+    Create `scripts/tests/test_discover_registration.py`:
+
+    ```python
+    """Registration is a layer-1 obligation, not paperwork.
+
+    Plan 1's test_skill_structure.py already asserts the self-check names every
+    file. This module pins the two things it cannot: that the discover entries say
+    what they are for, and that the 'not yet built' sentence retracted itself.
+    """
+    import pathlib
+    import re
+
+    REPO = pathlib.Path(__file__).resolve().parents[2]
+    SKILL = REPO / "SKILL.md"
+
+    MODES_WITH_FILES = ("discover",)
+
+
+    def normalised():
+        """Backticks stripped and whitespace collapsed, so that a sentence broken
+        across lines or wrapped in code formatting cannot hide from the search."""
+        return re.sub(r"\s+", " ", SKILL.read_text(encoding="utf-8").replace("`", ""))
+
+
+    def test_the_not_yet_built_sentence_retracted_itself():
+        text = normalised()
+        for mode in MODES_WITH_FILES:
+            assert (REPO / "modes" / f"{mode}.md").exists()
+            assert f"{mode} is not yet built" not in text, (
+                f"SKILL.md still tells the model to refuse {mode}, which now works. "
+                "A stale 'not built' costs more than a missing one: every check "
+                "passes and layer 1 declines a working mode.")
+
+
+    def test_the_self_check_names_this_plans_files_with_a_reason_to_open_them():
+        text = SKILL.read_text(encoding="utf-8")
+        for path in ("modes/discover.md", "references/discovery-sources.md",
+                     "references/source-policy.md",
+                     "references/risk-control-signals.yaml",
+                     "scripts/check_opencli_result.py", "scripts/check_no_write.py",
+                     "scripts/check_shortlist.py"):
+            assert path in text, f"{path} is registered nowhere in SKILL.md"
+
+
+    def test_the_gate_table_lists_both_discover_gates():
+        text = SKILL.read_text(encoding="utf-8")
+        for gate in ("scripts/check_no_write.py", "scripts/check_shortlist.py"):
+            row = next((line for line in text.splitlines()
+                        if line.startswith("|") and gate in line), None)
+            assert row is not None, f"{gate} has no row in the gate table"
+            assert row.count("|") >= 4, f"{gate}'s gate-table row has no 'fires on'"
+
+
+    def test_the_wrapper_is_not_described_as_a_gate():
+        # check_opencli_result.py is the one named exception to the gate contract:
+        # exit 0/2 only, and an adapter_call record instead of a receipt. Listing
+        # it as a gate would send someone looking for a receipt that never exists.
+        text = SKILL.read_text(encoding="utf-8")
+        row = next((line for line in text.splitlines()
+                    if line.startswith("|") and "check_opencli_result.py" in line), None)
+        assert row is not None
+        assert "wrapper" in row.lower()
+    ```
+
+- [ ] **Step 2: Run it, and run the full suite, and watch both fail**
+
+    ```bash
+    python3 -m pytest scripts/tests/test_discover_registration.py -q ; echo "rc=$?"
+    python3 -m pytest scripts/tests/test_skill_structure.py -q ; echo "rc=$?"
+    ```
+
+    Expected: the first module fails all four with `AssertionError`. The second fails `test_the_self_check_names_every_script` (naming `check_no_write.py` first), `test_the_self_check_names_every_reference_file` and `test_the_self_check_names_every_mode_file`. **This is the red that has been accumulating since Task 1** — see the note in Task 9 Step 4. Read the failures before fixing them; they are the list of what to register.
+
+- [ ] **Step 3: Register the read-when entries in SKILL.md's self-check**
+
+    In `SKILL.md`'s `## Self-check` section, append to the **Read-when** list, keeping the
+    existing wording and order of everything already there:
+
+    ```markdown
+    - [ ] In discover mode? `modes/discover.md`, loaded on entry, not on demand.
+    - [ ] About to make the first live retrieval of a run, or asked to page further,
+          fetch more detail pages, or work while the user is away?
+          `references/source-policy.md`.
+    - [ ] About to call an adapter other than the four in SKILL.md's table?
+          `references/discovery-sources.md`.
+    - [ ] An adapter call exited non-zero? `references/risk-control-signals.yaml`
+          carries the stop-signal patterns `scripts/check_opencli_result.py` matches.
+    ```
+
+- [ ] **Step 4: Register the scripts in SKILL.md's self-check**
+
+    Append to the **Ran, with a receipt in `journal.jsonl`** list:
+
+    ```markdown
+    - [ ] `scripts/check_opencli_result.py` — once per adapter invocation. It is a
+          wrapper, not a gate: it writes an `adapter_call` record rather than a
+          receipt, and exits 0 (classified) or 2 (could not classify), never 1.
+    - [ ] `scripts/check_no_write.py` (discover)
+    - [ ] `scripts/check_shortlist.py` (discover)
+    ```
+
+    and to the **Told the user** list:
+
+    ```markdown
+    - [ ] In discover: the §0 来源与读取质量 table, the trigger reason, every row's band
+          marked 「基于卡片信息的初判」, and — if the run degraded — the disclosure block
+          with its answers filled in.
+    ```
+
+- [ ] **Step 5: Add the three rows to the gate table**
+
+    Append to the gate table in `SKILL.md`, matching its existing three-column shape:
+
+    ```markdown
+    | Adapter classification | `scripts/check_opencli_result.py` | *(wrapper, not a gate)* a non-zero exit, a login wall, a platform stop-signal, or an empty identity field |
+    | Read-only | `scripts/check_no_write.py` | a journaled command whose published `access:` is `write`, or whose access cannot be resolved at all |
+    | Shortlist | `scripts/check_shortlist.py` | a row whose `source_id` is in no raw capture; a duplicated or over-counted source report; "no results" with no adapter that exited 0; a missing disclosure block or provisional stamp; a detail fetch outside the top three; an uncapped brief; a missing or stale mode entry |
+    ```
+
+- [ ] **Step 6: Retract the "not yet built" sentence**
+
+    In `SKILL.md`'s Modes row, `discover` must stop being described as unbuilt. Replace
+    whichever sentence marks it so — Plan 1 wrote *"`discover`, `assess` and `interview`
+    are **not yet built in this repo** — say so and stop rather than improvising them"*
+    — with per-mode sentences, so that the retraction is one sentence per mode and a
+    later plan can delete exactly its own:
+
+    ```markdown
+    | **Modes** | the four-mode map. `apply` is live. `discover` is live — enter it with `scripts/enter_mode.py --mode discover` and read `modes/discover.md` in full. `assess` is not yet built in this repo. `interview` is not yet built in this repo. For a mode that is not yet built, say so and stop rather than improvising it. | new |
+    ```
+
+    Leave the `assess` and `interview` sentences exactly as written above; Plans 2 and 4
+    each delete their own in their own final task.
+
+- [ ] **Step 7: Extend the library-only skip set**
+
+    In `scripts/tests/test_skill_structure.py`, `test_the_self_check_names_every_script`:
+
+    ```python
+        skip = {"journal.py", "paths.py", "rounds.py", "vocab.py",
+                "opencli_meta.py"}      # imported, never invoked
+    ```
+
+    `opencli_meta.py` is this plan's only library-only module: nothing runs it, it has
+    no CLI, and `check_no_write.py` is the thing a self-check can ask you whether you
+    ran. Add nothing else — a skip set is how a real gap gets waved through, so every
+    entry has to be a module with no command line.
+
+- [ ] **Step 8: Run the whole suite**
+
+    Run: `python3 -m pytest scripts/tests -q`
+    Expected: PASS, no failures, no errors. This is the first time in this plan the
+    **full** suite is green, and it is the step that proves the accumulated red was
+    registration debt and nothing else.
+
+- [ ] **Step 9: Commit**
+
+    ```bash
+    cd /Users/donghanglyu/code_project/job-hunt
+    git add SKILL.md scripts/tests/test_skill_structure.py \
+            scripts/tests/test_discover_registration.py
+    git commit -m "discover: register the new files in SKILL.md, retract 'not yet built'
+
+Plan 1's structural test asserts the self-check names every script,
+reference and mode file in the tree. That assertion is right and stays,
+so the plan that adds eight files is the plan that registers them —
+otherwise the suite goes red on the first new file and stays red, which
+teaches everyone to ignore it.
+
+SKILL.md said discover was not yet built and to stop rather than
+improvise. True when it was written, false since modes/discover.md
+landed, and a stale 'not built' is worse than a missing one: layer 1
+would decline a working mode while every automated check passed. The
+sentence is now one per mode so Plans 2 and 4 can each delete their own.
+
+opencli_meta.py joins the library-only skip set: no CLI, nothing runs
+it. Nothing else does, because a skip set is how a real gap gets waved
+through."
+    ```
+
+---
+
 ## Definition of done
 
-- [ ] `python3 -m pytest scripts/tests -q` passes with no failures and no errors.
+- [ ] `python3 -m pytest scripts/tests -q` passes with no failures and no errors. (Only true after Task 10 — see the known-red window in Global Constraints.)
 - [ ] `python3 scripts/check_no_write.py --workspace <any run>` exits 0 on every workspace this plan created, and its receipt is in that workspace's `journal.jsonl`.
 - [ ] Every one of these files exists and is committed: `references/risk-control-signals.yaml`, `references/discovery-sources.md`, `references/source-policy.md`, `modes/discover.md`, `scripts/opencli_meta.py`, `scripts/check_opencli_result.py`, `scripts/check_no_write.py`, `scripts/check_shortlist.py`.
-- [ ] `SKILL.md` contains the `discover-inserts (plan 3)` marker block with the four command pairs and the evaluable trigger for `references/discovery-sources.md`.
-- [ ] `git log --oneline` shows eight commits from this plan and `git status` is clean.
-- [ ] Nothing was pushed. `git log origin/main..HEAD` (if a remote exists) shows all eight commits still local.
-- [ ] `grep -rn "opencli [a-z0-9]* \(greet\|batchgreet\|send\|invite\|connect\|safe-send\|login\|mark\|exchange\|salesnav-message\)" SKILL.md modes references scripts` returns only the lines that *forbid* those commands — never one that instructs running them.
+- [ ] `SKILL.md` contains the `discover-inserts (plan 3)` marker block with the four command pairs, the six-clause platform-limit stop rule, and the evaluable triggers for `references/discovery-sources.md` **and** `references/source-policy.md`. The phrase `about to call an adapter other than the four` appears on a single line in both `SKILL.md` and `references/discovery-sources.md`.
+- [ ] `SKILL.md`'s `## Self-check` names every file this plan added, its gate table has rows for both discover gates, and it no longer says `discover` is not yet built.
+- [ ] Both halves of the layer-1.5 backstop are live for discover: `modes/discover.md` defines fields the gate requires, **and** `check_shortlist.py` fails with `NO_MODE_ENTRY` / `MODE_FILE_CHANGED`.
+- [ ] `git log --oneline` shows ten commits from this plan and `git status` is clean.
+- [ ] Nothing was pushed. `git log origin/main..HEAD` (if a remote exists) shows all ten commits still local.
+- [ ] No write command is instructed anywhere in the shipped skill:
+
+      ```bash
+      grep -rn --exclude-dir=__pycache__ --exclude-dir=tests \
+        "opencli [a-z0-9]* \(greet\|batchgreet\|send\|invite\|connect\|safe-send\|login\|mark\|exchange\|salesnav-message\)" \
+        SKILL.md modes references scripts
+      ```
+
+      Expected: exactly two lines, and read both before ticking this.
+      `modes/discover.md` — *"Never run `opencli 51job login`; it does not exist"* — forbids one.
+      `scripts/check_no_write.py` — the `parse_command_line` docstring's worked example
+      `('boss', 'greet') from 'opencli boss greet --job-id X'` — is the parser's own
+      documentation of the string it exists to catch, and deleting it would remove the
+      explanation of the guard rather than a write path. **Anything else is a finding.**
+      `--exclude-dir=tests` is deliberate: the gate's own fixtures must contain the
+      commands the gate catches, and a criterion read literally against them would have
+      an executor delete load-bearing test data to make a grep quiet.
 
 ## Named residual risks (not closed by this plan)
 
@@ -3907,4 +5047,8 @@ Live dry run 2026-08-09, read-only, no login attempted:
 2. **No risk-control body has ever been observed.** Every pattern in `references/risk-control-signals.yaml` except the login-wall handling is a guess, marked `verified: false`. The first real capture must replace it verbatim.
 3. **Five of eight adapters were never executed** (boss, linkedin, nowcoder, upwork, maimai). Their columns, flags and caps come from help text only, and `runtime_verified: false` records that in the catalogue.
 4. **A verbatim `source_id` in `raw/` is a credibility floor, not a proof.** It proves the identifier was returned by an adapter; it does not prove the row's `why_matched` follows from it.
-5. **`why_matched` has no gate.** It is checked for presence, never for truth. That is why the no-fabrication fence is restated in the field's own definition in `modes/discover.md` rather than only at the top of SKILL.md.
+5. **`why_matched` has no gate.** It is checked for presence, never for truth. That is why the no-fabrication fence is restated in the field's own definition in `modes/discover.md` rather than only at the top of SKILL.md. The presence check is also anchored on the *definition* rather than on the first occurrence of the word — an earlier version of that test measured a window from Step 0's passing mention and was satisfied by an unrelated "Never pad the count", so the entire fence paragraph could have been deleted with the suite green.
+6. **`references/source-policy.md`'s backstop covers one section, not the file.** `CAP_MISSING` / `CAP_ABOVE_CEILING` prove the yellow-tier round caps were respected. Nothing reports a run that quietly did something Red — the load-bearing half there is still that no Red action appears anywhere in this skill's instructions, plus `check_no_write.py` for the single Red line a script can see. A Red action taken outside opencli (a browser the skill drove itself, say) would leave no trace this plan can read.
+7. **`effort` is an estimate from a card, and nothing checks it against reality.** The gate proves the value is one of four strings, not that a `quick` row is actually quick. It exists so the within-band ordering rule is implementable at all; treat the ordering as a suggestion the user can overrule, and say so when presenting the shortlist.
+8. **`search-preferences.yaml` is written by discover and read by assess, and only the writer's schema is enforced.** `modes/discover.md` defines it and the mode-doc test pins the field list, but nothing validates the file on disk at read time. A hand-edited or half-written preferences file will be read as-is. The mitigation is behavioural, not mechanical: every field is asked rather than inferred, and the file is confirmed with the user once per session.
+9. **`NO_MODE_ENTRY` proves the entry was recorded, not that the file was read.** `scripts/enter_mode.py` can be run without reading a line of `modes/discover.md`. What the record actually buys is the *hash*: it proves which bytes were on disk at entry, so a shortlist built against an older schema is detectable. Combined with the gate requiring fields defined only in that file, it is two weak proofs that are hard to satisfy together by accident — which is the whole claim, and it is worth not overstating.
