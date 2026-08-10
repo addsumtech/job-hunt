@@ -12,6 +12,19 @@ points at something real, never that the claim follows from it. Carry that sente
 into the skill's own output; a reader who mistakes it for proof is worse off than one
 who was told nothing.
 
+HOW LOOSE THAT BOUND IS DEPENDS ON THE DOCUMENT, AND IT IS LOOSEST EXACTLY WHERE A
+POSTING IS SHORT. Paragraphs are packed up to the 900-character ceiling rather than
+kept one-per-block, so a small source collapses into very few blocks. Measured
+2026-08-10 on a realistic 1502-character posting: TWO blocks, the first 872 characters
+covering the title, every must-have and every nice-to-have. A row citing JD-001 for
+"PhD required" is then pointing at a slab that also contains the language preference
+and the publication venues -- the citation resolves, and localises almost nothing.
+This is faithful to the port (marketfit packs identically) and the parameters are
+fixed by the shared contract, so it is a recorded limit rather than a bug to fix here.
+What follows from it: on a short posting the block reference is close to worthless as
+localisation, and the requirement row's own quoted wording is what a reader must
+actually check. Do not let a resolving reference stand in for having read the text.
+
 Every length here is counted in CHARACTERS. Not bytes, and not latin display columns.
 A nine-character Chinese line is a real line; measuring it in bytes would keep junk and
 measuring it in latin width would silently delete a third of a Chinese posting.
