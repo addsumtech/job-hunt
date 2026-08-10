@@ -2096,14 +2096,21 @@ Three guards here (login wall, thin inputs, expired convention) and they share o
         import pathlib
 
         import check_conventions
-        root = pathlib.Path(check_conventions.SKILL_ROOT) / "market-conventions"
+        # CONVENTIONS_DIR, not SKILL_ROOT / "market-conventions": the tables live under
+        # references/. Composing the path by hand here globbed an empty directory and
+        # returned "all 0 shipped tables clean" — a quiet twin that can never fire, which
+        # would make its firing half (expired_convention_fails_ci) meaningless.
+        root = pathlib.Path(check_conventions.CONVENTIONS_DIR)
+        tables = sorted(root.glob("*.yaml"))
+        if not tables:
+            return False, f"no market tables found under {root} — the path is wrong"
         noisy = []
-        for path in sorted(root.glob("*.yaml")):
+        for path in tables:
             findings = check_conventions.check_file(path, datetime.date(2026, 8, 9))
             noisy += [f"{path.name}: {f}" for f in findings]
         if noisy:
             return False, "shipped market tables are not clean: " + noisy[0]
-        return True, f"all {len(list(root.glob('*.yaml')))} shipped tables clean"
+        return True, f"all {len(tables)} shipped tables clean"
     ```
 
     Append to `scripts/tests/test_eval_checkers_assess.py`:
@@ -2120,6 +2127,10 @@ Three guards here (login wall, thin inputs, expired convention) and they share o
         run = build(tmp_path)
         passed, evidence = ck.CHECKERS["current_tables_pass_ci"](run)
         assert passed is True, evidence
+        # Pin the count. Without this the checker passes vacuously on an empty glob,
+        # which is exactly how a wrong path went unnoticed: "all 0 shipped tables clean"
+        # reads like success.
+        assert evidence == "all 5 shipped tables clean", evidence
     ```
 
     Both tests depend on `evals/fixtures/conventions/expired-nl.yaml`, which Task 9 writes. Until then they fail with `not exercised`; run them at the end of Task 9 rather than here, and note that in the commit message.

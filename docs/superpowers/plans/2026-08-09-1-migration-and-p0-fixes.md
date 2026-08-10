@@ -105,119 +105,59 @@ Everything created or modified by this plan. One responsibility per file.
 
 ---
 
-### Task 1: Preserve the uncommitted work in the `job-application` repo
+### Task 1: Verify the preservation commits already landed in the `job-application` repo
 
-`/Users/donghanglyu/.claude/skills/job-application` has ~1500 lines uncommitted since 2026-06-04. Migrating a dirty tree would either lose that work or fold it into one shapeless commit. Commit it there first, in coherent groups, staging named paths only.
+> **This task was already executed on 2026-08-10, before this plan was finalised.** It is kept as a
+> *verification* task rather than deleted, because Task 2 migrates that repo's history and will
+> silently carry a dirty tree's worth of missing work if this state is not what you think it is.
+>
+> Background: `/Users/donghanglyu/.claude/skills/job-application` had ~1500 lines uncommitted since
+> 2026-06-04. Migrating a dirty tree would either lose that work or fold it into one shapeless
+> commit, so it was committed there first, in five coherent groups, staging named paths only.
+> **The commit messages differ from the ones an earlier draft of this plan prescribed — that is
+> expected and is not a defect.** What matters is that the five commits exist, the tree is clean,
+> and the suite is green.
 
 **Files:**
-- Modify (commit only, no content edits): `/Users/donghanglyu/.claude/skills/job-application/**` as listed below
-- Test: `/Users/donghanglyu/.claude/skills/job-application/scripts` (existing suite, must be green before and after)
+- Read only: `/Users/donghanglyu/.claude/skills/job-application/**`
+- Test: `/Users/donghanglyu/.claude/skills/job-application/scripts` (existing suite, must be green)
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: a clean `git status` in the `job-application` repo, with `main` at a new tip that contains every file Task 2 will migrate.
+- Produces: a verified-clean `job-application` repo whose tip contains every file Task 2 migrates.
 
-- [ ] **Step 1: Confirm the suite is green before touching anything**
-    Run: `cd /Users/donghanglyu/.claude/skills/job-application/scripts && python3 -m pytest tests -q`
-    Expected: PASS — `51 passed`. If it is not 51 passed, STOP and report; do not commit a red tree.
-
-- [ ] **Step 2: Confirm the working tree is exactly the expected set**
-    Run: `cd /Users/donghanglyu/.claude/skills/job-application && git status --short`
-    Expected output, exactly these 21 lines (order may vary):
-    ```
-     M README.md
-     M SKILL.md
-     M agents/ats-screener.md
-     M agents/hiring-manager.md
-     M assets/profile.example.yaml
-     M references/cv-craft.md
-     M references/gap-analysis.md
-     M references/job-posting-extraction.md
-     M references/motivation-letter.md
-     M scripts/render_cv.py
-     M scripts/render_letter.py
-     M scripts/tests/test_render_cv.py
-     M scripts/tests/test_render_letter.py
-    ?? agents/recruiter-screener.md
-    ?? references/candidate-situations.md
-    ?? references/interview-prep.md
-    ?? references/rirekisho.md
-    ?? references/role-families.md
-    ?? references/structured-applications.md
-    ?? scripts/render_rirekisho.py
-    ?? scripts/tests/test_render_rirekisho.py
-    ```
-    If anything else appears, STOP and report it — an unexpected path means someone else edited this tree and you would be committing their work blind.
-
-- [ ] **Step 3: Commit group 1 — renderers and their tests**
-    ```bash
-    cd /Users/donghanglyu/.claude/skills/job-application
-    git add scripts/render_cv.py scripts/render_letter.py \
-            scripts/tests/test_render_cv.py scripts/tests/test_render_letter.py \
-            assets/profile.example.yaml
-    git commit -m "feat(render): section ordering, CJK preamble, links, personal-data interlock, exec sections
-
-Adds meta.section_order/meta.headings resolution, the xeCJK preamble with a
-cross-platform font fallback, friendly link labels in all three renderers, the
-Cluster-1 personal-data suppression, and native achievements/board sections.
-Uncommitted since 2026-06-04; landed here so the history survives migration."
-    ```
-
-- [ ] **Step 4: Commit group 2 — the Japan rirekisho fork**
-    ```bash
-    cd /Users/donghanglyu/.claude/skills/job-application
-    git add scripts/render_rirekisho.py scripts/tests/test_render_rirekisho.py references/rirekisho.md
-    git commit -m "feat(rirekisho): Japanese 履歴書 renderer, reference and tests
-
-The rirekisho is a form, not a CV: personal-data block, 学歴・職歴 table,
-免許・資格 table, 志望の動機 box. docx only — the authentic form is exported to
-PDF from Word/LibreOffice rather than routed through LaTeX."
-    ```
-
-- [ ] **Step 5: Commit group 3 — the three judge personas**
-    ```bash
-    cd /Users/donghanglyu/.claude/skills/job-application
-    git add agents/ats-screener.md agents/recruiter-screener.md agents/hiring-manager.md
-    git commit -m "feat(judges): add the recruiter/HR screener as the third judge
-
-Three lenses, deliberately distinct: ATS = literal findability, Recruiter =
-fast/broad/logistics, Hiring Manager = deep fit. The recruiter's must_have_fit
->= 3 vs the hiring manager's >= 4 asymmetry is what makes 'honest stretch'
-statable at all."
-    ```
-
-- [ ] **Step 6: Commit group 4 — the craft references**
-    ```bash
-    cd /Users/donghanglyu/.claude/skills/job-application
-    git add references/candidate-situations.md references/cv-craft.md \
-            references/gap-analysis.md references/interview-prep.md \
-            references/job-posting-extraction.md references/motivation-letter.md \
-            references/role-families.md references/structured-applications.md
-    git commit -m "docs(references): candidate situations, role families, structured applications, interview prep
-
-Plus the cv-craft/gap-analysis/job-posting-extraction/motivation-letter updates:
-the quantification ladder, the qualitative-evidence rule, the NOT-ALLOWED table,
-the disqualifier wall, the FIT SNAPSHOT template and its required disclaimer."
-    ```
-
-- [ ] **Step 7: Commit group 5 — the orchestrator and README**
-    ```bash
-    cd /Users/donghanglyu/.claude/skills/job-application
-    git add SKILL.md README.md
-    git commit -m "docs(skill): three-judge loop, workspace convention, fast path, Step 7.5 brief
-
-SKILL.md's diff spans every group above, so it lands last and whole rather than
-being split with an interactive add (not available in this environment)."
-    ```
-
-- [ ] **Step 8: Verify the tree is clean and still green**
+- [ ] **Step 1: Confirm the five preservation commits are present, on top of `141bef6`**
     Run:
     ```bash
-    cd /Users/donghanglyu/.claude/skills/job-application && git status --short && \
-      git log --oneline -6 && cd scripts && python3 -m pytest tests -q
+    cd /Users/donghanglyu/.claude/skills/job-application && git log --oneline -6
     ```
-    Expected: `git status --short` prints nothing; the log shows the five new commits on top of `141bef6`; pytest reports `51 passed`.
-    Do **not** push. This repo has no remote and must not gain one.
+    Expected — these six lines, in this order (the five preservation commits, then the 2026-06-04 base):
+    ```
+    864ad7f docs: craft/gap/posting/letter guidance and the orchestrator flow
+    6002e49 feat: candidate situations, role families, structured applications, interview brief
+    7141315 feat: renderer overhaul — i18n headings, section order, links, CJK, profile schema
+    0940f6d feat: Japan rirekisho renderer and its reference
+    9404bbe feat: recruiter/HR screener as a third judge in the review loop
+    141bef6 docs: consistent 'dual-lens' wording in fast-path note
+    ```
+    If `141bef6` is the tip — i.e. the five commits are absent — the preservation never happened and
+    the ~1500 lines are still uncommitted or, worse, lost. **STOP and report**; do not migrate.
+
+- [ ] **Step 2: Confirm the working tree is clean**
+    Run: `cd /Users/donghanglyu/.claude/skills/job-application && git status --short`
+    Expected: **no output at all.**
+    If anything appears, someone edited this tree after the preservation commits. STOP and report it —
+    migrating now would leave that work behind with no error.
+
+- [ ] **Step 3: Confirm the suite is green**
+    Run: `cd /Users/donghanglyu/.claude/skills/job-application/scripts && python3 -m pytest tests -q`
+    Expected: PASS — `51 passed`. A red tree must not be migrated.
+
+- [ ] **Step 4: Confirm the repo still has no remote**
+    Run: `cd /Users/donghanglyu/.claude/skills/job-application && git remote -v`
+    Expected: **no output.** This repo has no remote and must not gain one. Nothing in this plan pushes.
+
+There is nothing to commit in this task.
 
 ---
 
@@ -6564,6 +6504,7 @@ State these when reporting completion, so nobody assumes they landed:
 
 - **The `discover`, `assess` and `interview` modes.** SKILL.md names them and says, per mode and in those exact words, that each `is not yet built in this repo`; `modes/` holds only `apply.md`. Those words are the **Status cell of that mode's row in SKILL.md's `## Modes` table** — there is no prose sentence to find. `test_a_mode_that_exists_is_not_still_described_as_not_yet_built` turns each row into a self-retracting one: the suite goes red the moment a later plan lands the mode file without editing its own row's Status to `live — modes/<mode>.md`.
 - **The self-check list and the gate table are extended by every later plan, and the suite is RED until they are.** `test_the_self_check_names_every_script` / `..._every_reference_file` / `..._every_agent_file` / `..._every_mode_file` are deliberately exhaustive. Plans 2, 3 and 4 together add fourteen scripts, three mode files, three reference files and two agent files, so each of them needs a final task that appends its own entries to SKILL.md's `## Self-check` section **and** its gate table, and **appends to** the `skip` set for its library-only modules (`opencli_meta.py` from Plan 3, `mock_vocab.py` and `mock_blocks.py` from Plan 4, joining `journal.py`, `paths.py`, `rounds.py`, `vocab.py`; Plan 2 has no library-only module and adds nothing). Appends, not replacements: three plans editing the same line as a whole-line replacement means whichever lands last deletes the other two's entries. This plan cannot do it — it runs first — and the red suite is the mechanism, not an accident.
+- **The CI conventions guard is Plan 2's to remove, and it is a FIFTH red.** Task 22 ships `make conventions` and the workflow's market-conventions step behind an `if [ -f scripts/check_conventions.py ]` file test, because the script does not exist yet and a CI step that references a missing file fails for the wrong reason. `test_the_conventions_guard_disappears_when_the_script_lands` returns early while the script is absent and goes **red the moment Plan 2 Task 6 creates it** — a CI step that keeps skipping is a CI step that is not there, and spec §10 requires an expired market table to fail the build. **Plan 2 must delete the guard from both `Makefile` and `.github/workflows/checks.yml` in the same task that creates the script**, and stage both files in that task's commit. Until it does, this test is red alongside the four self-check tests above, and any later plan's "the whole suite is green" step is unreachable.
 - **The mode-entry step for the other three modes.** `scripts/enter_mode.py` handles all four modes and `check_apply.py` requires the record for `apply`. Plans 2, 3 and 4 must each make `enter_mode.py --mode <theirs>` the first step of their mode file and mirror the `NO_MODE_ENTRY` / `MODE_FILE_CHANGED` findings into their own gate; without that, half of the layer-1.5 backstop exists for one mode out of four.
 - **The §12 flagged rewrite.** The FIT SNAPSHOT's required disclaimer talks about keyword-coverage *percentages*, and the new assess mode stops emitting those. Carrying it verbatim here is correct — this plan's job is that `job-hunt` does everything `job-application` does. **Plan 2 owns the rewrite**, as a separate small readable commit with its own `scripts/lossless-allowlist.json` entry naming it, so it is a decision rather than a casualty.
 - **Six layer-1 items from spec §6 that belong to the unbuilt modes**, listed so nobody finishes this plan believing SKILL.md is §6-complete. Landing here: the apply-verdict block and its disclaimer, the skill-wide banned-output vocabulary and its published-employer-rubric exception, and the §8 grounding-contract summary (Task 20). Landing with their modes: the read-only guarantee plus the `access: read` allow-list and the four opencli command pairs (**Plan 3**); the **platform-limit stop rule** — stop, no retry, no parameter change, no bypass, direction-level degradation, fill the disclosure table — which **Plan 3 carries into the same SKILL.md block** as the read-only guarantee; the four anti-coaching rules and their tripwire, and the mock-interview session mechanics (**Plan 4**).

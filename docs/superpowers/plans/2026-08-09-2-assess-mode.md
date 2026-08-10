@@ -3097,16 +3097,47 @@ off within a week, and then it is not there on the run that mattered.
   or a `FileNotFoundError`. No table exists yet. Record the failure count; it drops as
   Tasks 7–11 land.
 
+- [ ] **Step 7a: Remove the CI guard that only existed because this script did not**
+
+  Plan 1 Task 22 wired `make conventions` and the workflow's market-conventions step behind an
+  `if [ -f scripts/check_conventions.py ]` file test, because referencing a missing file fails CI for
+  the wrong reason. The script exists as of Step 5, so the guard now makes CI *skip* the check
+  silently — and spec §10 requires an expired market table to fail the build. Plan 1 ships
+  `test_the_conventions_guard_disappears_when_the_script_lands`, which returned early while the
+  script was absent and **is red from Step 5 onward** until this edit lands.
+
+  In `Makefile`, replace the guarded `conventions` recipe with the unguarded one:
+  ```make
+  conventions:
+  	python3 scripts/check_conventions.py --all
+  ```
+  (that leading whitespace is a **literal tab** — a Makefile recipe with spaces does not run)
+
+  In `.github/workflows/checks.yml`, replace the guarded step's `run:` body with:
+  ```yaml
+        - name: market conventions
+          run: python3 scripts/check_conventions.py --all
+  ```
+
+  Then run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests/test_ci.py -q`
+  Expected: PASS — the guard test is green now that neither file contains
+  `-f scripts/check_conventions.py`. If it still fails, one of the two entry points kept its guard.
+
 - [ ] **Step 8: Commit**
   ```
   cd /Users/donghanglyu/code_project/job-hunt
   git add references/market-conventions/README.md scripts/check_conventions.py \
           scripts/tests/test_check_conventions.py scripts/tests/test_market_tables.py \
+          Makefile .github/workflows/checks.yml \
           docs/superpowers/research/2026-08-09/review-cn.md \
           docs/superpowers/research/2026-08-09/review-nl_weu.md \
           docs/superpowers/research/2026-08-09/review-de.md \
           docs/superpowers/research/2026-08-09/review-us_uk.md
-  git commit -m "conventions: table lint plus the README that is its spec, and the source research"
+  git commit -m "conventions: table lint plus the README that is its spec, and the source research
+
+Also drops the CI guard Plan 1 put around this script while it did not exist:
+a market-conventions step that keeps skipping is a step that is not there, and
+spec section 10 requires an expired table to fail the build."
   ```
 
 ---
@@ -5612,8 +5643,10 @@ shipping the paragraph this task exists to retire.
 
 - [ ] **Step 5: Record both retired baseline lines in the allowlist, by hash**
 
-  Add to `scripts/lossless-allowlist.json`'s `waived` map, alongside the nine README lines
-  Plan 1 Task 21 already waived — this is an **append**, not a replacement of the map. The
+  Add to `scripts/lossless-allowlist.json`'s `waived` map, alongside the eighteen lines Plan 1
+  already waived (twelve README lines in three reason-groups from Task 21 Step 6, plus the six
+  baseline frontmatter-description lines from Task 20 Step 8a) — this is an **append**, not a
+  replacement of the map. The
   keys are `sha1(normalize(line))[:16]` as `check_skill_lossless.py` computes them, so
   editing either line again revokes its waiver and brings it back for review:
   ```json
@@ -5628,9 +5661,9 @@ shipping the paragraph this task exists to retire.
   python3 -m pytest scripts/tests/test_skill_structure.py -q
   ```
   Expected: the lossless check exits 0 and the waived count goes up by **exactly two**.
-  `waived` is cumulative over the whole allowlist, not per-commit: Plan 1 Task 21 waived nine
-  README lines and its Task 22 prints `LOSSLESS: … , 9 waived`, so the number here is
-  **11 waived**. Take `9` from the run Plan 1 actually printed rather than from this
+  `waived` is cumulative over the whole allowlist, not per-commit: Plan 1 waives eighteen lines
+  (12 README + 6 description) and its Task 22 prints `LOSSLESS: … , 18 waived`, so the number
+  here is **20 waived**. Take `18` from the run Plan 1 actually printed rather than from this
   sentence, and check the delta — the delta is the claim, the total is bookkeeping.
 
   A delta of **zero** on either key means that baseline line is still findable somewhere in
@@ -5803,8 +5836,8 @@ its real status instead of 'not yet built in this repo'."
   `test_skill_structure.py`**, which is red from Task 1 until Task 15 lands.
 - `python3 scripts/check_conventions.py --workspace /tmp/jh-lint --all --today 2026-08-09` exits 0.
 - `python3 scripts/check_skill_lossless.py --baseline job-application-baseline` exits 0 and
-  reports **two more** waived lines than Plan 1's last run did — Plan 1 ends at `9 waived`
-  (its nine deleted README lines), so this plan ends at `11 waived`, the two added by
+  reports **two more** waived lines than Plan 1's last run did — Plan 1 ends at `18 waived`
+  (12 README + 6 description), so this plan ends at `20 waived`, the two added by
   Task 14. The delta is the claim; if it is zero, a copy of the rewritten line is still in
   the tree.
 - `references/market-conventions/` holds `README.md` and five tables totalling 38 entries (cn 10, nl 9, de 8, uk 5, us 6), with the three dropped ids present in none of them, and each `<key>.yaml` declaring `market: <key>`.
