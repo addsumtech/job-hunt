@@ -141,7 +141,15 @@ Run it before tailoring (baseline) and after (so the user sees the delta). The a
 
 **REQUIRED disclaimer to include every time:**
 
-> ⚠️ The coverage line is a keyword *estimate*, not an ATS pass prediction. Modern ATS use semantic matching — they understand synonyms and context. Exact-keyword scores are a useful proxy but imprecise: a CV with 8/10 must-haves genuinely evidenced in context will outperform one with 10/10 forced mentions. Keyword stuffing (adding terms not backed by real experience) backfires at interview and with sophisticated ATS. Use this as a health check, not a target to game.
+> ⚠️ This is a count of evidence, not a forecast of the outcome. Every must-have is
+> printed with the evidence reference behind it, so the denominator can be audited row
+> by row and you can object to one line rather than to the whole number. `strongly
+> evidenced` counts `strong` only — `partial` and `gap` are never merged into a covered
+> number, because merging them needs a weight for a partial match and any weight would
+> be invented. This is not a prediction about a screening system: keyword stuffing
+> (adding terms not backed by real experience) backfires at interview and with
+> sophisticated ATS, and no count here estimates an interview or hiring outcome.
+> Whether to apply is your call.
 
 **Computation & labels (avoid two conflicting numbers):** the **"strongly evidenced" count** = must-haves where CV evidence is `strong` (count `partial` and `missing` separately; do not merge them into one "covered" number). This is *not* the same as the ATS screener's coverage formula (which gives partials half-weight: `(present + 0.5·partial)/total`) — label them distinctly ("evidenced must-haves" here vs. "ATS coverage %" from Judge 1) so the user never sees two unreconciled percentages. Be honest about `partial`: a keyword in the Skills list with no supporting bullet is partial, not strong.
 
