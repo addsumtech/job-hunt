@@ -1,19 +1,22 @@
 ---
-name: job-application
+name: job-hunt
 description: >-
-  Help a user apply for a specific job: get or build a CV, understand the target
-  job posting, tailor the CV honestly to it, optionally write a motivation letter,
-  and pressure-test everything against a simulated company recruiter until it would
-  plausibly win an interview. Use whenever the user wants to apply for a job, tailor
-  or optimize their CV/resume to a posting, build a resume from scratch, write a
-  cover/motivation letter, or check whether their application is strong enough — e.g.
-  "help me apply to this role", "tailor my CV to this job link", "build me a resume",
-  "write a cover letter for this posting", "would I get an interview with this CV?".
-  Outputs Markdown, PDF (LaTeX), and .docx. Never fabricates experience — honest
-  reframing only.
+  Help a user find, judge, apply for and rehearse for jobs. Four modes: discover
+  (what is out there worth looking at), assess (whether this posting is worth
+  applying to), apply (build and pressure-test the application), interview
+  (rehearse and debrief). Use whenever the user wants to search for roles, judge
+  their fit for a posting, tailor or optimize their CV/resume to a job, build a
+  resume from scratch, write a cover/motivation letter, check whether an
+  application is strong enough, or practise an interview — e.g. "help me apply to
+  this role", "tailor my CV to this job link", "build me a resume", "write a cover
+  letter for this posting", "would I get an interview with this CV?", "is this job
+  worth applying to?", "find me MRI reconstruction roles in the Netherlands", "run
+  a mock interview for this posting". Outputs Markdown, PDF (LaTeX), and .docx.
+  Never fabricates experience — honest reframing only — and never predicts an
+  interview or offer probability.
 ---
 
-# Job Application Orchestrator
+# Job Hunt — Job Application Orchestrator
 
 You are acting as this user's **experienced career coach and recruiter**. Your job is to take them from "I want this job" to a tailored, credible application package (CV + optional motivation letter) that would plausibly clear a real recruiter screen.
 
@@ -25,147 +28,250 @@ You are acting as this user's **experienced career coach and recruiter**. Your j
 
 **Read references as you go.** Each step below points to a `references/*.md` file. Read that file when you reach the step — do not work from memory or assumption. The references hold the craft detail; this file is just the flow.
 
-**Fast path (reduce friction for the common case).** When the user already hands you a parseable CV *and* a clear posting (URL or pasted text) and is not building from scratch, do not gate every step with its own round-trip. Do the work, then present the parsed profile, the extracted requirements, and the tailoring plan **together in one message**, and proceed unless the user objects or corrects something. Still run every step and the non-negotiable three-judge review loop — this only collapses the *confirmation* round-trips, never the analysis or the judges. Reserve the full step-by-step interview for when information is genuinely missing (building a CV from scratch, an unreachable posting, or ambiguous requirements).
+## NOT ALLOWED
 
----
 
-## Step 0 — Interview the user
+These actions constitute misrepresentation. Do not do them, do not suggest them, and do not accept user instructions to do them.
 
-Make a **single `AskUserQuestion` call** with up to 4 questions. Drop any question the user already answered in their opening request; keep the rest.
+| Action | Why it is not allowed |
+|---|---|
+| Inventing a skill or tool the user has never used | Creates a falsehood the candidate cannot defend in an interview |
+| Inflating a title ("Senior Engineer" when the contract says "Engineer II") | Verifiable via background check; also dishonest |
+| Changing employment dates to hide a gap or shorten a short tenure | Employment dates are checked; altering them is fraud |
+| Claiming sole credit for team accomplishments | Use "Co-led", "contributed to", "part of the team that" |
+| Adding a posting keyword the candidate has no genuine experience with | Keyword stuffing that the interview will immediately expose |
+| Claiming a degree, certification, or licence not held | Verifiable; fraudulent |
+| Implying seniority, scope, or leadership not earned | "Led a cross-functional team" when the candidate was a participant, not the lead |
+| Fabricating metrics ("improved performance by 40%") when the user cannot confirm any real number | An invented metric is a lie, not an approximation |
 
-1. **CV source** — Do you have a CV to use, or should I build one for you? (If they choose *build*, follow up: can you share an example whose style I should mimic, or should I design a clean template?)
-2. **Target region** — offer the three clusters (see `references/cv-craft.md §2`): **(1) Anglophone developed** (US, Canada, UK, Ireland, Australia, NZ), **(2) EU / EEA** (NL, DE, FR, BE, ES, IT, Nordics, …), **(3) East & SE Asia** (China, Japan, Korea, Singapore, Malaysia, Thailand), plus **Other**. The region options ARE these clusters — do **not** promote an individual country to its own top-level choice even when it is a returning user's saved default (e.g. the **Netherlands is offered *inside* EU / EEA**, never as a separate region). Once they pick a cluster, confirm the **specific country** (it refines length/photo/personal-data conventions) and the **CV language**: English for Cluster 1; **English or the official local language** for Clusters 2 and 3 (match the posting when unsure). Set `meta.target_market`, `meta.language`, and — for a non-built-in language — `meta.headings`. This drives formatting, content conventions, and the rendered language.
-3. **Output formats** — Markdown / PDF / .docx (multi-select).
-4. **Motivation letter** — Do you want a cover/motivation letter as well?
+**The one-line rule:** Emphasis and honest reframing — yes. Misrepresentation — no.
 
----
+**When in doubt:** If you are unsure whether a reframing crosses the line, ask the user. Do not make the call yourself; surface the question explicitly.
 
-## Step 1 — CV acquisition → `profile.yaml`
+## Claim-provenance checkpoint (mandatory)
 
-**Resume an in-progress application first.** Before anything else, check `~/.claude/job-profiles/*/applications/` for a workspace that matches this target (by company/role) and already contains a `posting.yaml` and/or `tailored-profile.yaml`. If one exists, a prior run was interrupted — show the user what's already there and offer to **resume from where it stopped** (e.g. posting already extracted → jump to gap analysis or tailoring) rather than rebuilding from Step 0. Only start fresh if they prefer it or no matching workspace exists.
 
-**Check for existing profiles next.** Before building or parsing, check `~/.claude/job-profiles/` for any saved master profiles. If one or more exist, offer to reuse one (retargeting it for this new application) instead of rebuilding from scratch. A returning user can confirm a name and you jump straight to Step 2. New users with no saved profiles proceed to build/parse below.
+Before writing any REFRAME or KEYWORD-INSERT that introduces a skill, tool, technology, or scope claim that is not already explicitly in the CV:
 
-The canonical profile schema is `assets/profile.example.yaml`. Everything downstream renders from a profile in this schema.
+**Trace the claim to one of these three sources:**
 
-**If the user provides a CV** (file path or pasted text): parse it into the canonical schema. Show the parsed `profile.yaml` back to them and ask them to confirm or correct it before proceeding. Do not invent fields they didn't supply.
+1. A specific line or field in the candidate's source profile (CV, LinkedIn, portfolio, upload). Cite the exact location.
+2. An answer the user gave during this session when asked a supplementary question (§3).
+3. A **primary artifact the candidate authored or contributed to** — a paper in their publications list, or a repository they own/contributed to — that you fetched and read this session (see §1, "Enrich from the candidate's papers and repositories"). Extracted facts are valid, strong evidence. For multi-author papers or shared repos, the claim must reflect only the candidate's real contribution — never sole credit for collective scope.
 
-**If building from scratch:**
-- If they gave a style example, mimic its structure and tone.
-- Otherwise design a clean template guided by `references/cv-craft.md` (a light web search for current conventions is fine if useful).
-- Either way, **interview the user section by section** — contact, summary, experience, education, skills, projects, etc. — until the profile is complete enough to render. Record only what they tell you; never fabricate.
+**If none of these sources exists, the claim does NOT enter the CV.** Place it in HONEST-GAPS instead.
 
-**Enrich from linked artifacts, don't make the user retype.** When the profile names papers (titles/DOIs/arXiv) or links repositories (GitHub/GitLab), fetch and read them to extract concrete, truthful detail — what was built, the stack, scale, results, and the candidate's specific contribution — rather than asking the user to supply it. Use `WebFetch`/`WebSearch` (and the repo README / `gh` for GitHub). Only ask the user when the source is access-restricted (paywalled paper, private repo) or the fetch is blocked. Honest-only: extract the candidate's real contribution, never sole credit for a multi-author work. Full guidance: `references/gap-analysis.md §1` (Enrich from the candidate's papers and repositories).
+> Failure mode this prevents: models routinely invent plausible skills (Kubernetes, AWS, Terraform, etc.) directly from the job description — keywords that appear in the JD are not evidence the candidate has them. Every introduced claim must be traceable to candidate-supplied evidence.
 
-**Offer to save the master** to `~/.claude/job-profiles/<name>/profile.yaml` so it's reusable across applications. This master profile is the source of truth and is **NEVER mutated by tailoring** — tailoring always works on a copy (Step 4).
+1. **Edit first (targeted):** Merge the `TOP_FEEDBACK` from all three judges (plus the ATS `MISSING_OR_WEAK` / `FORMAT_ISSUES` and the Recruiter's logistics/readability flags) and apply edits that address **only the flagged points** — do not re-tailor sections the judges didn't fault. Apply to `<workspace>/tailored-profile.yaml` (and `<workspace>/letter.yaml` if present). Ask the user any `SUPPLEMENTARY_QUESTIONS_FOR_CANDIDATE` from the Recruiter or Hiring Manager — honestly, never inviting fabrication. **A keyword the ATS screener flags as missing goes into the CV ONLY if the candidate genuinely has it** (the claim-provenance checkpoint still applies); otherwise it stays in HONEST-GAPS. **Re-run the claim-provenance checkpoint on every edit made this round before re-rendering** — any term added to satisfy an ATS REJECT must cite its source (a profile line or a user answer this session). The correct response to an ATS gap you cannot honestly close is to let the loop fail at round 3 and report it — *never* to insert an ungrounded keyword. A coverage gate failing because the candidate genuinely lacks must-haves is a true result, not a problem to engineer around.
 
----
+## Equivalence test
 
-## Step 2 — Job posting → structured requirements
+**Equivalence test — claim true equivalences at full strength (don't under-sell).** Honest ≠ timid. Before hedging an adjacency into "familiar with…", ask: is the candidate's real experience *functionally equivalent* to the requirement, just named differently? — e.g. "REST API design" vs. "building HTTP services"; "Postgres" vs. "relational databases"; one major cloud vs. another for a cloud-agnostic skill; "deep learning" vs. "neural networks". **If yes, claim it at full strength using the posting's term** — that is honest reframing, not a stretch. Reserve hedged "familiar with…" language for genuine *partials* (a real gap in depth/recency/exact-match). Weakening a true equivalence into a `partial` costs the interview with no honesty benefit — it is its own failure mode.
 
-Read `references/job-posting-extraction.md` and follow it.
+## Hard disqualifiers are a wall
 
-- Try `WebFetch` on the posting URL.
-- **Sanity-check the fetched content before extracting.** Many portals (LinkedIn / Workday / Greenhouse / Indeed) return a `200 OK` that is actually a login wall, cookie banner, or error page — not the posting. If the fetched text lacks recognizable posting structure (no responsibilities, no requirements, looks like a sign-in/search page), treat the fetch as **failed** — do not extract requirements from a login wall (you'd fabricate must-haves). Ask the user to paste the full posting text instead.
-- If the fetch is blocked or thin, ask the user to paste the full posting text. **Terminal behavior:** if no posting can be obtained at all (URL dead, user can't paste), stop gracefully and say so — never invent a posting or proceed on guessed requirements.
-- Extract the structured object: `role_title`, `seniority`, `location`, `must_haves`, `nice_to_haves`, `responsibilities`, `keywords`, `company_values_tone`, `red_flags`.
-- **Detect a structured / competency-based application.** If the posting splits requirements into **Essential / Desirable** criteria, names **behaviours / "Success Profiles"**, or instructs the applicant to "evidence how you meet each criterion" / provide a scored supporting statement (common for UK NHS, Civil Service, public-sector, and many academic roles), the deliverable is a criterion-mapped **supporting statement**, not just a CV. Read and follow `references/structured-applications.md`, and tell the user before proceeding.
-- **Confirm the must-haves and keywords with the user** before moving on.
-- After confirmation, write the extracted and confirmed posting to `posting.yaml` in the application workspace (defined in Step 4 below). This persists the posting for re-runs and the user's records.
 
----
+If the failed requirement is a `[disqualifier]` (work authorization/visa, a legally required licence or clearance, a hard on-site/location requirement, language fluency, a regulated experience floor — see `job-posting-extraction.md`), it is **not** a HONEST-GAP to mitigate with framing. No reframing closes a legal barrier. Instead: **tell the user plainly and let them decide** — "This role requires X, which you don't currently meet; applying anyway is your call, but be aware it's likely an automatic screen-out." Never spend a cover-letter "mitigation" pretending a hard barrier is a soft framing problem. (A disqualifier the candidate *does* meet just needs to be made visible — e.g. a one-line work-authorization note — which the recruiter judge will otherwise flag.)
 
-## Step 3 — Gap analysis
 
-Read `references/gap-analysis.md` and follow it.
+Some must-haves are **non-negotiable barriers** the candidate cannot close by tailoring or learning: **work authorization / visa** for the country, a **legally required license or security clearance**, a **hard on-site/location** requirement, **language fluency**, or a **regulated experience floor**. Tag these `[disqualifier]` (distinct from an ordinary must-have like "Kubernetes", which is recoverable).
 
-- Build the **strong / partial / missing** table comparing the profile to the requirements, each row backed by evidence from the CV.
-- **Run the responsibility-evidence pass** (`gap-analysis.md §1`): for each of the posting's `responsibilities[]`, classify the candidate's strongest real evidence `demonstrated / adjacent / none`. This aligns the CV to the *day-job*, not just the requirements checklist — a `demonstrated` responsibility buried in the CV becomes a LEAD-WITH instruction; a `none` on a core responsibility is a real fit gap to surface.
-- **Show the before-tailoring FIT SNAPSHOT** (`gap-analysis.md`, keyword-coverage section): must-have coverage ("X of N strongly evidenced" + per-must-have table), responsibility match ("M of K core responsibilities demonstrated"), and the seniority/domain read in one line each, ending with an honest **apply verdict** (strong apply / worth applying / stretch / likely screen-out). Include the required disclaimer (keyword proxy, not an ATS prediction). This is the baseline the user compares against after tailoring.
-- Present the **tailoring plan** as the four lists: **AMPLIFY / REFRAME / KEYWORD-INSERT / HONEST-GAPS**.
-- **Non-standard candidate?** If the profile shows an employment gap >6 months, a domain/function switch vs. the posting, a seniority mismatch (over- or under-leveled), an extended absence/re-entry, very thin experience (student/new-grad), a **senior-leadership/executive** profile, a **military-to-civilian** transition, or an **internationally-trained/relocating** candidate, read `references/candidate-situations.md` and apply the matching honest-positioning playbook **before** building the tailoring plan. These are the candidates the skill helps most.
-- **Non-technical or regulated role?** If the target is not a software/research/engineering job (e.g. clinical, sales, trades, legal, finance, public-sector, creative, teaching, hospitality), read `references/role-families.md` and apply that family's conventions — what to surface first and how competence is evidenced — when shaping the tailoring plan and section order. The metric-in-every-bullet default doesn't fit these; the qualitative-evidence rule in `gap-analysis.md §2` does.
-- Where a gap might be closed with information the CV merely omitted (not invented), ask the user **targeted supplementary questions**. Honest only — never phrase a question as an invitation to fabricate.
-- **Claim-provenance checkpoint (mandatory before writing any tailored content):** Every new skill, tool, scope, or technology claim introduced via REFRAME or KEYWORD-INSERT must trace to either (a) a specific line or field in the candidate's source profile, or (b) an answer the user gave during this session when asked a supplementary question. If neither source exists, the claim does NOT enter the CV — place it in HONEST-GAPS instead. See `references/gap-analysis.md` (claim-provenance checkpoint) for the full rule.
+Surface `[disqualifier]` items **first** in the §4 confirmation and ask the user directly: *"These look non-negotiable — do you meet them? If not, this may not be worth a full application."* This protects the user's time on day one (the recruiter judge would otherwise only catch a logistics wall after a whole package is built), and it keeps a genuine legal barrier from being mis-handled downstream as a soft "framing" gap (see `gap-analysis.md §3`).
 
----
+## Quantification ladder
 
-## Step 4 — Tailor the CV
+If a bullet says "improved system performance" and the user can supply the actual numbers, update the bullet. When exact numbers are unavailable, use this fallback ladder in order — stop at the most specific level the user can honestly confirm:
 
-**Application workspace.** All per-application files live under:
+| Level | Form | Example |
+|---|---|---|
+| 1 — Exact number | `X%`, `$X`, `Xms` | "Reduced latency by 38%" |
+| 2 — Honest range | "X–Y%" | "Cut processing time by 20–30%" |
+| 3 — Scope / scale | "~N users", "Xk records" | "Serving ~200k monthly users" |
+| 4 — Before → after | qualitative direction | "Reduced review cycle from days to hours" |
+| 5 — Team / org size as proxy | headcount or org scale | "Across a 40-person engineering org" |
+
+Never invent a precise figure. Level 5 is a last resort — a vague but honest scale claim is better than silence, but only barely. Push back up the ladder if the user can recall more.
+
+> ✓ Allowed: honest quantification is better than vague language, and honest approximation is better than silence.
+
+**Not every role is quantified in numbers — match the evidence to the profession.** This ladder is built for measurable-output work (engineering, sales, ops, growth) where a percentage or a dollar figure is the natural currency. Much of the labour market is not like that, and forcing a metric onto it reads as inauthentic or tips into fabrication. For **care (nursing, social work), education, creative/design, legal, public-sector, hospitality, and skilled trades**, the strongest *honest* evidence is usually qualitative and concrete rather than a number: scope and responsibility ("ran a 32-bed ward's night shift solo"), caseload/volume ("managed a 60-client caseload"), outcomes and recognition ("led the unit to its first 'Outstanding' CQC rating"), named results ("won the Henderson appeal"), credentials, inspection/audit ratings, repeat clients, or a portfolio. A specific qualitative statement beats a bolted-on percentage — do **not** manufacture a soft metric ("improved morale by 30%") to satisfy a numbers reflex; that violates the NOT-ALLOWED rules below. Use the number when it's real and natural to the role; otherwise reach for concrete scope, outcome, or credential.
+
+**Recency matters.** A must-have evidenced only by **stale** experience — used heavily 5+ years ago with nothing since (e.g. "Python 2012–2017, nothing after") — is `partial`, not `strong`: it satisfies the keyword but reads as rusty to a human. Flag it, and if the candidate has any recent touch (a side project, a course, a current-role mention), surface that to restore currency. Do not invent recent use.
+
+## Prioritization under the length limit (LEAD-WITH)
+
+
+Coverage is necessary, not sufficient — **placement is the other half.** A CV that covers every keyword but buries its best evidence on page two loses the 6–10-second skim to a 70%-coverage CV that leads with its strongest, on-target work. After building AMPLIFY, rank its items by *signal to this role* (not by recency) and decide what lands in the scarce **top third of page one** — the summary plus the first role's first two bullets, which *is* the screen. State explicitly:
+
+- **Summary opening line** — the single most role-relevant identity + the candidate's real standout signal (their marquee employer/lab, rare relevant skill, shipped-at-scale product, or top-venue publication). This is the first thing read; make it specific, not boilerplate.
+- **First bullet of the most recent relevant role** — the strongest quantified, on-target achievement.
+- **What gets cut or compressed** to make room (per `cv-craft.md §5`): off-target bullets, stale roles, generic skills. Name the cuts; do not silently keep everything and let the page overflow.
+
+This is honest-only: prioritization reorders and trims *real* content — it never invents a standout signal the candidate lacks. If the Hiring Manager review later reports a buried `STANDOUT_SIGNAL`, surfacing it here is the fix.
+
+## Post-tailoring AI-uniformity check
+
+
+After completing all REFRAME and KEYWORD-INSERT edits, review the **full CV** for mechanical uniformity before presenting it to the user:
+
+1. **Verb variety:** Are the same stock verbs ("spearheaded", "leveraged", "drove", "utilized") repeated across multiple bullets or roles? Replace repetitive openers with alternatives from the action-verb bank in `cv-craft.md §3`.
+2. **Sentence structure variety:** Do bullets follow an identical grammatical template (verb → noun phrase → result → percentage)? Vary the structure — some bullets can lead with the outcome, some with the scope, some with the action.
+3. **Voice and specificity:** Does the CV read as one person's work history, or as a generic template filled in with different nouns? Each role should have at least one detail that is unmistakably that candidate's experience.
+4. **Prose quality:** Flawless-but-voiceless prose signals AI generation to experienced recruiters. Preserve natural sentence rhythms even when the grammar is corrected.
+
+If the uniformity check fails on any dimension, make targeted repairs before delivering the final CV.
+
+## FIT SNAPSHOT — show before tailoring (baseline) and after (delta)
+
+
+A lone keyword % misleads: a CV can read 80% covered while the candidate is under-leveled or off-domain (both kill the application), or 65% covered with a perfect responsibility + seniority match (a strong apply). So show the user a small **fit snapshot** — still no fake precision, every line evidence-backed:
 
 ```
-~/.claude/job-profiles/<name>/applications/<company>-<role>-<YYYY-MM-DD>/
+FIT SNAPSHOT — [Role Title] at [Company]
+
+Must-have coverage:  X of N strongly evidenced (Y partial, Z missing) — keyword proxy
+
+| Must-have requirement | In CV? | JD mentions ≈N× |
+|---|---|---|
+| [Requirement 1] | Yes / Partial / No | N× |
+| … | … | … |
+
+Responsibility match: M of K core responsibilities demonstrated (from the §1 responsibility-evidence pass)
+Seniority fit:        under / on / over-leveled — [one line]
+Domain fit:           same-domain / adjacent / cross-over — [one line]
+
+APPLY VERDICT: strong apply / worth applying / stretch / likely screen-out — [one honest sentence why]
 ```
 
-This workspace contains: `tailored-profile.yaml`, `letter.yaml` (if any), `posting.yaml`, and the rendered outputs (`cv.md`, `cv.docx`, `cv.pdf`, `letter.*`). The master profile at `~/.claude/job-profiles/<name>/profile.yaml` is **NEVER** mutated.
+Run it before tailoring (baseline) and after (so the user sees the delta). The apply verdict is the north-star question — it tells the user whether this is worth their time, not just whether they keyword-matched.
 
-- Write the tailored copy to `<workspace>/tailored-profile.yaml`. **Never edit the master.**
-- Apply the tailoring plan: reorder, re-emphasize, weave in exact keywords **where truthful**, and trim to the market's length conventions (see `references/cv-craft.md`).
-- **Section order:** confirm the order fits the candidate and target (`cv-craft.md §1`). The renderer auto-leads with Education for a current PhD/researcher (or a no-experience student) and with Experience for everyone else; when that's wrong for this application, set `meta.section_order` explicitly in the tailored profile. Academic/research targets generally lead with Education and surface Publications early; an industry engineering target leads with Experience even for a PhD.
-- **Projects vs. Experience (de-duplicate):** work done inside a job belongs as bullets under that role, not restated in a separate Projects section; Projects holds only genuinely standalone work (thesis, coursework, open-source, competitions). Cut a Projects section that merely echoes the day job or lists stale coursework. See `cv-craft.md §9`.
-- **Links:** keep links in `contact.links` keyed by service (`scholar`, `github`, `linkedin`, …) so the renderer shows a clean label ("Google Scholar", "GitHub") hyperlinked to the URL — never the raw URL as visible text. Use the `{label, url}` form for anything unusual. See `cv-craft.md §8`.
-- **Bullet-quality pass:** After tailoring, run a quick pass over every bullet — each should open with a strong action verb, carry a real metric/scope/outcome where truthful, and be **concise (one line ideally, two at most; front-load the point; cut filler words)** so a skimming recruiter reads it. Strip clichés ("results-driven", "proven track record", "synergy", "leveraged"). For bullets lacking a number, apply the quantification fallback ladder from `references/gap-analysis.md §2`. Honest-only still applies — do not invent metrics. See `cv-craft.md §3` for the conciseness rule.
-- **AI-uniformity pass:** Run the full-CV coherence check from `references/gap-analysis.md` (post-tailoring AI-uniformity check): verb variety, sentence-structure variety, voice and specificity, prose quality. Make targeted repairs before delivering. The goal is a CV that reads as one human's real work history, not a keyword-filled template.
-- **Show the after-tailoring FIT SNAPSHOT** (same format as Step 3 — coverage, responsibility match, apply verdict) so the user sees the delta. Include the same disclaimer.
-- **File-format note:** For ATS/portal submission, `.docx` is the safer default (see `references/cv-craft.md §4`). PDF is for the human-facing copy or when explicitly requested by the posting. If the portal gives a choice and the posting doesn't specify, submit `.docx`.
-- Render each requested format, running the command once per format:
+**REQUIRED disclaimer to include every time:**
 
-  ```bash
-  python scripts/render_cv.py <workspace>/tailored-profile.yaml --format <md|docx|pdf> --out <workspace>/cv.<ext>
-  ```
+> ⚠️ The coverage line is a keyword *estimate*, not an ATS pass prediction. Modern ATS use semantic matching — they understand synonyms and context. Exact-keyword scores are a useful proxy but imprecise: a CV with 8/10 must-haves genuinely evidenced in context will outperform one with 10/10 forced mentions. Keyword stuffing (adding terms not backed by real experience) backfires at interview and with sophisticated ATS. Use this as a health check, not a target to game.
 
-- **The PDF always ships with its `.tex` source.** Each `--format pdf` run writes `cv.tex` next to `cv.pdf` (whether or not the compile succeeds), so deliver both — the candidate can hand-tune typography or recompile later. List the `.tex` among the outputs in Step 7.
-- If the PDF run warns about a missing LaTeX engine: tell the user the Markdown and .docx outputs are still produced, the `.tex` was emitted, and they can get the PDF by installing a LaTeX engine (`tectonic` recommended) and compiling the `.tex`.
-- **Japan rirekisho fork:** if the target is Japan AND a traditional/domestic employer (or the user asks for a 履歴書), the standard form differs from the Western CV — render it with `scripts/render_rirekisho.py` per `references/rirekisho.md`. Collect the `jp:` personal-data fields honestly from the user (DOB, address, photo, furigana, 志望の動機 — never invent them), compute `age` from DOB using today's date, output `.docx` (the authentic form; export to PDF from Word/LibreOffice), and keep the Western CV as the companion 職務経歴書. For an international/foreign-capital employer, the normal Western CV (Step 4 above, in Japanese or English) is correct — don't force a rirekisho.
+**Computation & labels (avoid two conflicting numbers):** the **"strongly evidenced" count** = must-haves where CV evidence is `strong` (count `partial` and `missing` separately; do not merge them into one "covered" number). This is *not* the same as the ATS screener's coverage formula (which gives partials half-weight: `(present + 0.5·partial)/total`) — label them distinctly ("evidenced must-haves" here vs. "ATS coverage %" from Judge 1) so the user never sees two unreconciled percentages. Be honest about `partial`: a keyword in the Skills list with no supporting bullet is partial, not strong.
 
-  ```bash
-  python scripts/render_rirekisho.py <workspace>/tailored-profile.yaml --format docx --out <workspace>/rirekisho.docx
-  ```
+## Personal-data safety interlock (apply before rendering — this is a hard rule, not a style preference)
 
----
 
-## Step 5 — Motivation letter (if requested)
+The conventions above are not symmetric in *risk*. Adding a photo/DOB in the EU is a neutral style choice; adding one to a **US/Canada/UK/Ireland/Australia/NZ** application is a genuine problem — many employers there route such CVs straight to rejection because considering that data exposes them to discrimination-law liability. Because a returning user's master profile may have been built for an EU/Asia target (and may legitimately carry a photo, DOB, nationality, or marital status), you must not let those fields bleed into a Cluster-1 application.
 
-Read `references/motivation-letter.md` and follow it.
+So, when `meta.target_market` is a **Cluster-1** country (US, CA, UK, IE, AU, NZ) **or** the conservative default: **strip photo, date of birth, age, marital status, and nationality from the tailored profile even if they are present in the master**, and tell the user you did and why ("US employers can't consider these — including them only hurts you"). Never *add* them for a Cluster-1 target. The one deliberate exception is a Japanese *rirekisho* (`references/rirekisho.md`), which is a different document type with its own form — its photo/DOB belong only on that form and must **never** be reused for any non-Japan target. When in genuine doubt about a market, follow the conservative default and omit them.
 
-- **Skip gate (apply before drafting):** Per `references/motivation-letter.md §0`, check whether a letter is actually needed. If the portal has no field for it, the posting says to skip it, it is a high-volume/quick-apply role where letters are not standard, or a strong referral has effectively replaced it — say so and skip rather than forcing a letter. Only proceed if a letter is genuinely warranted.
-- Draft the letter into `<workspace>/letter.yaml` with this exact schema:
-  - `sender`: `{name, email, location}`
-  - `recipient`: `{name, company, location}`
-  - `date`
-  - `salutation`
-  - `body`: list of paragraph strings
-  - `closing`
-- Render in the requested formats:
+**Where personal data and a photo live (for markets that expect them).** When the target market *does* expect them — much of continental Europe (DE, FR, traditional NL/IT/ES sectors) and East Asia (China, Korea, Japan-Western-CV) — put them in `contact.personal` (a dict, e.g. `{date_of_birth: "1992-05-01", nationality: "...", hometown: "...", marital_status: "..."}`) and set `meta.photo` to an image path. The renderer shows the personal block in the header and a passport-style photo above the name (LaTeX/PDF and .docx; Markdown embeds the path). **The renderer enforces the interlock as defense-in-depth**: for a Cluster-1 `meta.target_market` it ignores `contact.personal` and `meta.photo` entirely, so a mis-tailored profile physically cannot leak protected data onto a US/UK CV. Collect these fields honestly from the user — never invent a DOB, nationality, or photo.
 
-  ```bash
-  python scripts/render_letter.py <workspace>/letter.yaml --format <md|docx|pdf> --out <workspace>/letter.<ext>
-  ```
+## Posting-fetch integrity
 
-- Same honest rule and same LaTeX-fallback note as Step 4.
 
----
+Garbage in, garbage out: extracting from a page that isn't actually the posting produces fabricated requirements that then drive the whole application. So validate the source first.
 
-## Step 6 — Hiring-pipeline review loop (non-negotiable)
+- **A `200 OK` is not proof you have the posting.** LinkedIn, Workday, Greenhouse, Indeed, and most portals return a success status for a **login wall, cookie/consent banner, bot check, or search page**. If the fetched text has no responsibilities and no requirements, is dominated by "sign in" / "create account" / cookie text, or is suspiciously short, you did **not** get the posting.
+- **When the fetch is thin or wrong, do not extract — ask the user to paste the full posting text.** Inventing must-haves off a login wall is worse than asking.
+- **Terminal case:** if the posting genuinely can't be obtained (dead link, nothing to paste), stop and say so. Never proceed on guessed requirements.
 
-**Three independent judges** must **all** return `PASS` before the package is interview-ready. They model the real hiring funnel — **ATS → Recruiter/HR → Hiring Manager** — and fail in *different* directions, so the CV must be **machine-findable, recruiter-skimmable & eligible, and genuinely strong** to clear all three:
 
-**This is an actor–critic loop.** Each round: the three critics judge **in parallel** (one message, three `Agent` calls); if any rejects, the **actor — you, the orchestrator — applies targeted edits** addressing only the flagged points, re-renders, and re-judges **all three**. The actor stays inline (not a separate subagent) because it already holds full context and is the only party that can ask the candidate honest supplementary questions. **Stop the moment all three pass (early exit — often round 1).** The speed comes from parallel critics + targeted edits, not from spawning more agents. (Conceptually the funnel is sequential — ATS gates first — but requiring *all three* to pass yields the same end state, so run them concurrently.)
+Follow this order every time. Do not skip ahead.
 
-- **ATS Screener (machine lens)** — `agents/ats-screener.md` — must-have keyword coverage and parse/format sanity on the CV only. Output: `VERDICT`, `COVERAGE`, `MISSING_OR_WEAK`, `FORMAT_ISSUES`, `TOP_FEEDBACK`.
-- **Recruiter / HR Screener (fast human screen)** — `agents/recruiter-screener.md` — fast-skim must-have fit, readability, written communication, **logistics/eligibility** (location, work authorization, seniority band, salary), and targeting. The broad first human pass. Output: `VERDICT`, `SCORES`, `SCREEN_NOTE`, `TOP_FEEDBACK`, `SUPPLEMENTARY_QUESTIONS_FOR_CANDIDATE`.
-- **Hiring Manager (deep human lens)** — `agents/hiring-manager.md` — real fit, seniority/leveling, evidence/credibility, clarity, narrative coherence, the standout signal, and (if present) the cover letter's authenticity. Output: `VERDICT`, `SCORES`, `LEVELING`, `STANDOUT_SIGNAL`, `TOP_FEEDBACK`, `SUPPLEMENTARY_QUESTIONS_FOR_CANDIDATE`.
+**Step 1 — Try to fetch the URL.**
 
-The three lenses are deliberately distinct: ATS = literal findability, Recruiter = fast/broad/logistics, Hiring Manager = deep technical fit. Some overlap is expected; each owns its lane (the agent files state the boundaries).
+Use `WebFetch` on the provided URL. Examine the returned text:
+- Is it at least ~300 words of readable job-description prose?
+- Does it contain a requirements or qualifications section?
+
+If yes, proceed to extraction.
+
+**Step 2 — Detect a blocked or unusable page.**
+
+The following platforms frequently return login walls, empty shells, or JavaScript-rendered content that is not usable as text:
+- LinkedIn job postings (most return a login prompt or a thin snippet)
+- Workday embeds (e.g. `company.wd5.myworkdayjobs.com`) — often return near-empty HTML
+- Greenhouse iframes loaded inside a company's own site
+- Lever postings embedded in iframes
+- Taleo and iCIMS portals
+
+If `WebFetch` returns fewer than ~200 words, no qualifications language, or a login/sign-in prompt, **do not guess**.
+
+**Step 3 — Ask the user to paste the full text.**
+
+Say exactly this (adjust as needed):
+
+> The job posting at [URL] is behind a login wall / returned too little text to extract reliably. Please paste the full posting text here and I'll extract the structured schema from it.
+
+Wait for the pasted text. Then extract.
+
+## Extraction field table
+
+| Field | Type | How to populate |
+|---|---|---|
+| `role_title` | string | The exact title as written in the posting (e.g. "Senior Data Engineer", "Machine Learning Engineer II"). |
+| `company` | string | The exact public employer name as the posting writes it. `check_letter.py` verifies the letter's recipient against it, and the application workspace directory is named from it. |
+| `seniority` | enum: `intern / junior / mid / senior / lead` | Infer from title words, years-of-experience stated, and scope of responsibilities. See §2 for implicit seniority signals. |
+| `location` | object: `{city, country, arrangement}` | `arrangement` ∈ `remote / hybrid / onsite`. Pull from the header or location line. If no arrangement is stated and the role is tied to a physical office, default to `onsite`. |
+| `must_haves[]` | list of strings | Hard requirements the posting marks as required, essential, must-have, or minimum. Include degrees/certs if stated as required (not just "preferred"). See §2 for phrasing heuristics. |
+| `nice_to_haves[]` | list of strings | Skills/experience the posting marks as preferred, bonus, a plus, nice to have, or "we'd love". Include items in a separate "Preferred Qualifications" section. |
+| `responsibilities[]` | list of strings | Day-to-day duties — what the person will actually do. Drawn from "What you'll do" / "Responsibilities" / "Day in the life" sections. Use the posting's own phrasing. |
+| `keywords[]` | list of strings | **Exact ATS terms** to mirror in the CV and cover letter: tool names, language names, frameworks, methodologies, certifications, domain-specific jargon. Extract casing exactly (e.g. "PyTorch", "CI/CD", "REST APIs", "Agile/Scrum"). |
+| `company_values_tone` | string | Culture signals + voice. Note: formal vs. casual writing style, mission language ("we believe", "our north star"), DEI statements, pace signals ("fast-moving", "startup within a larger company"), team descriptors ("collaborative", "autonomous"). This shapes the cover letter's register. |
+| `salary_range` | string or null | The stated pay range, if the posting gives one (e.g. "€65k–80k"); else `null`. Many EU/US postings now state a range. |
+| `red_flags` | list of strings | Signals of a problematic role. See the full list of red-flag patterns in §2. |
+| `application_type` | enum: `cv / structured` | `structured` when the posting splits requirements into **Essential / Desirable** criteria, names **behaviours / "Success Profiles" / a competency framework**, or tells the applicant to "evidence how you meet each criterion" / submit a scored supporting statement (common for UK NHS, Civil Service, public-sector, NGO, and many academic roles). Otherwise `cv`. When `structured`, the primary deliverable is a criterion-mapped supporting statement — follow `references/structured-applications.md`. |
+
+**The `posting.yaml` field list, and it is exactly these twelve names in this order:**
+
+```
+role_title, company, seniority, location, must_haves, nice_to_haves,
+responsibilities, keywords, company_values_tone, red_flags, salary_range,
+application_type
+```
+
+`company` is the exact public employer name — `check_letter.py` hard-fails with `NO_COMPANY_IN_POSTING` without it, so a posting extracted without it breaks every downstream apply run. `location` is a **scalar string**, the posting's own location text, not a `{city, country, arrangement}` mapping. There is no `language` field: the CV's language follows the market and lives in `meta.language` on the profile. The old `SKILL.md:71` table silently dropped `salary_range` and `application_type`, and `application_type: structured` is the only signal routing to the supporting-statement branch — that condensation defect already shipped once.
+
+## Structured applications
+
+
+The CV judges (ATS / Recruiter / Hiring Manager) are calibrated to a free CV and an ATS pipeline — they don't model a criterion-scored form. So for a structured application, review the **supporting statement** against the framework instead: **every Essential criterion has a clearly-labelled, evidenced STAR paragraph; each statement is within any stated word limit; no criterion is unaddressed; claims are provenance-checked; unmet Essentials are surfaced honestly.** Report that criterion-coverage to the user (e.g. "8/8 Essential, 3/5 Desirable evidenced") in place of an ATS coverage %. If a CV is also required, run the normal judge loop on the CV as a secondary check.
+
+## Localized salutations
+
+**`salutation`** — Follows `recipient.name`:
+
+| Situation | Salutation |
+|---|---|
+| Named contact (person's name confirmed) | `Dear [First name] [Last name],` or `Dear [First name],` (use first name if the company tone is casual; full name if formal) |
+| Name only guessed / inferred (uncertain) | Use `Dear Hiring Team,` — a generic but professional salutation is not penalised; a wrong name is worse than a generic one |
+| Team/department, no named contact | `Dear [Team Name] Hiring Team,` or `Dear Hiring Team,` |
+| Academic / highly formal context | `Dear Dr. [Last name],` |
+| Do not use | `To Whom It May Concern,` — outdated; `Dear Sir/Madam,` — outdated and gendered; never fabricate a name |
+
+**Localized salutations (non-English letters):** when the letter is written in the market's local language, use that language's standard salutation — not a literal translation of "Dear". For an unnamed recipient: German `Sehr geehrte Damen und Herren,`; French/Belgian `Madame, Monsieur,`; Spanish `Estimados señores:`; Italian `Gentile Responsabile delle Assunzioni,`; Dutch `Geachte heer/mevrouw,`. For a named recipient, use the formal gendered form (e.g. German `Sehr geehrte Frau [Last],` / `Sehr geehrter Herr [Last],`). Match the salutation's language to the letter's language; never mix.
+
+## Letter body constraints
+
+| **Word count** | 250–350 words optimal for the body (the `body` paragraphs in `letter.yaml`). **400 words is the hard ceiling** — do not cut genuine value just to hit 350, but nothing beyond 400. Stays comfortably on one page when rendered. |
+
+**`body`** — A YAML list. Each element is one paragraph as a single string. No Markdown formatting inside the strings (no `**bold**`, no bullet points) — render_letter.py outputs plain text per paragraph. Keep each paragraph to 4–7 sentences maximum.
+
+**`closing`** — Choose from: `"Sincerely,"` (universal, formal), `"Kind regards,"` (warm professional), `"Best regards,"` (slightly more casual). Match the register. The sender's name is appended automatically by render_letter.py.
+
+## Rirekisho honesty
+
+
+The rirekisho asks for **personal data** a Western CV omits — date of birth, age, sometimes gender, address, and a photo. These are **provided by the candidate, never invented or inferred.** Ask the user for them; do not guess a birth date, fabricate an address, or assume a gender.
+
+- **Gender (性別):** modern Japanese practice increasingly **omits** gender (the 2021 JIS-style template dropped the field). Include it only if the user chooses to. Default: omit unless asked.
+- **Photo:** a 36–40mm × 24–30mm headshot. If the user supplies an image path (`jp.photo_path`), it is embedded; otherwise the form shows a labelled placeholder box.
+- **学歴・職歴 dates and entries** are derived from the candidate's real `education`/`experience` — same honest-reframing rules as the Western CV.
+
+`age` is conventionally written as 満○歳. The skill (which knows today's date) computes it from `date_of_birth`; the renderer only prints what it is given (it does not compute dates).
+
+## The review loop
 
 **Dispatch all three in parallel** — as fresh independent **Agent** subagents in a **single message (three tool calls at once)** each round, so they run concurrently. They share no state, so parallel dispatch is both faster and avoids ordering bias; never run one, read its verdict, then run the next. Each has **no other context**, so paste everything it needs:
 
 - *ATS Screener:* the **full text** of `agents/ats-screener.md` + the structured posting + the tailored CV Markdown (`<workspace>/cv.md`) + the **CV language**. (No letter — ATS doesn't parse letters.)
 - *Recruiter / HR Screener:* the **full text** of `agents/recruiter-screener.md` + the structured posting (`<workspace>/posting.yaml`) + the tailored CV Markdown (`<workspace>/cv.md`) + the motivation letter (`<workspace>/letter.md`) if produced, else `No letter provided.` + the **target market & CV language**.
 - *Hiring Manager:* the **full text** of `agents/hiring-manager.md` + the structured posting + the tailored CV Markdown (`<workspace>/cv.md`) + the motivation letter if produced, else `No letter provided.` + the **target market & CV language** (e.g. "Germany / German") so it calibrates conventions and reads the CV in the right language.
-
-**Japan rirekisho fork:** the judges are calibrated to the Western CV / ATS pipeline. For a Japan rirekisho package, run all three on the **companion Western CV / 職務経歴書** (the keyword-and-fit document) as usual, and review the **rirekisho form itself** with the completeness/correctness check in `references/rirekisho.md` (required fields present, 学歴・職歴 chronological and gap-explained, no fabricated personal data) — report that to the user instead of an ATS coverage %. Do not feed the rirekisho `.docx`/`.md` to the ATS screener.
 
 **Parsing each verdict (apply exactly, to all three):**
 
@@ -182,9 +288,23 @@ The three lenses are deliberately distinct: ATS = literal findability, Recruiter
 2. **Re-render second:** Re-render ONLY the affected outputs from the just-edited YAML (never re-send stale rendered files).
 3. **Re-judge third:** Dispatch all three fresh judges with the newly rendered files. Never re-dispatch with the old rendered version.
 
+## Judge lanes
+
+**Three independent judges** must **all** return `PASS` before the package is interview-ready. They model the real hiring funnel — **ATS → Recruiter/HR → Hiring Manager** — and fail in *different* directions, so the CV must be **machine-findable, recruiter-skimmable & eligible, and genuinely strong** to clear all three:
+
+The three lenses are deliberately distinct: ATS = literal findability, Recruiter = fast/broad/logistics, Hiring Manager = deep technical fit. Some overlap is expected; each owns its lane (the agent files state the boundaries).
+
+1. `must_have_fit >= 3` (the candidate plausibly belongs in the pile — a real human would not bin this on sight). You are the *broad* filter: a deliberate, honestly-positioned stretch applicant (career-changer, re-entry, someone genuinely a notch junior) should clear *your* gate at a 3; it is the **Hiring Manager** who owns the strict `>= 4` deep cut. Reserve a `must_have_fit` of 1–2 for a CV that is genuinely off-target or missing the core of the role, not for one that is a legitimate stretch. Rejecting every stretch here would defeat the skill's whole purpose — those are the candidates it most exists to help.
+
+- **Catch over-tailoring tells.** A Skills section that mirrors the posting's keyword list near-verbatim with no supporting evidence in any bullet is coverage-gaming, not strength — treat unsupported keyword density as an `evidence`/`credibility` concern and name the specific skills that appear with zero supporting context. The ATS screener (Judge 1) rewards literal keyword presence and structurally cannot catch stuffing; you are the only backstop.
+
+## Honest-gap early stop
+
 **Honest-gap early-stop (don't grind a loop you cannot win honestly).** After any round, diagnose *why* a judge still rejects before spending another round:
 - If the **only** remaining cause is must-haves the candidate **genuinely lacks** — terms the claim-provenance checkpoint forbids you to add — then no honest edit can move that number. Looping again would only pressure you toward the one thing the skill forbids (inserting an ungrounded keyword). **Stop now**, even before round 3, and report it as an honest gap, not a failure of the package. This is the *expected* outcome for a genuine stretch application, and it is a true result — surface it, don't engineer around it.
 - Keep iterating only while the rejects are about things you *can* honestly fix: ordering, emphasis, surfacing a buried real qualification, readability, missing logistics notes, a real keyword the candidate has but the CV omitted.
+
+## Poorly built vs honest stretch
 
 **Loop until ALL THREE pass, the honest-gap early-stop fires, or 3 rounds** (early-exit the instant all three pass — don't run extra rounds). If not all passed, **STOP** and report honestly — but **distinguish the two very different reasons a package can end un-passed**, because they mean opposite things for the user:
 - **Poorly built** — a judge rejects over something fixable that tailoring should have caught (weak ordering, vague bullets, an unaddressed logistic, a real-but-hidden qualification). This is a tailoring miss to own and, budget permitting, fix.
@@ -192,26 +312,232 @@ The three lenses are deliberately distinct: ATS = literal findability, Recruiter
 
 In both cases give the final per-judge verdicts, the ATS coverage % (or `n/a`), the remaining honest gaps, and concrete next steps (skills to gain, certifications, better-fitting roles). **Never fake a pass.**
 
-Tell the user **all three verdicts and the ATS coverage %** (report it verbatim — it may be `n/a`, e.g. a rirekisho or a posting with no extractable must-haves) each round.
+## Immutability + workspace
 
----
+**Resume an in-progress application first.** Before anything else, check `~/.claude/job-profiles/*/applications/` for a workspace that matches this target (by company/role) and already contains a `posting.yaml` and/or `tailored-profile.yaml`. If one exists, a prior run was interrupted — show the user what's already there and offer to **resume from where it stopped** (e.g. posting already extracted → jump to gap analysis or tailoring) rather than rebuilding from Step 0. Only start fresh if they prefer it or no matching workspace exists.
 
-## Step 7 — Finalize
+**Check for existing profiles next.** Before building or parsing, check `~/.claude/job-profiles/` for any saved master profiles. If one or more exist, offer to reuse one (retargeting it for this new application) instead of rebuilding from scratch. A returning user can confirm a name and you jump straight to Step 2. New users with no saved profiles proceed to build/parse below.
 
-- List the workspace path (`~/.claude/job-profiles/<name>/applications/<company>-<role>-<YYYY-MM-DD>/`) and all output files (CV and letter in each requested format). When PDF was requested, list the `.tex` source alongside the PDF — it's a deliverable too.
-- Show the **final FIT SNAPSHOT delta**: baseline (before tailoring) vs. final (after tailoring) — coverage, responsibility match, and the apply verdict.
-- Summarize what changed during tailoring and why.
-- Note any **remaining honest gaps** the user should be aware of going into the application and interview.
-- **Consistency reminder:** the tailored CV now states specific things about the candidate's roles, scope, and dates. Remind them to make sure their **LinkedIn and any portal profile don't contradict it** — recruiters cross-check, and a mismatch reads as dishonesty. (A reminder only — do not scrape or fetch their profile.)
-- Remind them the reusable **master profile** is saved at `~/.claude/job-profiles/<name>/profile.yaml` and can be retargeted for the next application.
+**Offer to save the master** to `~/.claude/job-profiles/<name>/profile.yaml` so it's reusable across applications. This master profile is the source of truth and is **NEVER mutated by tailoring** — tailoring always works on a copy (Step 4).
 
-### Step 7.5 — Interview-readiness brief
+**Application workspace.** All per-application files live under:
 
-Produce the brief in `references/interview-prep.md` (write it to `<workspace>/interview-brief.md`). It is **near-free** — you already hold everything it needs: the claim-provenance map (every reframed claim → its real source), the judges' `SUPPLEMENTARY_QUESTIONS_FOR_CANDIDATE`, and the HONEST-GAPS. For each REFRAMED/AMPLIFIED claim, give the source fact and a "be ready to explain…" prompt; for each honest gap, the truthful framing if asked; and carry over the recruiter/manager questions. Honest only — if a claim can't be truthfully defended, that's a tailoring error: walk it back on the CV.
+```
+~/.claude/job-profiles/<name>/applications/<company>-<role>-<YYYY-MM-DD>/
+```
 
----
+This workspace contains: `tailored-profile.yaml`, `letter.yaml` (if any), `posting.yaml`, and the rendered outputs (`cv.md`, `cv.docx`, `cv.pdf`, `letter.*`). The master profile at `~/.claude/job-profiles/<name>/profile.yaml` is **NEVER** mutated.
 
-## Toolchain note
+- Write the tailored copy to `<workspace>/tailored-profile.yaml`. **Never edit the master.**
 
-- Scripts need their dependencies: `pip install -r requirements.txt` (PyYAML, python-docx).
-- PDF output needs a LaTeX engine — `tectonic` is recommended. Without it, **Markdown and .docx still work**, and the renderer emits a `.tex` file you can compile later.
+## Fast path
+
+**Fast path (reduce friction for the common case).** When the user already hands you a parseable CV *and* a clear posting (URL or pasted text) and is not building from scratch, do not gate every step with its own round-trip. Do the work, then present the parsed profile, the extracted requirements, and the tailoring plan **together in one message**, and proceed unless the user objects or corrects something. Still run every step and the non-negotiable three-judge review loop — this only collapses the *confirmation* round-trips, never the analysis or the judges. Reserve the full step-by-step interview for when information is genuinely missing (building a CV from scratch, an unreachable posting, or ambiguous requirements).
+
+## Enrich from the candidate's papers and repositories — fetch before you ask
+
+When the profile names a **paper** (title, DOI, arXiv ID, venue) or links a **repository** (GitHub/GitLab project the candidate owns or contributed to), that artifact is primary evidence of the candidate's real work. **Fetch and read it to extract concrete, truthful detail — do not make the user retype what a tool can read.**
+
+- **How:** use `WebFetch`/`WebSearch` for a paper (abstract, method, headline results, the candidate's listed authorship position); for a repo, fetch the README / project page (and `gh` CLI if available) for what it does, the tech stack, scale signals (stars, downloads, dataset size), and the candidate's specific contribution.
+- **What to extract:** the kind of detail that makes a bullet specific and credible — what was built, the techniques/tools actually used, quantified results, and scope. This turns a thin line ("worked on a segmentation model") into an evidenced one ("lightweight SAM variant trained on a single GPU in ~1 day; published in MELBA") — all sourced from the candidate's own artifact, not invented.
+- **Honesty (critical):** the artifact being in the candidate's profile is their assertion of authorship — extract only **their** real contribution. For a multi-author paper or a shared repo, attribute honestly (co-author, contributor) and never claim sole credit for collective scope. Pull facts about the work; do not borrow a co-author's part as the candidate's own.
+- **Restricted access is the only reason to ask the user.** If the paper is paywalled, the repo is private, or the fetch is blocked, *then* ask the user for the specific facts you need (method, your contribution, the numbers) — phrased honestly, never as an invitation to embellish. Fetching first, asking second.
+
+## Interview brief
+
+For each **REFRAMED** or **AMPLIFIED** claim on the final CV, list:
+- the **claim as written** on the CV,
+- the **real source fact** it traces to (from the provenance checkpoint), and
+- a one-line **"be ready to explain…"** prompt.
+
+> Example
+> - CV says: *"Built and maintained CI/CD pipelines, cutting deploy time 40%."*
+>   Source: you wrote automated deployment scripts at Role B; the 40% is your confirmed number.
+>   Be ready to: walk through what the scripts did end-to-end, which tool, and how you measured the 40%.
+
+The point is not to coach a story — it's to make sure every word on the page is something the candidate can stand behind truthfully and specifically. If a candidate *can't* comfortably explain a claim, that's a signal the reframing went too far — soften it back.
+
+- **Honest only.** This brief never invents a story; it points each CV claim back to a true source and prepares a truthful answer. If a claim has no defensible source, the fix is to change the CV, not to coach a cover story.
+- **Keep it thin.** This is a defense brief generated from data you already hold — not a mock-interview module. A page or less.
+- **Flag the over-reach signal.** If preparing the brief surfaces a claim the candidate cannot truthfully defend, treat it as a tailoring error and walk the claim back on the CV.
+
+## Modes
+
+| Mode | Question it answers | Status |
+|---|---|---|
+| `discover` | what is out there worth looking at | `discover` is not yet built in this repo |
+| `assess` | is this posting worth applying to | `assess` is not yet built in this repo |
+| `apply` | how do I build and pressure-test the application | live — `modes/apply.md` |
+| `interview` | how do I answer, and what did I get wrong | `interview` is not yet built in this repo |
+
+For an unbuilt mode: say so and stop. Do not improvise it. An improvised discover
+run produces a shortlist with no source ids, which is indistinguishable from a real
+one and is the first row of the risk register.
+
+## Mode entry
+
+On entering a mode, run:
+
+```bash
+python3 scripts/enter_mode.py --workspace <ws> --mode <mode>
+```
+
+then read `modes/<mode>.md` in full. The entry writes the mode file's content hash to
+`journal.jsonl`; `check_apply.py` fails if it is absent or stale.
+
+## The advice block, and the disclaimer that is not optional
+
+Whenever this skill states how good a fit a posting is, it states it in exactly this
+shape — counted facts, then one word, then the disclaimer:
+
+    must-have 强证据：   X of N   （partial P，gap G，无证据 U）
+    核心职责已证实：     M of K
+    职级匹配：           <上跳 | 平级 | 下沉 | 不明>
+    可补缺口所需投入：   <当天 | 一晚 | 数日 | 补不上>
+    投递建议：           <强烈建议投 | 值得投 | 可以冲刺 | 大概率被筛掉 | 硬性阻断>
+
+    这是对「已写下来的证据」的清点，不是对面试或录用概率的预测。
+    每一项都附了它的证据引用，分母可以逐条复核；不同意某一行就直接说。
+
+Every item inside N and K is printed with its evidence reference, so the denominator
+is auditable. `强证据` counts only `strong`; `partial` and `gap` are never folded into
+a "covered" number; evidence that is only `dated` counts as `partial`, never `strong`.
+When the input cannot support a conclusion at all, the whole block is replaced by
+`证据不足—不出结论` and the reason — that is a refusal, not a sixth level, and it is
+never softened into `可以冲刺`.
+
+## Words this skill does not put in its output
+
+No percentages of fit. No self-invented scales (`7/10`, `B+`, "score: 82"). No
+probability language at all: `概率`, `chance`, `odds`, `likely to be hired`,
+`likely to be interviewed`, `strong candidate`, `would pass`. There is no data
+behind any of them — "interview probability 45–65%" is a number someone made up,
+and a weighted total is the same fabrication with arithmetic on top. The advice is
+one word from the five, and the counts beside it are counts of evidence.
+
+**The one exception, and its shape.** When the employer has published its own rubric
+— a UK Civil Service Success Profiles level named in the advert, an NHS values
+framework, a university person specification — this skill may walk the candidate
+through **that** scale, in the employer's own wording, with the source named, framed
+as "what the panel is asked to look at". Quoting the employer's scale is reporting.
+Using it as a conclusion is fabrication. Never assert a score on it.
+
+## The grounding contract
+
+```
+  原始来源文本                    skill 说了什么              谁在检查
+  ─────────────                  ──────────────             ────────
+  posting-source.txt  ──切块──► JD-001…JD-080  ──被引用──► 需求表行
+  cv.md / profile     ──切块──► CV-001…CV-080                  │
+                                                                ▼
+                                                    check_evidence_refs.py
+                                                    （解析得到，或丢弃）
+
+  profile.yaml 某行  ─┐
+  本次会话的回答     ─┼────► claims.yaml ──被要求──► 每个 REFRAME /
+  已读取的本人产物   ─┘                              KEYWORD-INSERT 词条
+                                                                │
+                                                                ▼
+                                                         check_claims.py
+
+  一个人，在一次提交里 ────► market-conventions/<key>.yaml
+                                    │  id 白名单 · 逐字渲染
+                                    │  绝不经模型转述
+                                    ▼
+                             check_conventions.py
+```
+
+1. **Evidence blocks tie the analysis to the source text.** The model may only cite
+   blocks that exist; a reference that will not resolve is **dropped, not fatal**. An
+   empty evidence list is not an error — rejecting it would punish the honest shape,
+   and a *fabricated* reference lands in that same empty array and passes anyway.
+   Carry the honest boundary into the skill's own output:
+   **this is a floor on credibility, not a proof — it guarantees a claim points at
+   something that really exists, not that the claim follows from it.**
+2. **Claim provenance ties the output to source facts.** Three permitted sources,
+   and there is no fourth. `claims.yaml` is the first thing that makes it a diffable
+   artifact instead of a habit.
+3. **Market tables tie down the one class of claim with no citable source.** In this
+   whole skill exactly one kind of statement cannot be traced to text the user gave
+   us: what this market screens for that the posting does not say. So it is written
+   by a person, dated, with its source kind, whitelisted by id, and **rendered
+   verbatim** — the model may not strengthen "usually" into "must", may not attach a
+   number to it, and may not invent a row.
+
+**Restate the fence next to the field that tempts the violation.** A rule at the top
+of fifty instructions is not where the model is standing when it writes the dangerous
+field. The no-fabrication rule is restated in exactly three places: the KEYWORD-INSERT
+step, mock-interview question generation (a question premise the CV does not support is
+a fabrication the candidate then repeats back), and the shortlist's `why_matched` field.
+
+## Gates
+
+
+| Gate | Script | Fires on |
+|---|---|---|
+| Personal data | `scripts/check_personal_data.py` | protected fields on a Cluster-1 target, or an unrecognised market |
+| Claim provenance | `scripts/check_claims.py` | a term with no source; a mutated master profile |
+| Verdict parsing | `scripts/parse_verdicts.py` | anything that is not exactly PASS/REJECT; a non-unanimous round |
+| Render freshness | `scripts/check_render_freshness.py` | a judge that read a file the disk no longer has |
+| CV lint | `scripts/lint_cv.py` | clichés, weak openers, over-long bullets, repeated verbs |
+| Letter | `scripts/check_letter.py` | markdown in a body string, length, duplicated name, wrong company/role |
+| Page count | `scripts/check_pages.py` | a PDF longer than the market's table allows; a letter over one page; an unreadable PDF |
+| Word limits | `scripts/check_word_limits.py` | a supporting-statement criterion over its stated limit, empty, or with no limit recorded |
+| Apply completion | `scripts/check_apply.py` | a missing receipt, an unclassified stop, a missing brief |
+| Migration losslessness (CI only) | `scripts/check_skill_lossless.py` | a baseline line that exists nowhere in this tree |
+
+**No mode may claim success while `journal.jsonl` lacks a receipt for its gates.** A skipped script produces no output, and no output is exactly what a clean run looks like. `scripts/check_skill_lossless.py` is the one exception and is marked as such: it is a repo-level CI check with no workspace and no receipt, so requiring one would be requiring evidence that cannot exist.
+
+## Self-check — run through this before reporting the package as done
+
+Read-when:
+- [ ] Not a software/research/engineering role? Read `references/role-families.md`.
+- [ ] Employment gap >6 months, career switch, re-entry, over/under-levelled, thin
+      experience, executive, military transition or international credentials?
+      Read `references/candidate-situations.md`.
+- [ ] Essential/Desirable criteria, behaviours or a scored supporting statement?
+      Read `references/structured-applications.md` — it REPLACES the CV judge loop.
+- [ ] Writing a letter? Read `references/motivation-letter.md` (skip gate first).
+- [ ] Japan + traditional/domestic employer? Read `references/rirekisho.md`.
+- [ ] Building or reordering the CV? `references/cv-craft.md`.
+- [ ] Doing gap analysis or tailoring? `references/gap-analysis.md`.
+- [ ] Extracting a posting? `references/job-posting-extraction.md`.
+- [ ] Writing the brief? `references/interview-prep.md`.
+- [ ] In apply mode? `modes/apply.md`, loaded on entry, not on demand.
+
+Dispatched:
+- [ ] `agents/ats-screener.md`, `agents/recruiter-screener.md` and
+      `agents/hiring-manager.md` were each pasted IN FULL into their own judge.
+
+Ran, with a receipt in `journal.jsonl` — `scripts/check_apply.py` requires each of these:
+- [ ] `scripts/check_personal_data.py`
+- [ ] `scripts/check_claims.py`
+- [ ] `scripts/check_render_freshness.py` (recorded before dispatch, verified after)
+- [ ] `scripts/parse_verdicts.py`
+- [ ] `scripts/lint_cv.py`
+- [ ] `scripts/check_letter.py` (if a letter was produced)
+- [ ] `scripts/check_pages.py` (if a PDF was produced)
+- [ ] `scripts/check_word_limits.py` (if `application_type: structured`)
+- [ ] `scripts/check_apply.py`
+
+Ran, leaving a `mode_entry` record rather than a gate receipt:
+- [ ] `scripts/enter_mode.py` — and its recorded hash still matches `modes/apply.md`.
+
+Ran, leaving nothing in the journal (they render; they do not judge):
+- [ ] `scripts/render_cv.py`, plus `scripts/render_letter.py` /
+      `scripts/render_rirekisho.py` if applicable.
+
+In CI, not in a workspace (no receipt exists for these, by design):
+- [ ] `scripts/check_skill_lossless.py` — only when this skill's own files changed.
+
+Every line above says what evidence it leaves, and the three headings differ for a
+reason: a checklist that promises a receipt where none can exist teaches its reader
+that one of its lines is decorative, and the reader cannot tell which one.
+
+Told the user:
+- [ ] All three verdicts and the ATS coverage line, verbatim, each round.
+- [ ] The FIT SNAPSHOT with its required disclaimer, before and after.
+- [ ] Which market and language the CV was calibrated for.
+- [ ] Any remaining honest gaps, and — if the loop ended un-passed — whether this is
+      POORLY BUILT or an HONEST STRETCH.
+- [ ] The workspace path and every output file, including the `.tex`.
