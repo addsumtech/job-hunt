@@ -22,10 +22,13 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import yaml  # noqa: E402
 
 import journal  # noqa: E402  (Plan 1)
+import enter_mode  # noqa: E402  (Plan 1)
+import paths       # noqa: E402  (Plan 1)
 from check_opencli_result import read_adapter_calls  # noqa: E402
 from vocab import EFFORT, VERDICTS  # noqa: E402  (Plan 1 — the ONE vocabulary)
 
 GATE = "check_shortlist"
+MODE = "discover"
 
 # The seventeen fields of a shortlist row: the thirteen JobListingEvidence base
 # fields, plus the four this skill adds on top of them. This tuple is the single
@@ -403,6 +406,33 @@ def check_run(workspace, shortlist, brief, md_text, calls):
     return findings
 
 
+def _check_mode_entry(workspace, skill_root):
+    """modes/discover.md is layer 1.5, and this is what reports it was not read.
+
+    Mirrors check_apply.py deliberately: the same two findings, the same
+    meaning, in the gate that belongs to this mode. Four modes with four
+    different words for the same failure would be four things to learn.
+    """
+    findings = []
+    entry = enter_mode.latest_mode_entry(workspace, MODE)
+    mode_path = paths.mode_file(MODE, skill_root)   # mode first, root second
+    if entry is None:
+        findings.append(
+            "NO_MODE_ENTRY: journal.jsonl has no mode_entry for discover. "
+            "modes/discover.md is loaded unconditionally on entering the mode — "
+            "it is the only definition of the brief, shortlist and preferences "
+            "schemas — and this record is the only thing that reports it was "
+            "not. Run `python3 scripts/enter_mode.py --workspace <ws> --mode "
+            "discover`, then read the file.")
+    elif (mode_path.is_file()
+          and entry.get("mode_file_sha256") != journal.sha256_file(mode_path)):
+        findings.append(
+            "MODE_FILE_CHANGED: modes/discover.md changed after this run entered "
+            "the mode, so the schema that was read is not the schema on disk. "
+            "re-enter the mode and re-read it before trusting this shortlist.")
+    return findings
+
+
 def _fail_to_run(workspace, message):
     journal.receipt(workspace, GATE, {}, "could_not_run", [message])
     print(message, file=sys.stderr)
@@ -412,6 +442,9 @@ def _fail_to_run(workspace, message):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Gate: the shortlist is real.")
     parser.add_argument("--workspace", required=True, type=pathlib.Path)
+    parser.add_argument("--skill-root", type=pathlib.Path,
+                        default=paths.SKILL_ROOT,
+                        help="repo root holding modes/ (default: paths.SKILL_ROOT)")
     args = parser.parse_args(argv)
     workspace = args.workspace
 
@@ -445,7 +478,8 @@ def main(argv=None):
     journal_path = workspace / "journal.jsonl"
 
     raw_texts = load_raw_texts(workspace)
-    findings = check_rows(shortlist, raw_texts)
+    findings = _check_mode_entry(workspace, args.skill_root)
+    findings.extend(check_rows(shortlist, raw_texts))
     findings.extend(check_run(workspace, shortlist, brief, md_text,
                               read_adapter_calls(workspace)))
 

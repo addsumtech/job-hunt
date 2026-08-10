@@ -9,6 +9,25 @@ import pathlib
 
 import yaml
 
+import hashlib
+
+REPO = pathlib.Path(__file__).resolve().parents[2]
+MODE_FILE = REPO / "modes" / "discover.md"
+
+
+def mode_entry_record():
+    """The record scripts/enter_mode.py writes on entering discover.
+
+    The hash is computed from the real modes/discover.md rather than pinned, so
+    editing the mode file never turns every shortlist test red for a reason
+    that has nothing to do with the shortlist.
+    """
+    return {"ts": "2026-08-09T14:01:00Z", "action": "mode_entry",
+            "mode": "discover", "mode_file": "modes/discover.md",
+            "mode_file_sha256": hashlib.sha256(
+                MODE_FILE.read_bytes()).hexdigest()}
+
+
 RAW_51JOB_SEARCH = [
     {"rank": 1, "jobId": "173198362",
      "title": "高级算法工程师（视觉调试智能化、AI方向）", "salary": "3-6万",
@@ -214,9 +233,7 @@ def build_workspace(root):
     _dump_yaml(workspace / "shortlist.yaml", SHORTLIST)
     (workspace / "shortlist.md").write_text(
         textwrap.dedent(SHORTLIST_MD), encoding="utf-8")
-    with (workspace / "journal.jsonl").open("w", encoding="utf-8") as handle:
-        for record in JOURNAL:
-            handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+    write_journal(workspace, JOURNAL)
     return workspace
 
 
@@ -240,7 +257,19 @@ def write_md(workspace, text):
     (workspace / "shortlist.md").write_text(text, encoding="utf-8")
 
 
-def write_journal(workspace, records):
+def write_journal(workspace, records, mode_entry=True):
+    """Rewrite journal.jsonl, keeping the workspace valid in every other respect.
+
+    The mode_entry record is prepended by default: a test that mutates the
+    adapter history is not also trying to assert that the mode was never
+    entered, and if it had to remember to re-add the entry every time, the
+    NO_MODE_ENTRY finding would show up in half the suite as noise.
+    """
+    head = []
+    if mode_entry and not any(
+            isinstance(r, dict) and r.get("action") == "mode_entry"
+            for r in records):
+        head = [mode_entry_record()]
     with (workspace / "journal.jsonl").open("w", encoding="utf-8") as handle:
-        for record in records:
+        for record in head + list(records):
             handle.write(json.dumps(record, ensure_ascii=False) + "\n")
