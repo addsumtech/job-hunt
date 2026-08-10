@@ -4,6 +4,16 @@ How to read a job posting and turn it into a structured object that drives CV ta
 
 ---
 
+## 0. Get the posting text reliably (before you extract anything)
+
+Garbage in, garbage out: extracting from a page that isn't actually the posting produces fabricated requirements that then drive the whole application. So validate the source first.
+
+- **A `200 OK` is not proof you have the posting.** LinkedIn, Workday, Greenhouse, Indeed, and most portals return a success status for a **login wall, cookie/consent banner, bot check, or search page**. If the fetched text has no responsibilities and no requirements, is dominated by "sign in" / "create account" / cookie text, or is suspiciously short, you did **not** get the posting.
+- **When the fetch is thin or wrong, do not extract — ask the user to paste the full posting text.** Inventing must-haves off a login wall is worse than asking.
+- **Terminal case:** if the posting genuinely can't be obtained (dead link, nothing to paste), stop and say so. Never proceed on guessed requirements.
+
+---
+
 ## 1. The Extraction Schema
 
 Extract exactly these fields. Populate each as described below.
@@ -18,7 +28,11 @@ Extract exactly these fields. Populate each as described below.
 | `responsibilities[]` | list of strings | Day-to-day duties — what the person will actually do. Drawn from "What you'll do" / "Responsibilities" / "Day in the life" sections. Use the posting's own phrasing. |
 | `keywords[]` | list of strings | **Exact ATS terms** to mirror in the CV and cover letter: tool names, language names, frameworks, methodologies, certifications, domain-specific jargon. Extract casing exactly (e.g. "PyTorch", "CI/CD", "REST APIs", "Agile/Scrum"). |
 | `company_values_tone` | string | Culture signals + voice. Note: formal vs. casual writing style, mission language ("we believe", "our north star"), DEI statements, pace signals ("fast-moving", "startup within a larger company"), team descriptors ("collaborative", "autonomous"). This shapes the cover letter's register. |
+| `salary_range` | string or null | The stated pay range, if the posting gives one (e.g. "€65k–80k"); else `null`. Many EU/US postings now state a range. |
 | `red_flags` | list of strings | Signals of a problematic role. See the full list of red-flag patterns in §2. |
+| `application_type` | enum: `cv / structured` | `structured` when the posting splits requirements into **Essential / Desirable** criteria, names **behaviours / "Success Profiles" / a competency framework**, or tells the applicant to "evidence how you meet each criterion" / submit a scored supporting statement (common for UK NHS, Civil Service, public-sector, NGO, and many academic roles). Otherwise `cv`. When `structured`, the primary deliverable is a criterion-mapped supporting statement — follow `references/structured-applications.md`. |
+
+**Salary fit (when a range is stated):** if `salary_range` is present, ask the user **once** whether it fits their expectation — a band mismatch is a common silent screen-out, and it's better surfaced now than after a full application. Keep it a single optional question; if no range is stated, don't ask (don't volunteer salary the posting didn't raise).
 
 ### JSON shape (for internal use by the orchestrator)
 
@@ -72,6 +86,8 @@ Real postings are inconsistent, duplicated, and full of noise. Use these rules t
 | Degree listed in "Preferred Qualifications" or "a degree in X is a plus" | `nice_to_have` |
 | No qualifier given, but listed alongside clearly hard requirements | Default to `must_have`; note ambiguity |
 
+**Non-English postings:** the cue words above are English; apply the same logic to the local-language equivalents. German: `Erforderlich` / `Voraussetzungen` / `Sie bringen mit` → `must_have`; `Wünschenswert` / `von Vorteil` / `idealerweise` → `nice_to_have`. French: `Exigé` / `Requis` → `must_have`; `Souhaité` / `un plus` → `nice_to_have`. Japanese: `必須` → `must_have`; `歓迎` / `尚可` / `あれば尚可` → `nice_to_have`. Extract `keywords` in the **posting's language** (tool names and proper nouns stay as-is). Record the posting language and carry it to `meta.language` so the CV and letter are written to match (see `cv-craft.md §2`).
+
 ### Implicit must-haves for senior/lead roles
 
 When a posting titles the role "Senior" or "Lead" but does not list years of experience or leadership expectations explicitly, add these as implicit must-haves (mark them `[implicit]` for the user to confirm):
@@ -80,6 +96,12 @@ When a posting titles the role "Senior" or "Lead" but does not list years of exp
 - `[implicit] Demonstrated ownership of significant features or systems`
 - `[implicit] Ability to work with minimal supervision`
 - For "Lead": also `[implicit] Experience mentoring engineers or technical leadership`
+
+### Hard disqualifiers (tag separately — they are walls, not wishes)
+
+Some must-haves are **non-negotiable barriers** the candidate cannot close by tailoring or learning: **work authorization / visa** for the country, a **legally required license or security clearance**, a **hard on-site/location** requirement, **language fluency**, or a **regulated experience floor**. Tag these `[disqualifier]` (distinct from an ordinary must-have like "Kubernetes", which is recoverable).
+
+Surface `[disqualifier]` items **first** in the §4 confirmation and ask the user directly: *"These look non-negotiable — do you meet them? If not, this may not be worth a full application."* This protects the user's time on day one (the recruiter judge would otherwise only catch a logistics wall after a whole package is built), and it keeps a genuine legal barrier from being mis-handled downstream as a soft "framing" gap (see `gap-analysis.md §3`).
 
 ### Stripping boilerplate
 

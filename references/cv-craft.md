@@ -35,27 +35,94 @@ Actionable guidelines for building and tailoring CVs. Every rule here tells you 
 
 **Why:** Recruiters spend 6–10 seconds on first pass. Years of relevant impact must be front and centre.
 
+### Academic / Research (PhD candidate, postdoc, research scientist, applying to research roles)
+
+```
+1. Contact header
+2. Summary / Research profile  (2–4 sentences; the research you do and your angle)
+3. Education  ← leads; for a researcher the degree/programme IS the headline credential
+4. Research Experience  (the PhD/postdoc role and its contributions)
+5. Publications  ← surfaced early; it is the currency of research hiring
+6. Skills  (methods, software, modalities)
+7. Projects (only genuinely standalone work — see §9)
+8. Awards / Grants
+```
+
+**Why:** Penn Career Services, Wordvice, and Paperpile all converge here — academic and research CVs lead with Education and bring Publications up near the top, because that is what a research hiring committee scans for first. A 2nd-year PhD has more signal in their programme + papers than in a job-title timeline. For an industry role that happens to value research (e.g. an ML-research engineer position), this order still reads well; for a pure software role, fall back to the experienced/industry order above and let work impact lead.
+
+### Senior leader / Executive (15+ years, P&L / org leadership, director and above)
+
+```
+1. Contact header
+2. Executive Summary  ← 3–5 lines; scope owned (revenue/P&L, headcount, geographies), leader type, signature outcomes
+3. Selected Achievements  ← 3–5 career-defining results above the timeline (turnarounds, exits, scale-ups)
+4. Work Experience  ← scope-and-outcome framed; compress the oldest roles to one line each
+5. Board / Advisory roles (if any)
+6. Education + Executive education
+7. Awards / Speaking / Affiliations (if they add signal)
+```
+
+**Why:** at this level the reader (a CEO, board, or search partner) scans for altitude — scope, P&L, transformation — not a keyword list, and exec hiring routes more through search/referral than ATS filters. A 1-page IC template buries exactly what gets someone shortlisted. 2 pages is normal and **3 is legitimate** when senior roles are genuinely distinct (see §5). The renderer has native `achievements` ("Selected Achievements") and `board` ("Board & Advisory") sections for exactly this — promote them via `meta.section_order`. Full playbook: `candidate-situations.md §6`.
+
+### Credential-led and non-technical roles
+
+For regulated and non-software professions — clinical/nursing, legal, finance, skilled trades, teaching, and others — the first thing the reader (or a credentialing screen) checks is often a **licence, registration, ticket, or portfolio**, not work history. Surface it accordingly: relabel the `certifications` section to the field's header and push it high. E.g. a nurse: `meta.section_order: [summary, certifications, experience, education, skills]` with `meta.headings: {certifications: "Licenses & Certifications"}`. The full per-family recipes (what to lead with and how each field evidences competence) are in **`role-families.md`** — read it whenever the target is not a software/research/engineering role. Some public-sector roles aren't a free CV at all but a criterion-scored form — see `structured-applications.md`.
+
+### Controlling order in practice: `meta.section_order`
+
+This is the escape hatch for **every** case the two auto-picked defaults don't fit — exec, credential-led, career-changer, a publication-heavy candidate, or any target-specific preference — so reach for it freely; it's not an edge case.
+
+The renderer auto-picks only two defaults: a **current** PhD/researcher role, or a current student with no work history, triggers the academic order (Education first); everyone else gets the industry order (Experience first). That binary doesn't know about executives or credential-led professions — so for those, **set `meta.section_order` explicitly** (and `meta.headings` to relabel a section). An explicit list wins outright. Listing a subset only reorders those sections; every section that has real content still renders (the field sequences sections, it does not hide them). Use it, for example, to lead with an Executive Summary + Selected Achievements, to surface Licenses for a nurse, to push Publications above Experience for a researcher, or to force Experience-first for a PhD applying to an industry engineering role.
+
 ---
 
-## 2. Regional Conventions
+## 2. Regional Conventions & Language
 
-| Dimension | US (résumé) | UK (CV) | EU / NL | Default (unknown market) |
-|---|---|---|---|---|
-| **Length** | 1 page (2 if 10+ years or senior); strictly never 3+ | 2 pages max; 1 page acceptable for junior | 2 pages; academic CVs can be longer | Follow US/UK conservative style |
-| **Photo** | NEVER include | Not expected; omit | Optional; common in NL, DE, FR | Omit |
-| **DOB / Marital status / Nationality** | NEVER include | NEVER include (illegal basis for discrimination) | Nationality common in NL/EU; DOB optional in some countries; driving licence relevant for certain roles | Omit unless user says otherwise |
-| **Personal statement / Summary** | Optional; at top if included | Common; 3–5 lines at top is expected at senior level | Common | Include if senior or career-changing |
-| **References section** | Omit completely; "references available on request" is also unnecessary filler | "References available on request" acceptable; or omit | Omit or one line | Omit |
-| **Format** | Reverse-chronological, clean single column, standard headings | Same; may use 2-column for skills/contact | Same; may follow Europass but a clean custom CV is almost always received better | Reverse-chronological, single column |
-| **Contact fields** | Name, phone, email, city+state (no street address), LinkedIn URL, portfolio/GitHub if relevant | Same; can add city without county | Same; some add nationality/driving licence per above | Name, phone, email, city, LinkedIn |
-| **Language** | English | English | English widely accepted in NL tech; Dutch preferred for non-tech/government NL roles; match language to job posting | Match job-posting language; default English |
-| **File format** | .docx for portal/ATS submission (see §4); PDF for human-facing copy or when posting requests PDF | PDF or .docx per above | PDF or .docx per above | .docx for ATS portals; PDF when requested |
+Target markets fall into three clusters that share CV conventions. The user picks a cluster; you then pin down the **specific country** (it refines the details below) and the **CV language**. Set `meta.target_market` (country/market) and `meta.language` accordingly. The conventions that vary across clusters: length, photo, personal data, "CV" vs "Resume" terminology, references, and language.
 
-**NL-specific note:** For Dutch tech and international companies based in NL, English CVs are standard and expected. For Dutch-language job postings (overheid, onderwijs, traditional industries), write the CV in Dutch or offer both.
+### Cluster 1 — Anglophone developed (US, Canada, UK, Ireland, Australia, New Zealand)
 
-**NL photo nuance:** For Dutch tech and international employers, omitting a photo is safe and is the modern default. For traditional Dutch-speaking sectors (retail, hospitality, some traditional non-tech firms), a photo is still commonly expected — match the sector norm. Default: omit when unsure.
+Language: **English** (Canada: also French for Québec / bilingual federal roles). This cluster contains two convention sub-styles — do **not** blur them:
 
-**Europass note:** Europass is bureaucratically recognised (EU institutions, some public-sector roles) but recruiters at private companies often find it verbose and dated. Use a clean custom CV by default; only switch to Europass if the posting explicitly requests it.
+- **US & Canada — *résumé* style.** The document is a "Resume". **1 page** (US strict; a 2nd page only at 10+ years / senior). **Never** a photo, DOB, marital status, or nationality. No references section ("available on request" is filler — omit). Reverse-chronological, single column. Contact: name, phone, email, city + state/province (no street address), LinkedIn, GitHub/portfolio if relevant.
+- **UK, Ireland, Australia & New Zealand — *CV* style.** The document is a "CV". **Up to 2 pages** (1 fine for junior). No photo; no DOB/marital status (discrimination grounds). "References available on request" is acceptable, or omit. Otherwise the same clean reverse-chronological single column.
+
+### Cluster 2 — EU / EEA (continental developed)
+
+Representative, not exhaustive: Netherlands, Germany, France, Belgium, Spain, Italy, Austria, Portugal, Poland, and the Nordics (Sweden, Denmark, Norway, Finland). Use the nearest-neighbour conventions for an unlisted EU country.
+
+- **Language — English *or* the official local language.** English is standard and expected in **tech and at international/multinational employers** across the EU. The **local language** is preferred for non-tech, public-sector, government, healthcare, and traditional-industry roles. When unsure, match the posting's language; offer both if it adds value. Built-in localized headings exist for `nl`, `de`, `fr`, `es`, `it`; for any other language set `meta.headings` (the renderer applies it). Write the CV *content* in the chosen language, not just the headings.
+- **Length:** 2 pages (academic CVs longer). **Format:** clean custom reverse-chronological single column. **Personal data:** nationality / work-authorization is commonly included (helpful for non-EU candidates); DOB optional and country-dependent — omit unless the local norm expects it.
+- **Photo:** optional; **common in DE, FR, and traditional NL sectors**, less so for tech/international. Omit by default for tech/international employers; include where the sector expects it.
+- **Europass:** recognised by EU institutions and some public-sector roles, but private recruiters often find it verbose and dated. Use a clean custom CV by default; switch to Europass only if the posting explicitly asks.
+- **NL specifics:** English CVs are standard at Dutch tech and international firms; write in Dutch (or offer both) for Dutch-language postings (overheid, onderwijs, traditional industries). Photo: omit by default for tech/international; traditional Dutch-speaking sectors (retail, hospitality) may still expect one — match the sector.
+
+### Cluster 3 — East & Southeast Asia (China, Japan, South Korea, Singapore, Malaysia, Thailand)
+
+Conventions vary substantially **by country** here — honor the local norm rather than one template:
+
+- **Language — English *or* the official local language** (Mandarin, Japanese, Korean, Thai; English in SG/MY). English is standard in **Singapore and Malaysia** and at multinationals/tech across the region; the local language is expected for domestic-facing roles and local employers. CJK/Thai render in **all formats including PDF** — the renderer auto-detects CJK and switches to a XeLaTeX/xeCJK build with a cross-platform CJK font fallback, so a Chinese/Japanese/Korean PDF compiles wherever a CJK font and a Unicode engine (`xelatex`/`tectonic`) are installed (it degrades to Markdown/.docx + a ready-to-compile `.tex` if not). Localized section labels for **zh / ja / ko are built in** (no `meta.headings` needed; set it only to override a specific label or for another CJK language); optionally set `meta.cjk_font` to pin a specific font. For a CJK summary/bullets, prefer a literal block (`summary: |`) or an inline string over a YAML folded scalar (`>`) — though the renderer also strips folded-scalar spaces that fall between CJK characters.
+- **Singapore & Malaysia:** closest to UK/Commonwealth — English CV, up to 2 pages. A photo and some personal details (nationality, occasionally DOB) are more commonly accepted than in the West, but a clean no-photo CV is fine for tech/MNCs.
+- **China:** photo commonly included; personal details (DOB, sometimes hometown) often expected on domestic CVs. A bilingual (Chinese + English) CV is common for MNC roles.
+- **Japan:** two document types — the highly-formatted *rirekisho* (履歴書, a templated form with photo and personal data, expected by many traditional employers) and the *shokumu-keirekisho* (職務経歴書, a free-form work-history CV that the normal Western render covers). Global/foreign firms accept a Western-style CV; traditional Japanese employers expect the rirekisho. **Flag this fork to the user**; when they need the rirekisho, follow `references/rirekisho.md` and render it with `scripts/render_rirekisho.py` (→ `.docx`; export to PDF from Word/LibreOffice).
+- **South Korea:** photo and personal details commonly expected on domestic CVs; an English résumé is accepted at global firms.
+- **Thailand:** photo commonly included; English or Thai depending on the employer.
+
+### Default — unknown / unlisted market
+
+Reverse-chronological, single column, **no photo, no personal data**, English, 1–2 pages. Match the posting's language. This conservative US/UK style is safely received almost anywhere.
+
+### Personal-data safety interlock (apply before rendering — this is a hard rule, not a style preference)
+
+The conventions above are not symmetric in *risk*. Adding a photo/DOB in the EU is a neutral style choice; adding one to a **US/Canada/UK/Ireland/Australia/NZ** application is a genuine problem — many employers there route such CVs straight to rejection because considering that data exposes them to discrimination-law liability. Because a returning user's master profile may have been built for an EU/Asia target (and may legitimately carry a photo, DOB, nationality, or marital status), you must not let those fields bleed into a Cluster-1 application.
+
+So, when `meta.target_market` is a **Cluster-1** country (US, CA, UK, IE, AU, NZ) **or** the conservative default: **strip photo, date of birth, age, marital status, and nationality from the tailored profile even if they are present in the master**, and tell the user you did and why ("US employers can't consider these — including them only hurts you"). Never *add* them for a Cluster-1 target. The one deliberate exception is a Japanese *rirekisho* (`references/rirekisho.md`), which is a different document type with its own form — its photo/DOB belong only on that form and must **never** be reused for any non-Japan target. When in genuine doubt about a market, follow the conservative default and omit them.
+
+**Where personal data and a photo live (for markets that expect them).** When the target market *does* expect them — much of continental Europe (DE, FR, traditional NL/IT/ES sectors) and East Asia (China, Korea, Japan-Western-CV) — put them in `contact.personal` (a dict, e.g. `{date_of_birth: "1992-05-01", nationality: "...", hometown: "...", marital_status: "..."}`) and set `meta.photo` to an image path. The renderer shows the personal block in the header and a passport-style photo above the name (LaTeX/PDF and .docx; Markdown embeds the path). **The renderer enforces the interlock as defense-in-depth**: for a Cluster-1 `meta.target_market` it ignores `contact.personal` and `meta.photo` entirely, so a mis-tailored profile physically cannot leak protected data onto a US/UK CV. Collect these fields honestly from the user — never invent a DOB, nationality, or photo.
+
+### File format (all clusters)
+
+`.docx` for ATS/portal submission (see §4); PDF for the human-facing copy or when the posting requests it. Markdown/.docx for any CJK/Thai CV (PDF caveat above).
 
 ---
 
@@ -72,7 +139,7 @@ Actionable guidelines for building and tailoring CVs. Every rule here tells you 
 - Quantity wherever possible: %, $, hours, users, latency, error rate, team size.
 - If you have no number, name the scope or scale: "across 3 microservices", "for a team of 12", "supporting 200k MAU".
 - One bullet = one accomplishment. Not a job description.
-- Target 1–2 lines per bullet. Three lines is a paragraph — split it.
+- **Be ruthlessly concise — a recruiter skims, and a wall of text gets skipped.** Prefer **one line** per bullet; two is the ceiling. Front-load the point (result or action first) so it survives a half-second glance. Cut filler that adds no signal: "responsible for", "in order to", "successfully", "various", "a number of", "helped to", and most adjectives. Strip a clause if removing it loses no meaning. If a bullet runs to three lines, it is either two bullets or it is padded — fix it. Density of *signal* matters, not density of *words*.
 
 ### Action Verb Bank (~25 verbs, grouped)
 
@@ -240,3 +307,28 @@ Sentence 4 (optional): What you're targeting / the value you bring next
 ### AI-generated uniformity — flag and fix
 
 Identically-structured, voiceless bullets ("Spearheaded… Leveraged… Drove…" repeated across every role) read as machine-generated to experienced recruiters. After any AI-assisted rewrite, review the full CV for mechanical uniformity: stock verbs, parallel-but-hollow sentence structures, prose that is grammatically correct but has no personality. Vary sentence structure, mix bullet lengths, and preserve the candidate's real voice. Full treatment: see `motivation-letter.md §6` (AI-Authenticity section).
+
+---
+
+## 8. Links and Hyperlinks
+
+A link on a CV should read as a **label**, not a URL. `Google Scholar` and `GitHub` are clean and instantly legible; `scholar.google.com/citations?user=YDMwxZwAAAAJ` is visual noise that makes the header look like a config file. The 2026 convention (enhancv, cv4me) is a friendly display label hyperlinked to the real URL.
+
+- **In the profile YAML**, give each link under `contact.links` keyed by service (`scholar`, `github`, `linkedin`, `orcid`, `website`, `portfolio`, …). The renderer maps the key (or the URL's host) to a friendly label automatically. For anything unusual, write the value as `{label: "...", url: "..."}` to name it yourself.
+- **The renderer handles display**: Markdown emits `[Google Scholar](url)`; LaTeX/PDF emits `\href{url}{Google Scholar}`; `.docx` emits a real clickable hyperlink whose visible text is the label. You do not hand-format links — keep the profile clean and let the renderer label them.
+- **ATS robustness:** because the visible text is now a label, the URL no longer sits on the page as plain text. That is fine for the human-facing PDF and for any modern ATS (all of which read hyperlink targets), and the URL stays recoverable in the Markdown source and the docx hyperlink relationship. If a posting routes through a known-primitive plain-text parser, you can fall back to showing the bare readable URL (e.g. `linkedin.com/in/name`) — but default to labels.
+- **Restraint:** two or three links in the header, maximum (LinkedIn + GitHub/Scholar + portfolio). More than that dilutes. No `bit.ly` shorteners — they look spammy and some filters flag them.
+
+---
+
+## 9. Projects vs. Experience — keep them distinct
+
+A common self-inflicted weakness is a CV where the Experience section is full of project descriptions **and** there is a separate Projects section — the reader can't tell what's a job and what's a side effort, and the two sections compete. Draw the line cleanly:
+
+- **Experience** = roles held at an organisation (employer, lab, internship, contract). Each entry has a title, an org, and dates. Work done *as part of that role* — even if it was a discrete "project" internally — belongs as **bullets under that role**, not as a separate Projects entry.
+- **Projects** = standalone work **not** tied to an employment role: a master's thesis, a course project, a hackathon entry, an open-source library, a competition submission, a personal build. These have no employer, so they can't live under Experience.
+
+**Rules when tailoring:**
+- Never list the same body of work in both sections. If a "project" happened inside a job, fold it into that job's bullets and remove the duplicate.
+- A Projects section earns its place only if it adds signal the Experience section doesn't — relevant, independent work the target role cares about. If it merely restates the day job or lists stale coursework, cut it; a tight CV with no Projects section beats a padded one.
+- For early-career/student profiles with little work history, Projects can legitimately carry real weight (see §1) — there the section is load-bearing, not padding. Judge by what the target role needs.

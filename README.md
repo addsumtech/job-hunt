@@ -1,6 +1,6 @@
 # job-application
 
-A Claude Code skill that takes a user from "I want this job" to a tailored, credible application package. It interviews the user, parses or builds a CV into a canonical `profile.yaml`, fetches and analyses the target job posting, tailors the CV through honest reframing (never fabrication), optionally drafts a motivation letter, and pressure-tests the package through a dual-lens review loop — two independent judges, a Hiring Manager (human lens) and an ATS Screener (machine lens), must both pass — iterating until they do or reporting honestly if they cannot. Outputs Markdown, .docx, and PDF (via LaTeX).
+A Claude Code skill that takes a user from "I want this job" to a tailored, credible application package. It interviews the user, parses or builds a CV into a canonical `profile.yaml`, fetches and analyses the target job posting, tailors the CV through honest reframing (never fabrication), optionally drafts a motivation letter, and pressure-tests the package through a review loop that models the real hiring funnel — three independent judges, an ATS Screener (machine lens), a Recruiter/HR Screener (fast human screen), and a Hiring Manager (deep human lens), must all pass — iterating until they do or reporting honestly if they cannot. Outputs Markdown, .docx, and PDF (via LaTeX).
 
 ---
 
@@ -40,7 +40,7 @@ The skill executes these 8 steps (full detail in `SKILL.md`):
 4. **Gap analysis** — AMPLIFY / REFRAME / KEYWORD-INSERT / HONEST-GAPS table against the posting.
 5. **Tailor CV** — write a tailored copy; render in requested formats.
 6. **Motivation letter** — draft `letter.yaml` and render if requested.
-7. **Dual-lens review loop** — dispatch two fresh judges each round (a Hiring Manager human lens + an ATS machine lens); iterate until **both** `PASS` or 3 rounds.
+7. **Hiring-pipeline review loop** — dispatch three fresh judges in parallel each round (ATS machine lens → Recruiter/HR fast human screen → Hiring Manager deep human lens); iterate until **all three** `PASS` or 3 rounds.
 8. **Finalize** — list output paths, summarize changes, note remaining gaps, confirm the master profile is saved.
 
 ---
@@ -65,13 +65,19 @@ job-application/
 ├── README.md
 ├── requirements.txt
 ├── references/
-│   ├── cv-craft.md                 # CV writing conventions
-│   ├── gap-analysis.md             # Gap analysis methodology
-│   ├── job-posting-extraction.md   # How to parse a posting
-│   └── motivation-letter.md        # Letter craft guide
-├── agents/
-│   ├── hiring-manager.md           # Review judge 1 — human lens (fit/credibility)
-│   └── ats-screener.md             # Review judge 2 — machine lens (keyword coverage)
+│   ├── cv-craft.md                 # CV writing conventions (markets, links, bullets, ordering)
+│   ├── gap-analysis.md             # Gap analysis + tailoring methodology
+│   ├── job-posting-extraction.md   # How to parse a posting (+ fetch sanity, application type)
+│   ├── candidate-situations.md     # Non-standard candidates (gap, switch, exec, military, intl)
+│   ├── role-families.md            # Non-tech / regulated role conventions (clinical, sales, legal…)
+│   ├── structured-applications.md  # Competency-form applications (NHS, Civil Service)
+│   ├── motivation-letter.md        # Letter craft guide
+│   ├── interview-prep.md           # Interview-readiness brief
+│   └── rirekisho.md                # Japanese 履歴書 form guide
+├── agents/                         # Three review judges (hiring funnel)
+│   ├── ats-screener.md             # Judge 1 of 3 — machine lens (keyword coverage)
+│   ├── recruiter-screener.md       # Judge 2 of 3 — fast human screen (skim/logistics)
+│   └── hiring-manager.md           # Judge 3 of 3 — deep human lens (fit/credibility)
 ├── assets/
 │   ├── profile.example.yaml        # Canonical profile schema
 │   ├── cv/template.tex             # LaTeX CV template
@@ -79,12 +85,12 @@ job-application/
 └── scripts/
     ├── render_cv.py
     ├── render_letter.py
+    ├── render_rirekisho.py         # Japanese 履歴書 form renderer
     └── tests/
         ├── fixtures/
-        │   ├── sample_profile.yaml
-        │   └── sample_letter.yaml
         ├── test_render_cv.py
-        └── test_render_letter.py
+        ├── test_render_letter.py
+        └── test_render_rirekisho.py
 ```
 
 ---
@@ -95,4 +101,4 @@ job-application/
 cd scripts && python -m pytest tests/ -v
 ```
 
-Expected: 17 tests, all passing.
+Expected: 41 tests, all passing.

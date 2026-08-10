@@ -16,6 +16,8 @@ Work through every `must_have` and `nice_to_have` from the extracted schema (see
 | `partial` | The profile has adjacent or transferable experience that partly covers the requirement, but there is a gap in depth, recency, or exact match. |
 | `missing` | The profile has no evidence of meeting this requirement. May be a genuine gap or an omission from the CV — see §3 to determine which. |
 
+**Recency matters.** A must-have evidenced only by **stale** experience — used heavily 5+ years ago with nothing since (e.g. "Python 2012–2017, nothing after") — is `partial`, not `strong`: it satisfies the keyword but reads as rusty to a human. Flag it, and if the candidate has any recent touch (a side project, a course, a current-role mention), surface that to restore currency. Do not invent recent use.
+
 ### Output: the gap table
 
 Produce this table after comparing every requirement:
@@ -39,6 +41,29 @@ Look in this order:
 3. Education / coursework (valid evidence for academic or early-career candidates, or for foundational knowledge)
 4. Projects / publications / open-source (valid for technical depth claims)
 5. Summary / profile statement (evidence of framing, not of fact — do not use as sole evidence for `strong`)
+
+### Responsibility-evidence pass (align to the day-job, not just the checklist)
+
+Requirements are the *eligibility* filter; the posting's `responsibilities[]` describe the **actual work** — and a CV whose lead bullets visibly mirror that work reads as "already doing this job" to a hiring manager. Must-have coverage is necessary but not sufficient; this pass is what turns a *covered* CV into an *aligned* one. Run it after the requirement table.
+
+For each `responsibility` in the posting, find the candidate's single strongest **real** evidence of having done that kind of work — a bullet, project, or paper — and classify `demonstrated` / `adjacent` / `none`:
+
+| Responsibility (from posting) | Match | Strongest real evidence |
+|---|---|---|
+| Design & maintain high-throughput data pipelines | demonstrated | Built the ETL pipeline at Role B (5M-row datasets) |
+| Mentor junior engineers | adjacent | Code-reviewed peers; no formal mentoring |
+| Own model deployment to production | none | Research-only; never shipped to prod |
+
+This drives tailoring directly: a `demonstrated` responsibility whose evidence is **buried** is a LEAD-WITH instruction (surface it into the top third — §4). An `adjacent` one is a REFRAME or honest-gap candidate. A `none` on a **core** responsibility is a real fit gap the user should know about (and the cover letter may address honestly). Never invent evidence to fill a `none`.
+
+### Enrich from the candidate's papers and repositories — fetch before you ask
+
+When the profile names a **paper** (title, DOI, arXiv ID, venue) or links a **repository** (GitHub/GitLab project the candidate owns or contributed to), that artifact is primary evidence of the candidate's real work. **Fetch and read it to extract concrete, truthful detail — do not make the user retype what a tool can read.**
+
+- **How:** use `WebFetch`/`WebSearch` for a paper (abstract, method, headline results, the candidate's listed authorship position); for a repo, fetch the README / project page (and `gh` CLI if available) for what it does, the tech stack, scale signals (stars, downloads, dataset size), and the candidate's specific contribution.
+- **What to extract:** the kind of detail that makes a bullet specific and credible — what was built, the techniques/tools actually used, quantified results, and scope. This turns a thin line ("worked on a segmentation model") into an evidenced one ("lightweight SAM variant trained on a single GPU in ~1 day; published in MELBA") — all sourced from the candidate's own artifact, not invented.
+- **Honesty (critical):** the artifact being in the candidate's profile is their assertion of authorship — extract only **their** real contribution. For a multi-author paper or a shared repo, attribute honestly (co-author, contributor) and never claim sole credit for collective scope. Pull facts about the work; do not borrow a co-author's part as the candidate's own.
+- **Restricted access is the only reason to ask the user.** If the paper is paywalled, the repo is private, or the fetch is blocked, *then* ask the user for the specific facts you need (method, your contribution, the numbers) — phrased honestly, never as an invitation to embellish. Fetching first, asking second.
 
 ---
 
@@ -67,6 +92,8 @@ If the candidate has not used the exact tool but has used a directly comparable 
 > Honest framing: "Experienced with Power BI for executive dashboards; familiar with Tableau's interface from evaluations."
 > ✓ Allowed: the framing is true and the transferability is real.
 
+**Equivalence test — claim true equivalences at full strength (don't under-sell).** Honest ≠ timid. Before hedging an adjacency into "familiar with…", ask: is the candidate's real experience *functionally equivalent* to the requirement, just named differently? — e.g. "REST API design" vs. "building HTTP services"; "Postgres" vs. "relational databases"; one major cloud vs. another for a cloud-agnostic skill; "deep learning" vs. "neural networks". **If yes, claim it at full strength using the posting's term** — that is honest reframing, not a stretch. Reserve hedged "familiar with…" language for genuine *partials* (a real gap in depth/recency/exact-match). Weakening a true equivalence into a `partial` costs the interview with no honesty benefit — it is its own failure mode.
+
 **Adding real-but-omitted detail the user confirms.**
 A CV may omit things that are genuinely part of the candidate's background. If gap analysis reveals a potential gap, ask the user first (see §3). If they confirm real experience, add it.
 
@@ -87,6 +114,8 @@ If a bullet says "improved system performance" and the user can supply the actua
 Never invent a precise figure. Level 5 is a last resort — a vague but honest scale claim is better than silence, but only barely. Push back up the ladder if the user can recall more.
 
 > ✓ Allowed: honest quantification is better than vague language, and honest approximation is better than silence.
+
+**Not every role is quantified in numbers — match the evidence to the profession.** This ladder is built for measurable-output work (engineering, sales, ops, growth) where a percentage or a dollar figure is the natural currency. Much of the labour market is not like that, and forcing a metric onto it reads as inauthentic or tips into fabrication. For **care (nursing, social work), education, creative/design, legal, public-sector, hospitality, and skilled trades**, the strongest *honest* evidence is usually qualitative and concrete rather than a number: scope and responsibility ("ran a 32-bed ward's night shift solo"), caseload/volume ("managed a 60-client caseload"), outcomes and recognition ("led the unit to its first 'Outstanding' CQC rating"), named results ("won the Henderson appeal"), credentials, inspection/audit ratings, repeat clients, or a portfolio. A specific qualitative statement beats a bolted-on percentage — do **not** manufacture a soft metric ("improved morale by 30%") to satisfy a numbers reflex; that violates the NOT-ALLOWED rules below. Use the number when it's real and natural to the role; otherwise reach for concrete scope, outcome, or credential.
 
 ---
 
@@ -113,12 +142,13 @@ These actions constitute misrepresentation. Do not do them, do not suggest them,
 
 Before writing any REFRAME or KEYWORD-INSERT that introduces a skill, tool, technology, or scope claim that is not already explicitly in the CV:
 
-**Trace the claim to one of these two sources:**
+**Trace the claim to one of these three sources:**
 
 1. A specific line or field in the candidate's source profile (CV, LinkedIn, portfolio, upload). Cite the exact location.
 2. An answer the user gave during this session when asked a supplementary question (§3).
+3. A **primary artifact the candidate authored or contributed to** — a paper in their publications list, or a repository they own/contributed to — that you fetched and read this session (see §1, "Enrich from the candidate's papers and repositories"). Extracted facts are valid, strong evidence. For multi-author papers or shared repos, the claim must reflect only the candidate's real contribution — never sole credit for collective scope.
 
-**If neither source exists, the claim does NOT enter the CV.** Place it in HONEST-GAPS instead.
+**If none of these sources exists, the claim does NOT enter the CV.** Place it in HONEST-GAPS instead.
 
 > Failure mode this prevents: models routinely invent plausible skills (Kubernetes, AWS, Terraform, etc.) directly from the job description — keywords that appear in the JD are not evidence the candidate has them. Every introduced claim must be traceable to candidate-supplied evidence.
 
@@ -156,6 +186,10 @@ The candidate has genuinely never done this thing and cannot honestly claim rela
 3. Note the mitigation in the tailoring plan.
 
 **Do not tell the user to pretend the gap does not exist in the cover letter.** The cover letter can address gaps directly and positively (see §4, HONEST-GAPS mitigation option: cover letter).
+
+### Case C: A hard disqualifier (a wall, not a gap)
+
+If the failed requirement is a `[disqualifier]` (work authorization/visa, a legally required licence or clearance, a hard on-site/location requirement, language fluency, a regulated experience floor — see `job-posting-extraction.md`), it is **not** a HONEST-GAP to mitigate with framing. No reframing closes a legal barrier. Instead: **tell the user plainly and let them decide** — "This role requires X, which you don't currently meet; applying anyway is your call, but be aware it's likely an automatic screen-out." Never spend a cover-letter "mitigation" pretending a hard barrier is a soft framing problem. (A disqualifier the candidate *does* meet just needs to be made visible — e.g. a one-line work-authorization note — which the recruiter judge will otherwise flag.)
 
 ---
 
@@ -202,29 +236,44 @@ These requirements remain weak after honest tailoring:
   2. …
 ```
 
-### Keyword-coverage estimate (show to the user before and after tailoring)
+### Prioritization under the length limit (LEAD-WITH)
 
-Before finalising the tailoring plan, compute and **show the user** this coverage table:
+Coverage is necessary, not sufficient — **placement is the other half.** A CV that covers every keyword but buries its best evidence on page two loses the 6–10-second skim to a 70%-coverage CV that leads with its strongest, on-target work. After building AMPLIFY, rank its items by *signal to this role* (not by recency) and decide what lands in the scarce **top third of page one** — the summary plus the first role's first two bullets, which *is* the screen. State explicitly:
+
+- **Summary opening line** — the single most role-relevant identity + the candidate's real standout signal (their marquee employer/lab, rare relevant skill, shipped-at-scale product, or top-venue publication). This is the first thing read; make it specific, not boilerplate.
+- **First bullet of the most recent relevant role** — the strongest quantified, on-target achievement.
+- **What gets cut or compressed** to make room (per `cv-craft.md §5`): off-target bullets, stale roles, generic skills. Name the cuts; do not silently keep everything and let the page overflow.
+
+This is honest-only: prioritization reorders and trims *real* content — it never invents a standout signal the candidate lacks. If the Hiring Manager review later reports a buried `STANDOUT_SIGNAL`, surfacing it here is the fix.
+
+### FIT SNAPSHOT — show before tailoring (baseline) and after (delta)
+
+A lone keyword % misleads: a CV can read 80% covered while the candidate is under-leveled or off-domain (both kill the application), or 65% covered with a perfect responsibility + seniority match (a strong apply). So show the user a small **fit snapshot** — still no fake precision, every line evidence-backed:
 
 ```
-KEYWORD COVERAGE — [Role Title] at [Company]
+FIT SNAPSHOT — [Role Title] at [Company]
+
+Must-have coverage:  X of N strongly evidenced (Y partial, Z missing) — keyword proxy
 
 | Must-have requirement | In CV? | JD mentions ≈N× |
 |---|---|---|
 | [Requirement 1] | Yes / Partial / No | N× |
-| [Requirement 2] | Yes / Partial / No | N× |
 | … | … | … |
 
-HEADLINE: X of N must-haves strongly evidenced (Y partial, Z missing).
+Responsibility match: M of K core responsibilities demonstrated (from the §1 responsibility-evidence pass)
+Seniority fit:        under / on / over-leveled — [one line]
+Domain fit:           same-domain / adjacent / cross-over — [one line]
+
+APPLY VERDICT: strong apply / worth applying / stretch / likely screen-out — [one honest sentence why]
 ```
 
-Run this before tailoring (baseline) and after (post-tailoring) so the user sees the delta.
+Run it before tailoring (baseline) and after (so the user sees the delta). The apply verdict is the north-star question — it tells the user whether this is worth their time, not just whether they keyword-matched.
 
 **REQUIRED disclaimer to include every time:**
 
-> ⚠️ This is a keyword-coverage *estimate*, not an ATS pass prediction. Modern ATS use semantic matching — they understand synonyms and context. Exact-keyword scores are a useful proxy but are imprecise: a CV with 8/10 must-haves genuinely evidenced in context will outperform one with 10/10 forced mentions. Keyword stuffing (adding terms not backed by real experience) can backfire at interview and with more sophisticated ATS. Use this table as a health check, not a target to game.
+> ⚠️ The coverage line is a keyword *estimate*, not an ATS pass prediction. Modern ATS use semantic matching — they understand synonyms and context. Exact-keyword scores are a useful proxy but imprecise: a CV with 8/10 must-haves genuinely evidenced in context will outperform one with 10/10 forced mentions. Keyword stuffing (adding terms not backed by real experience) backfires at interview and with sophisticated ATS. Use this as a health check, not a target to game.
 
-**Computation:** count must-haves where evidence in the CV is `strong` (fully evidenced) or `partial` (partially evidenced). Do not count `missing`. Be honest about `partial` — a keyword in the Skills list with no supporting bullet is partial, not strong.
+**Computation & labels (avoid two conflicting numbers):** the **"strongly evidenced" count** = must-haves where CV evidence is `strong` (count `partial` and `missing` separately; do not merge them into one "covered" number). This is *not* the same as the ATS screener's coverage formula (which gives partials half-weight: `(present + 0.5·partial)/total`) — label them distinctly ("evidenced must-haves" here vs. "ATS coverage %" from Judge 1) so the user never sees two unreconciled percentages. Be honest about `partial`: a keyword in the Skills list with no supporting bullet is partial, not strong.
 
 ### Mitigation options for HONEST-GAPS
 

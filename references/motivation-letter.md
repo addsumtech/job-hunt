@@ -85,7 +85,7 @@ A motivation letter has exactly four logical parts, written as 3–4 short parag
 
 **How to write it:**
 1. Draw from `company_values_tone` (extracted per `job-posting-extraction.md`). Use the company's own framing when quoting their mission or values — paraphrase accurately rather than copying verbatim.
-2. Name something specific: a product, a market position, a strategic direction, a team culture detail, or a public statement. Generics ("innovative company", "great culture") are worthless.
+2. Name something specific: a product, a market position, a strategic direction, a team culture detail, or a public statement. Generics ("innovative company", "great culture") are worthless. **If the posting alone doesn't give you a concrete anchor, fetch one** — `WebFetch`/`WebSearch` the company's careers page, product page, engineering blog, or a recent announcement, and cite something real and specific from it. (Same fetch-don't-guess principle as enriching the CV from the candidate's papers/repos.) Never invent a detail about the company; if you genuinely can't find one, keep the paragraph honest and lean rather than fabricating specifics.
 3. Connect your motivation honestly. If you are attracted to the problem domain, say so and explain the connection to your own interests. If you are motivated by the team's technical approach, be concrete about what in their stack or methodology appeals to you.
 4. This paragraph need not be long — two to three sentences is enough. Its job is to make the letter unmistakably *not* a template.
 
@@ -205,6 +205,8 @@ closing: "Sincerely,"
 | Academic / highly formal context | `Dear Dr. [Last name],` |
 | Do not use | `To Whom It May Concern,` — outdated; `Dear Sir/Madam,` — outdated and gendered; never fabricate a name |
 
+**Localized salutations (non-English letters):** when the letter is written in the market's local language, use that language's standard salutation — not a literal translation of "Dear". For an unnamed recipient: German `Sehr geehrte Damen und Herren,`; French/Belgian `Madame, Monsieur,`; Spanish `Estimados señores:`; Italian `Gentile Responsabile delle Assunzioni,`; Dutch `Geachte heer/mevrouw,`. For a named recipient, use the formal gendered form (e.g. German `Sehr geehrte Frau [Last],` / `Sehr geehrter Herr [Last],`). Match the salutation's language to the letter's language; never mix.
+
 **`body`** — A YAML list. Each element is one paragraph as a single string. No Markdown formatting inside the strings (no `**bold**`, no bullet points) — render_letter.py outputs plain text per paragraph. Keep each paragraph to 4–7 sentences maximum.
 
 **`closing`** — Choose from: `"Sincerely,"` (universal, formal), `"Kind regards,"` (warm professional), `"Best regards,"` (slightly more casual). Match the register. The sender's name is appended automatically by render_letter.py.
@@ -265,14 +267,17 @@ A letter that passes this test: could any other candidate have written exactly t
 
 ---
 
-## 6b. NL Motivatiebrief Note
+## 6b. Market & language calibration
 
-In the Netherlands, the motivation letter (`motivatiebrief`) is **universally expected** and is read closely — more so than in the US or UK, where cover letters are often skimmed. Key calibration differences:
+**Language rule (all markets):** write the letter in the **same language as the CV / posting** (see `cv-craft.md §2` clusters). Never mix languages in one letter. Use the market's standard salutation (see the localized-salutation note above).
 
-- **Tone:** Direct and understated. American-style self-promotion ("I am a top performer who consistently exceeds expectations") reads as overclaiming and creates a poor impression with Dutch recruiters.
-- **Structure:** The same four-paragraph framework applies, but keep the opener concise — Dutch professional culture values getting to the point.
-- **Language:** Match the posting language. Dutch-language postings expect a Dutch letter; English-language postings (especially in tech) expect English. Never mix languages in the same letter.
-- **Length:** 250–350 words is equally appropriate in Dutch. A shorter, sharper letter is culturally well-received; padding is not.
+Calibrate tone and expectation to the market:
+
+- **US & Canada / UK & Ireland / Australia & NZ:** cover letters are common but often skimmed; lead with the strongest hook fast. US tone tolerates more direct self-promotion than Europe; UK/Commonwealth is a touch more reserved.
+- **EU / EEA:** formal and specific. For non-tech, public-sector, or local-company roles, write in the **local language**; English is fine for tech/international employers. Avoid American-style self-promotion — it reads as overclaiming across most of continental Europe.
+- **East & SE Asia:** for international/foreign-capital firms, a Western-style letter in English (or the local language) works. **Japan caveat:** for a traditional rirekisho application the motivation lives in the form's **志望の動機** box, so a separate Western cover letter is usually redundant — a Japanese enclosure is a brief 添え状 (cover note), not a persuasive Western letter. Apply the §0 skip gate before drafting one.
+
+**NL specifics (motivatiebrief):** in the Netherlands the letter is **universally expected** and read closely. Tone: direct and understated — American-style self-promotion creates a poor impression. Keep the opener concise (Dutch culture values getting to the point). Dutch-language postings expect a Dutch letter; English postings (especially tech) expect English. 250–350 words; a shorter, sharper letter is well-received, padding is not.
 
 ---
 
