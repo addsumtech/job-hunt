@@ -73,3 +73,23 @@ def test_no_path_helper_creates_anything_on_disk(tmp_path, monkeypatch):
     paths.workspace("Donghang", "Acme", "Engineer", "2026-08-09")
     paths.search_dir("Donghang", "slug")
     assert list(tmp_path.iterdir()) == []
+
+
+def test_the_workspace_shape_can_be_inverted():
+    ws = paths.workspace("Donghang", "ASML", "MR recon engineer", "2026-08-09")
+    assert paths.profile_dir_of(ws) == paths.profile_dir("Donghang")
+    assert paths.answer_bank_of(ws) == paths.answer_bank("Donghang")
+
+
+def test_the_inverse_works_on_a_workspace_outside_the_profiles_root(tmp_path):
+    """A gate is routinely pointed at a copied workspace or a test fixture. Inverting
+    the SHAPE is the point; locating the home directory is not."""
+    ws = tmp_path / "job-profiles" / "demo" / "applications" / "acme-eng-2026-08-09"
+    ws.mkdir(parents=True)
+    assert paths.profile_dir_of(ws) == tmp_path / "job-profiles" / "demo"
+    assert paths.answer_bank_of(ws).name == paths.ANSWER_BANK_NAME
+
+
+def test_a_directory_that_is_not_a_workspace_is_refused():
+    with pytest.raises(ValueError, match="not a workspace"):
+        paths.profile_dir_of(pathlib.Path("/tmp/somewhere"))

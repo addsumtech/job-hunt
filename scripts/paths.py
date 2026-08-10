@@ -55,8 +55,11 @@ def search_prefs(name: str) -> pathlib.Path:
     return profile_dir(name) / "search-preferences.yaml"
 
 
+ANSWER_BANK_NAME = "answer-bank.md"
+
+
 def answer_bank(name: str) -> pathlib.Path:
-    return profile_dir(name) / "answer-bank.md"
+    return profile_dir(name) / ANSWER_BANK_NAME
 
 
 def search_dir(name: str, slug: str) -> pathlib.Path:
@@ -74,6 +77,28 @@ def workspace(name: str, company: str, role: str, date: str) -> pathlib.Path:
         raise ValueError(f"date must be YYYY-MM-DD, got {date!r}")
     stem = f"{slugify(company)}-{slugify(role)}-{date}"
     return profile_dir(name) / "applications" / stem
+
+
+def profile_dir_of(workspace) -> pathlib.Path:
+    """The profile directory that owns `workspace` — the inverse of workspace().
+
+    Relative to the path given, not to PROFILES_ROOT, so it works on a copied
+    workspace or a test fixture. Refuses anything that is not the documented shape
+    rather than guessing: a wrong guess here silently writes the answer bank — the one
+    artifact that compounds across applications — into the wrong profile.
+    """
+    workspace = pathlib.Path(workspace)
+    if workspace.parent.name != "applications" or len(workspace.parents) < 2:
+        raise ValueError(
+            f"{workspace} is not a workspace: expected "
+            "<profile_dir>/applications/<company>-<role>-<YYYY-MM-DD>"
+        )
+    return workspace.parents[1]
+
+
+def answer_bank_of(workspace) -> pathlib.Path:
+    """The profile-level answer bank for the profile that owns `workspace`."""
+    return profile_dir_of(workspace) / ANSWER_BANK_NAME
 
 
 def mode_file(mode: str, root=None) -> pathlib.Path:
