@@ -391,21 +391,6 @@ def check_answer_bank(path: pathlib.Path) -> list:
 
 # ----------------------------------------------------------------- banned vocabulary
 
-def check_vocabulary(paths: list, scanner) -> list:
-    if scanner is None:
-        raise MissingDependency(
-            "scripts/lint_no_prediction.py (Plan 2) is not importable — refusing to "
-            "report a vocabulary check that did not run"
-        )
-    findings = []
-    for path in paths:
-        if path.exists():
-            findings.extend(scanner(path.read_text(encoding="utf-8"), str(path)))
-    return findings
-
-
-# ----------------------------------------------------------------- banned vocabulary
-
 def _default_scanner():
     """scripts/lint_no_prediction.py is Plan 2's. This is the ONLY adapter point —
     if its function is named differently there, change it here and nowhere else.
@@ -419,6 +404,135 @@ def _default_scanner():
     except ImportError:
         return None
     return getattr(lint_no_prediction, "scan_text", None)
+
+
+def check_vocabulary(paths: list, scanner) -> list:
+    if scanner is None:
+        raise MissingDependency(
+            "scripts/lint_no_prediction.py (Plan 2) is not importable — refusing to "
+            "report a vocabulary check that did not run"
+        )
+    findings = []
+    for path in paths:
+        if path.exists():
+            findings.extend(scanner(path.read_text(encoding="utf-8"), str(path)))
+    return findings
+
+
+# ----------------------------------------------------------------- write-backs
+
+_WB_SECTION = "## Walk-back list"
+_WB_HEADING = re.compile(r"^###\s+(WB-\d+)\s*(.*)$", re.M)
+_CLAIM_FIELDS = ("term", "where", "source_kind", "source_ref", "session_date", "retracted")
+
+
+def walkback_entries(brief_text: str) -> list:
+    if _WB_SECTION not in brief_text:
+        return []
+    body = brief_text.split(_WB_SECTION, 1)[1]
+    following = re.search(r"^##\s+", body, re.M)
+    if following:
+        body = body[:following.start()]
+    marks = list(_WB_HEADING.finditer(body))
+    entries = []
+    for index, mark in enumerate(marks):
+        end = marks[index + 1].start() if index + 1 < len(marks) else len(body)
+        chunk = body[mark.end():end]
+        entry = {"id": mark.group(1), "claim": mark.group(2).strip(" —-")}
+        for field in ("quote", "softened", "defect", "transcript"):
+            found = re.search(rf"^\s*-\s*{field}:\s*(.+)$", chunk, re.M)
+            entry[field] = found.group(1).strip() if found else ""
+        entries.append(entry)
+    return entries
+
+
+def check_walkback(blocks: dict, brief_path: pathlib.Path, claims_path: pathlib.Path,
+                   transcript_name: str) -> list:
+    records = [
+        record
+        for block in blocks.values()
+        for record in block.records
+        if record.kind == "FINDING"
+    ]
+    fired = [r for r in records if r.fields["tag"] in V.WALKBACK_TAGS]
+    unsourced = [r for r in records if r.fields["tag"] == "UNSOURCED-FACT"]
+    if not fired and not unsourced:
+        return []
+
+    brief_text = brief_path.read_text(encoding="utf-8") if brief_path.exists() else ""
+    entries = walkback_entries(brief_text)
+
+    findings = []
+    if fired and _WB_SECTION not in brief_text:
+        findings.append(
+            "WALKBACK_MISSING: "
+            + ", ".join(sorted({r.fields["tag"] for r in fired}))
+            + f" fired, but {brief_path.name} has no '{_WB_SECTION}' section — a claim "
+            "the candidate cannot defend under one follow-up is a tailoring error, not "
+            "a rehearsal topic"
+        )
+    else:
+        for record in fired:
+            quote = record.fields["quote"]
+            if not any(MB.quote_is_in(quote, e["quote"]) for e in entries):
+                findings.append(
+                    f"WALKBACK_NO_ENTRY: {record.fields['tag']} at "
+                    f"{record.fields['ref']} has no '### WB-' entry quoting "
+                    f"{MB.normalize_quote(quote)[:60]!r}"
+                )
+
+    for entry in entries:
+        for field in ("quote", "softened", "defect"):
+            if not entry[field]:
+                findings.append(
+                    f"WALKBACK_INCOMPLETE: {entry['id']} is missing its '- {field}:' line"
+                )
+        # Any of the four defect tags may land here: the three that *demand* the
+        # section, plus an UNSOURCED-FACT the candidate could not stand behind, which
+        # is walked back rather than promoted to claims.yaml.
+        if entry["defect"] and entry["defect"] not in V.DEFECT_TAGS:
+            findings.append(
+                f"WALKBACK_BAD_DEFECT: {entry['id']}: defect: {entry['defect']!r} must "
+                "be one of " + " | ".join(V.DEFECT_TAGS)
+            )
+
+    promoted = []
+    if claims_path.exists():
+        try:
+            rows = yaml.safe_load(claims_path.read_text(encoding="utf-8")) or []
+        except yaml.YAMLError as exc:
+            findings.append(f"CLAIMS_UNPARSEABLE: {claims_path}: {exc}")
+            rows = []
+        for row in rows if isinstance(rows, list) else []:
+            if not isinstance(row, dict) or row.get("source_kind") != "session-answer":
+                continue
+            if transcript_name not in str(row.get("source_ref", "")):
+                continue
+            promoted.append(row)
+            missing = [f for f in _CLAIM_FIELDS if f not in row]
+            if missing:
+                findings.append(
+                    f"CLAIM_ROW_INCOMPLETE: the promotion row for "
+                    f"{row.get('term', '?')!r} is missing {', '.join(missing)}"
+                )
+
+    for record in unsourced:
+        quote = MB.normalize_quote(record.fields["quote"])
+        walked = any(MB.quote_is_in(record.fields["quote"], e["quote"]) for e in entries)
+        claimed = any(
+            str(row.get("term", "")).strip()
+            and MB.collapse_ws(str(row["term"])).lower() in quote.lower()
+            for row in promoted
+        )
+        if not (walked or claimed):
+            findings.append(
+                f"UNRESOLVED_FACT: UNSOURCED-FACT at {record.fields['ref']} "
+                f"({quote[:50]!r}) is neither promoted to claims.yaml "
+                f"(source_kind: session-answer, source_ref naming {transcript_name}) nor "
+                "walked back — ask the candidate where it came from before it enters the "
+                "answer bank"
+            )
+    return findings
 
 
 # ----------------------------------------------------------------- receipts
@@ -504,6 +618,12 @@ def run(workspace, round_no: int, answer_bank=None, today=None, vocab_scanner=_A
             workspace / "mock" / "cheatsheet.md",
         ],
         scanner,
+    )
+    findings += check_walkback(
+        blocks,
+        workspace / "interview-brief.md",
+        workspace / "claims.yaml",
+        f"transcript-{round_no}.md",
     )
     return findings
 
