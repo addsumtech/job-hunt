@@ -1,6 +1,12 @@
 # job-hunt — 接手说明
 
-停在这里：2026-08-10，用户因 token 成本喊停，**尚未开始构建**。下次从「立即可做的第一步」开始。
+**当前进度：计划 1 已完整交付并上线；计划 2–5 未开始。**（更新于 2026-08-10）
+
+`apply` 模式可用了：335 项测试全绿，`make check` 通过，`LOSSLESS 1317/1317`（18 条有据豁免），
+仓库已软链进 `~/.claude/skills/job-hunt` 和 `~/.codex/skills/job-hunt`，两个 runtime 都能触发。
+
+下一步是**计划 2（assess 模式）**：`docs/superpowers/plans/2026-08-09-2-assess-mode.md`。
+执行方式见本文末尾「恢复工作」一节；已知的执行注意事项列在「构建中现场发现的事」。
 
 ---
 
@@ -25,24 +31,46 @@ discover  →  assess  →  apply  →  interview
 | 研究产物（市场惯例取证、opencli 实测矩阵、教条保全审计、四份审计 + 四份重审 + 跨查） | `docs/superpowers/research/2026-08-09/` |
 | 五份实施计划（28,030 行，约 100 个任务） | `docs/superpowers/plans/` |
 | **存量保全** | `job-application` 仓库的 5 个提交 `9404bbe`..`864ad7f` |
+| **计划 1 全部 23 个任务** | 已交付并上线，见下节 |
 
-**存量保全这件事已经做完了**：`~/.claude/skills/job-application` 里那约 1500 行未提交工作（recruiter-screener、5 个新 reference、rirekisho 渲染器、render_cv 983 行改动）已分组提交，工作区干净，51 项测试全绿，未 push。
+**存量保全**：`~/.claude/skills/job-application` 里那约 1500 行未提交工作（recruiter-screener、
+5 个新 reference、rirekisho 渲染器、render_cv 983 行改动）已分组提交为 `9404bbe`..`864ad7f`。
+那个仓库**保留作归档，不要删**——`864ad7f` 是无损校验的 baseline。
+
+**历史迁移**已完成：用 `git merge --allow-unrelated-histories` 而不是拷文件，因为「搬运可以、
+改写不行」，历史就是搬运的证据。remote `ja` 指向那个归档仓库，别删也别往它推。
 
 ---
 
-## 立即可做的第一步：历史迁移
+## 计划 1 交付了什么
 
-**已在克隆体上端到端验证通过**（无冲突、32 条历史、文件路径正确、合并后 51 项测试仍全绿）：
+`apply` 模式，功能等同原 `job-application`，但六个静默缺陷全部修掉、分层就位、闸门可验证。
 
-```bash
-cd ~/code_project/job-hunt
-git remote add ja /Users/donghanglyu/.claude/skills/job-application
-git fetch ja
-git merge --allow-unrelated-histories --no-edit ja/main
-python3 -m pytest scripts/tests -q     # 应为 51 passed
+```
+SKILL.md 530 行（layer 1，每次触发都加载）
+modes/apply.md 252 行（layer 1.5，进入 apply 模式时加载）
+18 个脚本 · 335 项测试 · Makefile + .github/workflows/checks.yml
 ```
 
-用 merge 而不是拷文件，是因为「搬运可以、改写不行」——历史就是搬运的证据。
+**六个静默缺陷，每个都实测验证而非声称：**
+
+| 缺陷 | 修复前 | 现在 |
+|---|---|---|
+| 动机信 PDF | 0 字节，51 测试全绿 | 6,770 字节 |
+| Cluster-1 个人数据互锁 | `United States (Los Angeles, CA)` 漏出生日 | 归一化匹配；未知市场带个人数据时大声告警 |
+| 判决解析器 | 三个 agent 文件都声称存在，实际不存在 | 畸形 VERDICT 行 fail-closed 成 AMBIGUOUS |
+| 陈旧渲染重判 | 产出自我印证的合法判决 | 派发时哈希，不符即该轮作废 |
+| claim 溯源检查点 | 不产出任何东西，无法验证是否执行过 | `claims.yaml` + `master-fingerprint.json` |
+| 履历书日期 | 空白年/月，静默保存一份无效表格 | 拒绝写出，除非显式 `--allow-blank-dates` |
+
+**外加两处构建中现场发现并关掉的：**
+
+1. `check_skill_lossless` 的 baseline 原本是一个**只存在于本机的 tag**——在任何其他机器上都会
+   exit 2，而「跑不了」和「通过了」长得一模一样。改用不可变 commit `864ad7f`，它因迁移 merge
+   成了 HEAD 的祖先，任何 clone 都有。
+2. SKILL.md 点名了两个不存在的脚本，而守卫只扫 `## Self-check` 段所以无人报告。新守卫扫全文 +
+   所有 mode 文件，且**自撤回**：计划 2 一旦建出 `check_conventions.py`，测试立刻变红，逼你删掉
+   那条「尚未构建」声明。两个方向都做过变异测试。
 
 ---
 
@@ -52,7 +80,7 @@ python3 -m pytest scripts/tests -q     # 应为 51 passed
 
 | 计划 | 沙箱实测 | 状态 |
 |---|---|---|
-| 1 迁移 + P0 修复（23 任务） | **264 通过 / 0 失败** | 剩 7 条新缺陷，2 条阻塞 |
+| 1 迁移 + P0 修复（23 任务） | 沙箱 264 通过 → **实际交付 335 通过** | ✅ **已完成** |
 | 2 assess 模式 | 147 通过 + 8 个**设计上的红灯**（市场表尚未创建，正确的 TDD 红相） | 剩 8 条，2 条 HIGH |
 | 3 discover 模式 | 补上 F1 后 **123 全过** | 剩数条 |
 | 4 interview 模式 | — | 剩 6 条，2 条阻塞 |
@@ -65,40 +93,67 @@ python3 -m pytest scripts/tests -q     # 应为 51 passed
 | | 状态 |
 |---|---|
 | **F1** `enter_mode.mode_file` 不存在（计划 1 白纸黑字写了它不存在），真实签名 `paths.mode_file(mode, root)`，参数顺序还反着 | ✅ **已修**（这一条曾让计划 3 的 47/123 测试全红） |
-| **F2** 计划 3/4 要撤回的「尚未构建」句，在计划 1 改版后已变成 `## Modes` 表，撤回目标不存在 | ❌ 未修（计划 3 剩 11 处、计划 4 剩 7 处） |
-| **F3** 计划 3/4 各自整行重写同一处 skip-set，后跑的抹掉先跑的 | ❌ 未修 |
+| **F2** 计划 3/4 要撤回的「尚未构建」句，在计划 1 改版后已变成 `## Modes` 表，撤回目标不存在 | ✅ 已修（三份计划各自改自己那一行） |
+| **F3** 计划 3/4 各自整行重写同一处 skip-set，后跑的抹掉先跑的 | ✅ 已修（改成追加） |
 
-**最终跨查从未跑成**（两次都死在会话额度上）。重跑脚本已存：`docs/superpowers/research/2026-08-09/final-fix-workflow.js`，用 `Workflow({scriptPath: ...})` 调用即可，不用重新组织。
+**最终跨查已跑通**：28 条编辑全部解决，F1–F4 落实，spec §1–§12 全部有归属任务。它给出的最后
+4 条精确编辑也已应用（commit `d57576c`）。重跑脚本留在
+`docs/superpowers/research/2026-08-09/final-fix-workflow.js`。
 
 ---
 
-## 恢复工作的两条路
+## 恢复工作：执行计划 2
 
-**A. 先修完再动工**（保守）：跑 `final-fix-workflow.js` 补掉 F2/F3 和各计划残留缺陷 + 最终跨查，然后从迁移开始。
+```
+docs/superpowers/plans/2026-08-09-2-assess-mode.md
+```
 
-**B. 直接动工**（更快）：计划 1 沙箱 264 项全过、剩余缺陷不阻塞前 15 个任务。先执行迁移和计划 1 的前半段，边做边修。计划 3/4 的 F2/F3 要到它们各自的最后一个任务才咬人。
+**执行方式用 subagent-driven**：每 3–5 个任务派一个全新 subagent，任务组之间人审。理由是这些计划
+里有好几个任务专门在修「测试全绿但功能是坏的」这类缺陷，让持有全程上下文的执行者去验证自己刚写的
+修复，正是这类缺陷最容易蒙混过关的场景。换个没有前情的 subagent 跑测试，判断更硬。
 
-不管哪条，**构建建议用 subagent-driven**：每任务派全新 subagent，任务之间人审。理由是计划 1 有好几个任务专门在修「测试全绿但功能是坏的」这类缺陷，让持有全程上下文的执行者验证自己刚写的修复，正是这类缺陷最容易蒙混过关的场景。
+派 subagent 时必须交代的四条**现行偏离**（计划文本里没有，不说会让它困惑或改错）：
+
+1. `scripts/tests/test_vocab.py` 是 9 个测试不是 8 个。它的守卫
+   `test_no_other_script_redeclares_a_closed_set` **是活的，会扫你写的每个 `scripts/*.py`**：
+   任何脚本里都不许拼出 `strong_apply`，也不许出现裸的 `MARKET_KEYS =` / `DEFECT_TAGS =`，
+   唯一例外是精确别名 `MARKET_KEYS = vocab.MARKET_KEYS`。
+2. baseline 用不可变 commit `864ad7f`，不是那个只存在于本机的 tag。
+3. `HANDOFF.md` 在 `docs/` 下，所以无损语料库是 15 个文件（+SKILL.md 后为 16）。
+4. 因为第 1 条，计划里每个累计的「Expected: N passed」都比实际低 1。**核对每个任务新增的
+   delta，不要核对绝对总数。**
+
+### 计划 2 落地时会立刻变红的几件事（计划自己写了，但值得先知道）
+
+- `## Modes` 表里 assess 那一行的 Status 必须改成 `live — modes/assess.md`，否则自撤回测试变红。
+- `## Self-check` 段和闸门表必须**追加**本计划新增的脚本与 `modes/assess.md`（追加，不是整行替换
+  ——三个计划改同一行，整行替换会让后跑的抹掉先跑的）。
+- `modes/assess.md` 第一步必须是 `enter_mode.py --mode assess`，且 `check_assessment` 要镜像
+  `NO_MODE_ENTRY` / `MODE_FILE_CHANGED` 两个 finding。
+- 建出 `check_conventions.py` 的**同一个任务**里要拆掉 Makefile 和 CI 里的
+  `if [ -f scripts/check_conventions.py ]` 守卫，否则守卫测试从那一刻起一直红。
+- `check_evidence_refs.py` 和 `check_conventions.py` 建出来后，要从
+  `scripts/tests/test_skill_structure.py` 的 `NOT_YET_BUILT` 里删掉——那个声明也是自撤回的。
 
 ---
 
 ## 三件别忘了的事
 
-1. **`check_skill_lossless.py` 是唯一能证明那 1500 行存量没在搬迁中丢失的东西**，而它自己曾经是坏的（`docs/` 被递归收进语料库，导致引用了 SKILL.md 原文的计划文件让压缩过的 SKILL.md 也报 LOSSLESS）。修复者称已修好并实跑 `LOSSLESS: 1317/1317`——**迁移后亲自跑一遍，别采信报告**。
+1. **`check_skill_lossless.py` 是唯一能证明那 1500 行存量没在搬迁中丢失的东西。** 它自己曾经是
+   坏的（`docs/` 被递归收进语料库，于是引用了 SKILL.md 原文的计划文件会让一个被压缩过的
+   SKILL.md 也报 LOSSLESS）。已修，且亲自跑过：`LOSSLESS: 1317/1317 … 16 files, 18 waived`。
+   **每次改完 SKILL.md 都重跑它，别采信任何人的报告。**
 
-2. **它证明的和不证明的**：它衡量字节是否还在，不是内容是否在**需要的时刻**到达上下文。唯一真正的检验是跑完整 eval 然后看输出缺了什么（这就是计划 5）。
+2. **它证明的和不证明的**：它衡量字节是否还在，**不是**内容是否在需要的时刻到达上下文。唯一真正
+   的检验是跑完整 eval 然后看输出缺了什么——那是计划 5，还没做。所以现在还**不能**说分层没有
+   造成退化，只能说没有丢字节。
 
-3. **`job-application` 原仓库保留作归档，不要删**。
+3. **`~/.claude/skills/job-application` 保留作归档，不要删，不要改。** `864ad7f` 是 baseline。
 
 ---
 
-## 已知的活体缺陷（现有 skill 里，尚未修）
+## 已修：研究阶段实测出的活体缺陷
 
-这些是研究阶段实测出来的，计划 1 会修：
-
-- `render_letter.py:101` 比较裸串 `"tectonic"`，而 `render_cv.py:992` 比较 `Path(engine).name` → **动机信 PDF 永远生成不出来，而 51 项测试全绿**
-- Cluster-1 个人数据互锁对 `United States (Los Angeles, CA)` 这类真实拼法**不生效**（eval-0 的场景输入字面就是这个）
-- 三个评委文件都写着「orchestrator 以程序方式解析」，而**这个程序不存在**
-- `assets/{cv,letter}/template.tex` 是死文件（无任何代码加载，且已与实际产出漂移）
-- SKILL.md **没有 self-check 清单**——CLAUDE.md 里写的第三种 backstop 形式在现有 skill 里根本不存在
-- `posting.yaml` 字段表静默丢了 `salary_range` 和 `application_type`，后者是导向 supporting-statement 分支的唯一信号
+全部由计划 1 关闭，见上文表格。原始测量记录在
+`docs/superpowers/research/2026-08-09/preserve.json` 和四份 `audit-*.md` 里，值得保留是因为它们
+记录的是「什么样的检查会放过什么样的错误」，那比缺陷本身更有用。
