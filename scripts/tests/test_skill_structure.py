@@ -60,7 +60,8 @@ def test_the_self_check_names_every_script():
     # Written as a whole-line replacement instead of an append, whichever plan
     # lands last silently deletes the earlier plans' entries and the deletion
     # shows up as an unrelated red test in someone else's task.
-    skip = {"journal.py", "paths.py", "rounds.py", "vocab.py"}
+    skip = {"journal.py", "paths.py", "rounds.py", "vocab.py",
+            "opencli_meta.py"}      # imported, never invoked
     section = _self_check_section()
     for f in sorted((ROOT / "scripts").glob("*.py")):
         if f.name in skip:

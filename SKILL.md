@@ -361,7 +361,7 @@ The point is not to coach a story — it's to make sure every word on the page i
 
 | Mode | Question it answers | Status |
 |---|---|---|
-| `discover` | what is out there worth looking at | `discover` is not yet built in this repo |
+| `discover` | what is out there worth looking at | live — `modes/discover.md`; enter with `scripts/enter_mode.py --mode discover` |
 | `assess` | is this posting worth applying to | live — `modes/assess.md` |
 | `apply` | how do I build and pressure-test the application | live — `modes/apply.md` |
 | `interview` | how do I answer, and what did I get wrong | `interview` is not yet built in this repo |
@@ -487,6 +487,9 @@ a fabrication the candidate then repeats back), and the shortlist's `why_matched
 | Market tables | `scripts/check_conventions.py` | digits/percent in prose, source provenance, protected traits, duplicate ids, expired `review_by` (CI-hard) |
 | Assess | `scripts/check_assessment.py` | composes the six above and requires their receipts; disclaimer, disqualifier section, the 「那该怎么办」 half, verbatim conventions, stale-review banner |
 | Migration losslessness (CI only) | `scripts/check_skill_lossless.py` | a baseline line that exists nowhere in this tree |
+| Adapter classification | `scripts/check_opencli_result.py` | *(wrapper, not a gate)* a non-zero exit, a login wall, a platform stop-signal, or an empty identity field |
+| Read-only | `scripts/check_no_write.py` | a journaled command whose published `access:` is `write`, or whose access cannot be resolved at all |
+| Shortlist | `scripts/check_shortlist.py` | a row whose `source_id` is in no raw capture; a duplicated or over-counted source report; "no results" with no adapter that exited 0; a missing disclosure block or provisional stamp; a detail fetch outside the top three; an uncapped brief; a missing or stale mode entry |
 
 **No mode may claim success while `journal.jsonl` lacks a receipt for its gates.** A skipped script produces no output, and no output is exactly what a clean run looks like. `scripts/check_skill_lossless.py` is the one exception and is marked as such: it is a repo-level CI check with no workspace and no receipt, so requiring one would be requiring evidence that cannot exist.
 
@@ -564,6 +567,14 @@ Read-when:
 - [ ] Extracting a posting? `references/job-posting-extraction.md`.
 - [ ] Writing the brief? `references/interview-prep.md`.
 - [ ] In apply mode? `modes/apply.md`, loaded on entry, not on demand.
+- [ ] In discover mode? `modes/discover.md`, loaded on entry, not on demand.
+- [ ] About to make the first live retrieval of a run, or asked to page further,
+      fetch more detail pages, or work while the user is away?
+      `references/source-policy.md`.
+- [ ] About to call an adapter other than the four in SKILL.md's table?
+      `references/discovery-sources.md`.
+- [ ] An adapter call exited non-zero? `references/risk-control-signals.yaml`
+      carries the stop-signal patterns `scripts/check_opencli_result.py` matches.
 
 Dispatched:
 - [ ] `agents/ats-screener.md`, `agents/recruiter-screener.md` and
@@ -590,7 +601,17 @@ Ran, leaving nothing in the journal (they render; they do not judge):
 In CI, not in a workspace (no receipt exists for these, by design):
 - [ ] `scripts/check_skill_lossless.py` — only when this skill's own files changed.
 
-Every line above says what evidence it leaves, and the three headings differ for a
+Ran, with a receipt in `journal.jsonl` — the discover gates. `scripts/check_apply.py`
+does not require these; a discover run is not reportable without them:
+- [ ] `scripts/check_no_write.py` (discover)
+- [ ] `scripts/check_shortlist.py` (discover)
+
+Ran, leaving an `adapter_call` record rather than a gate receipt:
+- [ ] `scripts/check_opencli_result.py` — once per adapter invocation. It is a
+      wrapper, not a gate: it exits 0 (classified) or 2 (could not classify), never 1,
+      so there is no receipt to look for and no pass/fail to read into the exit code.
+
+Every line above says what evidence it leaves, and the headings differ for a
 reason: a checklist that promises a receipt where none can exist teaches its reader
 that one of its lines is decorative, and the reader cannot tell which one.
 
@@ -613,3 +634,6 @@ Told the user:
 - [ ] Any remaining honest gaps, and — if the loop ended un-passed — whether this is
       POORLY BUILT or an HONEST STRETCH.
 - [ ] The workspace path and every output file, including the `.tex`.
+- [ ] In discover: the §0 来源与读取质量 table, the trigger reason, every row's band
+      marked 「基于卡片信息的初判」, and — if the run degraded — the disclosure block
+      with its answers filled in.
