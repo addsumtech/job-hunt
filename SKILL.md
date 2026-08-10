@@ -362,7 +362,7 @@ The point is not to coach a story — it's to make sure every word on the page i
 | Mode | Question it answers | Status |
 |---|---|---|
 | `discover` | what is out there worth looking at | `discover` is not yet built in this repo |
-| `assess` | is this posting worth applying to | `assess` is not yet built in this repo |
+| `assess` | is this posting worth applying to | live — `modes/assess.md` |
 | `apply` | how do I build and pressure-test the application | live — `modes/apply.md` |
 | `interview` | how do I answer, and what did I get wrong | `interview` is not yet built in this repo |
 
@@ -479,6 +479,13 @@ a fabrication the candidate then repeats back), and the shortlist's `why_matched
 | Page count | `scripts/check_pages.py` | a PDF longer than the market's table allows; a letter over one page; an unreadable PDF |
 | Word limits | `scripts/check_word_limits.py` | a supporting-statement criterion over its stated limit, empty, or with no limit recorded |
 | Apply completion | `scripts/check_apply.py` | a missing receipt, an unclassified stop, a missing brief |
+| Evidence blocks | `scripts/evidence_blocks.py` | the posting and CV cut into addressable `JD-nnn` / `CV-nnn`; the only chunker |
+| Evidence refs | `scripts/check_evidence_refs.py` | refs that resolve to no block; block ids left in reader-facing prose |
+| Prediction lint | `scripts/lint_no_prediction.py` | percentages, `n/m` scores, prediction vocabulary (EN + ZH) in anything rendered |
+| Contradictions | `scripts/consistency.py` | verdict vs effort, loose knockouts, gaps with no action, work-authorization conflicts — reports, never repairs |
+| Coverage counts | `scripts/count_coverage.py` | the only count-producing path; a hand-written second number cannot be reconciled |
+| Market tables | `scripts/check_conventions.py` | digits/percent in prose, source provenance, protected traits, duplicate ids, expired `review_by` (CI-hard) |
+| Assess | `scripts/check_assessment.py` | composes the six above and requires their receipts; disclaimer, disqualifier section, the 「那该怎么办」 half, verbatim conventions, stale-review banner |
 | Migration losslessness (CI only) | `scripts/check_skill_lossless.py` | a baseline line that exists nowhere in this tree |
 
 **No mode may claim success while `journal.jsonl` lacks a receipt for its gates.** A skipped script produces no output, and no output is exactly what a clean run looks like. `scripts/check_skill_lossless.py` is the one exception and is marked as such: it is a repo-level CI check with no workspace and no receipt, so requiring one would be requiring evidence that cannot exist.
@@ -528,6 +535,18 @@ In CI, not in a workspace (no receipt exists for these, by design):
 Every line above says what evidence it leaves, and the three headings differ for a
 reason: a checklist that promises a receipt where none can exist teaches its reader
 that one of its lines is decorative, and the reader cannot tell which one.
+
+In assess mode:
+- [ ] Assessing a posting? `modes/assess.md`, entered with `scripts/enter_mode.py`.
+- [ ] Rendering a market convention card? `references/market-conventions/README.md` is the
+      rule for what may be in one; the tables are `references/market-conventions/cn.yaml`,
+      `references/market-conventions/nl.yaml`, `references/market-conventions/de.yaml`,
+      `references/market-conventions/uk.yaml`, `references/market-conventions/us.yaml`.
+- [ ] Ran `scripts/evidence_blocks.py`, `scripts/count_coverage.py`,
+      `scripts/consistency.py`, `scripts/check_evidence_refs.py`,
+      `scripts/lint_no_prediction.py` and `scripts/check_assessment.py`, and quoted
+      `check_assessment`'s receipt? `scripts/check_conventions.py` runs in CI over all five
+      tables.
 
 Told the user:
 - [ ] All three verdicts and the ATS coverage line, verbatim, each round.
