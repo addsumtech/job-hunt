@@ -596,6 +596,14 @@ The per-platform trigger strings are data and live in
 in a reference file**, because the moment it needs to be applied is the moment
 nobody is going to go and look it up.
 
+**READ `references/source-policy.md` before the first live retrieval of any run**
+— before the first `opencli` adapter call — and again before agreeing to page
+further, to fetch more detail pages, or to work while the user is away. It is the
+ONE source standard: what is green, what is yellow-with-caps, and what is never
+done whatever the user asks. Its two round caps are enforced rather than
+suggested: `brief.yaml` must carry `max_rows_per_round` and `max_pages_per_site`,
+and `check_shortlist.py` fails the run with `CAP_MISSING` or `CAP_ABOVE_CEILING`.
+
 **READ `references/discovery-sources.md` when you are in discover mode and
 about to call an adapter other than the four in the table above** (upwork,
 nowcoder, 1point3acres, maimai, or any site added later). It carries that
