@@ -771,6 +771,24 @@ def find_latex_engine(cjk=False):
     return None
 
 
+def _engine_cmd(engine, tex_path, out_dir):
+    """argv to compile `tex_path` into `out_dir` with `engine`.
+
+    Dispatch on the BASENAME, never on the whole string: find_latex_engine
+    returns an absolute path when the engine is not on PATH (measured on this
+    machine: '/opt/homebrew/bin/tectonic'), and `engine == "tectonic"` is False
+    for it. That comparison shipped in render_letter.py and produced a
+    pdflatex-shaped argv handed to tectonic — every letter PDF failed while
+    cv.pdf built in the same run, with the whole test suite green.
+
+    One helper, both renderers. Two call sites cannot drift if there is one.
+    """
+    engine, tex_path, out_dir = str(engine), str(tex_path), str(out_dir)
+    if pathlib.Path(engine).stem == "tectonic":
+        return [engine, tex_path, "--outdir", out_dir]
+    return [engine, "-interaction=nonstopmode", "-output-directory", out_dir, tex_path]
+
+
 def _has_cjk(text):
     """True if text contains CJK / Hangul / Thai characters, which need a
     Unicode LaTeX engine (XeTeX/LuaTeX) and a CJK font rather than the default
@@ -989,11 +1007,7 @@ def render_pdf(profile, out_path):
                   file=sys.stderr)
         return False
 
-    if pathlib.Path(engine).name == "tectonic":
-        cmd = [engine, str(tex_path), "--outdir", str(out_path.parent)]
-    else:
-        cmd = [engine, "-interaction=nonstopmode", "-output-directory",
-               str(out_path.parent), str(tex_path)]
+    cmd = _engine_cmd(engine, tex_path, out_path.parent)
     try:
         subprocess.run(cmd, check=True, capture_output=True)
     except subprocess.CalledProcessError:

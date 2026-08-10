@@ -466,3 +466,48 @@ def test_has_cjk_detects_scripts():
     assert render_cv._has_cjk("ประสบการณ์") is True  # Thai
     assert render_cv._has_cjk("Berufserfahrung") is False
     assert render_cv._has_cjk("Café résumé") is False
+
+
+# ── engine argv: one helper, two renderers ────────────────────────────────
+
+def test_engine_cmd_dispatches_on_the_basename_not_the_whole_path():
+    """find_latex_engine returns an ABSOLUTE path (measured:
+    '/opt/homebrew/bin/tectonic'). Comparing the whole string to 'tectonic'
+    silently selects the pdflatex argv and the compile fails."""
+    assert render_cv._engine_cmd("/opt/homebrew/bin/tectonic", "/w/cv.tex", "/w") == \
+        ["/opt/homebrew/bin/tectonic", "/w/cv.tex", "--outdir", "/w"]
+
+
+def test_engine_cmd_bare_tectonic_name_is_unchanged():
+    assert render_cv._engine_cmd("tectonic", "/w/cv.tex", "/w") == \
+        ["tectonic", "/w/cv.tex", "--outdir", "/w"]
+
+
+def test_engine_cmd_non_tectonic_engines_get_the_latex_argv():
+    for engine in ("/usr/bin/pdflatex", "pdflatex", "/Library/TeX/texbin/xelatex"):
+        assert render_cv._engine_cmd(engine, "/w/cv.tex", "/w") == \
+            [engine, "-interaction=nonstopmode", "-output-directory", "/w", "/w/cv.tex"]
+
+
+def test_engine_cmd_accepts_path_objects():
+    cmd = render_cv._engine_cmd(pathlib.Path("/opt/homebrew/bin/tectonic"),
+                                pathlib.Path("/w/cv.tex"), pathlib.Path("/w"))
+    assert all(isinstance(x, str) for x in cmd)
+    assert cmd[2] == "--outdir"
+
+
+def test_cv_pdf_invokes_tectonic_with_the_tectonic_argv(tmp_path, monkeypatch):
+    engine = "/opt/homebrew/bin/tectonic"
+    monkeypatch.setattr(render_cv, "find_latex_engine", lambda cjk=False: engine)
+    seen = {}
+
+    def fake_run(cmd, **kw):
+        seen["cmd"] = cmd
+        class R:
+            returncode = 0
+        return R()
+
+    monkeypatch.setattr(render_cv.subprocess, "run", fake_run)
+    out = tmp_path / "cv.pdf"
+    render_cv.render_pdf({"meta": {"name": "Z"}}, out)
+    assert seen["cmd"] == [engine, str(tmp_path / "cv.tex"), "--outdir", str(tmp_path)]

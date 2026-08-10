@@ -50,3 +50,31 @@ def test_letter_cjk_warns_and_degrades(tmp_path, capsys):
     assert render_letter.render_pdf(data, out) is False
     assert (tmp_path / "letter.tex").exists()
     assert "CJK" in capsys.readouterr().err
+
+
+def test_letter_pdf_uses_the_tectonic_argv_for_an_absolute_engine_path(tmp_path, monkeypatch):
+    """The bug this file shipped with: render_letter compared the engine to the
+    bare string 'tectonic' while find_latex_engine returns an absolute path, so
+    every letter PDF was compiled with pdflatex flags and failed — in the same
+    run where cv.pdf built fine, with all 51 tests green."""
+    engine = "/opt/homebrew/bin/tectonic"
+    monkeypatch.setattr(render_letter.render_cv, "find_latex_engine", lambda: engine)
+    seen = {}
+
+    def fake_run(cmd, **kw):
+        seen["cmd"] = cmd
+        class R:
+            returncode = 0
+        return R()
+
+    monkeypatch.setattr(render_letter.subprocess, "run", fake_run)
+    data = render_letter.load(FIXTURES / "sample_letter.yaml")
+    out = tmp_path / "letter.pdf"
+    assert render_letter.render_pdf(data, out) is True
+    assert seen["cmd"] == [engine, str(tmp_path / "letter.tex"), "--outdir", str(tmp_path)]
+
+
+def test_letter_and_cv_build_the_same_argv_for_the_same_engine():
+    """The two renderers cannot drift again: there is one helper."""
+    import render_cv
+    assert render_letter.render_cv._engine_cmd is render_cv._engine_cmd

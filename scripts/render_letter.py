@@ -6,6 +6,7 @@ Usage:
 """
 import argparse
 import pathlib
+import subprocess
 import sys
 
 import yaml
@@ -97,12 +98,7 @@ def render_pdf(d, out_path):
     if engine is None:
         print(f"WARNING: no LaTeX engine found. Wrote {tex_path}.", file=sys.stderr)
         return False
-    import subprocess
-    if engine == "tectonic":
-        cmd = [engine, str(tex_path), "--outdir", str(out_path.parent)]
-    else:
-        cmd = [engine, "-interaction=nonstopmode", "-output-directory",
-               str(out_path.parent), str(tex_path)]
+    cmd = render_cv._engine_cmd(engine, tex_path, out_path.parent)
     try:
         subprocess.run(cmd, check=True, capture_output=True)
     except subprocess.CalledProcessError:
