@@ -1657,7 +1657,7 @@ off within a week, and then it is not there on the run that mattered.
   The mode file already states each of these rules, and the model already follows them
   most of the time. That is exactly the problem this file exists for: a rule obeyed most
   of the time still ships the defect, and this one ships it invisibly. Nothing about a
-  strong_apply priced at three days looks broken on screen -- it looks like an assessment.
+  top verdict priced at three days looks broken on screen -- it looks like an assessment.
   The reader has no way to know the two halves were produced by a model contradicting
   itself, so they average them, and the average is not a judgement anyone made.
 
