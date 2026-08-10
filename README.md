@@ -30,18 +30,17 @@ Without a LaTeX engine, Markdown and .docx outputs still work normally. The rend
 
 ---
 
-## Skill flow
+## How it runs
 
-The skill executes these 8 steps (full detail in `SKILL.md`):
+One pipeline, in one place. `SKILL.md` holds the rules that must be in context on
+every run — the honesty rule, the NOT-ALLOWED table, the claim-provenance
+checkpoint, the gate table, the self-check. `modes/apply.md` holds the apply
+pipeline itself and is loaded unconditionally on entering the mode, with its
+content hash written to the workspace journal so that "it was loaded" is a fact
+rather than a hope.
 
-1. **Interview** — ask up to 4 questions: CV source, target market/language, output formats, motivation letter.
-2. **CV acquisition** — parse an existing CV or build one from scratch into `profile.yaml`.
-3. **Job posting** — fetch and extract structured requirements (must-haves, keywords, tone, red flags).
-4. **Gap analysis** — AMPLIFY / REFRAME / KEYWORD-INSERT / HONEST-GAPS table against the posting.
-5. **Tailor CV** — write a tailored copy; render in requested formats.
-6. **Motivation letter** — draft `letter.yaml` and render if requested.
-7. **Hiring-pipeline review loop** — dispatch three fresh judges in parallel each round (ATS machine lens → Recruiter/HR fast human screen → Hiring Manager deep human lens); iterate until **all three** `PASS` or 3 rounds.
-8. **Finalize** — list output paths, summarize changes, note remaining gaps, confirm the master profile is saved.
+A second copy of the pipeline was here until 2026-08-09 and had already drifted —
+it listed eight steps and omitted the interview-readiness brief. Read `SKILL.md`.
 
 ---
 
@@ -60,10 +59,14 @@ python scripts/render_letter.py LETTER.yaml --format md|docx|pdf --out OUTPUT_PA
 ## Layout
 
 ```
-job-application/
-├── SKILL.md                        # Orchestrator instructions
+job-hunt/
+├── SKILL.md                        # Orchestrator instructions — layer 1, always in context
 ├── README.md
 ├── requirements.txt
+├── Makefile                        # make check = tests + losslessness + conventions
+├── .github/workflows/checks.yml    # the same three checks, for whenever this repo gains a remote
+├── modes/
+│   └── apply.md                    # Layer 1.5 — the apply pipeline, loaded on mode entry
 ├── references/
 │   ├── cv-craft.md                 # CV writing conventions (markets, links, bullets, ordering)
 │   ├── gap-analysis.md             # Gap analysis + tailoring methodology
@@ -79,18 +82,65 @@ job-application/
 │   ├── recruiter-screener.md       # Judge 2 of 3 — fast human screen (skim/logistics)
 │   └── hiring-manager.md           # Judge 3 of 3 — deep human lens (fit/credibility)
 ├── assets/
-│   ├── profile.example.yaml        # Canonical profile schema
-│   ├── cv/template.tex             # LaTeX CV template
-│   └── letter/template.tex         # LaTeX letter template
+│   └── profile.example.yaml        # Canonical profile schema
+├── docs/                           # spec, plans, research — outside the skill corpus
 └── scripts/
+    ├── journal.py                  # gate receipts in journal.jsonl (library)
+    ├── paths.py                    # the one definition of the workspace shape (library)
+    ├── vocab.py                    # every closed vocabulary in the skill (library)
+    ├── rounds.py                   # judge-round-<n>.json read/merge (library)
+    ├── enter_mode.py               # mode entry + the mode file's content hash
+    ├── check_personal_data.py      # Cluster-1 interlock
+    ├── check_claims.py             # claim provenance + master-profile immutability
+    ├── check_render_freshness.py   # the judges read the files still on disk
+    ├── parse_verdicts.py           # PASS/REJECT parsing, fail-closed on AMBIGUOUS
+    ├── lint_cv.py                  # clichés, weak openers, bullet length, repeated verbs
+    ├── check_letter.py             # letter body constraints
+    ├── check_pages.py              # page count of the artifact actually submitted
+    ├── check_word_limits.py        # supporting-statement per-criterion word limits
+    ├── check_apply.py              # the composing gate: every receipt present
+    ├── check_skill_lossless.py     # CI only — the migration moved content, not deleted it
+    ├── lossless-allowlist.json     # deliberate deletions, each with a written reason
     ├── render_cv.py
     ├── render_letter.py
     ├── render_rirekisho.py         # Japanese 履歴書 form renderer
     └── tests/
         ├── fixtures/
-        ├── test_render_cv.py
-        ├── test_render_letter.py
-        └── test_render_rirekisho.py
+        ├── required_inline.json    # layer-1 rules that must stay inline, each with its why
+        └── test_*.py               # one module per script above
+```
+
+### A workspace
+
+Everything a single application produces lives in one directory whose **shape is
+load-bearing**: the "resume an unfinished application" lookup finds a prior run by
+that shape, so a run that invents its own layout orphans the previous workspace and
+silently re-interviews the user from scratch. `scripts/paths.py` is the only place
+it is defined.
+
+```
+~/.claude/job-profiles/<name>/
+  profile.yaml                 master profile · never mutated by any mode
+  search-preferences.yaml      target market/city/level/languages (written by discover)
+  answer-bank.md               the one artifact that accumulates across applications
+
+  applications/<company>-<role>-<YYYY-MM-DD>/
+    posting.yaml               extracted requirements
+    posting-source.txt         raw capture · never edited
+    cv-source.txt              raw CV text the assessment was cut from (assess mode)
+    evidence-blocks.json       derived · never hand-edited
+    fit-assessment.{yaml,md}
+    coverage.json              the single counting path (assess mode)
+    claims.yaml                append-only · a withdrawal is marked `retracted`, not deleted
+    master-fingerprint.json    sha256 + mtime of profile.yaml at mode entry, so a
+                               mutated master is detectable rather than discovered
+                               on the NEXT application
+    tailored-profile.yaml
+    cv.{md,docx,pdf,tex} · letter.* · supporting-statement.md
+    judge-round-<n>.json       dispatch hashes + the three parsed verdicts
+    interview-brief.md
+    mock/                      transcripts, assessments, question log (interview mode)
+    journal.jsonl              every gate receipt · the evidence a gate actually ran
 ```
 
 ---
@@ -101,4 +151,5 @@ job-application/
 cd scripts && python -m pytest tests/ -v
 ```
 
-Expected: 41 tests, all passing.
+Everything must pass. `make check` additionally runs the migration losslessness
+check and the market-convention lint.
