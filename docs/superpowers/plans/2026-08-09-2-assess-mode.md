@@ -38,14 +38,18 @@ These are copied verbatim from the shared contract. Do not rename, re-sign, or r
   def sha256_file(path: pathlib.Path) -> str
   def read_receipts(workspace: pathlib.Path, gate: str | None = None) -> list[dict]
   ```
-- `scripts/paths.py` is written in **Plan 1**. `PROFILES_ROOT = pathlib.Path.home() / ".claude" / "job-profiles"`; `profile_dir(name)`, `master_profile(name)`, `search_prefs(name)`, `answer_bank(name)`, `search_dir(name, slug)`, `workspace(name, company, role, date)`.
-  Anything that resolves a profile, workspace, answer-bank or search path imports it and calls
-  it — no `.parents[n]` walk, no string join. Every script in this plan is handed `--workspace`
-  explicitly and so resolves no profile path itself; `modes/assess.md` calls
+- `scripts/paths.py` is written in **Plan 1**. `PROFILES_ROOT = pathlib.Path.home() / ".claude" / "job-profiles"`; `SKILL_ROOT`; `profile_dir(name)`, `master_profile(name)`, `search_prefs(name)`, `answer_bank(name)`, `search_dir(name, slug)`, `workspace(name, company, role, date)`, `mode_file(mode, root=None)`, `lossless_allowlist(root=None)`.
+  Anything that resolves a profile, workspace, answer-bank, mode-file or search path imports it
+  and calls it — no `.parents[n]` walk, no string join. Every script in this plan is handed
+  `--workspace` explicitly and so resolves no profile path itself; `modes/assess.md` calls
   `paths.workspace(...)` to build the directory it works in. The one skill-tree-relative path
-  this plan needs (`references/market-conventions/`) is resolved **once**, as
-  `check_conventions.SKILL_ROOT`, and imported from there by `check_assessment.py` rather than
-  re-derived.
+  this plan adds (`references/market-conventions/`) is built **once**, as
+  `check_conventions.CONVENTIONS_DIR = paths.SKILL_ROOT / "references" / "market-conventions"`,
+  and imported from there by `check_assessment.py` rather than re-derived.
+- `scripts/enter_mode.py` is written in **Plan 1**: `MODES = ("discover", "assess", "apply",
+  "interview")`, `latest_mode_entry(workspace, mode) -> dict | None`, and a CLI that appends a
+  `mode_entry` record carrying `mode_file_sha256`. The mode file's path comes from
+  `paths.mode_file(mode, root)` — `enter_mode` has no `mode_file` of its own, so do not call one.
 - `scripts/vocab.py` is written in **Plan 1** and holds every closed set this skill uses:
   `VERDICTS`, `REFUSAL`, `VERDICT_ZH`, `MARKET_KEYS`, `NO_MARKET`, `LEVELS`, `SCREENING`,
   `MATCH`, `RECENCY`, `EFFORT`, `BANDS`, `CONTRADICTED`, `DEFECT_TAGS`. **No script in this
@@ -75,6 +79,23 @@ These are copied verbatim from the shared contract. Do not rename, re-sign, or r
   every clean run, `--check-only` or not. Plan 1's `check_apply.PASSING_VERDICTS` is
   `("pass", "recorded")`, so any string outside this set reads downstream as a failure.
   `"reported"` and `"produced"` are not used anywhere in this plan.
+- **Mode entry is step 0 of `modes/assess.md`, and half of the layer-1.5 backstop.**
+  `python3 scripts/enter_mode.py --workspace <ws> --mode assess` (Plan 1's script) writes a
+  `mode_entry` record carrying `modes/assess.md`'s content hash. `check_assessment.py`
+  mirrors `check_apply.py`'s two findings — `NO_MODE_ENTRY` when the record is absent,
+  `MODE_FILE_CHANGED` when the hash no longer matches the file on disk. Without this the
+  mode file is an ordinary reference that nothing reports skipping, which is the exact
+  silent-layering regression this skill's owner has already been bitten by.
+- **`posting.yaml`'s complete field list — twelve names, and this is the only list.** Plan 1
+  writes the identical twelve into `SKILL.md`'s extraction field table; `modes/assess.md`
+  §3 reproduces them byte-for-byte:
+  `role_title, company, seniority, location, must_haves, nice_to_haves, responsibilities,
+  keywords, company_values_tone, red_flags, salary_range, application_type`.
+  `company` is the exact public employer name — Plan 1's `check_letter.py` hard-fails with
+  `NO_COMPANY_IN_POSTING` without it, so every apply run downstream of an assess run breaks
+  if assess omits it. `location` is a **scalar string** (the posting's own location text),
+  not a mapping. There is **no `language` field**: the CV's language lives in
+  `meta.language` on the profile, and a second copy here is a second thing to disagree with.
 - **Testing discipline (non-negotiable):** every check's tests must pin the QUIET case as hard as the firing case. A check that cries wolf on ordinary output is worse than no check, because the reader learns to skip the line and it stops working on the run that mattered. A test that only imports a module proves the button exists, not that pressing it does anything.
 
 ### The `fit-assessment.yaml` schema (authoritative copy — Task 12 writes this into `modes/assess.md`)
@@ -133,17 +154,20 @@ Rules that bind every consumer of this file:
 | `scripts/count_coverage.py` | The ONLY count-producing path. Computes and renders the countable-facts block. |
 | `scripts/check_conventions.py` | The market-table lint: digit/percent ban, source provenance, protected traits, duplicate ids, expired `review_by`, en/zh symmetry, `unverified` discipline. Also the table loader. |
 | `scripts/check_assessment.py` | The assess-mode gate. Composes the five checks above and adds the assessment-only rules. |
-| `scripts/tests/conftest.py` | Puts `scripts/` on `sys.path` so tests can `import evidence_blocks`. |
+| `scripts/tests/conftest.py` | Puts `scripts/` on `sys.path` so tests can `import evidence_blocks`. Created-if-absent — Plan 3 creates-or-appends the same file. |
 | `scripts/tests/test_*.py` | One test module per script. Each pins the quiet case as hard as the firing case. |
 | `references/market-conventions/README.md` | The rules for adding an entry. This file **is** `check_conventions.py`'s spec. |
 | `references/market-conventions/{cn,nl,de,uk,us}.yaml` | The five hand-written tables. Rendered verbatim, never restated by the model. |
 | `modes/assess.md` | Layer 1.5. Defines the `fit-assessment.yaml` row schema, the fetch-integrity thresholds, the complete `posting.yaml` field list, the refusal floor, and the "what to do instead" half. |
 | `docs/superpowers/research/2026-08-09/markets.json` | **Already committed** (`ac404fb`). The sole source for all 38 convention entries. This plan reads it; it does not copy it. |
 | `docs/superpowers/research/2026-08-09/review-{cn,nl_weu,de,us_uk}.md` | Derived in Task 6 Step 1 from `markets.json`'s `review` field, so the four adversarial reviews are readable as prose beside it. |
-| `SKILL.md` | Written by Plan 1. Task 14 rewrites its FIT SNAPSHOT disclaimer; Task 15 extends its gate table and self-check. |
+| `SKILL.md` | Written by Plan 1. Task 14 rewrites its FIT SNAPSHOT disclaimer sentence; Task 15 extends its gate table and self-check and retracts "assess is not yet built". |
 | `references/gap-analysis.md` | Migrated by Plan 1. Task 14 rewrites its FIT SNAPSHOT disclaimer, the spec's one flagged rewrite. |
-| `scripts/lossless-allowlist.json` | Created by Plan 1. Task 14 records the flagged rewrite in it by name. |
+| `scripts/lossless-allowlist.json` | Created by Plan 1. Task 14 records the flagged rewrite in it by name, keyed on the retired line's hash. |
+| `scripts/tests/required_inline.json` | Written by Plan 1. Task 14 re-points the FIT SNAPSHOT anchor at the rewritten wording. |
 | `scripts/tests/test_skill_structure.py` | Written by Plan 1. Task 15 extends its library-only skip set. |
+| `scripts/enter_mode.py` | Written by Plan 1. `modes/assess.md` step 0 runs it; `check_assessment.py` requires its record. |
+| `scripts/vocab.py` | Written by Plan 1. Every closed set in this plan is imported from it. |
 | `requirements.txt` | Created by Plan 1. This plan only reads it. |
 
 ---
@@ -290,6 +314,9 @@ Rules that bind every consumer of this file:
       receipts = [json.loads(line) for line in
                   (tmp_path / "journal.jsonl").read_text(encoding="utf-8").splitlines()]
       assert [r["gate"] for r in receipts] == ["evidence_blocks"]
+      # "recorded", not "produced": Plan 1's check_apply.PASSING_VERDICTS is
+      # ("pass", "recorded"), so any other string reads downstream as a failure.
+      assert receipts[0]["verdict"] == "recorded"
 
 
   def test_main_exits_two_and_still_leaves_exactly_one_receipt(tmp_path, capsys):
@@ -482,10 +509,11 @@ Rules that bind every consumer of this file:
       cv_path = args.cv or workspace / "cv-source.txt"
       out_path = args.out or workspace / "evidence-blocks.json"
 
+      if not workspace.is_dir():
+          return cannot_run(workspace, f"workspace {workspace} does not exist")
       for label, path in (("posting-source.txt", jd_path), ("cv source", cv_path)):
           if not path.exists():
-              print(f"cannot run: {label} not found at {path}", file=sys.stderr)
-              return 2
+              return cannot_run(workspace, f"{label} not found at {path}")
 
       blocks = build_blocks(read_source(jd_path), "JD", "jd")
       blocks += build_blocks(read_source(cv_path), "CV", "cv")
@@ -500,9 +528,9 @@ Rules that bind every consumer of this file:
       out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
                           encoding="utf-8")
       journal.receipt(
-          workspace, "evidence_blocks",
+          workspace, GATE,
           {"jd": payload["sources"]["jd"]["sha256"], "cv": payload["sources"]["cv"]["sha256"]},
-          "produced", [f"BLOCKS: {len(blocks)}"])
+          "recorded", [f"BLOCKS: {len(blocks)}"])
       print(f"BLOCKS: {len(blocks)} written to {out_path}")
       return 0
 
@@ -514,7 +542,7 @@ Rules that bind every consumer of this file:
 - [ ] **Step 4: Run test to verify it passes**
 
   Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests/test_evidence_blocks.py -q`
-  Expected: PASS (11 passed)
+  Expected: PASS (13 passed)
 
 - [ ] **Step 5: Commit**
   ```
@@ -542,7 +570,7 @@ Rules that bind every consumer of this file:
 
 **Why this shape.** Rejecting an assessment because its evidence list is empty punishes the honest shape, while an *invented* ref lands in exactly that same empty array and sails through. So both land on the same place: the ref is dropped and listed, and the assessment survives. That is a plausibility bound, not a proof.
 
-The two modes exist because the drop is the mechanism working, not the assessment failing. Default mode rewrites and exits 0. `--check-only` makes no writes and exits 1 if any drop would be needed — that is what `check_assessment.py` calls, so the shipped file is provably clean by the time anyone reads it.
+The two modes exist because the drop is the mechanism working, not the assessment failing. Default mode rewrites and exits 0. `--check-only` makes no writes and exits 1 if any drop would be needed — that is the form `check_assessment.py` reproduces in-process (it imports `drop_unresolvable_refs` and `strip_block_ids` and runs them over a deep copy, so it never writes either), so the shipped file is provably clean by the time anyone reads it.
 
 **Where ids may legitimately appear.** The spec requires every counted requirement to be printed *with* its evidence reference so the denominator is auditable. So a markdown **table row** (a line whose stripped form starts with `|`) is exempt from stripping — that is the audit surface. Everywhere else — headlines, rationale, the strategy section, the 30/60/90 table's prose cells, the market-convention standing sentence — a block id is noise to a reader who never sees the block list, and gets removed. Name the thing itself: "the posting's sponsorship line", "your 2023 C++ port".
 
@@ -665,17 +693,43 @@ The two modes exist because the drop is the mechanism working, not the assessmen
       assert "NO_BLOCKS:" in capsys.readouterr().out
 
 
-  def test_missing_input_exits_two(tmp_path, capsys):
+  def test_missing_input_exits_two_and_still_leaves_exactly_one_receipt(tmp_path, capsys):
+      # "Could not run" is the case where silence looks most like a clean run.
       assert cer.main(["--workspace", str(tmp_path)]) == 2
       assert "evidence-blocks.json" in capsys.readouterr().err
+      receipts = [json.loads(line) for line in
+                  (tmp_path / "journal.jsonl").read_text(encoding="utf-8").splitlines()]
+      assert len(receipts) == 1
+      assert receipts[0]["gate"] == "check_evidence_refs"
+      assert receipts[0]["verdict"] == "could_not_run"
 
 
-  def test_a_receipt_is_written_exactly_once(tmp_path):
+  def test_a_workspace_that_does_not_exist_writes_no_journal(tmp_path, capsys):
+      missing = tmp_path / "nope"
+      assert cer.main(["--workspace", str(missing)]) == 2
+      assert not missing.exists()
+      assert "does not exist" in capsys.readouterr().err
+
+
+  def test_a_receipt_is_written_exactly_once_and_says_recorded(tmp_path):
       ws = _workspace(tmp_path)
       cer.main(["--workspace", str(ws)])
       lines = (ws / "journal.jsonl").read_text(encoding="utf-8").splitlines()
       assert len(lines) == 1
       assert json.loads(lines[0])["gate"] == "check_evidence_refs"
+      assert json.loads(lines[0])["verdict"] == "recorded"
+
+
+  def test_the_same_clean_state_never_produces_two_verdicts(tmp_path):
+      # A clean run is a clean run. check_only or not, the receipt says "recorded";
+      # two verdicts for one state is how a downstream PASSING_VERDICTS check starts
+      # reading a success as a failure.
+      ws = _workspace(tmp_path)
+      cer.main(["--workspace", str(ws)])
+      cer.main(["--workspace", str(ws), "--check-only"])
+      verdicts = [json.loads(line)["verdict"] for line in
+                  (ws / "journal.jsonl").read_text(encoding="utf-8").splitlines()]
+      assert verdicts == ["recorded", "recorded"]
   ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -702,6 +756,15 @@ The two modes exist because the drop is the mechanism working, not the assessmen
   unaffected -- refs travel in the evidence lists, and in the requirement table, which is
   the one place a reader is meant to see them because it is what makes the denominator
   auditable.
+
+  Exit 2 still writes a receipt, verdict "could_not_run". The single exception is a
+  workspace directory that does not exist: there is nothing to append to, and creating it
+  would leave a journal for a run that never happened.
+
+  A clean run's verdict is "recorded" whether or not --check-only was passed. The same
+  state must never produce two different verdicts: Plan 1's check_apply.PASSING_VERDICTS
+  is ("pass", "recorded"), so a second spelling of "this was fine" reads downstream as a
+  failure.
   """
   from __future__ import annotations
 
@@ -716,9 +779,19 @@ The two modes exist because the drop is the mechanism working, not the assessmen
   import journal  # noqa: E402
   import yaml  # noqa: E402
 
+  GATE = "check_evidence_refs"
+
   REF_RE = re.compile(r"\b(?:CV|JD)-\d{3}\b")
   _BRACKETED = re.compile(
       r"[\(（\[【]\s*(?:CV|JD)-\d{3}(?:\s*[,、;；]\s*(?:CV|JD)-\d{3})*\s*[\)）\]】]")
+
+
+  def cannot_run(workspace: pathlib.Path, reason: str) -> int:
+      """Exactly one receipt on the could-not-run path, then exit 2."""
+      print(f"cannot run: {reason}", file=sys.stderr)
+      if workspace.is_dir():
+          journal.receipt(workspace, GATE, {}, "could_not_run", [f"NO_INPUT: {reason}"])
+      return 2
 
 
   def load_block_ids(path: pathlib.Path) -> set[str]:
@@ -790,10 +863,11 @@ The two modes exist because the drop is the mechanism working, not the assessmen
       blocks_path = workspace / "evidence-blocks.json"
       yaml_path = workspace / "fit-assessment.yaml"
       md_path = workspace / "fit-assessment.md"
+      if not workspace.is_dir():
+          return cannot_run(workspace, f"workspace {workspace} does not exist")
       for path in (blocks_path, yaml_path):
           if not path.exists():
-              print(f"cannot run: {path.name} not found at {path}", file=sys.stderr)
-              return 2
+              return cannot_run(workspace, f"{path.name} not found at {path}")
 
       ids = load_block_ids(blocks_path)
       findings: list[str] = []
@@ -822,10 +896,10 @@ The two modes exist because the drop is the mechanism working, not the assessmen
       for finding in findings:
           print(finding)
       journal.receipt(
-          workspace, "check_evidence_refs",
+          workspace, GATE,
           {"evidence-blocks.json": journal.sha256_file(blocks_path),
            "fit-assessment.yaml": journal.sha256_file(yaml_path)},
-          "fail" if failed else ("pass" if args.check_only else "reported"),
+          "fail" if failed else "recorded",
           findings)
       return 1 if failed else 0
 
@@ -837,7 +911,7 @@ The two modes exist because the drop is the mechanism working, not the assessmen
 - [ ] **Step 4: Run test to verify it passes**
 
   Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests/test_check_evidence_refs.py -q`
-  Expected: PASS (11 passed)
+  Expected: PASS (13 passed)
 
 - [ ] **Step 5: Commit**
   ```
@@ -855,19 +929,26 @@ The two modes exist because the drop is the mechanism working, not the assessmen
 - Test: `scripts/tests/test_lint_no_prediction.py`
 
 **Interfaces:**
-- Consumes: `journal.receipt(...)`, `journal.sha256_file(path)`.
+- Consumes: `journal.receipt(...)`, `journal.sha256_file(path)`; `vocab.VERDICT_ZH`, `vocab.VERDICTS`, `vocab.REFUSAL`.
 - Produces:
-  - `VERDICT_LABELS: tuple[str, ...]` — every zh and en verdict token, masked before scanning.
-  - `mask_exempt_spans(line: str) -> str` — same-length masking of URLs and verdict labels.
+  - `VERDICT_LABELS: tuple[str, ...]` — every zh and en verdict token, **derived from `scripts/vocab.py`, never re-typed**, masked before scanning.
+  - `ROADMAP_HORIZON` — the compiled `30/60/90` planning-horizon pattern, masked before scanning.
+  - `mask_exempt_spans(line: str) -> str` — same-length masking of URLs, verdict labels and the roadmap horizon.
+  - `mock_block_lines(lines: list[str]) -> set[int]` — 0-based line numbers inside a `MOCK-*-V1` … `END-MOCK-*-V1` block.
+  - `mask_mock_quote(line: str) -> str` — same-length masking of a `quote=` field's payload.
   - `blockquote_allowlist(lines: list[str]) -> set[int]` — 0-based line numbers exempted by a cited published employer rubric.
   - `scan_text(text: str, label: str) -> list[str]` — findings, each prefixed `PERCENT:`, `SCORE_PATTERN:` or `PREDICTION_WORD:`.
   - `target_files(workspace: pathlib.Path) -> list[pathlib.Path]`
   - `main(argv=None) -> int`
 
-**The two traps this lint has to survive.**
+**The four traps this lint has to survive.** Three of them were reproduced against output
+this skill's own files *mandate*. A gate that fires on those is a gate someone switches
+off within a week, and then it is not there on the run that mattered.
 
 1. **The verdict vocabulary contains a banned word.** The human-facing zh label for `likely_screen_out` is 大概率被筛掉, which literally contains 概率. A naive scan fires on every assessment that reaches that verdict — the most common one this skill will ever print. So every verdict label is masked out *before* scanning. A bare 大概率 elsewhere still fires; only the exact label is exempt.
 2. **URLs carry digits and percent-encoding.** `https://www.gov.uk/2026/08/09/foo` matches the `n/m` score pattern, and `%20` matches the percent ban. A URL is an identifier, not a claim — the same reasoning that exempts a citation's title in the market tables. URLs are masked before scanning.
+3. **`30/60/90` is a planning horizon, not a score.** `modes/assess.md` §10 *requires* a 30/60/90 table on exactly the two verdicts (大概率被筛掉 / 硬性阻断) where spec §5.2 step 10 says the "what to do instead" half is the whole value. `_SCORE` matches the `30/60` inside it, so without a mask this gate fails every assessment that obeys its own mode file. `ROADMAP_HORIZON` masks that one token and nothing else; `8/11` still fires.
+4. **An honest transcript may contain a number the candidate said out loud.** Plan 4's mock-interview blocks carry `quote=` fields holding the candidate's verbatim words, and "it came out roughly 40% faster" is precisely the over-claim the provenance assessor exists to tag. `target_files()` globs `mock/assessment-*.md`, so without an exemption the honest transcript fails and the only way through is to launder the speech — Plan 4's own author calls writing "40 percent" instead **a dodge, not a fix**. So inside a `MOCK-*-V1` block, and only there, the payload after `quote=` is masked. The assessor's own prose on the same line, and every line outside the block, is scanned exactly as before.
 
 **The one allowlist.** Where an employer publishes its own rubric (UK Civil Service Success Profiles named in the advert, an NHS values framework, a university person specification), the skill may walk the candidate through *that* scale — in the employer's own wording, with the source named, as a list of what the panel was asked to look for. Quoting an employer's scale is reporting; treating it as a conclusion is inventing. Mechanically: a contiguous run of blockquote lines is exempt when the run's own last line, or one of the two lines after it, is an attribution line carrying an `https://` URL.
 
@@ -911,6 +992,33 @@ The two modes exist because the drop is the mechanism working, not the assessmen
   > — Civil Service, Success Profiles: Behaviours, https://www.gov.uk/government/publications/success-profiles
 
   That is the list the panel was asked to look for. It is not a statement about you.
+  """
+
+  # The exact shape modes/assess.md §10 mandates on 大概率被筛掉 / 硬性阻断.
+  OTHER_HALF = """## 那该怎么办
+
+  策略：`skill_sprint` 技能冲刺
+
+  ## 30/60/90 计划
+
+  | 目标 | 行动 | 验收标准 |
+  |---|---|---|
+  | 补上分布式训练 | 把单卡训练器移植到 torchrun | 仓库 README 里有两卡运行日志 |
+
+  ## 路线图
+
+  | 阶段 | 输出物 |
+  |---|---|
+  | 第一阶段 | 一份可复现的两卡训练日志 |
+  """
+
+  # The shape Plan 4's assessor emits. The candidate really said "40%"; the tag is
+  # the finding, and deleting the quote would delete the finding and keep the file.
+  MOCK_ASSESSMENT = """MOCK-PROVENANCE-V1
+  pass=provenance
+  FINDING: tag=OVER-CLAIM | ref=Q1 | quote=it came out roughly 40% faster end to end
+  FINDING: tag=UNSOURCED-FACT | ref=Q1 | quote=we benchmarked it on about 200 patient scans
+  END-MOCK-PROVENANCE-V1
   """
 
 
@@ -965,6 +1073,23 @@ The two modes exist because the drop is the mechanism working, not the assessmen
       assert lint.main(["--workspace", str(tmp_path)]) == 0
 
 
+  def test_the_mandated_30_60_90_table_is_not_a_score(tmp_path):
+      # modes/assess.md §10 REQUIRES this table on 大概率被筛掉 and 硬性阻断. A lint
+      # that fires on it fails every assessment that obeys its own mode file.
+      assert lint.scan_text("## 30/60/90 计划", "x") == []
+      assert lint.scan_text("Here is the 30 / 60 / 90 plan.", "x") == []
+      assert lint.scan_text(OTHER_HALF, "x") == []
+      _write(tmp_path, "fit-assessment.md", ORDINARY + "\n" + OTHER_HALF)
+      assert lint.main(["--workspace", str(tmp_path)]) == 0
+
+
+  def test_a_verbatim_candidate_quote_inside_a_mock_block_is_exempt(tmp_path):
+      # An honest transcript is the one place a number a HUMAN said is the evidence.
+      assert lint.scan_text(MOCK_ASSESSMENT, "x") == []
+      _write(tmp_path, "mock/assessment-1.md", MOCK_ASSESSMENT)
+      assert lint.main(["--workspace", str(tmp_path)]) == 0
+
+
   # ---------- the firing cases ----------
 
   def test_a_percentage_fires():
@@ -975,6 +1100,30 @@ The two modes exist because the drop is the mechanism working, not the assessmen
   def test_a_slash_score_fires():
       findings = lint.scan_text("You score 8/11 on the requirements.", "x")
       assert len(findings) == 1 and findings[0].startswith("SCORE_PATTERN:")
+
+
+  def test_the_roadmap_mask_is_that_one_token_and_nothing_wider():
+      # The exemption must not become a licence: a neighbouring score still fires,
+      # and a score on the same line as the horizon still fires.
+      assert lint.scan_text("30/60/91 is not the horizon", "x")
+      assert lint.scan_text("130/60/90", "x")
+      findings = lint.scan_text("## 30/60/90 计划 — 你目前 8/11", "x")
+      assert len(findings) == 1 and "8/11" in findings[0]
+
+
+  def test_the_mock_exemption_is_the_quote_payload_and_nothing_wider():
+      # The assessor's own prose is not a quote, and a quote= outside a block is not
+      # exempt -- otherwise the exemption is a lint-dodge anyone can type.
+      inside_prose = ("MOCK-PROVENANCE-V1\n"
+                      "NOTE: the candidate is a strong candidate | quote=she said so\n"
+                      "END-MOCK-PROVENANCE-V1\n")
+      assert any(f.startswith("PREDICTION_WORD:") for f in
+                 lint.scan_text(inside_prose, "x"))
+      loose = "FINDING: tag=OVER-CLAIM | quote=roughly 40% faster\n"
+      assert any(f.startswith("PERCENT:") for f in lint.scan_text(loose, "x"))
+      unterminated = ("MOCK-PROVENANCE-V1\n"
+                      "FINDING: tag=OVER-CLAIM | quote=roughly 40% faster\n")
+      assert any(f.startswith("PERCENT:") for f in lint.scan_text(unterminated, "x"))
 
 
   def test_english_prediction_vocabulary_fires():
@@ -1013,9 +1162,21 @@ The two modes exist because the drop is the mechanism working, not the assessmen
       assert surfaces == {"shortlist.md", "mock/assessment-1.md", "mock/cheatsheet.md"}
 
 
-  def test_no_target_files_exits_two(tmp_path, capsys):
+  def test_no_target_files_exits_two_and_still_leaves_exactly_one_receipt(tmp_path, capsys):
       assert lint.main(["--workspace", str(tmp_path)]) == 2
       assert "no rendered file" in capsys.readouterr().err
+      receipts = [json.loads(line) for line in
+                  (tmp_path / "journal.jsonl").read_text(encoding="utf-8").splitlines()]
+      assert len(receipts) == 1
+      assert receipts[0]["gate"] == "lint_no_prediction"
+      assert receipts[0]["verdict"] == "could_not_run"
+
+
+  def test_a_workspace_that_does_not_exist_writes_no_journal(tmp_path, capsys):
+      missing = tmp_path / "nope"
+      assert lint.main(["--workspace", str(missing)]) == 2
+      assert not missing.exists()
+      assert "does not exist" in capsys.readouterr().err
   ````
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1036,19 +1197,34 @@ The two modes exist because the drop is the mechanism working, not the assessmen
   conclusion is a word, the counts are printed with the evidence behind each row, and
   this lint keeps the made-up numbers out.
 
-  Two things are masked before any scan, and both matter:
+  Four things are masked before any scan, and every one of them was a live false
+  positive on output this skill's own files mandate:
 
   * The verdict labels. 大概率被筛掉 -- the human-facing label for likely_screen_out --
     literally contains 概率. Without masking, this lint fires on the most common verdict
     the skill prints, and a gate that cries wolf on ordinary output is one people switch
-    off. A bare 大概率 elsewhere still fires.
+    off. A bare 大概率 elsewhere still fires. The labels come from scripts/vocab.py and
+    are never re-typed here: a hand-copied second spelling would silently un-mask the
+    verdict it was copied from.
   * URLs. https://www.gov.uk/2026/08/09/x matches the n/m score pattern and %20 matches
     the percent ban. A URL is an identifier, not a claim -- the same reason a citation's
     title is exempt from the digit ban in the market tables.
+  * The 30/60/90 planning horizon. modes/assess.md §10 REQUIRES a 30/60/90 table on
+    exactly the two verdicts where the "what to do instead" half is the whole value, and
+    _SCORE matches the 30/60 inside it. One token is masked; 8/11 still fires.
+  * The payload of a `quote=` field, inside a MOCK-*-V1 block only. An interview
+    transcript is the one place in this skill where a number a HUMAN said out loud is the
+    evidence, and "roughly 40% faster" is exactly the over-claim the provenance assessor
+    is there to tag. Failing the file would force the transcript to be laundered, which
+    deletes the finding and keeps the file. The assessor's own prose on the same line,
+    and every line outside the block, is scanned as usual.
 
   The one allowlist: where an employer publishes its own rubric, the skill may walk the
   candidate through THAT scale, in the employer's wording, with the source named. Quoting
   an employer's scale is reporting. Treating it as a conclusion is inventing.
+
+  Exit 2 still writes a receipt, verdict "could_not_run", unless the workspace directory
+  itself is absent -- there is nothing to append to.
   """
   from __future__ import annotations
 
@@ -1060,14 +1236,24 @@ The two modes exist because the drop is the mechanism working, not the assessmen
   sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
   import journal  # noqa: E402
+  import vocab  # noqa: E402
 
-  VERDICT_LABELS = (
-      "强烈建议投", "值得投", "可以冲刺", "大概率被筛掉", "硬性阻断", "证据不足—不出结论",
-      "strong_apply", "worth_applying", "stretch", "likely_screen_out", "blocked",
-      "insufficient_evidence",
-  )
+  GATE = "lint_no_prediction"
+
+  # Derived, never re-typed. The zh labels and the banned-word list are two views of
+  # the same closed set -- 大概率被筛掉 contains 概率 -- so a second hand-written copy
+  # here would un-mask whichever label drifted. Longest first, so masking a short
+  # label can never leave the tail of a longer one behind.
+  VERDICT_LABELS = tuple(sorted(
+      tuple(vocab.VERDICT_ZH.values()) + tuple(vocab.VERDICTS) + (vocab.REFUSAL,),
+      key=len, reverse=True))
 
   _URL = re.compile(r"https?://\S+")
+  # A planning horizon, not a score. modes/assess.md §10 mandates the table.
+  ROADMAP_HORIZON = re.compile(r"(?<![0-9])30\s*/\s*60\s*/\s*90(?![0-9])")
+  _MOCK_OPEN = re.compile(r"^\s*MOCK-[A-Z]+-V1\s*$")
+  _MOCK_CLOSE = re.compile(r"^\s*END-MOCK-[A-Z]+-V1\s*$")
+  _QUOTE_FIELD = re.compile(r"quote=")
   _PERCENT = re.compile(r"%")
   _SCORE = re.compile(r"\b\d+\s*/\s*\d+\b")
   _WORDS = re.compile(
@@ -1082,12 +1268,46 @@ The two modes exist because the drop is the mechanism working, not the assessmen
 
 
   def mask_exempt_spans(line: str) -> str:
-      """Blank out URLs and verdict labels, preserving length so columns stay honest."""
+      """Blank out URLs, verdict labels and the roadmap horizon, preserving length so
+      the reported span still lines up with the original text."""
       masked = _URL.sub(lambda m: " " * len(m.group(0)), line)
+      masked = ROADMAP_HORIZON.sub(lambda m: " " * len(m.group(0)), masked)
       for label in VERDICT_LABELS:
           if label in masked:
               masked = masked.replace(label, " " * len(label))
       return masked
+
+
+  def mock_block_lines(lines: list[str]) -> set[int]:
+      """0-based indices of lines inside a closed MOCK-*-V1 block.
+
+      An unterminated block is NOT exempt. A block that never closes is a malformed
+      artifact, and treating it as an exemption would make "type the opening line" a
+      way to switch this lint off.
+      """
+      inside: set[int] = set()
+      opened_at: int | None = None
+      for index, line in enumerate(lines):
+          if opened_at is None:
+              if _MOCK_OPEN.match(line):
+                  opened_at = index
+          elif _MOCK_CLOSE.match(line):
+              inside.update(range(opened_at, index + 1))
+              opened_at = None
+      return inside
+
+
+  def mask_mock_quote(line: str) -> str:
+      """Blank the payload of a `quote=` field, preserving length.
+
+      `quote=` is last on the line and runs to its end, so everything after it is the
+      candidate's own words. Only the payload is masked -- the tag, the ref and any
+      prose before `quote=` are scanned exactly as before.
+      """
+      match = _QUOTE_FIELD.search(line)
+      if not match:
+          return line
+      return line[:match.end()] + " " * len(line[match.end():])
 
 
   def blockquote_allowlist(lines: list[str]) -> set[int]:
@@ -1110,17 +1330,27 @@ The two modes exist because the drop is the mechanism working, not the assessmen
   def scan_text(text: str, label: str) -> list[str]:
       lines = text.splitlines()
       exempt = blockquote_allowlist(lines)
+      in_mock = mock_block_lines(lines)
       findings: list[str] = []
       for number, line in enumerate(lines):
           if number in exempt:
               continue
-          masked = mask_exempt_spans(line)
+          masked = mask_exempt_spans(
+              mask_mock_quote(line) if number in in_mock else line)
           for code, pattern in CHECKS:
               for match in pattern.finditer(masked):
                   original = line[match.start():match.end()]
                   findings.append(f"{code}: {label}:{number + 1}: {original!r} "
                                   f"in {line.strip()!r}")
       return findings
+
+
+  def cannot_run(workspace: pathlib.Path, reason: str) -> int:
+      """Exactly one receipt on the could-not-run path, then exit 2."""
+      print(f"cannot run: {reason}", file=sys.stderr)
+      if workspace.is_dir():
+          journal.receipt(workspace, GATE, {}, "could_not_run", [f"NO_INPUT: {reason}"])
+      return 2
 
 
   def target_files(workspace: pathlib.Path) -> list[pathlib.Path]:
@@ -1141,10 +1371,12 @@ The two modes exist because the drop is the mechanism working, not the assessmen
       args = parser.parse_args(argv)
 
       workspace = args.workspace
+      if not workspace.is_dir():
+          return cannot_run(workspace, f"workspace {workspace} does not exist")
       files = list(args.files) if args.files else target_files(workspace)
       if not files:
-          print(f"cannot run: no rendered file to scan under {workspace}", file=sys.stderr)
-          return 2
+          return cannot_run(workspace,
+                            f"no rendered file to scan under {workspace}")
 
       findings: list[str] = []
       hashes: dict[str, str] = {}
@@ -1158,7 +1390,7 @@ The two modes exist because the drop is the mechanism working, not the assessmen
 
       for finding in findings:
           print(finding)
-      journal.receipt(workspace, "lint_no_prediction", hashes,
+      journal.receipt(workspace, GATE, hashes,
                       "fail" if findings else "pass", findings)
       return 1 if findings else 0
 
@@ -1170,7 +1402,7 @@ The two modes exist because the drop is the mechanism working, not the assessmen
 - [ ] **Step 4: Run test to verify it passes**
 
   Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests/test_lint_no_prediction.py -q`
-  Expected: PASS (14 passed)
+  Expected: PASS (20 passed)
 
 - [ ] **Step 5: Commit**
   ```
@@ -1381,12 +1613,31 @@ The two modes exist because the drop is the mechanism working, not the assessmen
       assert cons.main(["--workspace", str(tmp_path)]) == 0
       assert "NOTICE_VERDICT_EFFORT" in capsys.readouterr().out
       record = json.loads((tmp_path / "journal.jsonl").read_text(encoding="utf-8"))
-      assert record["gate"] == "consistency" and record["verdict"] == "reported"
+      assert record["gate"] == "consistency" and record["verdict"] == "recorded"
 
 
-  def test_the_cli_exits_two_without_an_assessment(tmp_path, capsys):
+  def test_the_cli_exits_two_and_still_leaves_exactly_one_receipt(tmp_path, capsys):
       assert cons.main(["--workspace", str(tmp_path)]) == 2
       assert "fit-assessment.yaml" in capsys.readouterr().err
+      receipts = [json.loads(line) for line in
+                  (tmp_path / "journal.jsonl").read_text(encoding="utf-8").splitlines()]
+      assert len(receipts) == 1
+      assert receipts[0]["gate"] == "consistency"
+      assert receipts[0]["verdict"] == "could_not_run"
+
+
+  def test_a_workspace_that_does_not_exist_writes_no_journal(tmp_path, capsys):
+      missing = tmp_path / "nope"
+      assert cons.main(["--workspace", str(missing)]) == 2
+      assert not missing.exists()
+      assert "does not exist" in capsys.readouterr().err
+
+
+  def test_the_conflict_efforts_are_members_of_the_shared_enum(tmp_path):
+      # CONFLICT_EFFORTS is a threshold, not a second copy of the effort vocabulary.
+      # If it ever stops being a subset, one of the two has drifted.
+      import vocab
+      assert set(cons.CONFLICT_EFFORTS) <= set(vocab.EFFORT)
   ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1416,6 +1667,11 @@ The two modes exist because the drop is the mechanism working, not the assessmen
   These are deliberately the checks that survive being wrong. Each fires on a countable
   fact, never on meaning, so a false positive costs the reader one line of caution and
   never suppresses a finding.
+
+  Exit 2 still writes a receipt, verdict "could_not_run", unless the workspace directory
+  itself is absent -- there is nothing to append to. A clean run's verdict is "recorded":
+  this script reports, it does not judge, and Plan 1's check_apply.PASSING_VERDICTS is
+  ("pass", "recorded").
   """
   from __future__ import annotations
 
@@ -1426,13 +1682,27 @@ The two modes exist because the drop is the mechanism working, not the assessmen
   sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
   import journal  # noqa: E402
+  import vocab  # noqa: E402
   import yaml  # noqa: E402
 
+  GATE = "consistency"
+
+  # A threshold over vocab.EFFORT, not a second copy of it. The assertion is what
+  # makes that claim checkable rather than a comment nobody reads.
   CONFLICT_EFFORTS = ("multi_day", "not_closable")
+  assert set(CONFLICT_EFFORTS) <= set(vocab.EFFORT)
   AUTH_CONDITION_TYPES = ("sponsorship", "work_authorization", "citizenship")
 
   NOTICE_CODES = ("NOTICE_VERDICT_EFFORT", "NOTICE_LOOSE_KNOCKOUTS", "NOTICE_GAP_ACTIONS",
                   "NOTICE_WORK_AUTH_CONFLICT", "NOTICE_WORK_AUTH_VERIFY")
+
+
+  def cannot_run(workspace: pathlib.Path, reason: str) -> int:
+      """Exactly one receipt on the could-not-run path, then exit 2."""
+      print(f"cannot run: {reason}", file=sys.stderr)
+      if workspace.is_dir():
+          journal.receipt(workspace, GATE, {}, "could_not_run", [f"NO_INPUT: {reason}"])
+      return 2
 
 
   def verdict_effort_conflict(assessment: dict | None) -> bool:
@@ -1593,17 +1863,20 @@ The two modes exist because the drop is the mechanism working, not the assessmen
       args = parser.parse_args(argv)
 
       path = args.workspace / "fit-assessment.yaml"
+      if not args.workspace.is_dir():
+          return cannot_run(args.workspace,
+                            f"workspace {args.workspace} does not exist")
       if not path.exists():
-          print(f"cannot run: fit-assessment.yaml not found at {path}", file=sys.stderr)
-          return 2
+          return cannot_run(args.workspace,
+                            f"fit-assessment.yaml not found at {path}")
 
       assessment = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
       findings = [f"{n['code']}: {n['text_en']}" for n in notices(assessment)]
       for finding in findings:
           print(finding)
-      journal.receipt(args.workspace, "consistency",
+      journal.receipt(args.workspace, GATE,
                       {"fit-assessment.yaml": journal.sha256_file(path)},
-                      "reported", findings)
+                      "recorded", findings)
       return 0
 
 
@@ -1614,7 +1887,7 @@ The two modes exist because the drop is the mechanism working, not the assessmen
 - [ ] **Step 4: Run test to verify it passes**
 
   Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests/test_consistency.py -q`
-  Expected: PASS (20 passed)
+  Expected: PASS (22 passed)
 
 - [ ] **Step 5: Commit**
   ```
@@ -1632,9 +1905,9 @@ The two modes exist because the drop is the mechanism working, not the assessmen
 - Test: `scripts/tests/test_count_coverage.py`
 
 **Interfaces:**
-- Consumes: `journal.receipt(...)`, `journal.sha256_file(path)`; the `fit-assessment.yaml` schema.
+- Consumes: `journal.receipt(...)`, `journal.sha256_file(path)`; `vocab.MATCH`, `vocab.RECENCY`, `vocab.VERDICT_ZH`, `vocab.REFUSAL`; the `fit-assessment.yaml` schema.
 - Produces:
-  - `LEVEL_DIRECTION_ZH`, `EFFORT_ZH`, `VERDICT_ZH` — the enum→label maps (also used by `modes/assess.md`).
+  - `LEVEL_DIRECTION_ZH`, `EFFORT_ZH` — the two enum→label maps this module owns. **`VERDICT_ZH` is imported from `vocab`, not re-declared**: a second copy of the verdict labels is a second thing to drift, and `lint_no_prediction.py` masks against the same map.
   - `coverage(rows: list[dict]) -> dict` — `{"must_total", "must_strong", "must_partial", "must_gap", "must_no_evidence", "resp_total", "resp_demonstrated", "invalid"}`; `invalid` is a list of finding strings.
   - `render_block(assessment: dict, counts: dict, lang: str = "zh") -> str` — the exact fenced-block body, no fence markers.
   - `main(argv=None) -> int` — prints the block, writes `<workspace>/coverage.json`.
@@ -1645,7 +1918,8 @@ The two modes exist because the drop is the mechanism working, not the assessmen
 - `must_strong` counts `match == "strong"` only. `partial` and `gap` are never merged into a covered number.
 - `match: "strong"` with `recency: "dated"` counts as **partial**, not strong. Evidence that is only dated satisfies the keyword and reads as rusty to a human.
 - `recency: "undated"` does **not** downgrade. A CV that omits dates is a formatting fact, not a staleness fact.
-- The invariant `must_strong + must_partial + must_gap + must_no_evidence == must_total` is asserted. A break means a row carries a value outside the enum, which is a `INVALID_MATCH` / `INVALID_RECENCY` finding and exit 1 — never a silent substitution. Substituting a value instead of dropping the row would put a claim we invented into the model's mouth: `no_evidence` is a finding about the CV, not a default.
+- The invariant `must_strong + must_partial + must_gap + must_no_evidence == must_total` is asserted. A break means a row carries a value outside the enum, which is an `INVALID_MATCH` / `INVALID_RECENCY` / `INVALID_KIND` finding and exit 1 — never a silent substitution. Substituting a value instead of dropping the row would put a claim we invented into the model's mouth: `no_evidence` is a finding about the CV, not a default.
+- `INVALID_KIND` is the third of those three and is easy to forget, because a row with a misspelled `kind` is counted into *neither* total and so leaves every printed number looking self-consistent. It is emitted, named here, and tested.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1726,6 +2000,19 @@ The two modes exist because the drop is the mechanism working, not the assessmen
       assert any(f.startswith("INVALID_RECENCY:") for f in counts["invalid"])
 
 
+  def test_an_out_of_enum_kind_is_reported():
+      # The quietest of the three: a misspelled `kind` lands in neither total, so
+      # every printed number stays self-consistent and the row simply vanishes.
+      counts = cc.coverage([row(kind="must-have")])
+      assert counts["must_total"] == 0 and counts["resp_total"] == 0
+      assert any(f.startswith("INVALID_KIND:") for f in counts["invalid"])
+
+
+  def test_the_zh_labels_come_from_the_shared_vocabulary():
+      import vocab
+      assert cc.VERDICT_ZH is vocab.VERDICT_ZH
+
+
   def test_the_rendered_block_is_stable_and_exact():
       counts = cc.coverage(ASSESSMENT["requirements"])
       block = cc.render_block(ASSESSMENT, counts, "zh")
@@ -1775,9 +2062,29 @@ The two modes exist because the drop is the mechanism working, not the assessmen
       assert "INVALID_MATCH:" in capsys.readouterr().out
 
 
-  def test_main_exits_two_without_an_assessment(tmp_path, capsys):
+  def test_a_clean_run_records_rather_than_judges(tmp_path):
+      (tmp_path / "fit-assessment.yaml").write_text(
+          yaml.safe_dump(ASSESSMENT, allow_unicode=True), encoding="utf-8")
+      assert cc.main(["--workspace", str(tmp_path)]) == 0
+      record = json.loads((tmp_path / "journal.jsonl").read_text(encoding="utf-8"))
+      assert record["gate"] == "count_coverage" and record["verdict"] == "recorded"
+
+
+  def test_main_exits_two_and_still_leaves_exactly_one_receipt(tmp_path, capsys):
       assert cc.main(["--workspace", str(tmp_path)]) == 2
       assert "fit-assessment.yaml" in capsys.readouterr().err
+      receipts = [json.loads(line) for line in
+                  (tmp_path / "journal.jsonl").read_text(encoding="utf-8").splitlines()]
+      assert len(receipts) == 1
+      assert receipts[0]["gate"] == "count_coverage"
+      assert receipts[0]["verdict"] == "could_not_run"
+
+
+  def test_a_workspace_that_does_not_exist_writes_no_journal(tmp_path, capsys):
+      missing = tmp_path / "nope"
+      assert cc.main(["--workspace", str(missing)]) == 2
+      assert not missing.exists()
+      assert "does not exist" in capsys.readouterr().err
   ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1814,18 +2121,31 @@ The two modes exist because the drop is the mechanism working, not the assessmen
   sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
   import journal  # noqa: E402
+  import vocab  # noqa: E402
   import yaml  # noqa: E402
 
-  MATCHES = ("strong", "partial", "gap", "no_evidence")
-  RECENCIES = ("current", "recent", "dated", "undated")
+  GATE = "count_coverage"
 
+  MATCHES = vocab.MATCH
+  RECENCIES = vocab.RECENCY
+  KINDS = ("must_have", "responsibility")
+
+  # These two maps are this module's own. VERDICT_ZH is not: lint_no_prediction.py
+  # masks against the same map, and two copies of it means one of them eventually
+  # stops matching the label the other one prints.
   LEVEL_DIRECTION_ZH = {"step_up": "上跳", "lateral": "平级", "step_down": "下沉",
                         "unclear": "不明"}
   EFFORT_ZH = {"quick": "当天", "evening": "一晚", "multi_day": "数日",
                "not_closable": "补不上"}
-  VERDICT_ZH = {"strong_apply": "强烈建议投", "worth_applying": "值得投",
-                "stretch": "可以冲刺", "likely_screen_out": "大概率被筛掉",
-                "blocked": "硬性阻断", "insufficient_evidence": "证据不足—不出结论"}
+  VERDICT_ZH = vocab.VERDICT_ZH
+
+
+  def cannot_run(workspace: pathlib.Path, reason: str) -> int:
+      """Exactly one receipt on the could-not-run path, then exit 2."""
+      print(f"cannot run: {reason}", file=sys.stderr)
+      if workspace.is_dir():
+          journal.receipt(workspace, GATE, {}, "could_not_run", [f"NO_INPUT: {reason}"])
+      return 2
 
 
   def coverage(rows: list[dict] | None) -> dict:
@@ -1867,9 +2187,11 @@ The two modes exist because the drop is the mechanism working, not the assessmen
               elif effective == "no_evidence":
                   counts["must_no_evidence"] += 1
           else:
+              # Counted into neither total, so the printed numbers still add up and
+              # the row simply vanishes. That is why this one has to be reported.
               counts["invalid"].append(
                   f"INVALID_KIND: row {identifier} has kind {kind!r}, "
-                  f"not 'must_have' or 'responsibility'")
+                  f"not one of {KINDS}")
       return counts
 
 
@@ -1905,9 +2227,12 @@ The two modes exist because the drop is the mechanism working, not the assessmen
       args = parser.parse_args(argv)
 
       path = args.workspace / "fit-assessment.yaml"
+      if not args.workspace.is_dir():
+          return cannot_run(args.workspace,
+                            f"workspace {args.workspace} does not exist")
       if not path.exists():
-          print(f"cannot run: fit-assessment.yaml not found at {path}", file=sys.stderr)
-          return 2
+          return cannot_run(args.workspace,
+                            f"fit-assessment.yaml not found at {path}")
 
       assessment = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
       counts = coverage(assessment.get("requirements"))
@@ -1923,9 +2248,9 @@ The two modes exist because the drop is the mechanism working, not the assessmen
       for finding in findings:
           print(finding)
       print(block)
-      journal.receipt(args.workspace, "count_coverage",
+      journal.receipt(args.workspace, GATE,
                       {"fit-assessment.yaml": journal.sha256_file(path)},
-                      "fail" if findings else "pass", findings)
+                      "fail" if findings else "recorded", findings)
       return 1 if findings else 0
 
 
@@ -1936,7 +2261,7 @@ The two modes exist because the drop is the mechanism working, not the assessmen
 - [ ] **Step 4: Run test to verify it passes**
 
   Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests/test_count_coverage.py -q`
-  Expected: PASS (13 passed)
+  Expected: PASS (17 passed)
 
 - [ ] **Step 5: Commit**
   ```
@@ -1952,14 +2277,16 @@ The two modes exist because the drop is the mechanism working, not the assessmen
 **Files:**
 - Create: `references/market-conventions/README.md`
 - Create: `scripts/check_conventions.py`
-- Create: `docs/superpowers/research/2026-08-09-market-conventions/markets.json`
-- Create: `docs/superpowers/research/2026-08-09-market-conventions/review-{cn,nl_weu,de,us_uk}.md`
+- Create: `docs/superpowers/research/2026-08-09/review-{cn,nl_weu,de,us_uk}.md`
 - Test: `scripts/tests/test_check_conventions.py`
+- Test: `scripts/tests/test_market_tables.py` (written here, red until Task 11 finishes)
 
 **Interfaces:**
-- Consumes: `journal.receipt(...)`, `journal.sha256_file(path)`.
+- Consumes: `journal.receipt(...)`, `journal.sha256_file(path)`; `vocab.MARKET_KEYS`.
 - Produces:
-  - `MARKET_KEYS = ("cn", "nl", "de", "uk", "us")`
+  - `MARKET_KEYS = vocab.MARKET_KEYS` — re-exported for readability, **never re-typed**
+  - `SKILL_ROOT` — the repo root, resolved **once** here. `check_assessment.py` imports it rather than re-deriving the same `.parents[1]` walk; one module owns the path, per the shared contract's `paths.py` rule.
+  - `CONVENTIONS_DIR = SKILL_ROOT / "references" / "market-conventions"`
   - `PROSE_FIELDS`, `PROPER_NOUNS`, `PROTECTED_TRAITS`
   - `load_market_file(path: pathlib.Path) -> dict`
   - `conventions_by_id(data: dict) -> dict[str, dict]`
@@ -1970,28 +2297,33 @@ The two modes exist because the drop is the mechanism working, not the assessmen
 
 **The digit ban and its deliberate hole.** A statistic here cannot be sourced and must not be invented, so a digit or a percent sign in a prose field fails the build. But `url`, `title`, `retrieved` and `quote` are exempt: a cited document's title is not a claim, it is an identifier, and statutes and case law are numbered — that is how they are named. Banning digits there stops no invented statistic; it only forces the citation to be wrong, or to be dropped in favour of a weaker source that happens to have no number in its name. A closed `PROPER_NOUNS` list exempts `H-1B`, `Form I-9` and `Form I-983` for the same reason — the reviewer flagged explicitly that removing them would leave sentences a reader cannot act on. It is a closed list on purpose: a general "proper nouns are fine" rule is a lint-dodge licence.
 
-**Calibration.** The length-ratio and modal-asymmetry warnings were measured against all forty source entries before the thresholds were chosen: `len(text_zh)/len(text_en)` runs 0.258–0.424 across the set, and the modal-marker delta runs −1 to +3. The thresholds below (`< 0.20` or `> 0.60`; `|delta| >= 3`) sit outside the body of the distribution on purpose. A gate that cries wolf on the repo's own fixtures is a gate someone eventually switches off.
+**Calibration.** The length-ratio and modal-asymmetry warnings were measured against all forty source entries before the thresholds were chosen: `len(text_zh)/len(text_en)` runs 0.258–0.424 across the set, and the modal-marker delta runs −1 to +3. The thresholds below (`< 0.20` or `> 0.60`; `|delta| > 3`) sit outside the body of the distribution on purpose. A gate that cries wolf on the repo's own fixtures is a gate someone eventually switches off — and `|delta| >= 3` did exactly that: recomputed over all forty entries it fires on `nl-weu-language-requirement-must-be-justified`, an entry that ships. Strict `>` is what puts the bound outside the measured body rather than on its edge.
 
-- [ ] **Step 1: Land the research the tables are built from**
+- [ ] **Step 1: Verify the research the tables are built from is present**
 
-  The five YAML tables in Tasks 7–11 are built from a research file and four adversarial reviews that currently live only in a session scratchpad. Copy them into the repo first so the later tasks have a durable, reviewable source. Run exactly:
+  `markets.json` and the four adversarial reviews are the sole source for all 38 convention
+  entries, and they are **already committed** at `ac404fb`. Nothing is copied from a session
+  scratchpad: a plan whose input lives in `/private/tmp` dies the moment the directory is
+  reaped, and Tasks 7–11 cannot be done from memory. Derive the four reviews as readable
+  prose beside the JSON:
   ```
-  SRC=/private/tmp/claude-501/-Users-donghanglyu/d1ca171b-6798-42dc-9582-87e4635be401/scratchpad
-  DST=/Users/donghanglyu/code_project/job-hunt/docs/superpowers/research/2026-08-09-market-conventions
-  mkdir -p "$DST"
-  cp "$SRC/markets.json" "$DST/markets.json"
+  cd /Users/donghanglyu/code_project/job-hunt
+  test -f docs/superpowers/research/2026-08-09/markets.json || \
+      { echo "STOP: markets.json is not in the repo"; exit 1; }
   python3 - <<'PY'
   import json, pathlib
   dst = pathlib.Path("/Users/donghanglyu/code_project/job-hunt/docs/superpowers/"
-                     "research/2026-08-09-market-conventions")
+                     "research/2026-08-09")
   for entry in json.loads((dst / "markets.json").read_text(encoding="utf-8")):
       (dst / f"review-{entry['market']}.md").write_text(entry["review"], encoding="utf-8")
       print("wrote", f"review-{entry['market']}.md")
   PY
   ```
-  Expected: `review-cn.md`, `review-nl_weu.md`, `review-de.md`, `review-us_uk.md` written beside `markets.json`.
+  Expected: `review-cn.md`, `review-nl_weu.md`, `review-de.md`, `review-us_uk.md` written
+  beside `markets.json`.
 
-  If `$SRC/markets.json` no longer exists, STOP and report it — Tasks 7–11 cannot be done from memory, and inventing a market convention is the one failure in this skill that a reader has no source text to catch.
+  If the `test -f` guard fires, STOP and report it. Inventing a market convention is the one
+  failure in this skill that a reader has no source text to catch.
 
 - [ ] **Step 2: Write `references/market-conventions/README.md`**
 
@@ -2291,6 +2623,20 @@ The two modes exist because the drop is the mechanism working, not the assessmen
                  for f in cck.check_file(write(tmp_path, data), TODAY))
 
 
+  def test_a_delta_of_exactly_three_does_not_warn(tmp_path):
+      # Recomputed over all forty source entries, a delta of +3 occurs on
+      # nl-weu-language-requirement-must-be-justified, an entry that SHIPS. The bound
+      # is strict so the calibration sits outside the measured body, not on its edge.
+      # The replacement is length-matched into the ratio band on purpose: a fixture that
+      # trips a DIFFERENT warning proves nothing about the one under test.
+      data = mutate(text_zh="招聘方必须先看在线简历；你必须把那几栏逐条填满；完整简历与联系方式"
+                            "不得在双方同意之前送达，所以要按照对方只看这几栏就下判断的方式来写，"
+                            "把最能说明问题的经历放在最前面，别把它当附件的摘要。")
+      findings = cck.check_file(write(tmp_path, data), TODAY)
+      assert len(cck._MODAL_ZH.findall(data["conventions"][0]["text_zh"])) == 3
+      assert findings == [], findings
+
+
   def test_an_unverified_note_must_name_what_it_disclaims(tmp_path):
       data = json.loads(json.dumps(GOOD))
       data["unverified"] = [{"note": "Nothing was sourced about 猎聘."}]
@@ -2332,10 +2678,30 @@ The two modes exist because the drop is the mechanism working, not the assessmen
       assert record["gate"] == "check_conventions" and record["verdict"] == "fail"
 
 
-  def test_a_missing_market_file_exits_two(tmp_path, capsys):
+  def test_a_missing_market_file_exits_two_and_still_leaves_one_receipt(tmp_path, capsys):
       assert cck.main(["--workspace", str(tmp_path),
                        "--market-file", str(tmp_path / "nope.yaml")]) == 2
       assert "nope.yaml" in capsys.readouterr().err
+      receipts = [json.loads(line) for line in
+                  (tmp_path / "journal.jsonl").read_text(encoding="utf-8").splitlines()]
+      assert len(receipts) == 1
+      assert receipts[0]["gate"] == "check_conventions"
+      assert receipts[0]["verdict"] == "could_not_run"
+
+
+  def test_a_workspace_that_does_not_exist_writes_no_journal(tmp_path, capsys):
+      missing = tmp_path / "nope"
+      assert cck.main(["--workspace", str(missing), "--all"]) == 2
+      assert not missing.exists()
+      assert "does not exist" in capsys.readouterr().err
+
+
+  def test_the_market_keys_are_the_shared_ones_and_the_root_is_resolved_once():
+      import paths
+      import vocab
+      assert cck.MARKET_KEYS is vocab.MARKET_KEYS
+      assert cck.SKILL_ROOT == paths.SKILL_ROOT
+      assert cck.CONVENTIONS_DIR == cck.SKILL_ROOT / "references" / "market-conventions"
   ```
 
 - [ ] **Step 4: Run test to verify it fails**
@@ -2359,6 +2725,15 @@ The two modes exist because the drop is the mechanism working, not the assessmen
 
   references/market-conventions/README.md is this script's spec. If the two disagree, the
   README is what a person reads before adding an entry, so fix the script.
+
+  EXPIRED_REVIEW_BY is a HARD finding here on purpose: this script is the CI lint, and CI
+  is where a passed review date is supposed to stop the build. It is NOT hard at runtime --
+  check_assessment.py re-prefixes it as WARN_ and requires a 「已过复核期」 banner instead,
+  because a date passing while the code did not change should not stop the skill working
+  (spec §10). The two behaviours are deliberate and live in two different scripts.
+
+  Exit 2 still writes a receipt, verdict "could_not_run", unless the workspace directory
+  itself is absent -- there is nothing to append to.
   """
   from __future__ import annotations
 
@@ -2371,9 +2746,24 @@ The two modes exist because the drop is the mechanism working, not the assessmen
   sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
   import journal  # noqa: E402
+  import paths  # noqa: E402
+  import vocab  # noqa: E402
   import yaml  # noqa: E402
 
-  MARKET_KEYS = ("cn", "nl", "de", "uk", "us")
+  GATE = "check_conventions"
+
+  # Re-exported, not re-typed. Plan 4's mock vocabulary carries a superset with a
+  # sixth token; two modules in one flat scripts/ namespace exporting the same name
+  # with different contents is how a closed set silently stops being closed.
+  MARKET_KEYS = vocab.MARKET_KEYS
+
+  # The skill root comes from paths.py, which is the one module allowed to know it --
+  # no second .parents[n] walk. The conventions directory is built from it ONCE here,
+  # and check_assessment.py imports CONVENTIONS_DIR rather than rebuilding it: two
+  # copies of a path is two things to be wrong when the tree moves.
+  SKILL_ROOT = paths.SKILL_ROOT
+  CONVENTIONS_DIR = SKILL_ROOT / "references" / "market-conventions"
+
   PROSE_FIELDS = ("text_en", "text_zh", "applies_when", "why")
   SOURCE_PROSE_FIELDS = ("publisher", "note")
   REQUIRED_FIELDS = ("id", "text_en", "text_zh", "applies_when", "added", "review_by",
@@ -2392,7 +2782,10 @@ The two modes exist because the drop is the mechanism working, not the assessmen
   )
 
   # Measured across all forty source entries: len(zh)/len(en) runs 0.258-0.424, and the
-  # modal-marker delta runs -1..+3. These bounds sit outside the body of both.
+  # modal-marker delta runs -1..+3. These bounds sit outside the body of both. The
+  # comparison below is STRICT (> MODAL_DELTA, not >=): at >= 3 the warning fires on
+  # nl-weu-language-requirement-must-be-justified, an entry that ships, which is the
+  # cry-wolf failure this calibration exists to avoid.
   RATIO_LOW, RATIO_HIGH = 0.20, 0.60
   MODAL_DELTA = 3
 
@@ -2406,6 +2799,14 @@ The two modes exist because the drop is the mechanism working, not the assessmen
   _ID = re.compile(r"^[a-z0-9-]+$")
   _LATIN_TOKEN = re.compile(r"[A-Za-z]{6,}")
   _CJK_TOKEN = re.compile(r"[一-鿿]{3,}")
+
+
+  def cannot_run(workspace: pathlib.Path, reason: str) -> int:
+      """Exactly one receipt on the could-not-run path, then exit 2."""
+      print(f"cannot run: {reason}", file=sys.stderr)
+      if workspace.is_dir():
+          journal.receipt(workspace, GATE, {}, "could_not_run", [f"NO_INPUT: {reason}"])
+      return 2
 
 
   def load_market_file(path: pathlib.Path) -> dict:
@@ -2519,7 +2920,7 @@ The two modes exist because the drop is the mechanism working, not the assessmen
                       f"outside {RATIO_LOW}-{RATIO_HIGH}; one language may be saying "
                       f"more than the other")
               delta = len(_MODAL_ZH.findall(chinese)) - len(_MODAL_EN.findall(english))
-              if abs(delta) >= MODAL_DELTA:
+              if abs(delta) > MODAL_DELTA:
                   findings.append(
                       f"WARN_MODAL_ASYMMETRY: {entry_id} has {delta:+d} more obligation "
                       f"markers in zh than en; check that neither version strengthens a "
@@ -2563,17 +2964,17 @@ The two modes exist because the drop is the mechanism working, not the assessmen
 
       today = (datetime.date.fromisoformat(args.today) if args.today
                else datetime.date.today())
+      if not args.workspace.is_dir():
+          return cannot_run(args.workspace,
+                            f"workspace {args.workspace} does not exist")
       files = list(args.market_file)
       if args.all:
-          root = pathlib.Path(__file__).resolve().parents[1] / "references" / "market-conventions"
-          files += [root / f"{key}.yaml" for key in MARKET_KEYS]
+          files += [CONVENTIONS_DIR / f"{key}.yaml" for key in MARKET_KEYS]
       if not files:
-          print("cannot run: pass --market-file or --all", file=sys.stderr)
-          return 2
+          return cannot_run(args.workspace, "pass --market-file or --all")
       for path in files:
           if not path.exists():
-              print(f"cannot run: {path} not found", file=sys.stderr)
-              return 2
+              return cannot_run(args.workspace, f"{path} not found")
 
       findings: list[str] = []
       hashes: dict[str, str] = {}
@@ -2584,7 +2985,7 @@ The two modes exist because the drop is the mechanism working, not the assessmen
       for finding in findings:
           print(finding)
       hard = [f for f in findings if not f.startswith("WARN_")]
-      journal.receipt(args.workspace, "check_conventions", hashes,
+      journal.receipt(args.workspace, GATE, hashes,
                       "fail" if hard else "pass", findings)
       return 1 if hard else 0
 
@@ -2596,390 +2997,14 @@ The two modes exist because the drop is the mechanism working, not the assessmen
 - [ ] **Step 6: Run test to verify it passes**
 
   Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests/test_check_conventions.py -q`
-  Expected: PASS (24 passed)
+  Expected: PASS (27 passed)
 
-- [ ] **Step 7: Commit**
-  ```
-  cd /Users/donghanglyu/code_project/job-hunt
-  git add references/market-conventions/README.md scripts/check_conventions.py \
-          scripts/tests/test_check_conventions.py \
-          docs/superpowers/research/2026-08-09-market-conventions
-  git commit -m "conventions: table lint plus the README that is its spec, and the source research"
-  ```
+- [ ] **Step 7: Write the all-tables regression test — and watch it fail**
 
----
-
-### Task 7: `references/market-conventions/cn.yaml`
-
-**Files:**
-- Create: `references/market-conventions/cn.yaml`
-- Test: (none new — the deliverable is `check_conventions.py --market-file references/market-conventions/cn.yaml` exiting 0 with no hard finding)
-
-**Interfaces:**
-- Consumes: `check_conventions.check_file(path, today) -> list[str]`, `check_conventions.load_market_file(path) -> dict`; the entry shape in `references/market-conventions/README.md`; the research at `docs/superpowers/research/2026-08-09-market-conventions/`.
-- Produces: `references/market-conventions/cn.yaml` with ten entries, ids exactly as in the table below. `modes/assess.md` and `check_assessment.py` reference these ids.
-
-**The build rule for every table task (7 through 11).** Follow it literally; do not improvise convention text.
-
-1. Read the entry in `docs/superpowers/research/2026-08-09-market-conventions/markets.json` (`entry.conventions[i]`) and the matching numbered section of the review file.
-2. **KEEP** → copy `text_en`, `text_zh`, `applies_when`, `why` byte-for-byte from `markets.json`.
-3. **KEEP-WITH-EDIT** → the review contains the replacement wording. Where the review gives a whole `text_en`/`text_zh`, use it byte-for-byte. Where it gives "replacement for the final sentence" / "insert the third sentence", splice **only at the sentence the review quotes** and leave every surrounding sentence untouched. Do not rewrite for style.
-4. **DROP** → the entry does not appear in any table. Record the id and the one-line reason in the `# DROPPED` comment block at the top of the file.
-5. Restructure the flat `source_kind` + `source_detail` prose into the structured `source:` mapping the README specifies: `kind`, `publisher`, `title`, `url`, `retrieved`, `quote` (one verbatim string from `source_detail`), plus `also:` for every further citation `source_detail` carries. The review states, per entry, which URL the quote actually belongs to — use that attribution, not the original one.
-6. Set `added: "2026-08-09"` on every entry, and `review_by` from the table below. The mapping is the README's rule applied to the reviewer's staleness rating: high → `2026-11-09`, medium → `2027-02-09`, low → `2027-08-09`.
-7. **Apply only edits the reviewer wrote out.** Everything the reviewer listed under "Important and missing" goes verbatim into a `# NEXT REVIEW` comment block at the top of the file, and into nothing else. Writing a new convention from a research note is authoring a market claim, and this table is the one place where only a person who checked the source may do that.
-
-**Disposition — `cn`, from `review-cn.md`. All ten entries ship.**
-
-| # | id | Verdict | Shipped text comes from | `review_by` |
-|---|---|---|---|---|
-| 1 | `cn-boss-profile-is-the-screen` | KEEP-WITH-EDIT | review §1 replacement block (drops the unsourced 「迷你简历」 terminology claim) | 2027-02-09 |
-| 2 | `cn-salary-expectation-declared-up-front` | KEEP-WITH-EDIT | review §2 replacement block (drops the unsourced "feeds the matching" claim) | 2027-02-09 |
-| 3 | `cn-campus-track-is-cohort-gated-and-early` | KEEP-WITH-EDIT | review §3 replacement block (the entry's own sources refute the exclusivity claim) | 2026-11-09 |
-| 4 | `cn-fresh-graduate-status-is-administrative` | KEEP-WITH-EDIT | review §4 replacement block (restores the central baseline 「各省自行规定」 erased) | 2026-11-09 |
-| 5 | `cn-three-party-agreement-is-not-the-employment-contract` | KEEP | `markets.json` verbatim. Correct `source.publisher` to 教育部学生服务与素质发展中心 and note the article is 综合整理, an official-platform explainer rather than a primary instrument | 2027-08-09 |
-| 6 | `cn-state-organised-recruitment-channel` | KEEP-WITH-EDIT | review §6 replacement block. **This is one of the live constraint violations the lint exists for: the old `text_en` contained "51job".** | 2026-11-09 |
-| 7 | `cn-posting-salary-is-not-a-defined-quantity` | KEEP-WITH-EDIT | review §7 replacement block (drops the statistics-definition category slip; 可主张 no longer rendered as 必须履行) | 2027-08-09 |
-| 8 | `cn-what-an-employer-may-ask-and-what-truthfulness-costs` | KEEP-WITH-EDIT | `markets.json` text with **only the final sentence** replaced by review §8's two blocks (adds the Beijing-only scope the reader could not otherwise see) | 2027-08-09 |
-| 9 | `cn-hukou-application-is-filed-by-the-employer` | KEEP-WITH-EDIT | review §9 replacement block. Also re-point `source` at 沪教委学〔2026〕13号 via the SJTU page the review verified, and add the SJTU 申请主体 and one-filing-per-cycle quotes to `source.also`. The unsourced "registration cut-off" detail must not reappear. | 2026-11-09 |
-| 10 | `cn-internship-is-usually-not-an-employment-relationship` | KEEP | `markets.json` verbatim. Add the review's precision note to `source.note`: the statutory sentence covers 勤工助学, and the broad proposition rests on commentary plus two contrasting outcomes. | 2027-08-09 |
-
-**`unverified` for `cn.yaml`.** Carry items 1–7 of `markets.json`'s `cn.entry.unverified` across, each as `{note, disclaims}`. `disclaims` must name the entry the note limits — item 3 (背调 prevalence) disclaims `cn-what-an-employer-may-ask-and-what-truthfulness-costs`; item 5 (期望薪资 norms) disclaims `cn-salary-expectation-declared-up-front`; item 6 (薪资构成 detail) disclaims `cn-posting-salary-is-not-a-defined-quantity`. Items with no matching entry are dropped rather than pointed at an unrelated one. **If the lint returns `WARN_UNVERIFIED_OVERLAP`, the fix is to delete the disclaimed assertion from `text_en`/`text_zh` — not to soften the note.** The reader never sees `unverified`.
-
-- [ ] **Step 1: Write the file**
-
-  Create `references/market-conventions/cn.yaml`. The first entry, written out in full, is the pattern for the other nine:
-  ```yaml
-  # Market conventions — China (cn)
-  #
-  # Built 2026-08-09 from docs/superpowers/research/2026-08-09-market-conventions/
-  # markets.json + review-cn.md. Every `published` URL in that research was fetched and
-  # every "Verbatim:" string grepped against the fetched text on 2026-08-09.
-  #
-  # DROPPED
-  #   (none — all ten cn entries ship)
-  #
-  # NEXT REVIEW — sourced facts the reviewer found MISSING. Do not write these into
-  # conventions from this comment; a person must check the source first.
-  #   1. 劳动合同法 第九条: an employer may not withhold your 居民身份证 or other documents,
-  #      demand a guarantee, or collect property from you under any name. China-wide,
-  #      invisible on any posting, and the legal hook for the 招转培 pattern entry 6 flags.
-  #   2. 第八条 running the other way: the employer must 如实告知 工作内容、工作条件、
-  #      工作地点、职业危害、安全生产状况、劳动报酬. Entry 8 ships only the candidate-side duty.
-  #   3. The 国聘行动 notice bans 毕业院校 / 国（境）外学习经历 / 学习方式 / 本单位实习期限 as
-  #      screening conditions — for participants in that campaign, not market-wide.
-  #   4. Shanghai: a failed employer 落户 filing cannot be re-submitted by another employer
-  #      in the same cycle.
-  #   5. 劳动合同法 第十条: a written contract must be concluded within one month of starting.
-
-  market: cn
-
-  conventions:
-    - id: cn-boss-profile-is-the-screen
-      text_en: |-
-        On BOSS直聘 the recruiter does not see your CV file first. What they see is the
-        structured profile you filled in at registration — the operator's own SEC filing
-        calls it a mini resume — and your full CV and contact details reach them only on
-        mutual consent inside the chat. Treat those profile fields as the actual
-        screening document and write them for a reader who will decide from them alone.
-      text_zh: |-
-        在 BOSS 直聘上，招聘方一开始看不到你的简历附件，只能看到你注册时填写的在线简历；完整简历和
-        联系方式要等双方在聊天中互相同意后才会送达。所以真正被筛的是在线资料的那几栏，要按「对方只看
-        这些就下判断」来写。
-      applies_when: "Applying through BOSS直聘, on any track (社招, 校招 or 实习)."
-      added: "2026-08-09"
-      review_by: "2027-02-09"
-      source:
-        kind: published
-        publisher: "Kanzhun Limited (operator of BOSS直聘), filed with the U.S. Securities and Exchange Commission"
-        title: "Annual Report on Form 20-F for the fiscal year ended December 31, 2025"
-        url: "https://www.sec.gov/Archives/edgar/data/1842827/000110465926050959/bz-20251231x20f.htm"
-        retrieved: "2026-08-09"
-        quote: "enterprise users on our platforms can only see a job seeker's mini resume that contains limited information. Enterprise users are not allowed to access job seekers' full resume or their contact information without job seekers' express consents"
-        also:
-          - publisher: "Kanzhun Limited"
-            title: "Annual Report on Form 20-F for the fiscal year ended December 31, 2025"
-            url: "https://www.sec.gov/Archives/edgar/data/1842827/000110465926050959/bz-20251231x20f.htm"
-            retrieved: "2026-08-09"
-            quote: "job seekers are required to provide basic personal and professional information, to create a mini resume which can be viewed by interested enterprise users"
-      why: |-
-        The posting shows a job description and a chat button. Nothing on it tells you
-        that the artefact being screened is your platform profile rather than the CV you
-        spent your effort on, so candidates optimise the wrong document.
-  ```
-
-  Then add the remaining nine entries in the order of the disposition table.
-
-- [ ] **Step 2: Run the lint to verify the table ships**
-
-  Run:
-  ```
-  cd /Users/donghanglyu/code_project/job-hunt
-  python3 scripts/check_conventions.py --workspace /tmp/jh-lint \
-      --market-file references/market-conventions/cn.yaml --today 2026-08-09
-  ```
-  Expected: exit `0`. Any `DIGIT_IN_PROSE`, `PERCENT_IN_PROSE`, `PROTECTED_TRAIT`, `MISSING_FIELD`, `BAD_SOURCE_*` or `EXPIRED_REVIEW_BY` line is a defect in the YAML, not in the lint — fix the YAML. `WARN_` lines do not fail; read each one and either fix the drift or record in the `# NEXT REVIEW` block why it is acceptable.
-
-- [ ] **Step 3: Verify the entry count and ids**
-
-  Run:
-  ```
-  cd /Users/donghanglyu/code_project/job-hunt && python3 -c "
-  import pathlib, sys; sys.path.insert(0, 'scripts')
-  import check_conventions as c
-  d = c.load_market_file(pathlib.Path('references/market-conventions/cn.yaml'))
-  ids = [e['id'] for e in d['conventions']]
-  print(len(ids)); print('\n'.join(ids))"
-  ```
-  Expected: `10`, then the ten ids of the disposition table in that order.
-
-- [ ] **Step 4: Commit**
-  ```
-  cd /Users/donghanglyu/code_project/job-hunt
-  git add references/market-conventions/cn.yaml
-  git commit -m "conventions: cn table, ten entries with the adversarial review applied"
-  ```
-
----
-
-### Task 8: `references/market-conventions/nl.yaml`
-
-**Files:**
-- Create: `references/market-conventions/nl.yaml`
-
-**Interfaces:**
-- Consumes: `check_conventions.check_file(path, today) -> list[str]`, `check_conventions.load_market_file(path) -> dict`; `references/market-conventions/README.md`; `docs/superpowers/research/2026-08-09-market-conventions/{markets.json,review-nl_weu.md}`.
-- Produces: `references/market-conventions/nl.yaml` with nine entries, ids as in the table below (note the `nl-weu-` prefix is gone).
-
-**Re-scoping.** The research key is `nl_weu`; the spec splits it and keeps `nl` only, because the Belgian half is two sourced facts with no application artifacts, no interview shape and no language expectations — the reviewer's own closing finding says "either scope the market key to NL, or source Belgium". So: **the Belgium-only entry is dropped, and every Belgian clause is cut out of the entries that survive.** Ids lose the `weu`.
-
-**The build rule (repeated in full — do not improvise convention text).**
-
-1. Read `entry.conventions[i]` in `markets.json` under `market: nl_weu`, and the matching numbered section of `review-nl_weu.md`.
-2. **KEEP** → copy `text_en`, `text_zh`, `applies_when`, `why` byte-for-byte.
-3. **KEEP-WITH-EDIT** → use the review's replacement wording byte-for-byte where it gives a whole field; splice only at the sentence it quotes where it gives a partial. Do not rewrite for style.
-4. **DROP** → the entry appears in no table; id and one-line reason go in the `# DROPPED` comment block.
-5. Restructure `source_kind` + `source_detail` into the structured `source:` mapping with `also:` for further citations, using the attribution the review corrects to.
-6. `added: "2026-08-09"`; `review_by` from the table.
-7. Apply only edits the reviewer wrote out; "Important and missing" goes verbatim into `# NEXT REVIEW` and nowhere else.
-
-**Disposition — `nl`, from `review-nl_weu.md`.**
-
-| # | New id | Verdict | Shipped text comes from | `review_by` |
-|---|---|---|---|---|
-| 1 | `nl-recognised-sponsor-gate` | KEEP-WITH-EDIT | review §1 replacement `text_en`/`text_zh`. Attribute the register quote to the **Work** register page only, and add the orientation-year permit citation to `source.also` — that permit is applied for by the candidate and breaks the "the employer is the deciding factor" frame. | 2027-02-09 |
-| 2 | `nl-salary-criterion-reset-annually` | KEEP-WITH-EDIT | review §2: `text_en` as given; for `text_zh` splice in the market-rate sentence the review quotes and change nothing else. | 2026-11-09 |
-| 3 | `nl-expat-scheme-is-an-employer-filing` | KEEP-WITH-EDIT | review §3 replacement blocks. **Live constraint violation: the old text carried "30% ruling" / 「30% 规则」 twice in each language.** Add the announced-reduction citation to `source.also`. | 2026-11-09 |
-| — | `nl-weu-be-single-permit-is-regional` | **DROP** | Belgium-only. The spec's market keys are cn/nl/de/uk/us; an entry that can only ever fire on a Belgian posting can never render, and leaving it invites a Dutch applicant reading Belgian regional-competence advice. | — |
-| 4 | `nl-sector-agreement-sets-the-band` | KEEP-WITH-EDIT | review §5 replacement blocks, **minus the Belgian sentence** — delete "In Belgium, sectoral minimum pay scales are set per joint committee (paritair comité / commission paritaire) and published in a government database." and its zh counterpart 「在比利时，行业最低工资表按「联合委员会」…公布。」 Use the review's replacement `applies_when` with "or Belgium" removed and "or joint committee" removed. Drop the Belgian citation from `source`. | 2027-02-09 |
-| 5 | `nl-motivation-letter-is-scored` | KEEP-WITH-EDIT | review §6 replacement blocks and replacement `applies_when` (which already scopes Belgium out). Fix the misquoted phone sentence in `source.quote` to the page's exact wording, including the "first prepared clear questions" clause. | 2027-02-09 |
-| 6 | `nl-language-requirement-must-be-justified` | KEEP-WITH-EDIT (heavy) | review §7 replacement blocks. Add the College-status citation to `source.also` — its opinions are authoritative but **not legally binding**, and the replacement text says so, which is the whole reason this entry survives rather than being dropped. | 2027-02-09 |
-| 7 | `nl-references-only-with-prior-permission` | KEEP-WITH-EDIT | review §8 replacement blocks. Add NVP clause 2.3 verbatim to `source.also`, or delete the background-check sentence — do not ship the sentence with clause 2.6 attached to it. | 2027-08-09 |
-| 8 | `nl-pay-range-not-pay-history` | KEEP-WITH-EDIT | `markets.json` text with review §9's middle replacement spliced in, **plus two constraint fixes**: replace the literal "2023/970" with "the EU pay-transparency directive" (en) and 「欧盟薪酬透明指令」 (zh), and add a `protected_trait_note` for the quoted "gender-neutral" / 「性别中立」 standard — it describes the *employer's* criteria inside a quoted legal test, not a candidate attribute. Use the review's replacement `applies_when` (EEA dropped). | 2026-11-09 |
-| 9 | `nl-regulated-profession-needs-formal-recognition` | KEEP-WITH-EDIT | review §10 replacement blocks. | 2027-08-09 |
-
-**`unverified` for `nl.yaml`.** Carry across the items from `markets.json` `nl_weu.entry.unverified` that still have a target after the re-scoping, each `{note, disclaims}`. The reviewer's cross-cutting finding is the acceptance criterion: in conventions 5, 6, 7 and 8 the `unverified` section correctly stated a claim was not sourced and the rendered text made that claim anyway. **Every claim `unverified` disclaims must be absent from the replacement text before this file is committed.** `WARN_UNVERIFIED_OVERLAP` is the mechanical hint; read the note and the text side by side yourself.
-
-- [ ] **Step 1: Write the file**, following the shape of `cn.yaml`'s first entry: `market: nl`, a `# DROPPED` block naming `nl-weu-be-single-permit-is-regional`, a `# NEXT REVIEW` block carrying the review's "Important and missing" items 1–7 verbatim, then the nine entries in table order.
-
-- [ ] **Step 2: Run the lint**
-  ```
-  cd /Users/donghanglyu/code_project/job-hunt
-  python3 scripts/check_conventions.py --workspace /tmp/jh-lint \
-      --market-file references/market-conventions/nl.yaml --today 2026-08-09
-  ```
-  Expected: exit `0`. In particular there must be **no** `PERCENT_IN_PROSE` on `nl-expat-scheme-is-an-employer-filing` and **no** `DIGIT_IN_PROSE` on `nl-pay-range-not-pay-history` — those two were the live violations this table is being rebuilt to close.
-
-- [ ] **Step 3: Verify the entry count and that Belgium is gone**
-  ```
-  cd /Users/donghanglyu/code_project/job-hunt && python3 -c "
-  import pathlib, sys; sys.path.insert(0, 'scripts')
-  import check_conventions as c
-  d = c.load_market_file(pathlib.Path('references/market-conventions/nl.yaml'))
-  ids = [e['id'] for e in d['conventions']]
-  blob = pathlib.Path('references/market-conventions/nl.yaml').read_text(encoding='utf-8')
-  body = '\n'.join(l for l in blob.splitlines() if not l.lstrip().startswith('#'))
-  print(len(ids)); print('\n'.join(ids))
-  print('belgium mentions in body:', body.lower().count('belgi'), body.count('比利时'))"
-  ```
-  Expected: `9`, the nine ids, and `belgium mentions in body: 0 0`.
-
-- [ ] **Step 4: Commit**
-  ```
-  cd /Users/donghanglyu/code_project/job-hunt
-  git add references/market-conventions/nl.yaml
-  git commit -m "conventions: nl table, re-scoped off nl_weu with the Belgian half dropped"
-  ```
-
----
-
-### Task 9: `references/market-conventions/de.yaml`
-
-**Files:**
-- Create: `references/market-conventions/de.yaml`
-
-**Interfaces:**
-- Consumes: `check_conventions.check_file(path, today) -> list[str]`, `check_conventions.load_market_file(path) -> dict`; `references/market-conventions/README.md`; `docs/superpowers/research/2026-08-09-market-conventions/{markets.json,review-de.md}`.
-- Produces: `references/market-conventions/de.yaml` with eight entries.
-
-**The build rule (repeated in full — do not improvise convention text).**
-
-1. Read `entry.conventions[i]` in `markets.json` under `market: de`, and the matching numbered section of `review-de.md`.
-2. **KEEP** → copy `text_en`, `text_zh`, `applies_when`, `why` byte-for-byte.
-3. **KEEP-WITH-EDIT** → use the review's replacement wording byte-for-byte where it gives a whole field; splice only at the sentence it quotes where it gives a partial. Do not rewrite for style.
-4. **DROP** → the entry appears in no table; id and one-line reason go in the `# DROPPED` comment block.
-5. Restructure `source_kind` + `source_detail` into the structured `source:` mapping with `also:` for further citations, using the attribution the review corrects to.
-6. `added: "2026-08-09"`; `review_by` from the table.
-7. Apply only edits the reviewer wrote out; "Important and missing" goes verbatim into `# NEXT REVIEW` and nowhere else.
-
-**Disposition — `de`, from `review-de.md`.**
-
-| # | id | Verdict | Shipped text comes from | `review_by` |
-|---|---|---|---|---|
-| 1 | `de-arbeitszeugnis-is-a-graded-document` | KEEP-WITH-EDIT | review §1 replacement blocks. Both fixes are load-bearing: the certificate is **not** issued automatically (it is an entitlement you assert), and the grade above the middle needs 「stets」 **and** 「vollen」 together — a reinforcing word alone does not lift it, which is exactly the error this entry exists to prevent. | 2027-08-09 |
-| 2 | `de-degree-classification-is-a-separate-procedure` | KEEP-WITH-EDIT | `markets.json` text with review §2's "third sentence onward" replacement spliced in. Drop the unsourced word "voluntary" from `source`; keep the anabin incompleteness caveat, which is the most actionable line on the source and was missing. Use the review's number-word substitutes: "are not the same thing, and are run by different bodies" / 「不是一回事，分属不同机构」. | 2027-08-09 |
-| 3 | `de-employer-drives-the-permit-not-you` | KEEP-WITH-EDIT | `markets.json` text with **exactly two** reviewer-written edits: replace 「有义务保证求职者配合」 with 「有义务督促求职者履行配合义务」 (the statute says *work toward*, not *guarantee*), and add "for the skilled-worker and study-related residence purposes the provision lists" so the accelerated procedure does not read as universally available. | 2026-11-09 |
-| 4 | `de-works-council-must-consent-to-the-hire` | KEEP-WITH-EDIT | review §4's replacement `applies_when` and its replacement tail for `text_en`/`text_zh`. The tail is the correction that matters: the council's objection window is short and consent counts as given if it lapses, so this stage cannot explain a long silence — the original invited a candidate to attribute months of nothing to the works council. | 2027-08-09 |
-| 5 | `de-your-notice-period-sets-the-start-date` | KEEP-WITH-EDIT (substantive legal error) | review §5 replacement blocks, and add the § 23 KSchG citation the review supplies to `source.also`. The original collapsed the **employer-side** service-length ladder into a rule about the candidate's own resignation; a long-tenured candidate following it names a start date months later than the law requires and loses offers over a period they do not owe. | 2027-08-09 |
-| 6 | `de-public-sector-pay-is-classified-not-negotiated` | KEEP-WITH-EDIT (source labelling only) | `markets.json` text verbatim. In `source`, name § 16 Abs. 2 **TV-L** for the BAG case and state that the BVA catalogue covers the **federal** agreement — the two cover different collective agreements and the citation did not say so. | 2027-02-09 |
-| 7 | `de-application-is-a-file-not-a-cv` | KEEP-WITH-EDIT (ship-blocker) | review §7 replacement final sentences. **Fix the Cyrillic contamination: 「证明材料可另行索取」, not 「证明материалы可另行索取」** — that string renders verbatim to the reader. Add the counterweight sentence the agency states on the same page (limit the attachments to what the job needs). Cut the submission-mechanics sentence; it is layout, and this table is about what the market weighs. | 2027-02-09 |
-| 8 | `de-austrian-and-swiss-certificates-do-not-transfer` (renamed from `de-dach-reference-letters-do-not-transfer`) | KEEP-WITH-EDIT | `markets.json` text with review §8's replacement Austrian clause, plus the SECO sentence that a Swiss certificate may carry negatives where material. Update the SECO url to its 301 target. `applies_when` re-scoped: the candidate holds Austrian or Swiss work history **and is applying in Germany**. | 2027-08-09 |
-| — | `de-dach-ch-permit-is-employer-filed-and-capped` | **DROP** | Switzerland-only. The spec fixes the key set at cn/nl/de/uk/us, so this can never render under any of them — and if a renderer ever ignored `applies_when`, a German applicant would read Swiss quota advice as their own. | — |
-| — | `de-dach-at-advertised-pay-is-a-floor` | **DROP** | Austria-only, same reason. Entry 8 survives because its subject is a document a **German** employer will read. | — |
-
-**`unverified` for `de.yaml`.** Carry the `de.entry.unverified` items across as `{note, disclaims}`, **with two corrections the reviewer made**: the item claiming no official source could be found on the Bewerbungsfoto is wrong (the source is a page the entry already cites), so drop that item and record the correction in `# NEXT REVIEW`; and the item on the Anschreiben's status at international employers stays, disclaiming `de-application-is-a-file-not-a-cv`.
-
-- [ ] **Step 1: Write the file** — `market: de`, a `# DROPPED` block naming both DACH entries with the reasons above, a `# NEXT REVIEW` block carrying `review-de.md`'s "Important and missing" items 1–5 verbatim, then the eight entries in table order.
-
-- [ ] **Step 2: Run the lint**
-  ```
-  cd /Users/donghanglyu/code_project/job-hunt
-  python3 scripts/check_conventions.py --workspace /tmp/jh-lint \
-      --market-file references/market-conventions/de.yaml --today 2026-08-09
-  ```
-  Expected: exit `0`.
-
-- [ ] **Step 3: Verify the count, the ids, and that no Cyrillic survived**
-  ```
-  cd /Users/donghanglyu/code_project/job-hunt && python3 -c "
-  import pathlib, re, sys; sys.path.insert(0, 'scripts')
-  import check_conventions as c
-  p = pathlib.Path('references/market-conventions/de.yaml')
-  d = c.load_market_file(p)
-  ids = [e['id'] for e in d['conventions']]
-  print(len(ids)); print('\n'.join(ids))
-  print('cyrillic:', re.findall(r'[Ѐ-ӿ]+', p.read_text(encoding='utf-8')))"
-  ```
-  Expected: `8`, the eight ids, and `cyrillic: []`.
-
-- [ ] **Step 4: Commit**
-  ```
-  cd /Users/donghanglyu/code_project/job-hunt
-  git add references/market-conventions/de.yaml
-  git commit -m "conventions: de table, DACH-only entries dropped and the notice-period error fixed"
-  ```
-
----
-
-### Task 10: `references/market-conventions/uk.yaml`
-
-**Files:**
-- Create: `references/market-conventions/uk.yaml`
-
-**Interfaces:**
-- Consumes: `check_conventions.check_file(path, today) -> list[str]`, `check_conventions.load_market_file(path) -> dict`; `references/market-conventions/README.md`; `docs/superpowers/research/2026-08-09-market-conventions/{markets.json,review-us_uk.md}`.
-- Produces: `references/market-conventions/uk.yaml` with five entries. `uk-civil-service-scores-named-behaviours-not-cover-letters` is the entry `lint_no_prediction.py`'s blockquote allowlist exists for — an employer that publishes its own rubric.
-
-**Re-scoping.** The research key is `us_uk`; the spec splits it, because the two markets are very different and the bundle made a US-sourced claim read as universal. Entries 7–10 are UK and come here; 1, 2, 3, 5, 6 are US and go to Task 11. Entry 4 covered both and is **split into two entries**, one per table, each carrying only its own half of the review's replacement text. Ids lose the `us_uk-` prefix and the `uk-` prefix stays.
-
-**The build rule (repeated in full — do not improvise convention text).**
-
-1. Read `entry.conventions[i]` in `markets.json` under `market: us_uk`, and the matching numbered section of `review-us_uk.md`.
-2. **KEEP** → copy `text_en`, `text_zh`, `applies_when`, `why` byte-for-byte.
-3. **KEEP-WITH-EDIT** → use the review's replacement wording byte-for-byte where it gives a whole field; splice only at the sentence it quotes where it gives a partial. Do not rewrite for style.
-4. **SPLIT** → take only the sentences of the review's replacement text that belong to this market, and nothing else.
-5. Restructure `source_kind` + `source_detail` into the structured `source:` mapping with `also:` for further citations, using the attribution the review corrects to.
-6. `added: "2026-08-09"`; `review_by` from the table.
-7. Apply only edits the reviewer wrote out; "Important and missing" goes verbatim into `# NEXT REVIEW` and nowhere else.
-
-**Disposition — `uk`, from `review-us_uk.md`.**
-
-| # | New id | Verdict | Shipped text comes from | `review_by` |
-|---|---|---|---|---|
-| 1 | `uk-check-the-public-sponsor-register-before-applying` | KEEP | `markets.json` verbatim (review §7: no digits, no drift, no overreach; refusing to state the salary figure and pointing at gov.uk is the correct pattern for a fact that changes yearly). Needs `protected_trait_note` only if the shipped text names a nationality term — check the lint output rather than assuming. | 2027-02-09 |
-| 2 | `uk-right-to-work-check-is-universal-and-you-pick-the-evidence` | KEEP-WITH-EDIT (small) | `markets.json` text with review §8's scoping change: "but **if you are not a British or Irish citizen** the choice of evidence is yours" / 「但若你不是英国或爱尔兰公民，选择用哪种证明是你的权利」. British and Irish citizens have a different route entirely. Add `protected_trait_note`: the fact **is** a citizenship-based evidence rule, and scoping it is what makes it correct rather than what makes it discriminatory. | 2027-02-09 |
-| 3 | `uk-civil-service-scores-named-behaviours-not-cover-letters` | KEEP-WITH-EDIT (small) | `markets.json` text with review §9's three fixes: add the two verified job-description sentences to `source` so the row is self-defending; soften "A general letter … scores nothing" to the review's exact replacement ("does not evidence any named behaviour, and each one is assessed on its own evidence" / 「无法为任何一项被点名的行为提供证据…」); add "where behaviours are assessed," because the page conditions it on the recruiting manager choosing to assess them. | 2027-02-09 |
-| 4 | `uk-nhs-shortlisting-is-assessed-against-the-person-specification` | KEEP-WITH-EDIT (substantive) | `markets.json` text with review §10's replacement second half, **and the id and opening changed from "scored" to "assessed"** — "scored" is not sourced; the pages say "judging how well your application matches". The conflation fix is the point: the *supporting information* section is where NHS Jobs tells you to sell yourself, and the *essential-and-desirable-criteria* section is the one carrying the do-not-identify-yourself instruction. A reader following the original would anonymise and de-narrativise the wrong box. | 2026-11-09 |
-| 5 | `uk-notice-period-sets-your-start-date` | KEEP-WITH-EDIT, SPLIT from `us_uk-at-will-versus-notice-period-changes-your-start-date` | **Only the UK sentences** of review §4's replacement `text_en`/`text_zh` — from "The UK works the other way:" to "…is therefore negotiated around a notice period as a matter of course." Plus the closing cross-market sentence, rewritten to the single market it now serves: keep "check your own contract, which may set the notice you owe". The review verified the UK half fully; it is the US half that rested on one state's agency. Restore the truncated gov.uk quote in `source.quote` — the sentence continues "…or give notice verbally when it should be given in writing." | 2027-02-09 |
-
-**`unverified` for `uk.yaml`.** Carry across the UK-relevant items of `us_uk.entry.unverified` as `{note, disclaims}`, including item 6 (UK employment law in flux) disclaiming `uk-notice-period-sets-your-start-date`.
-
-- [ ] **Step 1: Write the file** — `market: uk`, a `# NEXT REVIEW` block carrying `review-us_uk.md`'s "Important and missing" item 1 (the **Civil Service Nationality Rules** eligibility gate that sits in front of everything entry 3 describes — verified, published, and omitted; the reviewer flags that it names a protected trait, so a person must decide) and item 3 (the two suppressed thresholds), then the five entries in table order.
-
-- [ ] **Step 2: Run the lint**
-  ```
-  cd /Users/donghanglyu/code_project/job-hunt
-  python3 scripts/check_conventions.py --workspace /tmp/jh-lint \
-      --market-file references/market-conventions/uk.yaml --today 2026-08-09
-  ```
-  Expected: exit `0`. `PROTECTED_TRAIT` on `uk-right-to-work-check-is-universal-and-you-pick-the-evidence` must be closed by a written `protected_trait_note`, never by deleting the scoping — deleting it would make the entry wrong.
-
-- [ ] **Step 3: Verify the count and ids**
-  ```
-  cd /Users/donghanglyu/code_project/job-hunt && python3 -c "
-  import pathlib, sys; sys.path.insert(0, 'scripts')
-  import check_conventions as c
-  d = c.load_market_file(pathlib.Path('references/market-conventions/uk.yaml'))
-  ids = [e['id'] for e in d['conventions']]
-  print(len(ids)); print('\n'.join(ids))"
-  ```
-  Expected: `5`, and no id containing `scored` or `us_uk`.
-
-- [ ] **Step 4: Commit**
-  ```
-  cd /Users/donghanglyu/code_project/job-hunt
-  git add references/market-conventions/uk.yaml
-  git commit -m "conventions: uk table split out of us_uk, NHS section conflation fixed"
-  ```
-
----
-
-### Task 11: `references/market-conventions/us.yaml` and the all-tables regression test
-
-**Files:**
-- Create: `references/market-conventions/us.yaml`
-- Test: `scripts/tests/test_market_tables.py`
-
-**Interfaces:**
-- Consumes: `check_conventions.check_file(path, today) -> list[str]`, `check_conventions.load_market_file(path) -> dict`, `check_conventions.MARKET_KEYS`; `docs/superpowers/research/2026-08-09-market-conventions/{markets.json,review-us_uk.md}`.
-- Produces: `references/market-conventions/us.yaml` with six entries, and a test that holds **all five** shipped tables to the lint on every run.
-
-**The build rule (repeated in full — do not improvise convention text).**
-
-1. Read `entry.conventions[i]` in `markets.json` under `market: us_uk`, and the matching numbered section of `review-us_uk.md`.
-2. **KEEP** → copy `text_en`, `text_zh`, `applies_when`, `why` byte-for-byte.
-3. **KEEP-WITH-EDIT** → use the review's replacement wording byte-for-byte where it gives a whole field; splice only at the sentence it quotes where it gives a partial. Do not rewrite for style.
-4. **SPLIT** → take only the sentences of the review's replacement text that belong to this market, and nothing else.
-5. Restructure `source_kind` + `source_detail` into the structured `source:` mapping with `also:` for further citations, using the attribution the review corrects to.
-6. `added: "2026-08-09"`; `review_by` from the table.
-7. Apply only edits the reviewer wrote out; "Important and missing" goes verbatim into `# NEXT REVIEW` and nowhere else.
-
-**Disposition — `us`, from `review-us_uk.md`.**
-
-| # | New id | Verdict | Shipped text comes from | `review_by` |
-|---|---|---|---|---|
-| 1 | `us-authorisation-and-sponsorship-are-separate-screens` | KEEP-WITH-EDIT | review §1 replacement `text_en`/`text_zh` and replacement `why`. The original claimed what US application *forms* do; the source only says an employer *may ask*. Add `protected_trait_note`: the fact **is** a citizenship-status discrimination rule, and the complaint route is unusable without naming the basis. | 2027-08-09 |
-| 2 | `us-employer-class-decides-h1b-cap-exposure` | KEEP-WITH-EDIT | review §2 replacement `text_en`/`text_zh` and replacement `why`. Three fixes: restore the "at a qualifying institution" limb of the duties test, correct `why` (cap exemption turns on the organisation **and** the duties — the original `why` contradicted the regulation the entry cites), and drop the absolute "postings never mention this". `H-1B` is on the lint's `PROPER_NOUNS` allowlist — **do not delete it to satisfy a lint**, it is the only string that makes this entry findable. | 2026-11-09 |
-| 3 | `us-stem-opt-is-an-employer-side-requirement` | KEEP-WITH-EDIT (one word each) | `markets.json` text with "never" → "rarely" and 「从不披露」 → 「很少披露」. Everything else survived scrutiny intact. **Do not add an E-Verify employer lookup**: the reviewer's fetch returned HTTP 403 and they make no claim that a public one exists. | 2027-02-09 |
-| 4 | `us-at-will-is-the-default` | KEEP-WITH-EDIT, SPLIT from `us_uk-at-will-versus-notice-period-changes-your-start-date` | **Only the US sentences** of review §4's replacement `text_en`/`text_zh` — from "US employment is at-will in the ordinary case" to "…the customary short resignation notice is a norm, not an entitlement." That replacement already carries the scoping the original lacked: at-will is state law rather than a federal statute, so it is a default and not a universal rule. The unsourced employer-behaviour claims ("US employers commonly expect a near-term start date", "the at-will wording is standard boilerplate") do **not** ship. | 2027-02-09 |
-| 5 | `us-pay-range-in-a-posting-is-jurisdictional-not-cultural` | KEEP-WITH-EDIT | `markets.json` text with review §5's four fixes: cite the redirect **destination** URL for Colorado so the row does not rot; change 「在所有对外发布的职位、晋升和调岗机会中」 to 「在其对外发布的相关职位、晋升和调岗机会中」 (the source says "designated", not "all"); add "a job description and" before "a compensation range" in en and 「职位描述与」 in zh; leave "mostly" as "mostly" and do not let it drift to "only". | 2026-11-09 |
-| 6 | `us-you-choose-your-form-i9-documents` | KEEP-WITH-EDIT | review §6 replacement for the last two sentences of `text_en`/`text_zh`. **Two things must be fixed or this must not ship.** (a) `source.quote` currently ends `"Employers can't specify which documents they" [require]` — `[require]` is a word nobody wrote, closing a quote cut mid-clause. The real sentence is `"Employers can't specify which documents they will accept from a worker and should not prevent an individual from working because of a document's future expiration date."` Use it in full. (b) The prohibition is conditional in the source — "on the basis of citizenship, immigration status, or national origin" — and dropping that basis leaves a reader with no complaint. The replacement text restores it. Add `protected_trait_note` for the same reason as entry 1. | 2027-08-09 |
-
-**`unverified` for `us.yaml`.** Carry the US-relevant items of `us_uk.entry.unverified` across as `{note, disclaims}`, **with the reviewer's correction**: item 5 says no official source was verified for a US salary-history ban, and the entry's own Colorado source contains one verbatim. Drop that item and record the correction in `# NEXT REVIEW`.
-
-- [ ] **Step 1: Write the file** — `market: us`, a `# NEXT REVIEW` block carrying `review-us_uk.md`'s "Important and missing" items 2 (Colorado's pay-history ban, verbatim from a page already fetched) and 3 (the two suppressed thresholds — `at least half of their work time` and `four or more employees`, both verified and both currently unusable as written), plus the "Could not source" note about the E-Verify lookup, then the six entries in table order.
-
-- [ ] **Step 2: Write the all-tables regression test**
+  It lives here, before a single table exists, so it has a real red phase and then goes
+  green one table at a time across Tasks 7–11. Written after `us.yaml` it would never
+  have failed once, and a regression test that was never red is a test nobody has
+  evidence works.
 
   Create `scripts/tests/test_market_tables.py`:
   ```python
@@ -2988,7 +3013,7 @@ The two modes exist because the drop is the mechanism working, not the assessmen
 
   import check_conventions as cck
 
-  ROOT = pathlib.Path(__file__).resolve().parents[2] / "references" / "market-conventions"
+  ROOT = cck.CONVENTIONS_DIR
   # Pinned so the suite does not start failing on a review_by date rolling past. When it
   # does roll past, that is the CI lint's job to say so, not this test's.
   BUILD_DAY = datetime.date(2026, 8, 9)
@@ -2999,6 +3024,14 @@ The two modes exist because the drop is the mechanism working, not the assessmen
   def test_every_market_key_has_a_table():
       for key in cck.MARKET_KEYS:
           assert (ROOT / f"{key}.yaml").exists(), key
+
+
+  def test_every_table_declares_the_market_its_filename_claims():
+      # check_file only checks membership in MARKET_KEYS, and check_assessment selects
+      # the table by FILENAME. A file called nl.yaml that declares `market: de` is
+      # therefore invisible — and a wrong market card reads exactly like a right one.
+      for key in cck.MARKET_KEYS:
+          assert cck.load_market_file(ROOT / f"{key}.yaml")["market"] == key, key
 
 
   def test_every_shipped_table_passes_the_lint_with_no_hard_finding():
@@ -3033,11 +3066,20 @@ The two modes exist because the drop is the mechanism working, not the assessmen
 
   def test_the_three_live_violations_the_reviewer_found_are_gone():
       # "51job" in an English body, "30% ruling" in both languages, "2023/970" in a body.
-      cn = (ROOT / "cn.yaml").read_text(encoding="utf-8")
-      nl = (ROOT / "nl.yaml").read_text(encoding="utf-8")
-      for blob, needle in ((cn, "51job"), (nl, "30%"), (nl, "2023/970")):
-          body = "\n".join(l for l in blob.splitlines() if not l.lstrip().startswith("#"))
-          assert needle not in body, needle
+      #
+      # Scoped to the PROSE fields, and that scoping is the whole point. Both needles
+      # are also legitimate citation content: cn-campus-track-is-cohort-gated-and-early
+      # cites the 51job.com homepage, and nl-pay-range-not-pay-history cites the EUR-Lex
+      # title "Directive (EU) 2023/970 …". Grepping the whole file would leave exactly
+      # one escape — deleting the citation — which is the outcome the README's exemption
+      # paragraph exists to prevent.
+      needles = {"cn": ("51job",), "nl": ("30%", "2023/970")}
+      for key, wanted in needles.items():
+          data = cck.load_market_file(ROOT / f"{key}.yaml")
+          for entry in data["conventions"]:
+              prose = " ".join(str(entry.get(f) or "") for f in cck.PROSE_FIELDS)
+              for needle in wanted:
+                  assert needle not in prose, f"{entry['id']}: {needle}"
 
 
   def test_the_allowlisted_proper_nouns_survived_the_digit_ban():
@@ -3046,19 +3088,1034 @@ The two modes exist because the drop is the mechanism working, not the assessmen
           assert needle in us, needle
   ```
 
-- [ ] **Step 3: Run the lint and the test**
-  ```
-  cd /Users/donghanglyu/code_project/job-hunt
-  python3 scripts/check_conventions.py --workspace /tmp/jh-lint --all --today 2026-08-09
-  python3 -m pytest scripts/tests/test_market_tables.py -q
-  ```
-  Expected: the lint exits `0`; the test reports PASS (7 passed).
+  Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests/test_market_tables.py -q`
+  Expected: **FAIL — 8 failed**, every one of them `assert (ROOT / "cn.yaml").exists()`-shaped
+  or a `FileNotFoundError`. No table exists yet. Record the failure count; it drops as
+  Tasks 7–11 land.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 8: Commit**
   ```
   cd /Users/donghanglyu/code_project/job-hunt
-  git add references/market-conventions/us.yaml scripts/tests/test_market_tables.py
-  git commit -m "conventions: us table plus an all-tables regression over the shipped five"
+  git add references/market-conventions/README.md scripts/check_conventions.py \
+          scripts/tests/test_check_conventions.py scripts/tests/test_market_tables.py \
+          docs/superpowers/research/2026-08-09/review-cn.md \
+          docs/superpowers/research/2026-08-09/review-nl_weu.md \
+          docs/superpowers/research/2026-08-09/review-de.md \
+          docs/superpowers/research/2026-08-09/review-us_uk.md
+  git commit -m "conventions: table lint plus the README that is its spec, and the source research"
+  ```
+
+---
+
+### Task 7: `references/market-conventions/cn.yaml`
+
+**Files:**
+- Create: `references/market-conventions/cn.yaml`
+- Test: (none new — the deliverable is `check_conventions.py --market-file references/market-conventions/cn.yaml` exiting 0 with no hard finding)
+
+**Interfaces:**
+- Consumes: `check_conventions.check_file(path, today) -> list[str]`, `check_conventions.load_market_file(path) -> dict`; the entry shape in `references/market-conventions/README.md`; the research at `docs/superpowers/research/2026-08-09/`.
+- Produces: `references/market-conventions/cn.yaml` with ten entries, ids exactly as in the table below. `modes/assess.md` and `check_assessment.py` reference these ids.
+
+**The build rule for every table task (7 through 11).** Follow it literally; do not improvise convention text.
+
+1. Read the entry in `docs/superpowers/research/2026-08-09/markets.json` (`entry.conventions[i]`) and the matching numbered section of the review file.
+2. **KEEP** → copy `text_en`, `text_zh`, `applies_when`, `why` byte-for-byte from `markets.json`.
+3. **KEEP-WITH-EDIT** → the review contains the replacement wording. Where the review gives a whole `text_en`/`text_zh`, use it byte-for-byte. Where it gives "replacement for the final sentence" / "insert the third sentence", splice **only at the sentence the review quotes** and leave every surrounding sentence untouched. Do not rewrite for style.
+4. **DROP** → the entry does not appear in any table. Record the id and the one-line reason in the `# DROPPED` comment block at the top of the file.
+5. Restructure the flat `source_kind` + `source_detail` prose into the structured `source:` mapping the README specifies: `kind`, `publisher`, `title`, `url`, `retrieved`, `quote` (one verbatim string from `source_detail`), plus `also:` for every further citation `source_detail` carries. The review states, per entry, which URL the quote actually belongs to — use that attribution, not the original one.
+6. Set `added: "2026-08-09"` on every entry, and `review_by` from the table below. The mapping is the README's rule applied to the reviewer's staleness rating: high → `2026-11-09`, medium → `2027-02-09`, low → `2027-08-09`.
+7. **Apply only edits the reviewer wrote out.** Everything the reviewer listed under "Important and missing" goes verbatim into a `# NEXT REVIEW` comment block at the top of the file, and into nothing else. Writing a new convention from a research note is authoring a market claim, and this table is the one place where only a person who checked the source may do that.
+
+**Disposition — `cn`, from `review-cn.md`. All ten entries ship.**
+
+| # | id | Verdict | Shipped text comes from | `review_by` |
+|---|---|---|---|---|
+| 1 | `cn-boss-profile-is-the-screen` | KEEP-WITH-EDIT | review §1 replacement block (drops the unsourced 「迷你简历」 terminology claim) | 2027-02-09 |
+| 2 | `cn-salary-expectation-declared-up-front` | KEEP-WITH-EDIT | review §2 replacement block (drops the unsourced "feeds the matching" claim) | 2027-02-09 |
+| 3 | `cn-campus-track-is-cohort-gated-and-early` | KEEP-WITH-EDIT | review §3 replacement block (the entry's own sources refute the exclusivity claim) | 2026-11-09 |
+| 4 | `cn-fresh-graduate-status-is-administrative` | KEEP-WITH-EDIT | review §4 replacement block (restores the central baseline 「各省自行规定」 erased) | 2026-11-09 |
+| 5 | `cn-three-party-agreement-is-not-the-employment-contract` | KEEP | `markets.json` verbatim. Correct `source.publisher` to 教育部学生服务与素质发展中心 and note the article is 综合整理, an official-platform explainer rather than a primary instrument | 2027-08-09 |
+| 6 | `cn-state-organised-recruitment-channel` | KEEP-WITH-EDIT | review §6 replacement block. **This is one of the live constraint violations the lint exists for: the old `text_en` contained "51job".** | 2026-11-09 |
+| 7 | `cn-posting-salary-is-not-a-defined-quantity` | KEEP-WITH-EDIT | review §7 replacement block (drops the statistics-definition category slip; 可主张 no longer rendered as 必须履行) | 2027-08-09 |
+| 8 | `cn-what-an-employer-may-ask-and-what-truthfulness-costs` | KEEP-WITH-EDIT | `markets.json` text with **only the final sentence** replaced by review §8's two blocks (adds the Beijing-only scope the reader could not otherwise see) | 2027-08-09 |
+| 9 | `cn-hukou-application-is-filed-by-the-employer` | KEEP-WITH-EDIT | review §9 replacement block. Also re-point `source` at 沪教委学〔2026〕13号 via the SJTU page the review verified, and add the SJTU 申请主体 and one-filing-per-cycle quotes to `source.also`. The unsourced "registration cut-off" detail must not reappear. | 2026-11-09 |
+| 10 | `cn-internship-is-usually-not-an-employment-relationship` | KEEP | `markets.json` verbatim. Add the review's precision note to `source.note`: the statutory sentence covers 勤工助学, and the broad proposition rests on commentary plus two contrasting outcomes. | 2027-08-09 |
+
+**`unverified` for `cn.yaml`.** Carry items 1–7 of `markets.json`'s `cn.entry.unverified` across, each as `{note, disclaims}`. `disclaims` must name the entry the note limits — item 3 (背调 prevalence) disclaims `cn-what-an-employer-may-ask-and-what-truthfulness-costs`; item 5 (期望薪资 norms) disclaims `cn-salary-expectation-declared-up-front`; item 6 (薪资构成 detail) disclaims `cn-posting-salary-is-not-a-defined-quantity`. Items with no matching entry are dropped rather than pointed at an unrelated one. **If the lint returns `WARN_UNVERIFIED_OVERLAP`, the fix is to delete the disclaimed assertion from `text_en`/`text_zh` — not to soften the note.** The reader never sees `unverified`.
+
+- [ ] **Step 1: Open the file with its header blocks, and define the lint helper**
+
+  Create `references/market-conventions/cn.yaml` with its comment blocks and nothing
+  else yet:
+  ```yaml
+  # Market conventions — China (cn)
+  #
+  # Built 2026-08-09 from docs/superpowers/research/2026-08-09/
+  # markets.json + review-cn.md. Every `published` URL in that research was fetched and
+  # every "Verbatim:" string grepped against the fetched text on 2026-08-09.
+  #
+  # DROPPED
+  #   (none — all ten cn entries ship)
+  #
+  # NEXT REVIEW — sourced facts the reviewer found MISSING. Do not write these into
+  # conventions from this comment; a person must check the source first.
+  #   1. 劳动合同法 第九条: an employer may not withhold your 居民身份证 or other documents,
+  #      demand a guarantee, or collect property from you under any name. China-wide,
+  #      invisible on any posting, and the legal hook for the 招转培 pattern entry 6 flags.
+  #   2. 第八条 running the other way: the employer must 如实告知 工作内容、工作条件、
+  #      工作地点、职业危害、安全生产状况、劳动报酬. Entry 8 ships only the candidate-side duty.
+  #   3. The 国聘行动 notice bans 毕业院校 / 国（境）外学习经历 / 学习方式 / 本单位实习期限 as
+  #      screening conditions — for participants in that campaign, not market-wide.
+  #   4. Shanghai: a failed employer 落户 filing cannot be re-submitted by another employer
+  #      in the same cycle.
+  #   5. 劳动合同法 第十条: a written contract must be concluded within one month of starting.
+
+
+  market: cn
+
+  conventions:
+  ```
+
+  Then define the one-line lint to run after **every single entry**, so a bad splice is
+  caught while you still remember what you spliced. One checkbox per entry is not
+  bureaucracy: each of these 10 entries is a splice from a 20k-character adversarial
+  review with its own `source:` restructuring, and doing them all behind one checkbox is
+  exactly how a wrong attribution reaches a reader who has no source text to catch it.
+  ```
+  cd /Users/donghanglyu/code_project/job-hunt && mkdir -p /tmp/jh-lint
+  lint_cn() { python3 scripts/check_conventions.py --workspace /tmp/jh-lint \
+      --market-file references/market-conventions/cn.yaml --today 2026-08-09; }
+  ```
+
+- [ ] **Step 2: Entry 1 — `cn-boss-profile-is-the-screen`**
+
+  Written out in full, because it is the pattern every other entry in every other table
+  follows — the structured `source:` with `also:`, the block scalars, the ISO dates:
+  ```yaml
+    - id: cn-boss-profile-is-the-screen
+      text_en: |-
+        On BOSS直聘 the recruiter does not see your CV file first. What they see is the
+        structured profile you filled in at registration — the operator's own SEC filing
+        calls it a mini resume — and your full CV and contact details reach them only on
+        mutual consent inside the chat. Treat those profile fields as the actual
+        screening document and write them for a reader who will decide from them alone.
+      text_zh: |-
+        在 BOSS 直聘上，招聘方一开始看不到你的简历附件，只能看到你注册时填写的在线简历；完整简历和
+        联系方式要等双方在聊天中互相同意后才会送达。所以真正被筛的是在线资料的那几栏，要按「对方只看
+        这些就下判断」来写。
+      applies_when: "Applying through BOSS直聘, on any track (社招, 校招 or 实习)."
+      added: "2026-08-09"
+      review_by: "2027-02-09"
+      source:
+        kind: published
+        publisher: "Kanzhun Limited (operator of BOSS直聘), filed with the U.S. Securities and Exchange Commission"
+        title: "Annual Report on Form 20-F for the fiscal year ended December 31, 2025"
+        url: "https://www.sec.gov/Archives/edgar/data/1842827/000110465926050959/bz-20251231x20f.htm"
+        retrieved: "2026-08-09"
+        quote: "enterprise users on our platforms can only see a job seeker's mini resume that contains limited information. Enterprise users are not allowed to access job seekers' full resume or their contact information without job seekers' express consents"
+        also:
+          - publisher: "Kanzhun Limited"
+            title: "Annual Report on Form 20-F for the fiscal year ended December 31, 2025"
+            url: "https://www.sec.gov/Archives/edgar/data/1842827/000110465926050959/bz-20251231x20f.htm"
+            retrieved: "2026-08-09"
+            quote: "job seekers are required to provide basic personal and professional information, to create a mini resume which can be viewed by interested enterprise users"
+      why: |-
+        The posting shows a job description and a chat button. Nothing on it tells you
+        that the artefact being screened is your platform profile rather than the CV you
+        spent your effort on, so candidates optimise the wrong document.
+  ```
+
+  Then lint the file as it stands:
+  ```
+  lint_cn
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 3: Entry 2 — `cn-salary-expectation-declared-up-front`**
+
+  Build it exactly as row 2 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_cn
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 4: Entry 3 — `cn-campus-track-is-cohort-gated-and-early`**
+
+  Build it exactly as row 3 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_cn
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 5: Entry 4 — `cn-fresh-graduate-status-is-administrative`**
+
+  Build it exactly as row 4 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_cn
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 6: Entry 5 — `cn-three-party-agreement-is-not-the-employment-contract`**
+
+  Build it exactly as row 5 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_cn
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 7: Entry 6 — `cn-state-organised-recruitment-channel`**
+
+  Build it exactly as row 6 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_cn
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 8: Entry 7 — `cn-posting-salary-is-not-a-defined-quantity`**
+
+  Build it exactly as row 7 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_cn
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 9: Entry 8 — `cn-what-an-employer-may-ask-and-what-truthfulness-costs`**
+
+  Build it exactly as row 8 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_cn
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 10: Entry 9 — `cn-hukou-application-is-filed-by-the-employer`**
+
+  Build it exactly as row 9 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_cn
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 11: Entry 10 — `cn-internship-is-usually-not-an-employment-relationship`**
+
+  Build it exactly as row 10 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_cn
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 12: Run the lint to verify the table ships**
+
+  Run:
+  ```
+  cd /Users/donghanglyu/code_project/job-hunt
+  python3 scripts/check_conventions.py --workspace /tmp/jh-lint \
+      --market-file references/market-conventions/cn.yaml --today 2026-08-09
+  ```
+  Expected: exit `0`. Any `DIGIT_IN_PROSE`, `PERCENT_IN_PROSE`, `PROTECTED_TRAIT`, `MISSING_FIELD`, `BAD_SOURCE_*` or `EXPIRED_REVIEW_BY` line is a defect in the YAML, not in the lint — fix the YAML. `WARN_` lines do not fail; read each one and either fix the drift or record in the `# NEXT REVIEW` block why it is acceptable.
+
+- [ ] **Step 13: Verify the entry count and ids**
+
+  Run:
+  ```
+  cd /Users/donghanglyu/code_project/job-hunt && python3 -c "
+  import pathlib, sys; sys.path.insert(0, 'scripts')
+  import check_conventions as c
+  d = c.load_market_file(pathlib.Path('references/market-conventions/cn.yaml'))
+  ids = [e['id'] for e in d['conventions']]
+  print(len(ids)); print('\n'.join(ids))"
+  ```
+  Expected: `10`, then the ten ids of the disposition table in that order.
+
+- [ ] **Step 14: Commit**
+  ```
+  cd /Users/donghanglyu/code_project/job-hunt
+  git add references/market-conventions/cn.yaml
+  git commit -m "conventions: cn table, ten entries with the adversarial review applied"
+  ```
+
+---
+
+### Task 8: `references/market-conventions/nl.yaml`
+
+**Files:**
+- Create: `references/market-conventions/nl.yaml`
+
+**Interfaces:**
+- Consumes: `check_conventions.check_file(path, today) -> list[str]`, `check_conventions.load_market_file(path) -> dict`; `references/market-conventions/README.md`; `docs/superpowers/research/2026-08-09/{markets.json,review-nl_weu.md}`.
+- Produces: `references/market-conventions/nl.yaml` with nine entries, ids as in the table below (note the `nl-weu-` prefix is gone).
+
+**Re-scoping.** The research key is `nl_weu`; the spec splits it and keeps `nl` only, because the Belgian half is two sourced facts with no application artifacts, no interview shape and no language expectations — the reviewer's own closing finding says "either scope the market key to NL, or source Belgium". So: **the Belgium-only entry is dropped, and every Belgian clause is cut out of the entries that survive.** Ids lose the `weu`.
+
+**The build rule (repeated in full — do not improvise convention text).**
+
+1. Read `entry.conventions[i]` in `markets.json` under `market: nl_weu`, and the matching numbered section of `review-nl_weu.md`.
+2. **KEEP** → copy `text_en`, `text_zh`, `applies_when`, `why` byte-for-byte.
+3. **KEEP-WITH-EDIT** → use the review's replacement wording byte-for-byte where it gives a whole field; splice only at the sentence it quotes where it gives a partial. Do not rewrite for style.
+4. **DROP** → the entry appears in no table; id and one-line reason go in the `# DROPPED` comment block.
+5. Restructure `source_kind` + `source_detail` into the structured `source:` mapping with `also:` for further citations, using the attribution the review corrects to.
+6. `added: "2026-08-09"`; `review_by` from the table.
+7. Apply only edits the reviewer wrote out; "Important and missing" goes verbatim into `# NEXT REVIEW` and nowhere else.
+
+**Disposition — `nl`, from `review-nl_weu.md`.**
+
+| # | New id | Verdict | Shipped text comes from | `review_by` |
+|---|---|---|---|---|
+| 1 | `nl-recognised-sponsor-gate` | KEEP-WITH-EDIT | review §1 replacement `text_en`/`text_zh`. Attribute the register quote to the **Work** register page only, and add the orientation-year permit citation to `source.also` — that permit is applied for by the candidate and breaks the "the employer is the deciding factor" frame. | 2027-02-09 |
+| 2 | `nl-salary-criterion-reset-annually` | KEEP-WITH-EDIT | review §2: `text_en` as given; for `text_zh` splice in the market-rate sentence the review quotes and change nothing else. | 2026-11-09 |
+| 3 | `nl-expat-scheme-is-an-employer-filing` | KEEP-WITH-EDIT | review §3 replacement blocks. **Live constraint violation: the old text carried "30% ruling" / 「30% 规则」 twice in each language.** Add the announced-reduction citation to `source.also`. | 2026-11-09 |
+| — | `nl-weu-be-single-permit-is-regional` | **DROP** | Belgium-only. The spec's market keys are cn/nl/de/uk/us; an entry that can only ever fire on a Belgian posting can never render, and leaving it invites a Dutch applicant reading Belgian regional-competence advice. | — |
+| 4 | `nl-sector-agreement-sets-the-band` | KEEP-WITH-EDIT | review §5 replacement blocks, **minus the Belgian sentence** — delete "In Belgium, sectoral minimum pay scales are set per joint committee (paritair comité / commission paritaire) and published in a government database." and its zh counterpart 「在比利时，行业最低工资表按「联合委员会」…公布。」 Use the review's replacement `applies_when` with "or Belgium" removed and "or joint committee" removed. Drop the Belgian citation from `source`. | 2027-02-09 |
+| 5 | `nl-motivation-letter-is-scored` | KEEP-WITH-EDIT | review §6 replacement blocks and replacement `applies_when` (which already scopes Belgium out). Fix the misquoted phone sentence in `source.quote` to the page's exact wording, including the "first prepared clear questions" clause. | 2027-02-09 |
+| 6 | `nl-language-requirement-must-be-justified` | KEEP-WITH-EDIT (heavy) | review §7 replacement blocks. Add the College-status citation to `source.also` — its opinions are authoritative but **not legally binding**, and the replacement text says so, which is the whole reason this entry survives rather than being dropped. | 2027-02-09 |
+| 7 | `nl-references-only-with-prior-permission` | KEEP-WITH-EDIT | review §8 replacement blocks. Add NVP clause 2.3 verbatim to `source.also`, or delete the background-check sentence — do not ship the sentence with clause 2.6 attached to it. | 2027-08-09 |
+| 8 | `nl-pay-range-not-pay-history` | KEEP-WITH-EDIT | `markets.json` text with review §9's middle replacement spliced in, **plus two constraint fixes**: replace the literal "2023/970" with "the EU pay-transparency directive" (en) and 「欧盟薪酬透明指令」 (zh), and add a `protected_trait_note` for the quoted "gender-neutral" / 「性别中立」 standard — it describes the *employer's* criteria inside a quoted legal test, not a candidate attribute. Use the review's replacement `applies_when` (EEA dropped). | 2026-11-09 |
+| 9 | `nl-regulated-profession-needs-formal-recognition` | KEEP-WITH-EDIT | review §10 replacement blocks. | 2027-08-09 |
+
+**`unverified` for `nl.yaml`.** Carry across the items from `markets.json` `nl_weu.entry.unverified` that still have a target after the re-scoping, each `{note, disclaims}`. The reviewer's cross-cutting finding is the acceptance criterion: in conventions 5, 6, 7 and 8 the `unverified` section correctly stated a claim was not sourced and the rendered text made that claim anyway. **Every claim `unverified` disclaims must be absent from the replacement text before this file is committed.** `WARN_UNVERIFIED_OVERLAP` is the mechanical hint; read the note and the text side by side yourself.
+
+- [ ] **Step 1: Open the file with its header blocks, and define the lint helper**
+
+  Create `references/market-conventions/nl.yaml` following the shape of `cn.yaml`'s first
+  entry: `market: nl`, a `# DROPPED` block naming `nl-weu-be-single-permit-is-regional`,
+  and a `# NEXT REVIEW` block carrying the review's "Important and missing" items 1–7
+  verbatim. No `conventions:` entries yet.
+
+  Then define the one-line lint to run after **every single entry**, so a bad splice is
+  caught while you still remember what you spliced. One checkbox per entry is not
+  bureaucracy: each of these 9 entries is a splice from a 20k-character adversarial
+  review with its own `source:` restructuring, and doing them all behind one checkbox is
+  exactly how a wrong attribution reaches a reader who has no source text to catch it.
+  ```
+  cd /Users/donghanglyu/code_project/job-hunt && mkdir -p /tmp/jh-lint
+  lint_nl() { python3 scripts/check_conventions.py --workspace /tmp/jh-lint \
+      --market-file references/market-conventions/nl.yaml --today 2026-08-09; }
+  ```
+
+- [ ] **Step 2: Entry 1 — `nl-recognised-sponsor-gate`**
+
+  Build it exactly as row 1 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_nl
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 3: Entry 2 — `nl-salary-criterion-reset-annually`**
+
+  Build it exactly as row 2 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_nl
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 4: Entry 3 — `nl-expat-scheme-is-an-employer-filing`**
+
+  Build it exactly as row 3 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_nl
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 5: Entry 4 — `nl-sector-agreement-sets-the-band`**
+
+  Build it exactly as row 4 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_nl
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 6: Entry 5 — `nl-motivation-letter-is-scored`**
+
+  Build it exactly as row 5 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_nl
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 7: Entry 6 — `nl-language-requirement-must-be-justified`**
+
+  Build it exactly as row 6 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_nl
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 8: Entry 7 — `nl-references-only-with-prior-permission`**
+
+  Build it exactly as row 7 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_nl
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 9: Entry 8 — `nl-pay-range-not-pay-history`**
+
+  Build it exactly as row 8 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_nl
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 10: Entry 9 — `nl-regulated-profession-needs-formal-recognition`**
+
+  Build it exactly as row 9 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_nl
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 11: Run the lint**
+  ```
+  cd /Users/donghanglyu/code_project/job-hunt
+  python3 scripts/check_conventions.py --workspace /tmp/jh-lint \
+      --market-file references/market-conventions/nl.yaml --today 2026-08-09
+  ```
+  Expected: exit `0`. In particular there must be **no** `PERCENT_IN_PROSE` on `nl-expat-scheme-is-an-employer-filing` and **no** `DIGIT_IN_PROSE` on `nl-pay-range-not-pay-history` — those two were the live violations this table is being rebuilt to close.
+
+- [ ] **Step 12: Verify the entry count and that Belgium is gone**
+  ```
+  cd /Users/donghanglyu/code_project/job-hunt && python3 -c "
+  import pathlib, sys; sys.path.insert(0, 'scripts')
+  import check_conventions as c
+  d = c.load_market_file(pathlib.Path('references/market-conventions/nl.yaml'))
+  ids = [e['id'] for e in d['conventions']]
+  blob = pathlib.Path('references/market-conventions/nl.yaml').read_text(encoding='utf-8')
+  body = '\n'.join(l for l in blob.splitlines() if not l.lstrip().startswith('#'))
+  print(len(ids)); print('\n'.join(ids))
+  print('belgium mentions in body:', body.lower().count('belgi'), body.count('比利时'))"
+  ```
+  Expected: `9`, the nine ids, and `belgium mentions in body: 0 0`.
+
+- [ ] **Step 13: Commit**
+  ```
+  cd /Users/donghanglyu/code_project/job-hunt
+  git add references/market-conventions/nl.yaml
+  git commit -m "conventions: nl table, re-scoped off nl_weu with the Belgian half dropped"
+  ```
+
+---
+
+### Task 9: `references/market-conventions/de.yaml`
+
+**Files:**
+- Create: `references/market-conventions/de.yaml`
+
+**Interfaces:**
+- Consumes: `check_conventions.check_file(path, today) -> list[str]`, `check_conventions.load_market_file(path) -> dict`; `references/market-conventions/README.md`; `docs/superpowers/research/2026-08-09/{markets.json,review-de.md}`.
+- Produces: `references/market-conventions/de.yaml` with eight entries.
+
+**The build rule (repeated in full — do not improvise convention text).**
+
+1. Read `entry.conventions[i]` in `markets.json` under `market: de`, and the matching numbered section of `review-de.md`.
+2. **KEEP** → copy `text_en`, `text_zh`, `applies_when`, `why` byte-for-byte.
+3. **KEEP-WITH-EDIT** → use the review's replacement wording byte-for-byte where it gives a whole field; splice only at the sentence it quotes where it gives a partial. Do not rewrite for style.
+4. **DROP** → the entry appears in no table; id and one-line reason go in the `# DROPPED` comment block.
+5. Restructure `source_kind` + `source_detail` into the structured `source:` mapping with `also:` for further citations, using the attribution the review corrects to.
+6. `added: "2026-08-09"`; `review_by` from the table.
+7. Apply only edits the reviewer wrote out; "Important and missing" goes verbatim into `# NEXT REVIEW` and nowhere else.
+
+**Disposition — `de`, from `review-de.md`.**
+
+| # | id | Verdict | Shipped text comes from | `review_by` |
+|---|---|---|---|---|
+| 1 | `de-arbeitszeugnis-is-a-graded-document` | KEEP-WITH-EDIT | review §1 replacement blocks. Both fixes are load-bearing: the certificate is **not** issued automatically (it is an entitlement you assert), and the grade above the middle needs 「stets」 **and** 「vollen」 together — a reinforcing word alone does not lift it, which is exactly the error this entry exists to prevent. | 2027-08-09 |
+| 2 | `de-degree-classification-is-a-separate-procedure` | KEEP-WITH-EDIT | `markets.json` text with review §2's "third sentence onward" replacement spliced in. Drop the unsourced word "voluntary" from `source`; keep the anabin incompleteness caveat, which is the most actionable line on the source and was missing. Use the review's number-word substitutes: "are not the same thing, and are run by different bodies" / 「不是一回事，分属不同机构」. | 2027-08-09 |
+| 3 | `de-employer-drives-the-permit-not-you` | KEEP-WITH-EDIT | `markets.json` text with **exactly two** reviewer-written edits: replace 「有义务保证求职者配合」 with 「有义务督促求职者履行配合义务」 (the statute says *work toward*, not *guarantee*), and add "for the skilled-worker and study-related residence purposes the provision lists" so the accelerated procedure does not read as universally available. | 2026-11-09 |
+| 4 | `de-works-council-must-consent-to-the-hire` | KEEP-WITH-EDIT | review §4's replacement `applies_when` and its replacement tail for `text_en`/`text_zh`. The tail is the correction that matters: the council's objection window is short and consent counts as given if it lapses, so this stage cannot explain a long silence — the original invited a candidate to attribute months of nothing to the works council. | 2027-08-09 |
+| 5 | `de-your-notice-period-sets-the-start-date` | KEEP-WITH-EDIT (substantive legal error) | review §5 replacement blocks, and add the § 23 KSchG citation the review supplies to `source.also`. The original collapsed the **employer-side** service-length ladder into a rule about the candidate's own resignation; a long-tenured candidate following it names a start date months later than the law requires and loses offers over a period they do not owe. | 2027-08-09 |
+| 6 | `de-public-sector-pay-is-classified-not-negotiated` | KEEP-WITH-EDIT (source labelling only) | `markets.json` text verbatim. In `source`, name § 16 Abs. 2 **TV-L** for the BAG case and state that the BVA catalogue covers the **federal** agreement — the two cover different collective agreements and the citation did not say so. **The § number goes in `source.title` or `source.quote`, both of which are exempt from the digit ban; it must NOT go in `source.note` or `source.publisher`, which are digit-scanned prose and will hard-fail with `DIGIT_IN_PROSE`.** | 2027-02-09 |
+| 7 | `de-application-is-a-file-not-a-cv` | KEEP-WITH-EDIT (ship-blocker) | review §7 replacement final sentences. **Fix the Cyrillic contamination: 「证明材料可另行索取」, not 「证明материалы可另行索取」** — that string renders verbatim to the reader. Add the counterweight sentence the agency states on the same page (limit the attachments to what the job needs). Cut the submission-mechanics sentence; it is layout, and this table is about what the market weighs. | 2027-02-09 |
+| 8 | `de-austrian-and-swiss-certificates-do-not-transfer` (renamed from `de-dach-reference-letters-do-not-transfer`) | KEEP-WITH-EDIT | `markets.json` text with review §8's replacement Austrian clause, plus the SECO sentence that a Swiss certificate may carry negatives where material. Update the SECO url to its 301 target. `applies_when` re-scoped: the candidate holds Austrian or Swiss work history **and is applying in Germany**. | 2027-08-09 |
+| — | `de-dach-ch-permit-is-employer-filed-and-capped` | **DROP** | Switzerland-only. The spec fixes the key set at cn/nl/de/uk/us, so this can never render under any of them — and if a renderer ever ignored `applies_when`, a German applicant would read Swiss quota advice as their own. | — |
+| — | `de-dach-at-advertised-pay-is-a-floor` | **DROP** | Austria-only, same reason. Entry 8 survives because its subject is a document a **German** employer will read. | — |
+
+**`unverified` for `de.yaml`.** Carry the `de.entry.unverified` items across as `{note, disclaims}`, **with two corrections the reviewer made**: the item claiming no official source could be found on the Bewerbungsfoto is wrong (the source is a page the entry already cites), so drop that item and record the correction in `# NEXT REVIEW`; and the item on the Anschreiben's status at international employers stays, disclaiming `de-application-is-a-file-not-a-cv`.
+
+- [ ] **Step 1: Open the file with its header blocks, and define the lint helper**
+
+  Create `references/market-conventions/de.yaml`: `market: de`, a `# DROPPED` block naming
+  both DACH entries with the reasons above, and a `# NEXT REVIEW` block carrying
+  `review-de.md`'s "Important and missing" items 1–5 verbatim. No entries yet.
+
+  Then define the one-line lint to run after **every single entry**, so a bad splice is
+  caught while you still remember what you spliced. One checkbox per entry is not
+  bureaucracy: each of these 8 entries is a splice from a 20k-character adversarial
+  review with its own `source:` restructuring, and doing them all behind one checkbox is
+  exactly how a wrong attribution reaches a reader who has no source text to catch it.
+  ```
+  cd /Users/donghanglyu/code_project/job-hunt && mkdir -p /tmp/jh-lint
+  lint_de() { python3 scripts/check_conventions.py --workspace /tmp/jh-lint \
+      --market-file references/market-conventions/de.yaml --today 2026-08-09; }
+  ```
+
+- [ ] **Step 2: Entry 1 — `de-arbeitszeugnis-is-a-graded-document`**
+
+  Build it exactly as row 1 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_de
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 3: Entry 2 — `de-degree-classification-is-a-separate-procedure`**
+
+  Build it exactly as row 2 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_de
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 4: Entry 3 — `de-employer-drives-the-permit-not-you`**
+
+  Build it exactly as row 3 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_de
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 5: Entry 4 — `de-works-council-must-consent-to-the-hire`**
+
+  Build it exactly as row 4 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_de
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 6: Entry 5 — `de-your-notice-period-sets-the-start-date`**
+
+  Build it exactly as row 5 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_de
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 7: Entry 6 — `de-public-sector-pay-is-classified-not-negotiated`**
+
+  Build it exactly as row 6 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  **The one trap in this entry:** the reviewer's correction is to name § 16 Abs. 2 TV-L,
+  and `SOURCE_PROSE_FIELDS = ("publisher", "note")` are digit-scanned. Put the paragraph
+  number in `source.title` or `source.quote` — both exempt, because a statute's number is
+  how it is named, not a statistic. Putting it in `source.note` hard-fails with
+  `DIGIT_IN_PROSE`, and the only ways out of that are dropping the citation or
+  mis-spelling it, which are the two outcomes the exemption exists to prevent.
+
+  Then lint the file as it stands:
+  ```
+  lint_de
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 8: Entry 7 — `de-application-is-a-file-not-a-cv`**
+
+  Build it exactly as row 7 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_de
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 9: Entry 8 — `de-austrian-and-swiss-certificates-do-not-transfer`**
+
+  Build it exactly as row 8 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_de
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 10: Run the lint**
+  ```
+  cd /Users/donghanglyu/code_project/job-hunt
+  python3 scripts/check_conventions.py --workspace /tmp/jh-lint \
+      --market-file references/market-conventions/de.yaml --today 2026-08-09
+  ```
+  Expected: exit `0`.
+
+- [ ] **Step 11: Verify the count, the ids, and that no Cyrillic survived**
+  ```
+  cd /Users/donghanglyu/code_project/job-hunt && python3 -c "
+  import pathlib, re, sys; sys.path.insert(0, 'scripts')
+  import check_conventions as c
+  p = pathlib.Path('references/market-conventions/de.yaml')
+  d = c.load_market_file(p)
+  ids = [e['id'] for e in d['conventions']]
+  print(len(ids)); print('\n'.join(ids))
+  print('cyrillic:', re.findall(r'[Ѐ-ӿ]+', p.read_text(encoding='utf-8')))"
+  ```
+  Expected: `8`, the eight ids, and `cyrillic: []`.
+
+- [ ] **Step 12: Commit**
+  ```
+  cd /Users/donghanglyu/code_project/job-hunt
+  git add references/market-conventions/de.yaml
+  git commit -m "conventions: de table, DACH-only entries dropped and the notice-period error fixed"
+  ```
+
+---
+
+### Task 10: `references/market-conventions/uk.yaml`
+
+**Files:**
+- Create: `references/market-conventions/uk.yaml`
+
+**Interfaces:**
+- Consumes: `check_conventions.check_file(path, today) -> list[str]`, `check_conventions.load_market_file(path) -> dict`; `references/market-conventions/README.md`; `docs/superpowers/research/2026-08-09/{markets.json,review-us_uk.md}`.
+- Produces: `references/market-conventions/uk.yaml` with five entries. `uk-civil-service-scores-named-behaviours-not-cover-letters` is the entry `lint_no_prediction.py`'s blockquote allowlist exists for — an employer that publishes its own rubric.
+
+**Re-scoping.** The research key is `us_uk`; the spec splits it, because the two markets are very different and the bundle made a US-sourced claim read as universal. Entries 7–10 are UK and come here; 1, 2, 3, 5, 6 are US and go to Task 11. Entry 4 covered both and is **split into two entries**, one per table, each carrying only its own half of the review's replacement text. Ids lose the `us_uk-` prefix and the `uk-` prefix stays.
+
+**The build rule (repeated in full — do not improvise convention text).**
+
+1. Read `entry.conventions[i]` in `markets.json` under `market: us_uk`, and the matching numbered section of `review-us_uk.md`.
+2. **KEEP** → copy `text_en`, `text_zh`, `applies_when`, `why` byte-for-byte.
+3. **KEEP-WITH-EDIT** → use the review's replacement wording byte-for-byte where it gives a whole field; splice only at the sentence it quotes where it gives a partial. Do not rewrite for style.
+4. **SPLIT** → take only the sentences of the review's replacement text that belong to this market, and nothing else.
+5. Restructure `source_kind` + `source_detail` into the structured `source:` mapping with `also:` for further citations, using the attribution the review corrects to.
+6. `added: "2026-08-09"`; `review_by` from the table.
+7. Apply only edits the reviewer wrote out; "Important and missing" goes verbatim into `# NEXT REVIEW` and nowhere else.
+
+**Disposition — `uk`, from `review-us_uk.md`.**
+
+| # | New id | Verdict | Shipped text comes from | `review_by` |
+|---|---|---|---|---|
+| 1 | `uk-check-the-public-sponsor-register-before-applying` | KEEP | `markets.json` verbatim (review §7: no digits, no drift, no overreach; refusing to state the salary figure and pointing at gov.uk is the correct pattern for a fact that changes yearly). Needs `protected_trait_note` only if the shipped text names a nationality term — check the lint output rather than assuming. | 2027-02-09 |
+| 2 | `uk-right-to-work-check-is-universal-and-you-pick-the-evidence` | KEEP-WITH-EDIT (small) | `markets.json` text with review §8's scoping change: "but **if you are not a British or Irish citizen** the choice of evidence is yours" / 「但若你不是英国或爱尔兰公民，选择用哪种证明是你的权利」. British and Irish citizens have a different route entirely. Add `protected_trait_note`: the fact **is** a citizenship-based evidence rule, and scoping it is what makes it correct rather than what makes it discriminatory. | 2027-02-09 |
+| 3 | `uk-civil-service-scores-named-behaviours-not-cover-letters` | KEEP-WITH-EDIT (small) | `markets.json` text with review §9's three fixes: add the two verified job-description sentences to `source` so the row is self-defending; soften "A general letter … scores nothing" to the review's exact replacement ("does not evidence any named behaviour, and each one is assessed on its own evidence" / 「无法为任何一项被点名的行为提供证据…」); add "where behaviours are assessed," because the page conditions it on the recruiting manager choosing to assess them. | 2027-02-09 |
+| 4 | `uk-nhs-shortlisting-is-assessed-against-the-person-specification` | KEEP-WITH-EDIT (substantive) | `markets.json` text with review §10's replacement second half, **and the id and opening changed from "scored" to "assessed"** — "scored" is not sourced; the pages say "judging how well your application matches". The conflation fix is the point: the *supporting information* section is where NHS Jobs tells you to sell yourself, and the *essential-and-desirable-criteria* section is the one carrying the do-not-identify-yourself instruction. A reader following the original would anonymise and de-narrativise the wrong box. | 2026-11-09 |
+| 5 | `uk-notice-period-sets-your-start-date` | KEEP-WITH-EDIT, SPLIT from `us_uk-at-will-versus-notice-period-changes-your-start-date` | **Only the UK sentences** of review §4's replacement `text_en`/`text_zh` — from "The UK works the other way:" to "…is therefore negotiated around a notice period as a matter of course." Plus the closing cross-market sentence, rewritten to the single market it now serves: keep "check your own contract, which may set the notice you owe". The review verified the UK half fully; it is the US half that rested on one state's agency. Restore the truncated gov.uk quote in `source.quote` — the sentence continues "…or give notice verbally when it should be given in writing." | 2027-02-09 |
+
+**`unverified` for `uk.yaml`.** Carry across the UK-relevant items of `us_uk.entry.unverified` as `{note, disclaims}`, including item 6 (UK employment law in flux) disclaiming `uk-notice-period-sets-your-start-date`.
+
+- [ ] **Step 1: Open the file with its header blocks, and define the lint helper**
+
+  Create `references/market-conventions/uk.yaml`: `market: uk`, and a `# NEXT REVIEW`
+  block carrying `review-us_uk.md`'s "Important and missing" item 1 (the **Civil Service
+  Nationality Rules** eligibility gate that sits in front of everything entry 3 describes
+  — verified, published, and omitted; the reviewer flags that it names a protected trait,
+  so a person must decide) and item 3 (the two suppressed thresholds). No entries yet.
+
+  Then define the one-line lint to run after **every single entry**, so a bad splice is
+  caught while you still remember what you spliced. One checkbox per entry is not
+  bureaucracy: each of these 5 entries is a splice from a 20k-character adversarial
+  review with its own `source:` restructuring, and doing them all behind one checkbox is
+  exactly how a wrong attribution reaches a reader who has no source text to catch it.
+  ```
+  cd /Users/donghanglyu/code_project/job-hunt && mkdir -p /tmp/jh-lint
+  lint_uk() { python3 scripts/check_conventions.py --workspace /tmp/jh-lint \
+      --market-file references/market-conventions/uk.yaml --today 2026-08-09; }
+  ```
+
+- [ ] **Step 2: Entry 1 — `uk-check-the-public-sponsor-register-before-applying`**
+
+  Build it exactly as row 1 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_uk
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 3: Entry 2 — `uk-right-to-work-check-is-universal-and-you-pick-the-evidence`**
+
+  Build it exactly as row 2 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_uk
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 4: Entry 3 — `uk-civil-service-scores-named-behaviours-not-cover-letters`**
+
+  Build it exactly as row 3 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_uk
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 5: Entry 4 — `uk-nhs-shortlisting-is-assessed-against-the-person-specification`**
+
+  Build it exactly as row 4 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_uk
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 6: Entry 5 — `uk-notice-period-sets-your-start-date`**
+
+  Build it exactly as row 5 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_uk
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 7: Run the lint**
+  ```
+  cd /Users/donghanglyu/code_project/job-hunt
+  python3 scripts/check_conventions.py --workspace /tmp/jh-lint \
+      --market-file references/market-conventions/uk.yaml --today 2026-08-09
+  ```
+  Expected: exit `0`. `PROTECTED_TRAIT` on `uk-right-to-work-check-is-universal-and-you-pick-the-evidence` must be closed by a written `protected_trait_note`, never by deleting the scoping — deleting it would make the entry wrong.
+
+- [ ] **Step 8: Verify the count and ids**
+  ```
+  cd /Users/donghanglyu/code_project/job-hunt && python3 -c "
+  import pathlib, sys; sys.path.insert(0, 'scripts')
+  import check_conventions as c
+  d = c.load_market_file(pathlib.Path('references/market-conventions/uk.yaml'))
+  ids = [e['id'] for e in d['conventions']]
+  print(len(ids)); print('\n'.join(ids))"
+  ```
+  Expected: `5`, and no id containing `scored` or `us_uk`.
+
+- [ ] **Step 9: Commit**
+  ```
+  cd /Users/donghanglyu/code_project/job-hunt
+  git add references/market-conventions/uk.yaml
+  git commit -m "conventions: uk table split out of us_uk, NHS section conflation fixed"
+  ```
+
+---
+
+### Task 11: `references/market-conventions/us.yaml` — the fifth table turns the regression green
+
+**Files:**
+- Create: `references/market-conventions/us.yaml`
+
+**Interfaces:**
+- Consumes: `check_conventions.check_file(path, today) -> list[str]`, `check_conventions.load_market_file(path) -> dict`, `check_conventions.MARKET_KEYS`, `check_conventions.CONVENTIONS_DIR`; `docs/superpowers/research/2026-08-09/{markets.json,review-us_uk.md}`; `scripts/tests/test_market_tables.py` (written in Task 6 Step 7).
+- Produces: `references/market-conventions/us.yaml` with six entries — the last of the five, which is what finally takes `test_market_tables.py` from red to green.
+
+**The build rule (repeated in full — do not improvise convention text).**
+
+1. Read `entry.conventions[i]` in `markets.json` under `market: us_uk`, and the matching numbered section of `review-us_uk.md`.
+2. **KEEP** → copy `text_en`, `text_zh`, `applies_when`, `why` byte-for-byte.
+3. **KEEP-WITH-EDIT** → use the review's replacement wording byte-for-byte where it gives a whole field; splice only at the sentence it quotes where it gives a partial. Do not rewrite for style.
+4. **SPLIT** → take only the sentences of the review's replacement text that belong to this market, and nothing else.
+5. Restructure `source_kind` + `source_detail` into the structured `source:` mapping with `also:` for further citations, using the attribution the review corrects to.
+6. `added: "2026-08-09"`; `review_by` from the table.
+7. Apply only edits the reviewer wrote out; "Important and missing" goes verbatim into `# NEXT REVIEW` and nowhere else.
+
+**Disposition — `us`, from `review-us_uk.md`.**
+
+| # | New id | Verdict | Shipped text comes from | `review_by` |
+|---|---|---|---|---|
+| 1 | `us-authorisation-and-sponsorship-are-separate-screens` | KEEP-WITH-EDIT | review §1 replacement `text_en`/`text_zh` and replacement `why`. The original claimed what US application *forms* do; the source only says an employer *may ask*. Add `protected_trait_note`: the fact **is** a citizenship-status discrimination rule, and the complaint route is unusable without naming the basis. | 2027-08-09 |
+| 2 | `us-employer-class-decides-h1b-cap-exposure` | KEEP-WITH-EDIT | review §2 replacement `text_en`/`text_zh` and replacement `why`. Three fixes: restore the "at a qualifying institution" limb of the duties test, correct `why` (cap exemption turns on the organisation **and** the duties — the original `why` contradicted the regulation the entry cites), and drop the absolute "postings never mention this". `H-1B` is on the lint's `PROPER_NOUNS` allowlist — **do not delete it to satisfy a lint**, it is the only string that makes this entry findable. | 2026-11-09 |
+| 3 | `us-stem-opt-is-an-employer-side-requirement` | KEEP-WITH-EDIT (one word each) | `markets.json` text with "never" → "rarely" and 「从不披露」 → 「很少披露」. Everything else survived scrutiny intact. **Do not add an E-Verify employer lookup**: the reviewer's fetch returned HTTP 403 and they make no claim that a public one exists. | 2027-02-09 |
+| 4 | `us-at-will-is-the-default` | KEEP-WITH-EDIT, SPLIT from `us_uk-at-will-versus-notice-period-changes-your-start-date` | **Only the US sentences** of review §4's replacement `text_en`/`text_zh` — from "US employment is at-will in the ordinary case" to "…the customary short resignation notice is a norm, not an entitlement." That replacement already carries the scoping the original lacked: at-will is state law rather than a federal statute, so it is a default and not a universal rule. The unsourced employer-behaviour claims ("US employers commonly expect a near-term start date", "the at-will wording is standard boilerplate") do **not** ship. | 2027-02-09 |
+| 5 | `us-pay-range-in-a-posting-is-jurisdictional-not-cultural` | KEEP-WITH-EDIT | `markets.json` text with review §5's four fixes: cite the redirect **destination** URL for Colorado so the row does not rot; change 「在所有对外发布的职位、晋升和调岗机会中」 to 「在其对外发布的相关职位、晋升和调岗机会中」 (the source says "designated", not "all"); add "a job description and" before "a compensation range" in en and 「职位描述与」 in zh; leave "mostly" as "mostly" and do not let it drift to "only". | 2026-11-09 |
+| 6 | `us-you-choose-your-form-i9-documents` | KEEP-WITH-EDIT | review §6 replacement for the last two sentences of `text_en`/`text_zh`. **Two things must be fixed or this must not ship.** (a) `source.quote` currently ends `"Employers can't specify which documents they" [require]` — `[require]` is a word nobody wrote, closing a quote cut mid-clause. The real sentence is `"Employers can't specify which documents they will accept from a worker and should not prevent an individual from working because of a document's future expiration date."` Use it in full. (b) The prohibition is conditional in the source — "on the basis of citizenship, immigration status, or national origin" — and dropping that basis leaves a reader with no complaint. The replacement text restores it. Add `protected_trait_note` for the same reason as entry 1. | 2027-08-09 |
+
+**`unverified` for `us.yaml`.** Carry the US-relevant items of `us_uk.entry.unverified` across as `{note, disclaims}`, **with the reviewer's correction**: item 5 says no official source was verified for a US salary-history ban, and the entry's own Colorado source contains one verbatim. Drop that item and record the correction in `# NEXT REVIEW`.
+
+- [ ] **Step 1: Open the file with its header blocks, and define the lint helper**
+
+  Create `references/market-conventions/us.yaml`: `market: us`, and a `# NEXT REVIEW`
+  block carrying `review-us_uk.md`'s "Important and missing" items 2 (Colorado's
+  pay-history ban, verbatim from a page already fetched) and 3 (the two suppressed
+  thresholds — `at least half of their work time` and `four or more employees`, both
+  verified and both currently unusable as written), plus the "Could not source" note
+  about the E-Verify lookup. No entries yet.
+
+  Then define the one-line lint to run after **every single entry**, so a bad splice is
+  caught while you still remember what you spliced. One checkbox per entry is not
+  bureaucracy: each of these 6 entries is a splice from a 20k-character adversarial
+  review with its own `source:` restructuring, and doing them all behind one checkbox is
+  exactly how a wrong attribution reaches a reader who has no source text to catch it.
+  ```
+  cd /Users/donghanglyu/code_project/job-hunt && mkdir -p /tmp/jh-lint
+  lint_us() { python3 scripts/check_conventions.py --workspace /tmp/jh-lint \
+      --market-file references/market-conventions/us.yaml --today 2026-08-09; }
+  ```
+
+- [ ] **Step 2: Entry 1 — `us-authorisation-and-sponsorship-are-separate-screens`**
+
+  Build it exactly as row 1 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_us
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 3: Entry 2 — `us-employer-class-decides-h1b-cap-exposure`**
+
+  Build it exactly as row 2 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_us
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 4: Entry 3 — `us-stem-opt-is-an-employer-side-requirement`**
+
+  Build it exactly as row 3 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_us
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 5: Entry 4 — `us-at-will-is-the-default`**
+
+  Build it exactly as row 4 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_us
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 6: Entry 5 — `us-pay-range-in-a-posting-is-jurisdictional-not-cultural`**
+
+  Build it exactly as row 5 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_us
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 7: Entry 6 — `us-you-choose-your-form-i9-documents`**
+
+  Build it exactly as row 6 of the disposition table above says, then apply build
+  rules 5 and 6: restructure the flat `source_kind` + `source_detail` into the
+  structured `source:` mapping using the attribution the review corrects to, set
+  `added: "2026-08-09"`, and take `review_by` from the row.
+
+  Then lint the file as it stands:
+  ```
+  lint_us
+  ```
+  Expected: exit `0`, or only `WARN_` lines. Any hard finding is a defect in the entry
+  you just wrote, not in the lint — fix the YAML before the next entry.
+
+- [ ] **Step 8: Watch the last of the red go green**
+
+  `scripts/tests/test_market_tables.py` was written in Task 6 Step 7, before any table
+  existed, and has been going green one file at a time ever since. It is not rewritten
+  here — rewriting a regression test in the task that finally satisfies it is how a test
+  ends up shaped around the thing it was meant to judge.
+
+  Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests/test_market_tables.py -q`
+  Expected: PASS (8 passed) — the first run in which every one of the eight is green.
+
+- [ ] **Step 9: Run the CI lint over all five tables at once**
+  ```
+  cd /Users/donghanglyu/code_project/job-hunt
+  mkdir -p /tmp/jh-lint
+  python3 scripts/check_conventions.py --workspace /tmp/jh-lint --all --today 2026-08-09
+  ```
+  Expected: exit `0`. `--all` resolves the directory from `check_conventions.CONVENTIONS_DIR`,
+  the one place that path is defined.
+
+- [ ] **Step 10: Commit**
+  ```
+  cd /Users/donghanglyu/code_project/job-hunt
+  git add references/market-conventions/us.yaml
+  git commit -m "conventions: us table completes the five, all-tables regression now green"
   ```
 
 ---
@@ -3070,14 +4127,20 @@ The two modes exist because the drop is the mechanism working, not the assessmen
 
 **Interfaces:**
 - Consumes: `paths.workspace(name, company, role, date)`; `scripts/evidence_blocks.py`, `scripts/count_coverage.py`, `scripts/consistency.py`, `scripts/check_evidence_refs.py`, `scripts/lint_no_prediction.py`, `scripts/check_conventions.py`, `scripts/check_assessment.py`; `references/market-conventions/{cn,nl,de,uk,us}.yaml`.
-- Produces (these are the definitions Task 13 enforces and nothing else supplies):
-  - the `posting.yaml` field list,
-  - the `fit-assessment.yaml` row schema,
-  - `DISCLAIMER_ANCHOR_ZH = "不是对结果的预判"` and `DISCLAIMER_ANCHOR_EN = "not a forecast of the outcome"`,
-  - the closed strategy set `apply_anyway | reposition | skill_sprint | side_door | change_track`,
-  - the 30/60/90 column names 目标 | 行动 | 验收标准 and the roadmap's 输出物 column.
+- Consumes also: `scripts/enter_mode.py` — step 0 of this file, and half of its own backstop.
+- Produces (these are the definitions Task 13 enforces and nothing else supplies — each one is named against the finding that enforces it, so a claim here that no gate makes true is visible as a blank):
 
-**Why this file is layer 1.5 and not a reference.** Entering assess mode loads it unconditionally — the model never has to judge whether it is relevant, there are only four such files, and the choice is deterministic. It has two backstops at once: `check_assessment.py` requires artifact fields that only this file defines, and `journal.jsonl` records its content hash. That is what makes it different from the optional-reference regression this skill's owner has already been bitten by.
+  | Definition | Enforced by |
+  |---|---|
+  | the twelve-name `posting.yaml` field list | Plan 1's `check_letter.NO_COMPANY_IN_POSTING`, plus the Step 2 anchor script |
+  | the `fit-assessment.yaml` row schema | `ROW_UNSOURCED`, `BAD_VERDICT`, `PROVISIONAL_VERDICT` |
+  | `DISCLAIMER_ANCHOR_ZH = "不是对结果的预判"` / `DISCLAIMER_ANCHOR_EN = "not a forecast of the outcome"` | `NO_DISCLAIMER` |
+  | the `## 硬性阻断项` section and its `R<n>` id list | `DISQUALIFIER_AFTER_VERDICT`, `NO_DISQUALIFIER_SECTION` |
+  | the closed strategy set `apply_anyway \| reposition \| skill_sprint \| side_door \| change_track` | `NO_STRATEGY_SECTION`, `STRATEGY_NOT_UNIQUE` |
+  | the 30/60/90 column names 目标 \| 行动 \| 验收标准 and the roadmap's 输出物 column | `NO_ACCEPTANCE_COLUMN` |
+  | the 「已过复核期」 stale-review banner | `MISSING_STALE_BANNER` |
+
+**Why this file is layer 1.5 and not a reference.** Entering assess mode loads it unconditionally — the model never has to judge whether it is relevant, there are only four such files, and the choice is deterministic. It has two backstops at once: `check_assessment.py` requires artifact fields that only this file defines, **and** `journal.jsonl` records its content hash, written by `scripts/enter_mode.py` in step 0 and checked by `check_assessment`'s `NO_MODE_ENTRY` / `MODE_FILE_CHANGED`. Both halves, or neither: the field backstop alone cannot tell "the model read this file" from "the model guessed a schema that happens to fit", which is exactly the optional-reference regression this skill's owner has already been bitten by.
 
 - [ ] **Step 1: Write the file**
 
@@ -3090,11 +4153,26 @@ The two modes exist because the drop is the mechanism working, not the assessmen
 
   **This mode owns** `posting.yaml`, `posting-source.txt`, `cv-source.txt`,
   `evidence-blocks.json`, `fit-assessment.yaml`, `fit-assessment.md`, `coverage.json`.
-  It reads `profile.yaml` and never writes it. Workspace path, byte-identical in shape to
-  the old skill so "resume an unfinished application" keeps working:
-  `~/.claude/job-profiles/<name>/applications/<company>-<role>-<YYYY-MM-DD>/`
+  It reads `profile.yaml` and never writes it. Resolve the workspace with
+  `paths.workspace(name, company, role, "2026-08-09")` — never by joining strings. That
+  one function owns the shape `~/.claude/job-profiles/<name>/applications/<company>-<role>-<YYYY-MM-DD>/`,
+  which is byte-identical to the old skill's so "resume an unfinished application" keeps
+  working; a run that builds its own path breaks resumption silently.
 
   ---
+
+  ## 0. Enter the mode — before anything else
+
+  ```
+  python3 scripts/enter_mode.py --workspace <ws> --mode assess
+  ```
+
+  This writes a `mode_entry` record to `journal.jsonl` carrying this file's content hash,
+  and `check_assessment.py` refuses to pass without it (`NO_MODE_ENTRY`) or with a hash
+  that no longer matches the file on disk (`MODE_FILE_CHANGED`). Read this file in full
+  after running it. The record is not paperwork: it is the only thing that distinguishes
+  "the model loaded this file" from "the model produced something shaped like what this
+  file asks for", and without it a layer-1.5 file is an optional reference again.
 
   ## 1. Fetch-integrity gate — a 200 OK is not evidence you have the posting
 
@@ -3120,21 +4198,26 @@ The two modes exist because the drop is the mechanism working, not the assessmen
   reads exactly like a right one and the reader has no source text to check it against.
   If `search-preferences.yaml` already holds a target market, confirm it **once per
   session** rather than once per posting — but re-ask whenever the posting's location does
-  not match the stored market.
+  not match the stored market. That file is written by discover mode; if it does not
+  exist, just ask. Never write it from here.
 
-  Markets with tables: `cn`, `nl`, `de`, `uk`, `us`. Anything else →
-  「本市场无惯例数据」 and no convention card at all. **Never substitute a neighbouring
-  market's conventions.**
+  Markets with tables: `cn`, `nl`, `de`, `uk`, `us`. Anything else → set
+  `market: other` in `fit-assessment.yaml`, say 「本市场无惯例数据」, and render no
+  convention card at all. The sixth token is `other`, never `none` — one spelling, so two
+  gates cannot disagree about the same word. **Never substitute a neighbouring market's
+  conventions.**
 
   ## 3. Extract `posting.yaml` — the complete field list
 
+  Twelve names, and this list is byte-identical to `SKILL.md`'s extraction field table.
+  Two copies is one thing; two copies that disagree is a downstream gate failing on a file
+  the upstream mode was told to write.
+
   ```yaml
   role_title: "..."          # exactly as written in the posting
+  company: "..."             # the exact public employer name
   seniority: mid             # intern | junior | mid | senior | lead
-  location:
-    city: "..."
-    country: "..."
-    arrangement: onsite      # remote | hybrid | onsite
+  location: "..."            # the posting's own location text, verbatim, one string
   must_haves: []             # required / essential / minimum / "you must"
   nice_to_haves: []          # preferred / bonus / a plus / ideally / advantageous
   responsibilities: []       # what the person will actually do, in the posting's words
@@ -3143,11 +4226,13 @@ The two modes exist because the drop is the mechanism working, not the assessmen
   red_flags: []
   salary_range: null         # the stated band, or null
   application_type: cv       # cv | structured
-  language: en               # the posting's own language
   ```
 
-  Two fields carry weight far past their size, and an earlier compression of this list
-  **silently dropped both**:
+  Three fields carry weight far past their size:
+  - `company` — the **exact public employer name**. `apply` mode names the workspace
+    directory from it and `check_letter.py` verifies the letter's recipient against it,
+    emitting `NO_COMPANY_IN_POSTING` — a hard finding — when this field is absent. Every
+    apply run downstream of an assess run that skipped it fails on that line.
   - `salary_range` — when present, ask the user **once** whether the band fits. A band
     mismatch is a common silent screen-out and is cheaper to surface now than after a
     full application. If no range is stated, do not raise salary at all.
@@ -3156,6 +4241,11 @@ The two modes exist because the drop is the mechanism working, not the assessmen
     evidence each criterion. It is the **only** signal that routes to a
     supporting-statement deliverable in `apply`. Getting it wrong produces a perfectly
     good CV for a process that does not read CVs.
+
+  An earlier compression of this list **silently dropped `salary_range` and
+  `application_type`**, and that defect shipped. There is no `language` field here: the
+  language the CV is calibrated for lives in `meta.language` on the profile, and a second
+  copy of it in the posting file is a second thing for the two to disagree about.
 
   Non-English cue words map the same way: `Erforderlich` / `Voraussetzungen` /
   `Sie bringen mit` → must_have; `Wünschenswert` / `von Vorteil` → nice_to_have;
@@ -3169,6 +4259,25 @@ The two modes exist because the drop is the mechanism working, not the assessmen
   Surface these **before anything else** and ask the user directly whether they meet them.
   No reframing closes a legal barrier, and a "mitigation" that treats one as a wording
   problem reads to a recruiter as already handled.
+
+  **The mechanical form, because "surface it first" is not checkable and this rule is too
+  important to leave uncheckable.** Whenever any requirement row is `screening: knockout`
+  with `match: gap` or `match: no_evidence`, `fit-assessment.md` opens with a
+  `## 硬性阻断项` section, **above** the counts block, and that section names every such
+  row **by its id**:
+
+  ```markdown
+  ## 硬性阻断项
+
+  - **R2** — 该岗位要求你已经持有欧盟工作许可。这是法律层面的门槛，不是表述问题。
+  - **R5** — 岗位要求本地注册执业资格。
+  ```
+
+  Write the barrier in your own words, in the reader's language — paraphrase is expected
+  and correct. The **id** is the mechanical handle, and it is what `check_assessment.py`
+  looks for (`DISQUALIFIER_AFTER_VERDICT`, `NO_DISQUALIFIER_SECTION`). Keying the check on
+  the posting's own wording instead would fire on every honest translation, and a check
+  that cries wolf on correct output is one people stop reading.
 
   ## 5. Cut evidence blocks
 
@@ -3262,8 +4371,15 @@ The two modes exist because the drop is the mechanism working, not the assessmen
   Load `references/market-conventions/<market>.yaml`. Render only entries whose
   `applies_when` is satisfied, and render `text_en` / `text_zh` **character for
   character**. You may not author, strengthen or extend an entry, attach a number to one,
-  or invent one. If an entry's `review_by` has passed, still render it, with a
-  「已过复核期」 banner.
+  or invent one.
+
+  **If an entry's `review_by` has passed, still render it, with a 「已过复核期」 banner.**
+  A date going by while the code did not change should not stop the skill working. The CI
+  lint (`check_conventions.py --all`) fails on the expired date so a person fixes it; the
+  runtime gate downgrades it to `WARN_EXPIRED_REVIEW_BY` and instead requires the banner
+  string 「已过复核期」 to appear in `fit-assessment.md` (`MISSING_STALE_BANNER`). Rendering
+  a stale card without telling the reader it is stale is the one thing that is worse than
+  either.
 
   The one sentence you write in this section is where **this CV** stands against the
   convention, and it cites CV blocks like any other claim. List the ids you rendered in
@@ -3287,6 +4403,10 @@ The two modes exist because the drop is the mechanism working, not the assessmen
   | `side_door` 侧门切入 | A contract, internal transfer, adjacent team or smaller employer reaches the same work |
   | `change_track` 换方向 | The blocking requirement is structural and not worth closing for this goal |
 
+  Write the chosen token literally — `check_assessment.py` counts how many of the five
+  appear in the section and fails on zero (`NO_STRATEGY_SECTION`) and on more than one
+  (`STRATEGY_NOT_UNIQUE`). A menu is not a recommendation; picking is the work.
+
   **(b) A 30/60/90 table** with exactly these columns:
 
   | 目标 | 行动 | 验收标准 |
@@ -3296,19 +4416,26 @@ The two modes exist because the drop is the mechanism working, not the assessmen
   **(c) A roadmap carrying an 输出物 column.**
 
   `验收标准` and `输出物` are where the entire value of this section sits — they are what
-  turn advice into something checkable. Every row of both tables must also appear in
+  turn advice into something checkable, and `NO_ACCEPTANCE_COLUMN` fails the gate when
+  either column header is missing. Every row of both tables must also appear in
   `actions:` in `fit-assessment.yaml`; that list is the single authoritative to-do list,
   and `consistency.py` compares it against the closable gaps.
 
   ## 11. Gates — run all of them, in this order
 
   ```
+  python3 scripts/evidence_blocks.py     --workspace <ws>   # step 5, listed again for order
   python3 scripts/count_coverage.py      --workspace <ws>
   python3 scripts/consistency.py         --workspace <ws>
   python3 scripts/check_evidence_refs.py --workspace <ws>
   python3 scripts/lint_no_prediction.py  --workspace <ws>
   python3 scripts/check_assessment.py    --workspace <ws>
   ```
+
+  `check_assessment.py` runs last on purpose: it reads the other five gates' receipts out
+  of `journal.jsonl` and refuses to pass if any of them is missing (`MISSING_RECEIPT`) or
+  recorded a failure (`UPSTREAM_FAILED`). Re-deriving their answers instead would let a
+  gate that was never run look identical to a gate that passed.
 
   Attach every notice `consistency.py` printed beside the thing it qualifies. Notices
   **report and never repair**: code can see two fields disagree, it cannot see which one
@@ -3321,9 +4448,12 @@ The two modes exist because the drop is the mechanism working, not the assessmen
 
   ## 12. Self-check before you hand this over
 
-  - [ ] `posting-source.txt` is verbatim and unedited; `posting.yaml` carries
-        `salary_range` and `application_type`.
-  - [ ] Disqualifiers were asked about, and they render **before** the verdict.
+  - [ ] `scripts/enter_mode.py --mode assess` ran before anything else, and this file was
+        read in full after it.
+  - [ ] `posting-source.txt` is verbatim and unedited; `posting.yaml` carries all twelve
+        fields, including `company`, `salary_range` and `application_type`.
+  - [ ] Disqualifiers were asked about, and a `## 硬性阻断项` section names each blocking
+        row **by id**, **before** the verdict.
   - [ ] Every requirement row prints its evidence reference; no block id appears in prose.
   - [ ] The coverage block is the one `count_coverage.py` produced, byte for byte.
   - [ ] The disclaimer is present, unchanged, directly under the block.
@@ -3331,34 +4461,55 @@ The two modes exist because the drop is the mechanism working, not the assessmen
         rubric with its source named on the next line.
   - [ ] Convention cards are verbatim from `references/market-conventions/<market>.yaml`,
         `applies_when` was honoured, and `conventions_rendered` lists their ids.
+  - [ ] Any rendered entry whose `review_by` has passed carries the 「已过复核期」 banner.
   - [ ] Every consistency notice that fired is attached where it fired.
-  - [ ] If the verdict is 大概率被筛掉 or 硬性阻断: one strategy, a 30/60/90 table with
-        `验收标准`, and a roadmap with `输出物` — all mirrored into `actions:`.
+  - [ ] If the verdict is 大概率被筛掉 or 硬性阻断: **exactly one** strategy token from the
+        closed set, a 30/60/90 table with a `验收标准` column, and a roadmap with an
+        `输出物` column — all mirrored into `actions:`.
   - [ ] A discover-stage 「基于卡片信息的初判」 verdict was **not** copied in. assess
         always recomputes.
   - [ ] `check_assessment.py` exited 0 and its receipt is in `journal.jsonl`.
   `````
 
-- [ ] **Step 2: Verify the file defines what the gate will look for**
+- [ ] **Step 2: Write the anchor script and run it BEFORE the file exists**
 
-  Run:
-  ```
+  Every other task in this plan has a red phase; this one has to be given one deliberately,
+  or "write the file, then grep the file you just wrote" proves only that grep works.
+  Write the script first and run it against a repo where `modes/assess.md` is not yet
+  committed — or, if Step 1 already landed, against `git stash`ed state.
+
+  Create `scripts/tests/check_assess_anchors.sh`:
+  ```bash
+  #!/usr/bin/env bash
+  # Every string check_assessment.py or Plan 1's SKILL.md table depends on modes/assess.md
+  # defining. Not a pytest file: it is also the copy-paste command in this task's step.
   cd /Users/donghanglyu/code_project/job-hunt && python3 -c "
   import pathlib
   t = pathlib.Path('modes/assess.md').read_text(encoding='utf-8')
-  for needle in ['不是对结果的预判', 'not a forecast of the outcome', 'salary_range',
-                 'application_type', 'insufficient_evidence', 'how_to_close',
-                 'conventions_rendered', '验收标准', '输出物', 'apply_anyway',
-                 'side_door', 'change_track']:
+  for needle in ['scripts/enter_mode.py', '--mode assess',
+                 '不是对结果的预判', 'not a forecast of the outcome',
+                 'role_title', 'company', 'seniority', 'location', 'must_haves',
+                 'nice_to_haves', 'responsibilities', 'keywords', 'company_values_tone',
+                 'red_flags', 'salary_range', 'application_type',
+                 'insufficient_evidence', 'how_to_close', 'conventions_rendered',
+                 '硬性阻断项', '已过复核期', '验收标准', '输出物',
+                 'apply_anyway', 'reposition', 'skill_sprint', 'side_door', 'change_track']:
       assert needle in t, needle
+  assert 'language: en' not in t, 'the posting.yaml list must not carry a language field'
   print('all anchors present')"
   ```
+
+  Run it with `modes/assess.md` absent first.
+  Expected: `AssertionError` — a `FileNotFoundError`, or, if the file exists but Step 1's
+  §10 was skipped, `AssertionError: 不是对结果的预判`. Record which. Then run it against
+  the written file.
   Expected: `all anchors present`
 
 - [ ] **Step 3: Commit**
   ```
   cd /Users/donghanglyu/code_project/job-hunt
-  git add modes/assess.md
+  chmod +x scripts/tests/check_assess_anchors.sh
+  git add modes/assess.md scripts/tests/check_assess_anchors.sh
   git commit -m "assess: layer-1.5 mode file defining the row schema and the refusal floor"
   ```
 
@@ -3372,22 +4523,28 @@ The two modes exist because the drop is the mechanism working, not the assessmen
 
 **Interfaces:**
 - Consumes:
-  - `journal.receipt(...)`, `journal.sha256_file(path)`, `journal.read_receipts(workspace, gate)`
+  - `journal.receipt(...)`, `journal.sha256_file(path)`, **`journal.read_receipts(workspace, gate)` — actually called, see `MISSING_RECEIPT` below**
+  - `enter_mode.latest_mode_entry(workspace, mode) -> dict | None`; `paths.mode_file(mode, root) -> pathlib.Path`, `paths.SKILL_ROOT`
+  - `vocab.VERDICTS`, `vocab.REFUSAL`
   - `check_evidence_refs.load_block_ids(path) -> set[str]`, `check_evidence_refs.drop_unresolvable_refs(assessment, ids) -> tuple[dict, list[str]]`, `check_evidence_refs.strip_block_ids(markdown) -> tuple[str, list[str]]`
   - `lint_no_prediction.scan_text(text, label) -> list[str]`, `lint_no_prediction.target_files(workspace) -> list[pathlib.Path]`
   - `consistency.notices(assessment) -> list[dict]`
   - `count_coverage.coverage(rows) -> dict`, `count_coverage.render_block(assessment, counts, lang) -> str`
-  - `check_conventions.check_file(path, today) -> list[str]`, `check_conventions.conventions_by_id(data) -> dict`, `check_conventions.load_market_file(path) -> dict`, `check_conventions.MARKET_KEYS`
+  - `check_conventions.check_file(path, today) -> list[str]`, `check_conventions.conventions_by_id(data) -> dict`, `check_conventions.load_market_file(path) -> dict`, `check_conventions.MARKET_KEYS`, `check_conventions.SKILL_ROOT`, `check_conventions.CONVENTIONS_DIR`
   - the anchors defined in `modes/assess.md`
-- Produces: `DISCLAIMER_ANCHORS`, `check(workspace, market_dir, today) -> list[str]`, `main(argv=None) -> int`
+- Produces: `DISCLAIMER_ANCHORS`, `DISQUALIFIER_HEADING`, `STALE_BANNER`, `STRATEGIES`, `OTHER_HALF_VERDICTS`, `ACCEPTANCE_COLUMNS`, `UPSTREAM_GATES`, `PASSING_VERDICTS`, `check(workspace, market_dir, today, skill_root=None) -> list[str]`, `main(argv=None) -> int`
 
 **What this gate adds on top of the five it composes.** Each of these closes a way the assessment can be internally consistent and still wrong:
+- **`NO_MODE_ENTRY` / `MODE_FILE_CHANGED`** — the content-hash half of the layer-1.5 backstop, mirrored from `check_apply.py`. The artifact-field half alone cannot distinguish "the model read `modes/assess.md`" from "the model produced something shaped like it".
+- **`MISSING_RECEIPT` / `UPSTREAM_FAILED`** — this gate *composes* five others, so it must know they ran. Recomputing their answers instead would make a gate that was never run indistinguishable from a gate that passed, which is the whole reason the journal exists.
 - **`ROW_UNSOURCED`** — a row that claims a match with no resolvable reference. `no_evidence` with an empty list is the honest shape and passes.
 - **`NO_DISCLAIMER`** — the counts without the disclaimer is a count that reads as a prediction.
-- **`DISQUALIFIER_AFTER_VERDICT`** — a hard barrier printed after the conclusion has already been read is a barrier nobody registered.
+- **`NO_DISQUALIFIER_SECTION` / `DISQUALIFIER_NOT_NAMED` / `DISQUALIFIER_AFTER_VERDICT`** — a hard barrier printed after the conclusion has already been read is a barrier nobody registered. Keyed on the `## 硬性阻断项` section and the **row ids** it lists, never on the posting's own wording: a Chinese section that names the barrier correctly is a paraphrase by construction, and a check that demands the English requirement text back fires on every honest translation.
 - **`NOTICE_NOT_ATTACHED`** — a contradiction the code found and the document did not mention is a contradiction the reader averages away.
 - **`COUNT_MISMATCH`** — a number in the document that `count_coverage.py` did not produce is a second, unreconciled number.
-- **`CONVENTION_PARAPHRASED`** — the model restating a convention is exactly how a 「usually」 becomes a 「must」 with nothing to check it against.
+- **`CONVENTION_PARAPHRASED`** — the model restating a convention is exactly how a 「usually」 becomes a 「must」 with nothing to check it against. Compared with **all whitespace removed on both sides**: the tables use YAML block scalars with hard wraps, and demanding the model reproduce the YAML's line breaks would fire on a card rendered character-for-character.
+- **`WARN_EXPIRED_REVIEW_BY` + `MISSING_STALE_BANNER`** — spec §10 is explicit that an expired `review_by` fails CI but at **runtime** renders with a 「已过复核期」 banner rather than refusing. So this gate re-prefixes the lint's hard finding as a warning and requires the banner instead. Left hard, a date passing with no code change stops the skill working.
+- **`NO_STRATEGY_SECTION` / `STRATEGY_NOT_UNIQUE` / `NO_ACCEPTANCE_COLUMN`** — on `likely_screen_out` and `blocked`, spec §5.2 step 10 says the 「那该怎么办」 half is the value: exactly one strategy from the closed set, `验收标准` on the 30/60/90 table, `输出物` on the roadmap. `modes/assess.md` §10 says so too, and until now nothing reported its absence.
 - **`REFUSAL_WITH_VERDICT`** — a refusal that still prints a conclusion is not a refusal.
 
 - [ ] **Step 1: Write the failing test**
@@ -3402,6 +4559,9 @@ The two modes exist because the drop is the mechanism working, not the assessmen
 
   import check_assessment as ca
   import count_coverage as cc
+  import enter_mode
+  import journal
+  import vocab
 
   TODAY = datetime.date(2026, 8, 9)
 
@@ -3412,11 +4572,19 @@ The two modes exist because the drop is the mechanism working, not the assessmen
       {"id": "JD-002", "source": "jd", "text": "You must already hold an EU work permit"},
   ]}
 
+  # A real table uses YAML block scalars with hard wraps, so text_zh arrives with a
+  # newline in the middle. A card rendered character-for-character reflows it. The
+  # fixture carries that newline on purpose: without it, CONVENTION_PARAPHRASED could
+  # be a substring check that fires on correct output and no test would notice.
+  CONVENTION_ZH = ("投递前先在公开的认可担保方名录里查一下这家公司，\n"
+                   "再决定要不要为它定制材料。")
+  CONVENTION_EN = ("Check the company in the public register of recognised sponsors\n"
+                   "before you invest in a tailored application.")
+
   MARKET = {"market": "nl", "conventions": [{
       "id": "nl-recognised-sponsor-gate",
-      "text_en": "Check the company in the public register of recognised sponsors before "
-                 "you invest in a tailored application.",
-      "text_zh": "投递前先在公开的认可担保方名录里查一下这家公司，再决定要不要为它定制材料。",
+      "text_en": CONVENTION_EN,
+      "text_zh": CONVENTION_ZH,
       "applies_when": "A Netherlands role that needs a work-related residence permit.",
       "added": "2026-08-09", "review_by": "2027-08-09",
       "source": {"kind": "published", "publisher": "IND",
@@ -3457,10 +4625,29 @@ The two modes exist because the drop is the mechanism working, not the assessmen
                 "分母可以逐条审计；本 skill 不给出面试或录用的可能性估计，也不给 0–100 分。"
                 "要不要投，由你决定。")
 
+  # The 「那该怎么办」 half, required only on likely_screen_out and blocked.
+  OTHER_HALF = ("\n## 那该怎么办\n\n"
+                "策略：`skill_sprint` 技能冲刺\n\n"
+                "| 目标 | 行动 | 验收标准 |\n|---|---|---|\n"
+                "| 补上分布式训练 | 移植到 torchrun | 仓库里有两卡运行日志 |\n\n"
+                "| 阶段 | 输出物 |\n|---|---|\n"
+                "| 第一阶段 | 一份可复现的两卡训练日志 |\n")
 
-  def build(tmp_path, assessment=None, markdown=None, market=None):
+
+  def _skill_root(tmp_path):
+      """A skill tree with a modes/assess.md, so enter_mode has real bytes to hash."""
+      root = tmp_path / "skill"
+      (root / "modes").mkdir(parents=True, exist_ok=True)
+      (root / "modes" / "assess.md").write_text(
+          "# Mode: assess\n\nThe layer-1.5 file.\n", encoding="utf-8")
+      return root
+
+
+  def build(tmp_path, assessment=None, markdown=None, market=None,
+            enter=True, receipts=True):
       assessment = copy.deepcopy(assessment or ASSESSMENT)
       tmp_path.mkdir(parents=True, exist_ok=True)
+      root = _skill_root(tmp_path)
       (tmp_path / "evidence-blocks.json").write_text(
           json.dumps(BLOCKS, ensure_ascii=False), encoding="utf-8")
       (tmp_path / "fit-assessment.yaml").write_text(
@@ -3476,7 +4663,8 @@ The two modes exist because the drop is the mechanism working, not the assessmen
           markdown = (
               "# Fit assessment\n\n"
               "## 硬性阻断项\n\n"
-              "该岗位要求你已经持有欧盟工作许可（Kubernetes in production 另见下表）。\n\n"
+              "- **R2** — 该岗位明确要求你已经持有欧盟工作许可。这是法律层面的门槛，"
+              "不是表述问题。\n\n"
               "## 计数\n\n"
               "```\n" + block + "\n```\n\n"
               + DISCLAIMER + "\n\n"
@@ -3486,43 +4674,126 @@ The two modes exist because the drop is the mechanism working, not the assessmen
               "| Kubernetes in production | required | weighted | no_evidence | — |\n"
               "| Run jobs on a shared cluster | unclear | nice_to_have | strong | CV-002 |\n\n"
               "## 市场惯例\n\n"
-              "投递前先在公开的认可担保方名录里查一下这家公司，再决定要不要为它定制材料。\n\n"
+              # Reflowed onto one line, exactly as a renderer would. Character-for-character
+              # is about the words, not about where the YAML happened to wrap.
+              + CONVENTION_ZH.replace("\n", "") + "\n\n"
               "你的简历没有说明当前的居留身份，因此在这条惯例上无法定位。\n")
       (tmp_path / "fit-assessment.md").write_text(markdown, encoding="utf-8")
-      return tmp_path, market_dir
+      if enter:
+          enter_mode.main(["--workspace", str(tmp_path), "--mode", "assess",
+                           "--skill-root", str(root)])
+      if receipts:
+          for gate in ca.UPSTREAM_GATES:
+              journal.receipt(tmp_path, gate, {}, "recorded")
+      return tmp_path, market_dir, root
 
 
   # ---------- the quiet case, pinned as hard as the firing case ----------
 
   def test_a_well_formed_assessment_passes_with_no_findings(tmp_path):
-      ws, market_dir = build(tmp_path)
-      assert ca.check(ws, market_dir, TODAY) == []
+      ws, market_dir, root = build(tmp_path)
+      assert ca.check(ws, market_dir, TODAY, root) == []
 
 
   def test_the_cli_passes_and_writes_exactly_one_receipt(tmp_path, capsys):
-      ws, market_dir = build(tmp_path)
+      ws, market_dir, root = build(tmp_path)
+      capsys.readouterr()          # discard enter_mode's own line from the fixture
       assert ca.main(["--workspace", str(ws), "--market-dir", str(market_dir),
-                      "--today", "2026-08-09"]) == 0
+                      "--skill-root", str(root), "--today", "2026-08-09"]) == 0
       assert capsys.readouterr().out.strip() == ""
-      lines = (ws / "journal.jsonl").read_text(encoding="utf-8").splitlines()
-      assert [json.loads(l)["gate"] for l in lines] == ["check_assessment"]
-      assert json.loads(lines[0])["verdict"] == "pass"
+      own = [json.loads(l) for l in
+             (ws / "journal.jsonl").read_text(encoding="utf-8").splitlines()
+             if json.loads(l).get("gate") == "check_assessment"]
+      assert len(own) == 1
+      assert own[0]["verdict"] == "pass"
 
 
   def test_a_no_evidence_row_with_an_empty_list_is_not_unsourced(tmp_path):
-      ws, market_dir = build(tmp_path)
-      assert not [f for f in ca.check(ws, market_dir, TODAY)
+      ws, market_dir, root = build(tmp_path)
+      assert not [f for f in ca.check(ws, market_dir, TODAY, root)
                   if f.startswith("ROW_UNSOURCED")]
 
 
   def test_the_english_disclaimer_is_accepted_too(tmp_path):
-      ws, market_dir = build(tmp_path)
+      ws, market_dir, root = build(tmp_path)
       md = (ws / "fit-assessment.md").read_text(encoding="utf-8").replace(
           DISCLAIMER, "⚠️ This is a count of evidence, not a forecast of the outcome. "
                       "Whether to apply is your call.")
       (ws / "fit-assessment.md").write_text(md, encoding="utf-8")
-      assert not [f for f in ca.check(ws, market_dir, TODAY)
+      assert not [f for f in ca.check(ws, market_dir, TODAY, root)
                   if f.startswith("NO_DISCLAIMER")]
+
+
+  def test_a_convention_reflowed_off_the_yaml_wrap_points_is_not_a_paraphrase(tmp_path):
+      # The fixture's text_zh has a hard newline in it; the rendered card does not.
+      # Whitespace is not the claim.
+      ws, market_dir, root = build(tmp_path)
+      assert "\n" in CONVENTION_ZH
+      assert CONVENTION_ZH not in (ws / "fit-assessment.md").read_text(encoding="utf-8")
+      assert not [f for f in ca.check(ws, market_dir, TODAY, root)
+                  if f.startswith("CONVENTION_PARAPHRASED")]
+
+
+  def test_a_disqualifier_section_that_genuinely_paraphrases_passes(tmp_path):
+      # Chinese prose that names the barrier correctly and shares no substring with the
+      # posting's English wording. This is what correct output looks like.
+      broken = copy.deepcopy(ASSESSMENT)
+      broken["requirements"][1]["screening"] = "knockout"
+      ws, market_dir, root = build(tmp_path, assessment=broken)
+      md = (ws / "fit-assessment.md").read_text(encoding="utf-8").replace(
+          "- **R2** — 该岗位明确要求你已经持有欧盟工作许可。这是法律层面的门槛，不是表述问题。",
+          "- **R2** — 生产环境的容器编排经验是硬门槛，你目前没有可引用的证据。")
+      (ws / "fit-assessment.md").write_text(md, encoding="utf-8")
+      assert not [f for f in ca.check(ws, market_dir, TODAY, root)
+                  if f.startswith("DISQUALIFIER")]
+
+
+  def test_the_other_half_is_not_demanded_on_an_ordinary_verdict(tmp_path):
+      ws, market_dir, root = build(tmp_path)
+      assert not [f for f in ca.check(ws, market_dir, TODAY, root)
+                  if f.startswith("NO_STRATEGY") or f.startswith("NO_ACCEPTANCE")]
+
+
+  def test_a_complete_other_half_on_likely_screen_out_passes(tmp_path):
+      broken = copy.deepcopy(ASSESSMENT)
+      broken["verdict"] = "likely_screen_out"
+      ws, market_dir, root = build(tmp_path, assessment=broken)
+      md = (ws / "fit-assessment.md").read_text(encoding="utf-8") + OTHER_HALF
+      (ws / "fit-assessment.md").write_text(md, encoding="utf-8")
+      findings = ca.check(ws, market_dir, TODAY, root)
+      assert not [f for f in findings if f.startswith("NO_STRATEGY")
+                  or f.startswith("STRATEGY_NOT_UNIQUE")
+                  or f.startswith("NO_ACCEPTANCE")]
+
+
+  # ---------- the layer-1.5 backstop ----------
+
+  def test_no_mode_entry_fails(tmp_path, capsys):
+      ws, market_dir, root = build(tmp_path, enter=False)
+      assert any(f.startswith("NO_MODE_ENTRY:")
+                 for f in ca.check(ws, market_dir, TODAY, root))
+
+
+  def test_an_edited_mode_file_invalidates_the_entry(tmp_path):
+      ws, market_dir, root = build(tmp_path)
+      (root / "modes" / "assess.md").write_text("# Mode: assess\n\nrewritten\n",
+                                                encoding="utf-8")
+      assert any(f.startswith("MODE_FILE_CHANGED:")
+                 for f in ca.check(ws, market_dir, TODAY, root))
+
+
+  def test_an_upstream_gate_that_never_ran_is_not_a_clean_run(tmp_path):
+      ws, market_dir, root = build(tmp_path, receipts=False)
+      findings = ca.check(ws, market_dir, TODAY, root)
+      assert any(f.startswith("MISSING_RECEIPT:") and "count_coverage" in f
+                 for f in findings)
+
+
+  def test_an_upstream_gate_that_failed_is_reported(tmp_path):
+      ws, market_dir, root = build(tmp_path)
+      journal.receipt(ws, "lint_no_prediction", {}, "fail", ["PERCENT: x"])
+      assert any(f.startswith("UPSTREAM_FAILED:") and "lint_no_prediction" in f
+                 for f in ca.check(ws, market_dir, TODAY, root))
 
 
   # ---------- the firing cases ----------
@@ -3530,45 +4801,61 @@ The two modes exist because the drop is the mechanism working, not the assessmen
   def test_a_row_claiming_a_match_with_no_resolvable_ref_fails(tmp_path):
       broken = copy.deepcopy(ASSESSMENT)
       broken["requirements"][0]["evidence"] = [{"ref": "CV-999"}]
-      ws, market_dir = build(tmp_path, assessment=broken)
-      findings = ca.check(ws, market_dir, TODAY)
+      ws, market_dir, root = build(tmp_path, assessment=broken)
+      findings = ca.check(ws, market_dir, TODAY, root)
       assert any(f.startswith("ROW_UNSOURCED:") and "R1" in f for f in findings)
 
 
   def test_a_missing_disclaimer_fails(tmp_path):
-      ws, market_dir = build(tmp_path)
+      ws, market_dir, root = build(tmp_path)
       md = (ws / "fit-assessment.md").read_text(encoding="utf-8").replace(DISCLAIMER, "")
       (ws / "fit-assessment.md").write_text(md, encoding="utf-8")
-      assert any(f.startswith("NO_DISCLAIMER:") for f in ca.check(ws, market_dir, TODAY))
+      assert any(f.startswith("NO_DISCLAIMER:")
+                 for f in ca.check(ws, market_dir, TODAY, root))
+
+
+  def test_a_blocking_row_with_no_disqualifier_section_fails(tmp_path):
+      broken = copy.deepcopy(ASSESSMENT)
+      broken["requirements"][1]["screening"] = "knockout"
+      ws, market_dir, root = build(tmp_path, assessment=broken)
+      md = (ws / "fit-assessment.md").read_text(encoding="utf-8")
+      head, _, tail = md.partition("## 计数")
+      (ws / "fit-assessment.md").write_text("# Fit assessment\n\n## 计数" + tail,
+                                            encoding="utf-8")
+      assert any(f.startswith("NO_DISQUALIFIER_SECTION:")
+                 for f in ca.check(ws, market_dir, TODAY, root))
+
+
+  def test_a_disqualifier_section_that_omits_the_row_id_fails(tmp_path):
+      broken = copy.deepcopy(ASSESSMENT)
+      broken["requirements"][1]["screening"] = "knockout"
+      ws, market_dir, root = build(tmp_path, assessment=broken)
+      md = (ws / "fit-assessment.md").read_text(encoding="utf-8").replace(
+          "- **R2** —", "- 有一条硬门槛 —")
+      (ws / "fit-assessment.md").write_text(md, encoding="utf-8")
+      assert any(f.startswith("DISQUALIFIER_NOT_NAMED:") and "R2" in f
+                 for f in ca.check(ws, market_dir, TODAY, root))
 
 
   def test_a_disqualifier_named_only_after_the_verdict_fails(tmp_path):
       broken = copy.deepcopy(ASSESSMENT)
-      broken["requirements"][1]["screening"] = "knockout"   # a knockout with no evidence
-      ws, market_dir = build(tmp_path, assessment=broken)
-      md = (ws / "fit-assessment.md").read_text(encoding="utf-8")
-      md = md.replace("Kubernetes in production", "another requirement")
-      (ws / "fit-assessment.md").write_text(
-          md + "\n## 硬性阻断项\n\n该岗位要求 Kubernetes in production。\n", encoding="utf-8")
-      assert any(f.startswith("DISQUALIFIER_AFTER_VERDICT:")
-                 for f in ca.check(ws, market_dir, TODAY))
-
-
-  def test_the_same_disqualifier_named_before_the_verdict_passes(tmp_path):
-      broken = copy.deepcopy(ASSESSMENT)
       broken["requirements"][1]["screening"] = "knockout"
-      ws, market_dir = build(tmp_path, assessment=broken)
-      # The fixture already names it in the 硬性阻断项 section above the counts block.
-      assert not [f for f in ca.check(ws, market_dir, TODAY)
-                  if f.startswith("DISQUALIFIER_AFTER_VERDICT")]
+      ws, market_dir, root = build(tmp_path, assessment=broken)
+      md = (ws / "fit-assessment.md").read_text(encoding="utf-8")
+      head, _, tail = md.partition("## 计数")
+      moved = ("# Fit assessment\n\n## 计数" + tail
+               + "\n## 硬性阻断项\n\n- **R2** — 生产环境的容器编排经验是硬门槛。\n")
+      (ws / "fit-assessment.md").write_text(moved, encoding="utf-8")
+      assert any(f.startswith("DISQUALIFIER_AFTER_VERDICT:")
+                 for f in ca.check(ws, market_dir, TODAY, root))
 
 
   def test_a_fired_notice_that_is_not_attached_fails(tmp_path):
       broken = copy.deepcopy(ASSESSMENT)
       broken["verdict"] = "strong_apply"
       broken["effort"] = "multi_day"
-      ws, market_dir = build(tmp_path, assessment=broken)
-      findings = ca.check(ws, market_dir, TODAY)
+      ws, market_dir, root = build(tmp_path, assessment=broken)
+      findings = ca.check(ws, market_dir, TODAY, root)
       assert any(f.startswith("NOTICE_NOT_ATTACHED:") and "NOTICE_VERDICT_EFFORT" in f
                  for f in findings)
 
@@ -3577,96 +4864,180 @@ The two modes exist because the drop is the mechanism working, not the assessmen
       broken = copy.deepcopy(ASSESSMENT)
       broken["verdict"] = "strong_apply"
       broken["effort"] = "multi_day"
-      ws, market_dir = build(tmp_path, assessment=broken)
+      ws, market_dir, root = build(tmp_path, assessment=broken)
       md = (ws / "fit-assessment.md").read_text(encoding="utf-8")
       (ws / "fit-assessment.md").write_text(
           md + "\n> 结论与投入互相矛盾：请以下面的需求表为准。\n", encoding="utf-8")
-      assert not [f for f in ca.check(ws, market_dir, TODAY)
+      assert not [f for f in ca.check(ws, market_dir, TODAY, root)
                   if f.startswith("NOTICE_NOT_ATTACHED")]
 
 
   def test_a_hand_edited_count_fails(tmp_path):
-      ws, market_dir = build(tmp_path)
+      ws, market_dir, root = build(tmp_path)
       md = (ws / "fit-assessment.md").read_text(encoding="utf-8").replace(
           "1 of 2", "2 of 2")
       (ws / "fit-assessment.md").write_text(md, encoding="utf-8")
-      assert any(f.startswith("COUNT_MISMATCH:") for f in ca.check(ws, market_dir, TODAY))
+      assert any(f.startswith("COUNT_MISMATCH:")
+                 for f in ca.check(ws, market_dir, TODAY, root))
 
 
   def test_a_paraphrased_convention_fails(tmp_path):
-      ws, market_dir = build(tmp_path)
+      ws, market_dir, root = build(tmp_path)
       md = (ws / "fit-assessment.md").read_text(encoding="utf-8").replace(
-          "投递前先在公开的认可担保方名录里查一下这家公司，再决定要不要为它定制材料。",
+          CONVENTION_ZH.replace("\n", ""),
           "你必须先在名录里查到这家公司，否则不要投。")
       (ws / "fit-assessment.md").write_text(md, encoding="utf-8")
       assert any(f.startswith("CONVENTION_PARAPHRASED:") for f in
-                 ca.check(ws, market_dir, TODAY))
+                 ca.check(ws, market_dir, TODAY, root))
 
 
   def test_an_unknown_convention_id_fails(tmp_path):
       broken = copy.deepcopy(ASSESSMENT)
       broken["conventions_rendered"] = ["nl-invented-by-the-model"]
-      ws, market_dir = build(tmp_path, assessment=broken)
+      ws, market_dir, root = build(tmp_path, assessment=broken)
       assert any(f.startswith("CONVENTION_UNKNOWN_ID:")
-                 for f in ca.check(ws, market_dir, TODAY))
+                 for f in ca.check(ws, market_dir, TODAY, root))
 
 
   def test_a_prediction_word_in_the_rendered_file_fails(tmp_path):
-      ws, market_dir = build(tmp_path)
+      ws, market_dir, root = build(tmp_path)
       md = (ws / "fit-assessment.md").read_text(encoding="utf-8")
       (ws / "fit-assessment.md").write_text(md + "\n你是一个很强的候选人，录取率不低。\n",
                                             encoding="utf-8")
-      assert any(f.startswith("PREDICTION_WORD:") for f in ca.check(ws, market_dir, TODAY))
+      assert any(f.startswith("PREDICTION_WORD:")
+                 for f in ca.check(ws, market_dir, TODAY, root))
 
 
   def test_a_block_id_left_in_prose_fails(tmp_path):
-      ws, market_dir = build(tmp_path)
+      ws, market_dir, root = build(tmp_path)
       md = (ws / "fit-assessment.md").read_text(encoding="utf-8")
       (ws / "fit-assessment.md").write_text(md + "\n你的 C++ 经历（CV-001）很对口。\n",
                                             encoding="utf-8")
-      assert any(f.startswith("STRIPPED_ID:") for f in ca.check(ws, market_dir, TODAY))
+      assert any(f.startswith("STRIPPED_ID:")
+                 for f in ca.check(ws, market_dir, TODAY, root))
 
 
   def test_a_refusal_that_still_prints_a_verdict_fails(tmp_path):
       broken = copy.deepcopy(ASSESSMENT)
-      broken["verdict"] = "insufficient_evidence"
-      ws, market_dir = build(tmp_path, assessment=broken)
+      broken["verdict"] = vocab.REFUSAL
+      ws, market_dir, root = build(tmp_path, assessment=broken)
       assert any(f.startswith("REFUSAL_WITH_VERDICT:")
-                 for f in ca.check(ws, market_dir, TODAY))
+                 for f in ca.check(ws, market_dir, TODAY, root))
 
 
   def test_a_provisional_discover_verdict_may_not_be_carried_in(tmp_path):
       broken = copy.deepcopy(ASSESSMENT)
       broken["provisional"] = True
-      ws, market_dir = build(tmp_path, assessment=broken)
+      ws, market_dir, root = build(tmp_path, assessment=broken)
       assert any(f.startswith("PROVISIONAL_VERDICT:")
-                 for f in ca.check(ws, market_dir, TODAY))
+                 for f in ca.check(ws, market_dir, TODAY, root))
 
 
   def test_a_market_with_no_table_is_fine_only_if_nothing_was_rendered(tmp_path):
       broken = copy.deepcopy(ASSESSMENT)
-      broken["market"] = "none"
+      broken["market"] = vocab.NO_MARKET          # "other", never "none"
       broken["conventions_rendered"] = []
-      ws, market_dir = build(tmp_path, assessment=broken)
-      assert not [f for f in ca.check(ws, market_dir, TODAY)
+      ws, market_dir, root = build(tmp_path, assessment=broken)
+      assert not [f for f in ca.check(ws, market_dir, TODAY, root)
                   if f.startswith("CONVENTION")]
       broken["conventions_rendered"] = ["nl-recognised-sponsor-gate"]
-      ws2, market_dir2 = build(tmp_path / "b", assessment=broken)
+      ws2, market_dir2, root2 = build(tmp_path / "b", assessment=broken)
       assert any(f.startswith("CONVENTION_UNKNOWN_ID:")
-                 for f in ca.check(ws2, market_dir2, TODAY))
+                 for f in ca.check(ws2, market_dir2, TODAY, root2))
 
 
-  def test_a_broken_market_table_fails_the_assessment(tmp_path):
+  # ---------- the other half, on the two verdicts that require it ----------
+
+  def test_a_screen_out_verdict_with_no_strategy_fails(tmp_path):
+      broken = copy.deepcopy(ASSESSMENT)
+      broken["verdict"] = "blocked"
+      ws, market_dir, root = build(tmp_path, assessment=broken)
+      findings = ca.check(ws, market_dir, TODAY, root)
+      assert any(f.startswith("NO_STRATEGY_SECTION:") for f in findings)
+      assert any(f.startswith("NO_ACCEPTANCE_COLUMN:") and "验收标准" in f
+                 for f in findings)
+      assert any(f.startswith("NO_ACCEPTANCE_COLUMN:") and "输出物" in f
+                 for f in findings)
+
+
+  def test_a_menu_of_strategies_is_not_a_recommendation(tmp_path):
+      broken = copy.deepcopy(ASSESSMENT)
+      broken["verdict"] = "likely_screen_out"
+      ws, market_dir, root = build(tmp_path, assessment=broken)
+      md = (ws / "fit-assessment.md").read_text(encoding="utf-8") + OTHER_HALF + \
+          "\n也可以考虑 `reposition` 重新定位。\n"
+      (ws / "fit-assessment.md").write_text(md, encoding="utf-8")
+      assert any(f.startswith("STRATEGY_NOT_UNIQUE:")
+                 for f in ca.check(ws, market_dir, TODAY, root))
+
+
+  def test_a_roadmap_without_its_deliverable_column_fails(tmp_path):
+      broken = copy.deepcopy(ASSESSMENT)
+      broken["verdict"] = "likely_screen_out"
+      ws, market_dir, root = build(tmp_path, assessment=broken)
+      md = ((ws / "fit-assessment.md").read_text(encoding="utf-8")
+            + OTHER_HALF.replace("输出物", "备注"))
+      (ws / "fit-assessment.md").write_text(md, encoding="utf-8")
+      findings = ca.check(ws, market_dir, TODAY, root)
+      assert any(f.startswith("NO_ACCEPTANCE_COLUMN:") and "输出物" in f
+                 for f in findings)
+      assert not [f for f in findings if f.startswith("NO_STRATEGY_SECTION")]
+
+
+  # ---------- convention expiry: CI is hard, runtime is a banner ----------
+
+  def test_an_expired_table_does_not_stop_the_skill_working(tmp_path):
+      # Spec §10: 「惯例过期 | CI lint 报错；运行时不拒绝渲染，改打「已过复核期」横幅」.
+      # A date passing while the code did not change must not stop the skill.
       market = copy.deepcopy(MARKET)
       market["conventions"][0]["review_by"] = "2026-08-08"
-      ws, market_dir = build(tmp_path, market=market)
-      assert any(f.startswith("EXPIRED_REVIEW_BY:")
-                 for f in ca.check(ws, market_dir, TODAY))
+      ws, market_dir, root = build(tmp_path, market=market)
+      md = (ws / "fit-assessment.md").read_text(encoding="utf-8").replace(
+          "## 市场惯例\n\n", "## 市场惯例\n\n> ⚠️ 已过复核期\n\n")
+      (ws / "fit-assessment.md").write_text(md, encoding="utf-8")
+      findings = ca.check(ws, market_dir, TODAY, root)
+      assert any(f.startswith("WARN_EXPIRED_REVIEW_BY:") for f in findings)
+      assert not [f for f in findings if not f.startswith("WARN_")]
+      assert ca.main(["--workspace", str(ws), "--market-dir", str(market_dir),
+                      "--skill-root", str(root), "--today", "2026-08-09"]) == 0
 
 
-  def test_missing_inputs_exit_two(tmp_path, capsys):
+  def test_an_expired_entry_rendered_without_the_banner_fails(tmp_path):
+      market = copy.deepcopy(MARKET)
+      market["conventions"][0]["review_by"] = "2026-08-08"
+      ws, market_dir, root = build(tmp_path, market=market)
+      findings = ca.check(ws, market_dir, TODAY, root)
+      assert any(f.startswith("MISSING_STALE_BANNER:")
+                 and "nl-recognised-sponsor-gate" in f for f in findings)
+
+
+  def test_a_hard_table_defect_still_fails_the_assessment(tmp_path):
+      # Only EXPIRED_REVIEW_BY is downgraded. Everything else the table lint finds is
+      # still a reason not to show this card to anyone.
+      market = copy.deepcopy(MARKET)
+      market["conventions"][0]["text_en"] = "The 30% ruling is administered here."
+      ws, market_dir, root = build(tmp_path, market=market)
+      assert any(f.startswith("PERCENT_IN_PROSE:")
+                 for f in ca.check(ws, market_dir, TODAY, root))
+
+
+  # ---------- could not run ----------
+
+  def test_missing_inputs_exit_two_and_still_leave_exactly_one_receipt(tmp_path, capsys):
       assert ca.main(["--workspace", str(tmp_path)]) == 2
       assert "fit-assessment.yaml" in capsys.readouterr().err
+      receipts = [json.loads(line) for line in
+                  (tmp_path / "journal.jsonl").read_text(encoding="utf-8").splitlines()]
+      assert len(receipts) == 1
+      assert receipts[0]["gate"] == "check_assessment"
+      assert receipts[0]["verdict"] == "could_not_run"
+
+
+  def test_a_workspace_that_does_not_exist_writes_no_journal(tmp_path, capsys):
+      missing = tmp_path / "nope"
+      assert ca.main(["--workspace", str(missing)]) == 2
+      assert not missing.exists()
+      assert "does not exist" in capsys.readouterr().err
   ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -3685,14 +5056,37 @@ The two modes exist because the drop is the mechanism working, not the assessmen
   the contradiction detectors, the counting path, the market-table lint -- and adds the
   rules that only make sense once all five outputs sit in the same document.
 
+  Composition means requiring the receipts, not recomputing the answers. A gate that was
+  never run produces no output, and no output looks exactly like a clean run, so this
+  gate reads journal.jsonl and refuses to pass when an upstream receipt is missing or
+  records a failure. It re-derives their logic on top of that as a belt-and-braces check
+  on the SHIPPED bytes, which is a different question from "did the gate run".
+
   Each added rule closes a way an assessment can be internally consistent and still
   wrong: counts without the disclaimer read as a prediction; a hard barrier printed after
   the conclusion is a barrier nobody registered; a contradiction found in code and absent
   from the page is one the reader averages away; a convention restated by the model is how
-  a "usually" becomes a "must" with nothing to check it against.
+  a "usually" becomes a "must" with nothing to check it against; a 大概率被筛掉 with no
+  「那该怎么办」 half is a door closed with nothing behind it.
 
-  A mode may not claim success without a receipt. A skipped gate produces no output, and
-  that looks exactly like a clean one.
+  Two comparisons are deliberately loose, because the tight version fires on correct
+  output and a gate that cries wolf is a gate people stop reading:
+
+  * Conventions are compared with ALL whitespace removed. The tables use YAML block
+    scalars with hard wraps; demanding the model reproduce the wrap points would fail a
+    card rendered character-for-character.
+  * Disqualifiers are keyed on the `## 硬性阻断项` section and the ROW IDS it lists, never
+    on the posting's own wording. A Chinese section naming an English requirement is a
+    paraphrase by construction, and that is the correct output, not the defect.
+
+  One finding is deliberately downgraded. check_conventions.py fails hard on an expired
+  review_by because it is the CI lint and that is where a stale date should stop a build.
+  Here it becomes WARN_EXPIRED_REVIEW_BY and the card must instead carry a 「已过复核期」
+  banner (spec §10). A date passing while the code did not change must not stop the skill
+  working -- but rendering a stale card without saying so is worse than either.
+
+  A mode may not claim success without a receipt. Exit 2 writes one too, verdict
+  "could_not_run", unless the workspace directory itself is absent.
   """
   from __future__ import annotations
 
@@ -3700,6 +5094,7 @@ The two modes exist because the drop is the mechanism working, not the assessmen
   import copy
   import datetime
   import pathlib
+  import re
   import sys
 
   sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -3708,13 +5103,39 @@ The two modes exist because the drop is the mechanism working, not the assessmen
   import check_evidence_refs as refs  # noqa: E402
   import consistency  # noqa: E402
   import count_coverage as coverage  # noqa: E402
+  import enter_mode  # noqa: E402
   import journal  # noqa: E402
   import lint_no_prediction as prediction  # noqa: E402
+  import paths  # noqa: E402
+  import vocab  # noqa: E402
   import yaml  # noqa: E402
+
+  GATE = "check_assessment"
+  MODE = "assess"
 
   DISCLAIMER_ANCHORS = ("不是对结果的预判", "not a forecast of the outcome")
   VERDICT_MARKERS = ("投递建议：", "apply verdict:")
-  FIVE_LEVELS = ("strong_apply", "worth_applying", "stretch", "likely_screen_out", "blocked")
+  DISQUALIFIER_HEADING = "## 硬性阻断项"
+  STALE_BANNER = "已过复核期"
+
+  # The closed set modes/assess.md §10 defines. Exactly one of these, on exactly the two
+  # verdicts below; the two column headers are where the section's whole value sits.
+  STRATEGIES = ("apply_anyway", "reposition", "skill_sprint", "side_door", "change_track")
+  OTHER_HALF_VERDICTS = ("likely_screen_out", "blocked")
+  ACCEPTANCE_COLUMNS = ("验收标准", "输出物")
+
+  # Composition: each of these must have run on THIS workspace and not failed.
+  UPSTREAM_GATES = ("evidence_blocks", "count_coverage", "consistency",
+                    "check_evidence_refs", "lint_no_prediction")
+  PASSING_VERDICTS = ("pass", "recorded")
+
+  _ROW_ID = re.compile(r"\bR\d+\b")
+  _HEADING = re.compile(r"^\s{0,3}#{1,6}\s")
+
+
+  def _squeeze(text: str) -> str:
+      """Whitespace is not the claim."""
+      return re.sub(r"\s+", "", text)
 
 
   def _verdict_line_index(lines: list[str]) -> int | None:
@@ -3724,14 +5145,65 @@ The two modes exist because the drop is the mechanism working, not the assessmen
       return None
 
 
+  def _section_lines(lines: list[str], heading: str) -> tuple[int, list[str]] | None:
+      """The lines of the first `heading` section, up to the next heading of any level."""
+      for index, line in enumerate(lines):
+          if line.strip().startswith(heading):
+              body = []
+              for later in lines[index + 1:]:
+                  if _HEADING.match(later):
+                      break
+                  body.append(later)
+              return index, body
+      return None
+
+
+  def cannot_run(workspace: pathlib.Path, reason: str) -> int:
+      """Exactly one receipt on the could-not-run path, then exit 2."""
+      print(f"cannot run: {reason}", file=sys.stderr)
+      if workspace.is_dir():
+          journal.receipt(workspace, GATE, {}, "could_not_run", [f"NO_INPUT: {reason}"])
+      return 2
+
+
   def check(workspace: pathlib.Path, market_dir: pathlib.Path,
-            today: datetime.date) -> list[str]:
+            today: datetime.date, skill_root: pathlib.Path | None = None) -> list[str]:
       findings: list[str] = []
+      root = pathlib.Path(skill_root) if skill_root else paths.SKILL_ROOT
       assessment = yaml.safe_load(
           (workspace / "fit-assessment.yaml").read_text(encoding="utf-8")) or {}
       markdown = (workspace / "fit-assessment.md").read_text(encoding="utf-8")
       lines = markdown.splitlines()
+      squeezed = _squeeze(markdown)
       block_ids = refs.load_block_ids(workspace / "evidence-blocks.json")
+
+      # 0. The layer-1.5 backstop, mirrored from check_apply.py. modes/assess.md is
+      #    loaded unconditionally on entering the mode; this is what makes that real.
+      entry = enter_mode.latest_mode_entry(workspace, MODE)
+      mode_path = paths.mode_file(MODE, root)
+      if entry is None:
+          findings.append("NO_MODE_ENTRY: journal.jsonl has no mode_entry for assess — "
+                          "modes/assess.md is loaded unconditionally on entering the "
+                          "mode; run scripts/enter_mode.py --mode assess and read it")
+      elif (mode_path.exists()
+            and entry.get("mode_file_sha256") != journal.sha256_file(mode_path)):
+          findings.append("MODE_FILE_CHANGED: modes/assess.md changed after this run "
+                          "entered the mode, so what was read is not what is on disk — "
+                          "re-enter the mode and re-read it")
+
+      # 0b. Every upstream gate ran, on this workspace, and did not fail.
+      for gate in UPSTREAM_GATES:
+          receipts = journal.read_receipts(workspace, gate)
+          if not receipts:
+              findings.append(f"MISSING_RECEIPT: no journal.jsonl receipt for {gate} — "
+                              f"the gate was never run, and a skipped gate looks exactly "
+                              f"like a clean one")
+              continue
+          last = receipts[-1]
+          if last.get("verdict") not in PASSING_VERDICTS:
+              detail = "; ".join(last.get("findings") or []) or "no findings recorded"
+              findings.append(f"UPSTREAM_FAILED: {gate} verdict={last.get('verdict')} "
+                              f"({detail})")
 
       # 1. Evidence references, in check-only form: nothing may still need dropping.
       _, dropped = refs.drop_unresolvable_refs(copy.deepcopy(assessment), block_ids)
@@ -3768,7 +5240,8 @@ The two modes exist because the drop is the mechanism working, not the assessmen
       # 5. The counting path is the only counting path.
       counts = coverage.coverage(assessment.get("requirements"))
       findings += counts["invalid"]
-      refusing = assessment.get("verdict") == "insufficient_evidence"
+      verdict = assessment.get("verdict")
+      refusing = verdict == vocab.REFUSAL
       if not refusing:
           rendered = [coverage.render_block(assessment, counts, lang) for lang in ("zh", "en")]
           if not any(block in markdown for block in rendered):
@@ -3784,54 +5257,94 @@ The two modes exist because the drop is the mechanism working, not the assessmen
           for marker in VERDICT_MARKERS:
               if marker in markdown:
                   findings.append(f"REFUSAL_WITH_VERDICT: verdict is "
-                                  f"insufficient_evidence but {marker!r} still renders a "
+                                  f"{vocab.REFUSAL} but {marker!r} still renders a "
                                   f"conclusion")
-      elif assessment.get("verdict") not in FIVE_LEVELS:
-          findings.append(f"BAD_VERDICT: {assessment.get('verdict')!r} is not one of "
-                          f"{FIVE_LEVELS} or 'insufficient_evidence'")
+      elif verdict not in vocab.VERDICTS:
+          findings.append(f"BAD_VERDICT: {verdict!r} is not one of "
+                          f"{vocab.VERDICTS} or {vocab.REFUSAL!r}")
       if assessment.get("provisional"):
           findings.append("PROVISIONAL_VERDICT: a discover-stage 基于卡片信息的初判 was "
                           "carried into an assessment; assess always recomputes")
 
-      # 7. Disqualifiers render before the verdict.
-      verdict_index = _verdict_line_index(lines)
-      if verdict_index is not None:
-          for row in assessment.get("requirements") or []:
-              row = row or {}
-              if row.get("screening") != "knockout":
-                  continue
-              if row.get("match") not in ("gap", "no_evidence"):
-                  continue
-              text = str(row.get("text") or "").strip()
-              first = next((i for i, line in enumerate(lines) if text and text in line), None)
-              if first is None or first > verdict_index:
+      # 7. Disqualifiers render before the verdict, in a section that names their ids.
+      blocking = [row or {} for row in (assessment.get("requirements") or [])
+                  if (row or {}).get("screening") == "knockout"
+                  and (row or {}).get("match") in ("gap", "no_evidence")]
+      if blocking:
+          section = _section_lines(lines, DISQUALIFIER_HEADING)
+          if section is None:
+              findings.append(
+                  f"NO_DISQUALIFIER_SECTION: {len(blocking)} knockout requirement(s) are "
+                  f"not met and there is no '{DISQUALIFIER_HEADING}' section; a wall the "
+                  f"reader is never shown is a wall they walk into")
+          else:
+              heading_index, body = section
+              named = set(_ROW_ID.findall("\n".join(body)))
+              for row in blocking:
+                  if str(row.get("id")) not in named:
+                      findings.append(
+                          f"DISQUALIFIER_NOT_NAMED: row {row.get('id')} is a knockout the "
+                          f"candidate does not meet and the disqualifier section does not "
+                          f"list its id; paraphrase the barrier freely, but name the row")
+              verdict_index = _verdict_line_index(lines)
+              if verdict_index is not None and heading_index > verdict_index:
                   findings.append(
-                      f"DISQUALIFIER_AFTER_VERDICT: row {row.get('id')} is a knockout the "
-                      f"candidate does not meet, and it does not appear before the verdict "
-                      f"line; a wall printed after the conclusion is a wall nobody read")
+                      "DISQUALIFIER_AFTER_VERDICT: the disqualifier section renders below "
+                      "the verdict line; a wall printed after the conclusion is a wall "
+                      "nobody read")
 
-      # 8. Market conventions: allowlisted by id, rendered verbatim.
+      # 8. The "what to do instead" half, on the two verdicts that require it.
+      if verdict in OTHER_HALF_VERDICTS:
+          chosen = [name for name in STRATEGIES if name in markdown]
+          if not chosen:
+              findings.append(
+                  f"NO_STRATEGY_SECTION: verdict is {verdict} and no strategy from "
+                  f"{STRATEGIES} appears; a verdict without the other half is a door "
+                  f"closed with nothing behind it")
+          elif len(chosen) > 1:
+              findings.append(
+                  f"STRATEGY_NOT_UNIQUE: {chosen} all appear; pick exactly one. A menu "
+                  f"hands the choice back to the reader, which is the work they asked for")
+          for column in ACCEPTANCE_COLUMNS:
+              if column not in markdown:
+                  findings.append(
+                      f"NO_ACCEPTANCE_COLUMN: verdict is {verdict} and the '{column}' "
+                      f"column is missing; 验收标准 and 输出物 are what turn advice into "
+                      f"something checkable, and they are the whole value of this section")
+
+      # 9. Market conventions: allowlisted by id, rendered verbatim, staleness banner-ed.
       market = assessment.get("market")
       table = market_dir / f"{market}.yaml"
       known: dict[str, dict] = {}
+      expired: set[str] = set()
       if market in conventions.MARKET_KEYS:
           if not table.exists():
               findings.append(f"CONVENTION_TABLE_MISSING: {table} does not exist")
           else:
-              findings += conventions.check_file(table, today)
+              for finding in conventions.check_file(table, today):
+                  if finding.startswith("EXPIRED_REVIEW_BY:"):
+                      # CI keeps this hard. At runtime it is a banner, not a refusal.
+                      expired.add(finding.split(":", 1)[1].strip().split()[0])
+                      findings.append("WARN_" + finding)
+                  else:
+                      findings.append(finding)
               known = conventions.conventions_by_id(conventions.load_market_file(table))
       for entry_id in assessment.get("conventions_rendered") or []:
-          entry = known.get(entry_id)
-          if entry is None:
+          convention = known.get(entry_id)
+          if convention is None:
               findings.append(f"CONVENTION_UNKNOWN_ID: {entry_id} is not an entry in "
                               f"{table.name}; the model may not author a convention")
               continue
-          if not any(str(entry.get(field, "")).strip() and
-                     str(entry[field]).strip() in markdown
+          if not any(_squeeze(str(convention.get(field, ""))) and
+                     _squeeze(str(convention[field])) in squeezed
                      for field in ("text_en", "text_zh")):
               findings.append(f"CONVENTION_PARAPHRASED: {entry_id} was listed as rendered "
                               f"but neither text_en nor text_zh appears verbatim in "
                               f"fit-assessment.md")
+          if entry_id in expired and STALE_BANNER not in markdown:
+              findings.append(f"MISSING_STALE_BANNER: {entry_id} is past its review_by and "
+                              f"was rendered without the 「{STALE_BANNER}」 banner; the card "
+                              f"still renders, but the reader has to be told it is stale")
       return findings
 
 
@@ -3839,27 +5352,29 @@ The two modes exist because the drop is the mechanism working, not the assessmen
       parser = argparse.ArgumentParser(description="The assess-mode gate.")
       parser.add_argument("--workspace", required=True, type=pathlib.Path)
       parser.add_argument("--market-dir", type=pathlib.Path, default=None)
+      parser.add_argument("--skill-root", type=pathlib.Path, default=None)
       parser.add_argument("--today", default=None)
       args = parser.parse_args(argv)
 
       workspace = args.workspace
-      market_dir = args.market_dir or (
-          pathlib.Path(__file__).resolve().parents[1] / "references" / "market-conventions")
+      market_dir = args.market_dir or conventions.CONVENTIONS_DIR
+      skill_root = args.skill_root or paths.SKILL_ROOT
       today = (datetime.date.fromisoformat(args.today) if args.today
                else datetime.date.today())
 
+      if not workspace.is_dir():
+          return cannot_run(workspace, f"workspace {workspace} does not exist")
       required = [workspace / "fit-assessment.yaml", workspace / "fit-assessment.md",
                   workspace / "evidence-blocks.json"]
       for path in required:
           if not path.exists():
-              print(f"cannot run: {path.name} not found at {path}", file=sys.stderr)
-              return 2
+              return cannot_run(workspace, f"{path.name} not found at {path}")
 
-      findings = check(workspace, market_dir, today)
+      findings = check(workspace, market_dir, today, skill_root)
       hard = [f for f in findings if not f.startswith("WARN_")]
       for finding in findings:
           print(finding)
-      journal.receipt(workspace, "check_assessment",
+      journal.receipt(workspace, GATE,
                       {path.name: journal.sha256_file(path) for path in required},
                       "fail" if hard else "pass", findings)
       return 1 if hard else 0
@@ -3872,12 +5387,16 @@ The two modes exist because the drop is the mechanism working, not the assessmen
 - [ ] **Step 4: Run test to verify it passes**
 
   Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests/test_check_assessment.py -q`
-  Expected: PASS (20 passed)
+  Expected: PASS (35 passed)
 
-- [ ] **Step 5: Run the whole suite**
+- [ ] **Step 5: Run the whole suite and read what is still red**
 
   Run: `cd /Users/donghanglyu/code_project/job-hunt && python3 -m pytest scripts/tests -q`
-  Expected: PASS, every module green, no test skipped.
+  Expected: every module in **this** plan green — and `test_skill_structure.py` still failing,
+  with one failure per script this plan added plus one for `modes/assess.md`. That is Plan 1's
+  self-check assertion doing its job; it has been red since Task 1 and Task 15 is what turns it
+  green. Do not "fix" it by editing the skip set. If anything **other** than
+  `test_skill_structure.py` is red, stop here.
 
 - [ ] **Step 6: Commit**
   ```
@@ -3888,21 +5407,232 @@ The two modes exist because the drop is the mechanism working, not the assessmen
 
 ---
 
+### Task 14: The one flagged rewrite — the FIT SNAPSHOT disclaimer
+
+**Files:**
+- Modify: `references/gap-analysis.md`
+- Modify: `SKILL.md`
+- Modify: `scripts/tests/required_inline.json`
+- Modify: `scripts/lossless-allowlist.json`
+
+**Interfaces:**
+- Consumes: the `job-application-baseline` tag and `scripts/check_skill_lossless.py` (Plan 1 Tasks 2 and 5); `scripts/tests/required_inline.json`'s `{"anchors": [{"text", "source", "why"}]}` shape (Plan 1 Task 17); the allowlist shape `{"_comment", "waived": {sha1_16: reason}, "deleted_files": {}}` (Plan 1 Task 2).
+- Produces: a rewritten FIT SNAPSHOT disclaimer, two `waived` entries recording the retired lines by hash, and a re-pointed anchor.
+
+**Why this is a task and not a line in the migration.** Spec §12 names exactly one rewrite in
+the whole migration and demands it be **a separate, small, readable commit**, kept out of the
+migration diff and recorded in the allowlist by name. Plan 1 deliberately carries the file
+verbatim and hands this here. The reason it cannot be carried verbatim: the disclaimer is a
+paragraph about **keyword coverage percentages** — "a CV with 8/10 must-haves genuinely
+evidenced will outperform one with 10/10 forced mentions", "use this as a health check, not a
+target to game" — and the whole point of D2 and `lint_no_prediction.py` is that this skill no
+longer prints a percentage or an `n/m` score anywhere a reader sees. Shipped verbatim it is a
+required disclaimer about a number the skill does not produce, which teaches the reader to
+discount the disclaimers that *are* load-bearing.
+
+**Why the scope is two lines and not five.** `references/gap-analysis.md:276` ("do not merge
+them into one" / the `ATS coverage %` label) and `SKILL.md:193`/`:195` ("the ATS coverage %")
+are about **Judge 1's** ATS-screener output, which apply mode still produces. They remain true,
+they are not what §12 flagged, and rewriting them here would be a second, unflagged rewrite
+smuggled into the diff that exists to prevent exactly that. `gap-analysis.md:256`'s
+`— keyword proxy` label stays for the same reason. Two lines change; both are recorded.
+
+- [ ] **Step 1: Rewrite the disclaimer in `references/gap-analysis.md`**
+
+  Replace the block quote under **REQUIRED disclaimer to include every time:** with:
+  ```markdown
+  > ⚠️ This is a count of evidence, not a forecast of the outcome. Every must-have is
+  > printed with the evidence reference behind it, so the denominator can be audited row
+  > by row and you can object to one line rather than to the whole number. `strongly
+  > evidenced` counts `strong` only — `partial` and `gap` are never merged into a covered
+  > number, because merging them needs a weight for a partial match and any weight would
+  > be invented. This is not a prediction about a screening system: keyword stuffing
+  > (adding terms not backed by real experience) backfires at interview and with
+  > sophisticated ATS, and no count here estimates an interview or hiring outcome.
+  > Whether to apply is your call.
+  ```
+  The replacement keeps the two substantive claims the old paragraph carried — semantic
+  matching means exact-keyword counting is a proxy, and stuffing backfires — and drops the
+  arithmetic the skill no longer performs.
+
+- [ ] **Step 2: Re-point the layer-1 sentence in `SKILL.md`**
+
+  The FIT SNAPSHOT bullet ends `Include the required disclaimer (keyword proxy, not an ATS
+  prediction).` Replace that parenthetical with `(a count of evidence, not a forecast of the
+  outcome)`. Change nothing else on the line. Layer 1 must not promise a disclaimer whose
+  wording no longer exists.
+
+- [ ] **Step 3: Re-point the anchor**
+
+  In `scripts/tests/required_inline.json`, the anchor whose `text` is
+  `"not an ATS pass prediction"` no longer appears anywhere. Replace that one object with:
+  ```json
+  {"text": "not a forecast of the outcome",
+   "source": "references/gap-analysis.md (rewritten 2026-08-09 — spec §12's one flagged rewrite)",
+   "why": "The FIT SNAPSHOT disclaimer. The snapshot is spoken, never written, so no artifact and no script can check it. The wording is the rewrite, not a baseline quote: `source` says so, because an anchor that silently stops being a quotation is an anchor nobody can re-verify."}
+  ```
+  Every other anchor is still a verbatim baseline quotation; this is the only one that is not,
+  and its `source` field is what keeps that visible.
+
+- [ ] **Step 4: Record both retired lines in the allowlist, by hash**
+
+  Add to `scripts/lossless-allowlist.json`'s `waived` map. The keys are
+  `sha1(normalize(line))[:16]` as `check_skill_lossless.py` computes them, so editing either
+  line again revokes its waiver and brings it back for review:
+  ```json
+  "d6da8347c791420b": "references/gap-analysis.md:274 — the FIT SNAPSHOT required disclaimer. Spec §12's single flagged rewrite, performed in its own commit. The paragraph was about keyword coverage PERCENTAGES ('a CV with 8/10 must-haves ... will outperform one with 10/10 forced mentions'), and D2 plus scripts/lint_no_prediction.py mean this skill prints no percentage and no n/m score anywhere a reader sees. Carried verbatim it would be a required disclaimer about a number that is never produced. The replacement keeps both substantive claims — exact-keyword counting is a proxy because matching is semantic, and stuffing backfires — and drops the arithmetic.",
+  "903ea1e8ad127567": "SKILL.md:84 — the FIT SNAPSHOT bullet. Only its trailing parenthetical changed, from '(keyword proxy, not an ATS prediction)' to '(a count of evidence, not a forecast of the outcome)', so layer 1 does not promise a disclaimer whose wording no longer exists. Same rewrite as d6da8347c791420b; the rest of the line moved to modes/apply.md unchanged."
+  ```
+
+- [ ] **Step 5: Verify the lossless check is still satisfied and the anchor test is green**
+  ```
+  cd /Users/donghanglyu/code_project/job-hunt
+  python3 scripts/check_skill_lossless.py --baseline job-application-baseline
+  python3 -m pytest scripts/tests/test_skill_structure.py -q
+  ```
+  Expected: the lossless check exits 0 and reports two waived lines — **not zero, and not
+  three**. Zero means a waiver key is wrong and the rewrite is being counted as present; three
+  means something else was rewritten in the same commit, which is the thing this task's
+  separateness exists to prevent. The structure test is green because the anchor now matches.
+
+- [ ] **Step 6: Commit — alone**
+  ```
+  cd /Users/donghanglyu/code_project/job-hunt
+  git add references/gap-analysis.md SKILL.md scripts/tests/required_inline.json \
+          scripts/lossless-allowlist.json
+  git commit -m "docs: rewrite the FIT SNAPSHOT disclaimer off keyword percentages
+
+Spec section 12's single flagged rewrite, in its own commit so it is readable and
+so the migration diff contains no rewrites at all. The old disclaimer explained how
+to read a keyword-coverage percentage; D2 and lint_no_prediction.py mean this skill
+prints no percentage and no n/m score anywhere a reader sees, so carrying it
+verbatim would ship a required disclaimer about a number nobody produces.
+
+Both retired lines are recorded in scripts/lossless-allowlist.json by hash, with
+the reason, so each stays a decision someone made. The required_inline.json anchor
+moves with the wording and its source field records that it is the rewrite rather
+than a baseline quotation."
+  ```
+  Nothing else may be in this commit. A rewrite hidden inside a large diff is invisible in
+  review, and that invisibility is the whole failure mode `check_skill_lossless.py` exists for.
+
+---
+
+### Task 15: Put this plan's files into `SKILL.md`'s self-check and gate table
+
+**Files:**
+- Modify: `SKILL.md`
+- Modify: `scripts/tests/test_skill_structure.py`
+
+**Interfaces:**
+- Consumes: `SKILL.md`'s `## Self-check` section and its gate table, and `scripts/tests/test_skill_structure.py`'s `test_the_self_check_names_every_script` / `..._every_mode_file` / `..._every_reference_file` (all written by Plan 1 Task 17).
+- Produces: seven script rows, one mode row and one reference row in both places, and the retraction of the "assess is not yet built" sentence.
+
+**Why this task exists at all, and why it is last.** Plan 1's structure test walks
+`scripts/*.py`, `modes/*.md`, `references/*.md` and `agents/*.md` and asserts each is named in
+`SKILL.md`'s `## Self-check`. That test is correct and it stays. The consequence is that the
+suite goes **red the moment this plan's first script lands** and stays red until this task
+runs — so Task 13 Step 5's "run the whole suite" is not green until now. Plan 1 cannot fix
+this; it runs first. Each later plan carries its own entries.
+
+The second half is a retraction. Plan 1's `SKILL.md` says `discover`, `assess` and `interview`
+are "not yet built in this repo — say so and stop rather than improvising them". Plan 1's own
+guard only fires when the mode file is **absent**, so once `modes/assess.md` exists the stale
+sentence passes every check and layer 1 tells the model to refuse a mode that works. Plan 1
+carries a test that goes red on exactly that, and this task is what turns it green.
+
+- [ ] **Step 1: Extend the gate table**
+
+  In `SKILL.md`'s gate table, add these rows. Every one of them is a gate a completion message
+  may cite, and a gate that is not in this table is a gate no run knows to invoke:
+
+  | What | Script | Catches |
+  |---|---|---|
+  | Evidence blocks | `scripts/evidence_blocks.py` | the posting and CV cut into addressable `JD-nnn` / `CV-nnn`; the only chunker |
+  | Evidence refs | `scripts/check_evidence_refs.py` | refs that resolve to no block; block ids left in reader-facing prose |
+  | Prediction lint | `scripts/lint_no_prediction.py` | percentages, `n/m` scores, prediction vocabulary (EN + ZH) in anything rendered |
+  | Contradictions | `scripts/consistency.py` | verdict vs effort, loose knockouts, gaps with no action, work-authorization conflicts — reports, never repairs |
+  | Coverage counts | `scripts/count_coverage.py` | the only count-producing path; a hand-written second number cannot be reconciled |
+  | Market tables | `scripts/check_conventions.py` | digits/percent in prose, source provenance, protected traits, duplicate ids, expired `review_by` (CI-hard) |
+  | Assess | `scripts/check_assessment.py` | composes the six above and requires their receipts; disclaimer, disqualifier section, the 「那该怎么办」 half, verbatim conventions, stale-review banner |
+
+- [ ] **Step 2: Extend the self-check**
+
+  Add to `SKILL.md`'s `## Self-check` section, in the assess-mode group:
+  ```markdown
+  - [ ] Assessing a posting? `modes/assess.md`, entered with `scripts/enter_mode.py`.
+  - [ ] Rendering a market convention card? `references/market-conventions/README.md` is the
+        rule for what may be in one; the tables are `references/market-conventions/cn.yaml`,
+        `references/market-conventions/nl.yaml`, `references/market-conventions/de.yaml`,
+        `references/market-conventions/uk.yaml`, `references/market-conventions/us.yaml`.
+  - [ ] Ran `scripts/evidence_blocks.py`, `scripts/count_coverage.py`,
+        `scripts/consistency.py`, `scripts/check_evidence_refs.py`,
+        `scripts/lint_no_prediction.py` and `scripts/check_assessment.py`, and quoted
+        `check_assessment`'s receipt? `scripts/check_conventions.py` runs in CI over all five
+        tables.
+  ```
+  Every backticked path here must exist — Plan 1's `test_every_path_the_self_check_names_exists`
+  walks the other direction, because a checklist that names a file nobody wrote sends the model
+  to read nothing and report it as done.
+
+- [ ] **Step 3: Retract "assess is not yet built"**
+
+  In `SKILL.md`'s Modes row, the sentence naming `discover`, `assess` and `interview` as "not
+  yet built in this repo" now says something false about `assess`. Rewrite it to name only the
+  modes that are still unbuilt at this point in the sequence (`discover` and `interview`), and
+  add `assess` to the list of modes that work. Leave the other two exactly as they are; Plans 3
+  and 4 retract their own.
+
+- [ ] **Step 4: Extend the library-only skip set**
+
+  In `scripts/tests/test_skill_structure.py`, `test_the_self_check_names_every_script` skips
+  modules that are imported and never invoked. This plan adds **no** such module — all seven of
+  its scripts are runnable gates and all seven are named in Step 2. But confirm `vocab.py` is in
+  the set alongside `journal.py`, `paths.py` and `rounds.py`, and add it if Plan 1 did not:
+  ```python
+      skip = {"journal.py", "paths.py", "rounds.py", "vocab.py"}   # imported, never invoked
+  ```
+  Do not add a gate to this set to make a failure go away. The set is for modules with no CLI;
+  a gate that is skipped here is a gate no self-check will ever name.
+
+- [ ] **Step 5: Run the whole suite — green for the first time since Task 1**
+  ```
+  cd /Users/donghanglyu/code_project/job-hunt
+  python3 -m pytest scripts/tests -q
+  python3 scripts/check_conventions.py --workspace /tmp/jh-lint --all --today 2026-08-09
+  ```
+  Expected: every module green, no test skipped; the lint exits 0. In particular
+  `test_skill_structure.py` is green — it has been red since `scripts/evidence_blocks.py`
+  landed, and Task 13 Step 5's suite run could not be green before this task.
+
+- [ ] **Step 6: Commit**
+  ```
+  cd /Users/donghanglyu/code_project/job-hunt
+  git add SKILL.md scripts/tests/test_skill_structure.py
+  git commit -m "assess: name the assess gates in SKILL.md's gate table and self-check
+
+Plan 1's test_skill_structure.py asserts every scripts/*.py, modes/*.md and
+references/*.md is named in the self-check, so the suite has been red since the
+first script of this plan landed. Adds the seven assess gates, modes/assess.md and
+the market-convention tables, and retracts the now-false sentence saying assess is
+not yet built in this repo."
+  ```
+
+
 ## Done means
 
-- `python3 -m pytest scripts/tests -q` is green from the repo root.
+- `python3 -m pytest scripts/tests -q` is green from the repo root — **including
+  `test_skill_structure.py`**, which is red from Task 1 until Task 15 lands.
 - `python3 scripts/check_conventions.py --workspace /tmp/jh-lint --all --today 2026-08-09` exits 0.
-- `references/market-conventions/` holds `README.md` and five tables totalling 38 entries (cn 10, nl 9, de 8, uk 5, us 6), with the three dropped ids present in none of them.
-- `modes/assess.md` defines the `fit-assessment.yaml` row schema, the fetch-integrity thresholds, the full `posting.yaml` field list including `salary_range` and `application_type`, the `insufficient_evidence` floor, and the "what to do instead" half.
+- `python3 scripts/check_skill_lossless.py --baseline job-application-baseline` exits 0 and
+  reports exactly **two** waived lines, both added by Task 14.
+- `references/market-conventions/` holds `README.md` and five tables totalling 38 entries (cn 10, nl 9, de 8, uk 5, us 6), with the three dropped ids present in none of them, and each `<key>.yaml` declaring `market: <key>`.
+- `modes/assess.md` defines the `fit-assessment.yaml` row schema, the fetch-integrity thresholds, the twelve-name `posting.yaml` field list including `company`, `salary_range` and `application_type`, the `insufficient_evidence` floor, the `## 硬性阻断项` id list, and the "what to do instead" half — and step 0 of it runs `scripts/enter_mode.py --mode assess`.
+- Every closed set this plan uses is imported from `scripts/vocab.py`; `grep -n 'FIVE_LEVELS\|VERDICT_ZH = {\|MARKET_KEYS = (' scripts/*.py` returns nothing outside `vocab.py`.
+- Every gate writes exactly one receipt on every exit path, verdict `"could_not_run"` on exit 2,
+  and each has a test asserting it. `grep -c 'return 2' scripts/*.py` matches the number of
+  `cannot_run(` call sites.
+- `SKILL.md` names all seven scripts, `modes/assess.md` and the market-convention files in both
+  its gate table and its `## Self-check`, and no longer says assess is not yet built.
+- No path under `/private/tmp` appears anywhere in the tree.
 - Every commit stages named paths only. Nothing was pushed.
-
-
-
-
-
-
-
-
-
-
-
