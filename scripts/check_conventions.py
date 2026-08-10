@@ -240,26 +240,54 @@ def check_file(path: pathlib.Path, today: datetime.date) -> list[str]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Lint the market-convention tables.")
-    parser.add_argument("--workspace", required=True, type=pathlib.Path)
+    parser.add_argument("--workspace", type=pathlib.Path, default=None,
+                        help="required in gate mode; omit it only with --ci, which "
+                             "lints the shipped tables as a repo check and writes no receipt")
     parser.add_argument("--market-file", action="append", type=pathlib.Path, default=[])
     parser.add_argument("--all", action="store_true",
                         help="check every shipped table under references/market-conventions")
     parser.add_argument("--today", default=None, help="YYYY-MM-DD, for deterministic tests")
+    parser.add_argument("--ci", action="store_true",
+                        help="repo-check mode: lint the shipped tables with no workspace and no "
+                             "receipt. Implies --all.")
     args = parser.parse_args(argv)
 
     today = (datetime.date.fromisoformat(args.today) if args.today
              else datetime.date.today())
-    if not args.workspace.is_dir():
+
+    # --ci is a NAMED exception to the gate contract, in the same class as
+    # check_skill_lossless.py: it lints files that live in the repo, not artifacts that
+    # live in a user's run, so there is no workspace to journal into and a receipt would
+    # be bookkeeping about nobody. Everything else — the findings, the WARN_ split, the
+    # exit codes — is identical, so CI and a gate run cannot disagree about a table.
+    if args.ci:
+        if args.workspace is not None:
+            print("BAD_ARGS: --ci takes no --workspace; it writes no receipt", file=sys.stderr)
+            return 2
+        args.all = True
+    elif args.workspace is None:
+        print("BAD_ARGS: --workspace is required in gate mode (or pass --ci for the repo check)",
+              file=sys.stderr)
+        return 2
+    elif not args.workspace.is_dir():
         return cannot_run(args.workspace,
                           f"workspace {args.workspace} does not exist")
     files = list(args.market_file)
     if args.all:
         files += [CONVENTIONS_DIR / f"{key}.yaml" for key in MARKET_KEYS]
+    def _cannot_run(reason: str) -> int:
+        """In --ci mode there is no journal to write to, so say why on stderr and exit 2.
+        Exit 2 stays 'could not run', distinct from 1 = 'a table is bad', in both modes."""
+        if args.ci:
+            print(f"NO_INPUT: {reason}", file=sys.stderr)
+            return 2
+        return cannot_run(args.workspace, reason)
+
     if not files:
-        return cannot_run(args.workspace, "pass --market-file or --all")
+        return _cannot_run("pass --market-file or --all")
     for path in files:
         if not path.exists():
-            return cannot_run(args.workspace, f"{path} not found")
+            return _cannot_run(f"{path} not found")
 
     findings: list[str] = []
     hashes: dict[str, str] = {}
@@ -270,8 +298,9 @@ def main(argv: list[str] | None = None) -> int:
     for finding in findings:
         print(finding)
     hard = [f for f in findings if not f.startswith("WARN_")]
-    journal.receipt(args.workspace, GATE, hashes,
-                    "fail" if hard else "pass", findings)
+    if not args.ci:
+        journal.receipt(args.workspace, GATE, hashes,
+                        "fail" if hard else "pass", findings)
     return 1 if hard else 0
 
 

@@ -18,6 +18,6 @@ lossless:
 	$(PY) scripts/check_skill_lossless.py --baseline $(BASELINE)
 
 conventions:
-	python3 scripts/check_conventions.py --all
+	$(PY) scripts/check_conventions.py --ci
 
 check: test lossless conventions

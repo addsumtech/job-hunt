@@ -23,4 +23,4 @@ jobs:
       - run: python3 -m pytest scripts/tests -q
       - run: python3 scripts/check_skill_lossless.py --baseline 864ad7f
       - name: market conventions
-        run: python3 scripts/check_conventions.py --all
+        run: python3 scripts/check_conventions.py --ci

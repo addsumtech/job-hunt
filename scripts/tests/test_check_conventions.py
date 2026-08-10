@@ -257,3 +257,48 @@ def test_the_market_keys_are_the_shared_ones_and_the_root_is_resolved_once():
     assert cck.MARKET_KEYS is vocab.MARKET_KEYS
     assert cck.SKILL_ROOT == paths.SKILL_ROOT
     assert cck.CONVENTIONS_DIR == cck.SKILL_ROOT / "references" / "market-conventions"
+
+
+# --ci is the repo-check mode: same findings, same exit codes, no workspace and no
+# receipt. It exists because `make check` and the CI workflow lint tables that live in
+# the repo, not artifacts in a user's run — there is nothing to journal into. The pair
+# below pins both halves, because a mode with no test is a mode that drifts.
+
+def test_ci_mode_lints_the_shipped_tables_without_a_workspace(capsys):
+    """The invocation Makefile and checks.yml actually run. Before --ci existed this
+    exited 2 on argparse, which reads on a CI dashboard as a broken market table."""
+    assert cck.main(["--ci"]) == 0
+    assert "BAD_ARGS" not in capsys.readouterr().err
+
+
+def test_ci_mode_writes_no_journal_anywhere(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    assert cck.main(["--ci"]) == 0
+    capsys.readouterr()
+    assert list(tmp_path.iterdir()) == [], "--ci must leave no receipt behind"
+
+
+def test_ci_and_workspace_together_are_refused(capsys):
+    """Not a convenience: accepting both would let a caller believe a receipt was
+    written when none was, and the whole point of a receipt is that its absence shows."""
+    assert cck.main(["--ci", "--workspace", "/tmp"]) == 2
+    assert "BAD_ARGS" in capsys.readouterr().err
+
+
+def test_gate_mode_still_demands_a_workspace(capsys):
+    assert cck.main(["--all"]) == 2
+    err = capsys.readouterr().err
+    assert "BAD_ARGS" in err and "--ci" in err
+
+
+def test_ci_mode_still_fails_on_a_bad_table(tmp_path, monkeypatch, capsys):
+    """The quiet half of --ci is worthless if the loud half is missing. A digit in a
+    prose field must still exit 1 with no workspace in sight."""
+    bad = tmp_path / "cn.yaml"
+    doc = json.loads(json.dumps(GOOD))
+    doc["conventions"][0]["text_en"] = "Screening rejects 38 percent of applicants outright."
+    bad.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    monkeypatch.setattr(cck, "CONVENTIONS_DIR", tmp_path)
+    monkeypatch.setattr(cck, "MARKET_KEYS", ("cn",))
+    assert cck.main(["--ci", "--today", "2026-08-09"]) == 1
+    assert "DIGIT_IN_PROSE" in capsys.readouterr().out
