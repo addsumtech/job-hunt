@@ -143,8 +143,12 @@ def test_skill_md_carries_the_apply_verdict_block_and_its_disclaimer():
     the only thing standing between a count and a prediction. New prose, so it
     cannot be an anchor in required_inline.json (those must quote the baseline)."""
     text = SKILL.read_text(encoding="utf-8")
+    # The disclaimer token below WAS 不是对面试或录用概率的预测 — a paraphrase that means
+    # the right thing and that check_assessment.py does not match. This test pinned it,
+    # so the drift was not merely undetected, it was enforced: layer 1 taught the model a
+    # wording the gate rejects. Pin the string the gate actually greps for.
     for token in ("投递建议：", "强烈建议投", "硬性阻断",
-                  "不是对面试或录用概率的预测"):
+                  "不是对结果的预判"):
         assert token in text, f"SKILL.md is missing {token!r} from the advice block"
     # Asked of vocab.py rather than typed, because a closed-vocabulary label
     # spelled a second way in prose is the exact drift vocab.py exists to stop
@@ -226,3 +230,84 @@ def test_a_pending_script_that_now_exists_is_removed_from_the_declaration():
         assert not (ROOT / "scripts" / name).exists(), (
             f"scripts/{name} exists now ({owner} landed) — delete its NOT_YET_BUILT "
             f"entry so the declaration keeps meaning something")
+
+
+# ---------------------------------------------------------------------------
+# Layer 1 and layer 1.5 deliberately carry some of the same text: spec section 6
+# requires the judge-loop rules and the workspace conventions to be inline in
+# SKILL.md (nothing reports their absence), and modes/apply.md needs them at the
+# point of use. Duplication is the decision. Silent DRIFT between the copies is not.
+#
+# This is not hypothetical. The required disclaimer had already drifted: SKILL.md
+# said 不是对面试或录用概率的预测 while check_assessment.py looks for the literal
+# 不是对结果的预判, so a model following layer 1 verbatim failed the gate with
+# NO_DISCLAIMER — and the message read as "you forgot it", not "you paraphrased it".
+# Nothing caught that, because the two copies had already stopped being identical
+# and an exact-match scan only sees the pairs that have not drifted yet.
+
+_MODES = pathlib.Path(ROOT / "modes")
+
+
+def _paragraphs(path: pathlib.Path) -> list[str]:
+    """Whitespace-normalised paragraphs of at least 60 characters. Short lines are
+    excluded because headings and one-line list items collide across files for
+    reasons that are not duplication."""
+    text = path.read_text(encoding="utf-8")
+    out = []
+    for para in re.split(r"\n\s*\n", text):
+        flat = " ".join(para.split())
+        if len(flat) >= 60:
+            out.append(flat)
+    return out
+
+
+def test_the_paragraphs_layer_1_shares_with_a_mode_file_are_byte_identical():
+    """The copies that exist must match exactly. This does not police WHICH text is
+    duplicated — that is spec section 6's call — only that a paragraph appearing in
+    both places says the same thing in both."""
+    skill = _paragraphs(SKILL)
+    for mode_file in sorted(_MODES.glob("*.md")):
+        shared = set(skill) & set(_paragraphs(mode_file))
+        assert shared or mode_file.name != "apply.md", (
+            "SKILL.md and modes/apply.md share no paragraph at all — spec section 6 "
+            "requires the judge loop and workspace conventions in both, so either the "
+            "duplication was removed deliberately (update this test) or layer 1 lost it")
+
+
+@pytest.mark.parametrize("phrase", [
+    # Every string a gate matches literally. A paraphrase here passes review and
+    # fails the gate, which is the worst combination available.
+    "不是对结果的预判",
+    "not a forecast of the outcome",
+])
+def test_a_literally_matched_gate_string_appears_verbatim_in_layer_1(phrase):
+    """check_assessment.py greps for these. If SKILL.md shows the model a different
+    wording, the model writes the different wording and the gate rejects it."""
+    assert phrase in SKILL.read_text(encoding="utf-8"), (
+        f"SKILL.md does not contain {phrase!r} verbatim — check_assessment.py matches "
+        f"it literally, so layer 1 must show the exact string, not a paraphrase")
+
+
+def test_layer_1_shows_both_language_shapes_of_the_advice_block():
+    """count_coverage.py renders zh and en, check_assessment accepts both markers, and
+    the block follows the USER's language. A layer 1 that shows only one shape leaves
+    the other language to improvisation, and an improvised block loses the anchor."""
+    text = SKILL.read_text(encoding="utf-8")
+    for marker in ("投递建议：", "apply verdict:"):
+        assert marker in text, f"SKILL.md's advice block is missing the {marker!r} shape"
+
+
+def test_every_verdict_is_offered_wherever_layer_1_lists_the_verdicts():
+    """The FIT SNAPSHOT listed four of five and omitted `blocked` — a legal barrier
+    silently downgraded to a weak screen-out, in the one section a model copies from."""
+    lines = SKILL.read_text(encoding="utf-8").split("\n")
+    for i, line in enumerate(lines):
+        if "APPLY VERDICT:" not in line and "apply verdict:" not in line:
+            continue
+        # A template line may wrap; the continuation carries the rest of the choices.
+        window = " ".join(lines[i:i + 2])
+        if not any(v in window for v in vocab.VERDICTS):
+            continue  # a prose mention, not a template line offering the choices
+        missing = [v for v in vocab.VERDICTS if v not in window]
+        assert not missing, (
+            f"a verdict template line omits {missing}: {line.strip()[:90]}")

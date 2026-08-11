@@ -118,26 +118,28 @@ If the uniformity check fails on any dimension, make targeted repairs before del
 
 ## FIT SNAPSHOT — show before tailoring (baseline) and after (delta)
 
-A lone keyword % misleads: a CV can read 80% covered while the candidate is under-leveled or off-domain (both kill the application), or 65% covered with a perfect responsibility + seniority match (a strong apply). So show the user a small **fit snapshot** — still no fake precision, every line evidence-backed:
+A lone coverage count misleads: a CV can cover most must-haves while the candidate is under-leveled or off-domain (both kill the application), or miss several and still be a strong apply on a perfect responsibility + seniority match. So show the user a small **fit snapshot** — still no fake precision, every line evidence-backed:
 
 ```
 FIT SNAPSHOT — [Role Title] at [Company]
 
-Must-have coverage:  X of N strongly evidenced (Y partial, Z missing) — keyword proxy
+Must-have coverage:  X of N strongly evidenced (Y partial, Z missing)
 
-| Must-have requirement | In CV? | JD mentions ≈N× |
+| Must-have requirement | In CV? | Evidence |
 |---|---|---|
-| [Requirement 1] | Yes / Partial / No | N× |
+| [Requirement 1] | Yes / Partial / No | CV-nnn |
 | … | … | … |
 
 Responsibility match: M of K core responsibilities demonstrated (from the §1 responsibility-evidence pass)
-Seniority fit:        under / on / over-leveled — [one line]
+Seniority fit:        step_up / lateral / step_down / unclear — [one line]
 Domain fit:           same-domain / adjacent / cross-over — [one line]
 
-APPLY VERDICT: strong apply / worth applying / stretch / likely screen-out — [one honest sentence why]
+APPLY VERDICT: strong_apply / worth_applying / stretch / likely_screen_out / blocked — [one honest sentence why]
 ```
 
-Run it before tailoring (baseline) and after (so the user sees the delta). The apply verdict is the north-star question — it tells the user whether this is worth their time, not just whether they keyword-matched.
+Run it before tailoring (baseline) and after (so the user sees the delta). The apply verdict is the north-star question — it tells the user whether this is worth their time, not just whether the words matched.
+
+**This snapshot and the advice block below are the same judgement in two places, so they must not disagree.** The snapshot is apply mode's before/after view; the advice block is the shape every mode uses to state fit. Both carry the same five verdicts from `scripts/vocab.py` — `blocked` included, because a legal barrier is not a weak `likely_screen_out` — and `insufficient_evidence` replaces the whole thing rather than appearing as a sixth level. Both carry the required disclaimer verbatim.
 
 **REQUIRED disclaimer to include every time:**
 
@@ -384,7 +386,9 @@ then read `modes/<mode>.md` in full. The entry writes the mode file's content ha
 ## The advice block, and the disclaimer that is not optional
 
 Whenever this skill states how good a fit a posting is, it states it in exactly this
-shape — counted facts, then one word, then the disclaimer:
+shape — counted facts, then one word, then the disclaimer. **The block follows the
+user's language, not the market's**, so both shapes are here; `scripts/count_coverage.py`
+emits them with `--lang zh` and `--lang en` and is the only path that produces the counts.
 
     must-have 强证据：   X of N   （partial P，gap G，无证据 U）
     核心职责已证实：     M of K
@@ -392,8 +396,26 @@ shape — counted facts, then one word, then the disclaimer:
     可补缺口所需投入：   <当天 | 一晚 | 数日 | 补不上>
     投递建议：           <强烈建议投 | 值得投 | 可以冲刺 | 大概率被筛掉 | 硬性阻断>
 
-    这是对「已写下来的证据」的清点，不是对面试或录用概率的预测。
-    每一项都附了它的证据引用，分母可以逐条复核；不同意某一行就直接说。
+    must-haves strongly evidenced:   X of N   (partial P, gap G, no evidence U)
+    core responsibilities demonstrated: M of K
+    level match:                     <step_up | lateral | step_down | unclear>
+    effort to close the gaps:        <quick | evening | multi_day | not_closable>
+    apply verdict:                   <strong_apply | worth_applying | stretch |
+                                      likely_screen_out | blocked>
+
+**Immediately under the block, ship one of these two disclaimers unchanged.** The exact
+wording is load-bearing: `check_assessment.py` looks for the literal string
+「不是对结果的预判」 or "not a forecast of the outcome", so a disclaimer that means the
+same thing in different words fails the gate as `NO_DISCLAIMER` — and the failure reads
+as "you forgot the disclaimer" rather than "you paraphrased it".
+
+> ⚠️ 以上是对证据的清点，不是对结果的预判。每一项都连同它的证据引用一起印出，分母可以逐条审计；
+> 本 skill 不给出面试或录用的可能性估计，也不给 0–100 分。要不要投，由你决定。
+
+> ⚠️ This is a count of evidence, not a forecast of the outcome. Every item is printed
+> with its evidence reference so the denominator can be audited row by row. This skill
+> states no interview or hiring outcome estimate and no 0–100 score. Whether to apply
+> is your call.
 
 Every item inside N and K is printed with its evidence reference, so the denominator
 is auditable. `强证据` counts only `strong`; `partial` and `gap` are never folded into
