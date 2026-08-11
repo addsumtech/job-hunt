@@ -364,7 +364,7 @@ The point is not to coach a story — it's to make sure every word on the page i
 | `discover` | what is out there worth looking at | live — `modes/discover.md`; enter with `scripts/enter_mode.py --mode discover` |
 | `assess` | is this posting worth applying to | live — `modes/assess.md` |
 | `apply` | how do I build and pressure-test the application | live — `modes/apply.md` |
-| `interview` | how do I answer, and what did I get wrong | `interview` is not yet built in this repo |
+| `interview` | how do I answer, and what did I get wrong | live — `modes/interview.md`, gated by `scripts/check_mock.py` |
 
 For an unbuilt mode: say so and stop. Do not improvise it. An improvised discover
 run produces a shortlist with no source ids, which is indistinguishable from a real
@@ -479,6 +479,7 @@ a fabrication the candidate then repeats back), and the shortlist's `why_matched
 | Page count | `scripts/check_pages.py` | a PDF longer than the market's table allows; a letter over one page; an unreadable PDF |
 | Word limits | `scripts/check_word_limits.py` | a supporting-statement criterion over its stated limit, empty, or with no limit recorded |
 | Apply completion | `scripts/check_apply.py` | a missing receipt, an unclassified stop, a missing brief |
+| Mock interview | `scripts/check_mock.py` | an invented tag or band; a tag with no quote, or a quote that is not in the transcript; a pass emitting the other pass's tags; a scraped question with no id, no date, or the wrong country; an answer-bank entry with no source; a collapsed claim with no walk-back; an unsourced fact neither promoted nor walked back |
 | Evidence blocks | `scripts/evidence_blocks.py` | the posting and CV cut into addressable `JD-nnn` / `CV-nnn`; the only chunker |
 | Evidence refs | `scripts/check_evidence_refs.py` | refs that resolve to no block; block ids left in reader-facing prose |
 | Prediction lint | `scripts/lint_no_prediction.py` | percentages, `n/m` scores, prediction vocabulary (EN + ZH) in anything rendered |
@@ -641,6 +642,8 @@ Read-when:
 - [ ] Extracting a posting? `references/job-posting-extraction.md`.
 - [ ] Writing the brief? `references/interview-prep.md`.
 - [ ] In apply mode? `modes/apply.md`, loaded on entry, not on demand.
+- [ ] In interview mode? `modes/interview.md`, loaded on entry, not on demand — and
+      `references/interview-shapes.md` in full before the first question.
 - [ ] In discover mode? `modes/discover.md`, loaded on entry, not on demand.
 - [ ] About to make the first live retrieval of a run, or asked to page further,
       fetch more detail pages, or work while the user is away?
@@ -653,6 +656,8 @@ Read-when:
 Dispatched:
 - [ ] `agents/ats-screener.md`, `agents/recruiter-screener.md` and
       `agents/hiring-manager.md` were each pasted IN FULL into their own judge.
+- [ ] `agents/mock-assessor-transcript.md` and `agents/mock-assessor-provenance.md` were
+      each pasted IN FULL into their own assessor, with **different** input packs.
 
 Ran, with a receipt in `journal.jsonl` — `scripts/check_apply.py` requires each of these:
 - [ ] `scripts/check_personal_data.py`
@@ -664,6 +669,7 @@ Ran, with a receipt in `journal.jsonl` — `scripts/check_apply.py` requires eac
 - [ ] `scripts/check_pages.py` (if a PDF was produced)
 - [ ] `scripts/check_word_limits.py` (if `application_type: structured`)
 - [ ] `scripts/check_apply.py`
+- [ ] `scripts/check_mock.py` (once per mock-interview round)
 
 Ran, leaving a `mode_entry` record rather than a gate receipt:
 - [ ] `scripts/enter_mode.py` — and its recorded hash still matches `modes/apply.md`.

@@ -61,7 +61,8 @@ def test_the_self_check_names_every_script():
     # lands last silently deletes the earlier plans' entries and the deletion
     # shows up as an unrelated red test in someone else's task.
     skip = {"journal.py", "paths.py", "rounds.py", "vocab.py",
-            "opencli_meta.py"}      # imported, never invoked
+            "opencli_meta.py",                    # Plan 3 — leave it
+            "mock_vocab.py", "mock_blocks.py"}    # imported, never invoked
     section = _self_check_section()
     for f in sorted((ROOT / "scripts").glob("*.py")):
         if f.name in skip:
