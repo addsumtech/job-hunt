@@ -1,0 +1,24 @@
+round: 2
+posting_country: NL
+questions:
+  - id: Q1
+    text: Your CV says you cut reconstruction time by a third. Walk me through how you measured that.
+    source: judge-supplementary
+    asked: true
+  - id: Q2
+    text: Who ran that benchmark, and where did the 200 scans come from?
+    source: generated
+    asked: true
+  - id: Q3
+    text: Take the speed-up specifically. What was the before number and the after number?
+    source: generated
+    asked: true
+rejected:
+  - id: R1
+    text: "ASML 宣讲会 → 笔试 → 二面 → HR 电话面 timeline"
+    source: scraped
+    source_site: nowcoder
+    source_id: "057523b2ca9d"
+    source_time: "2026-08-06T11:06:49"
+    entity_country: CN
+    reason: wrong_country

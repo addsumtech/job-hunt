@@ -1,0 +1,6 @@
+- term: department cluster
+  where: tailoring-plan.md:promoted-from-mock
+  source_kind: session-answer
+  source_ref: mock/transcript-2.md#Q2
+  session_date: "2026-08-09"
+  retracted: null

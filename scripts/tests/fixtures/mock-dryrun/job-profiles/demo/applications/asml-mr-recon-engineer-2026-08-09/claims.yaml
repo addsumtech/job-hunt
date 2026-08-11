@@ -1,0 +1,6 @@
+- term: GPU batching
+  where: tailored-profile.yaml:experience[0].bullets[2]
+  source_kind: profile-line
+  source_ref: profile.yaml:experience[0].bullets[2]
+  session_date: "2026-08-09"
+  retracted: null
