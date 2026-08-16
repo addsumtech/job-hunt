@@ -767,3 +767,55 @@ def test_valid_headings_and_section_order_are_silent(full_profile, capsys):
     p["meta"]["section_order"] = ["education", "skills", "experience"]
     render_cv.render_markdown(p)
     assert capsys.readouterr().err == ""
+
+
+# assets/profile.example.yaml:2 declares meta.name and contact.email the only two
+# required fields, and until 2026-08-16 nothing enforced that. A profile missing
+# meta.name rendered `{\LARGE \textbf{}}` into the PDF and a bare `#` into the
+# Markdown, printed "Wrote cv.pdf", and exited 0 — a nameless CV, in every format,
+# with no warning. It was invisible downstream too: check_pages cannot require a name
+# the profile never supplied, and the three judges read a cv.md wrong the same way.
+
+def test_a_profile_missing_a_declared_required_field_is_refused(tmp_path):
+    """Loud, and naming the field. The old behaviour was a rendered artifact the
+    candidate would have had to notice by reading their own PDF."""
+    p = tmp_path / "p.yaml"
+    p.write_text('meta: {}\ncontact: {email: "x@example.com"}\n', encoding="utf-8")
+    with pytest.raises(ValueError, match=r"meta\.name"):
+        render_cv.load_profile(p)
+
+    p.write_text('meta: {name: "X"}\ncontact: {}\n', encoding="utf-8")
+    with pytest.raises(ValueError, match=r"contact\.email"):
+        render_cv.load_profile(p)
+
+
+def test_a_field_present_but_blank_counts_as_missing(tmp_path):
+    """`name: ""` and `name: "   "` render exactly the same empty block as no key at
+    all, so the check keys on the rendered value, not on the key existing."""
+    p = tmp_path / "p.yaml"
+    for blank in ('""', '"   "'):
+        p.write_text(f'meta: {{name: {blank}}}\ncontact: {{email: "x@example.com"}}\n',
+                     encoding="utf-8")
+        with pytest.raises(ValueError, match=r"meta\.name"):
+            render_cv.load_profile(p)
+
+
+def test_a_complete_profile_loads_silently(tmp_path):
+    """The quiet case, pinned as hard as the firing one — a check that refuses a
+    legitimate profile is worse than the hole it closes, because the user's only
+    move is to stop using the renderer."""
+    p = tmp_path / "p.yaml"
+    p.write_text('meta: {name: "Łukasz Wójcik"}\ncontact: {email: "l@example.com"}\n',
+                 encoding="utf-8")
+    assert render_cv.load_profile(p)["meta"]["name"] == "Łukasz Wójcik"
+
+
+def test_the_shipped_example_and_fixtures_satisfy_their_own_schema(tmp_path):
+    """The example is what a user copies. If it ever stopped satisfying the rule the
+    example's own line 2 states, the rule would be the thing that is wrong."""
+    root = pathlib.Path(__file__).resolve().parent.parent.parent
+    for rel in ("assets/profile.example.yaml",
+                "scripts/tests/fixtures/full_profile.yaml",
+                "scripts/tests/fixtures/sample_profile.yaml"):
+        assert render_cv.missing_required_fields(
+            render_cv.yaml.safe_load((root / rel).read_text(encoding="utf-8"))) == [], rel

@@ -342,9 +342,40 @@ def section_order(profile):
 
 # ── Shared helpers ────────────────────────────────────────────────────────────
 
+# assets/profile.example.yaml:2 — "All fields optional except meta.name and
+# contact.email." Nothing enforced that. A profile missing meta.name rendered a CV
+# with an EMPTY name block in all three formats — `{\LARGE \textbf{}}` in LaTeX,
+# a bare `#` in Markdown — printed "Wrote cv.pdf", and exited 0. A CV with no name
+# on it is worthless to the reader and invisible to every gate downstream:
+# check_pages cannot require a name the profile never supplied, the judges read a
+# cv.md that is wrong in the same way, and the candidate sees a filename, not a page.
+# Refusing to render is right here rather than a warning: unlike a missing LaTeX
+# engine, there is no partial output worth having.
+REQUIRED_PROFILE_FIELDS = (("meta", "name"), ("contact", "email"))
+
+
+def missing_required_fields(profile) -> list:
+    """The declared-required fields this profile does not supply, as 'a.b' strings."""
+    missing = []
+    for section, key in REQUIRED_PROFILE_FIELDS:
+        value = ((profile or {}).get(section) or {}).get(key)
+        if not (str(value).strip() if value is not None else ""):
+            missing.append(f"{section}.{key}")
+    return missing
+
+
 def load_profile(path):
     with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+        profile = yaml.safe_load(f)
+    missing = missing_required_fields(profile)
+    if missing:
+        raise ValueError(
+            f"{path}: missing required field(s) {', '.join(missing)} — "
+            f"assets/profile.example.yaml declares these the only two required fields, "
+            f"and rendering without them produces a CV with a blank name or no way to "
+            f"reply to it. Add them to the profile; do not work around this by editing "
+            f"the rendered output, which the next re-render discards.")
+    return profile
 
 
 def _contact_links(profile):
