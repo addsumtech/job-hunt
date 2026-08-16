@@ -47,13 +47,24 @@ def test_only_the_top_three_verdicts_may_get_a_detail_fetch():
 
 def test_the_disclosure_block_ships_prefilled_with_no():
     body = text()
-    for label in cs.DISCLOSURE_LABELS:
-        assert label in body, f"disclosure label {label!r} missing"
-    for label in ("收到限制信号后重试：", "绕过任何平台控制：", "取得真实岗位："):
+    for pair in cs.DISCLOSURE_LABELS:
+        for label in pair:
+            assert label in body, f"disclosure label {label!r} missing"
+    # Pre-filled in BOTH spellings. Pairing the labels and leaving this
+    # assertion on the three Chinese ones would ship the English half of the
+    # block without the one backstop that makes it worth having: an answer that
+    # is already 否/no can only become 是/yes by an active overwrite, never by an
+    # omission, and only if something checks that it was not left blank.
+    for label, answer in (("收到限制信号后重试：", "否"),
+                          ("绕过任何平台控制：", "否"),
+                          ("取得真实岗位：", "否"),
+                          ("Retried after a stop signal:", "no"),
+                          ("Bypassed any platform control:", "no"),
+                          ("Obtained real postings:", "no")):
         line = next(l for l in body.splitlines() if label in l)
-        assert line.split(label, 1)[1].strip() == "否", (
-            f"{label!r} must ship pre-filled as 否 so concealment is an active "
-            "overwrite, not an omission")
+        assert line.split(label, 1)[1].strip() == answer, (
+            f"{label!r} must ship pre-filled as {answer!r} so concealment is an "
+            "active overwrite, not an omission")
 
 
 def test_the_three_auth_states_are_distinguished():
@@ -209,5 +220,31 @@ def test_insufficient_evidence_is_never_a_shortlist_row():
 
 def test_the_card_based_stamp_is_required_in_the_rendered_markdown_too():
     body = text()
-    assert cs.PROVISIONAL_STAMP in body
+    for spelling in cs.PROVISIONAL_STAMP:
+        assert spelling in body, f"provisional stamp {spelling!r} is defined nowhere"
     assert "MD_MISSING_PROVISIONAL_STAMP" in body
+
+
+def test_the_english_scaffolding_of_the_document_is_defined_here_too():
+    # Pairing the two GATE literals and nothing else yields an English document
+    # with Chinese furniture — worse than either language alone, because it reads
+    # to the user as a bug and passes every check. The mode file is the only
+    # place these section names and labels are defined, so it is the only place
+    # the English spellings can come from.
+    body = text()
+    for anchor in ("§0 Sources and read quality", "§0.1 Trigger",
+                   "§0.2 Disclosure", "no detail fetched",
+                   "direction-level shortlist"):
+        assert anchor in body, f"English scaffolding {anchor!r} is defined nowhere"
+    # …and the Chinese originals are still here, because a mirror replaces
+    # nothing.
+    for anchor in ("§0 来源与读取质量", "§0.1 触发原因", "§0.2 披露", "未取详情",
+                   "方向级 shortlist"):
+        assert anchor in body, f"{anchor!r} was dropped rather than mirrored"
+
+
+def test_the_language_rule_the_pairing_rests_on_is_written_down():
+    # spec §10: 「CV 跟市场走；评估/shortlist/面试复盘跟用户走」. Without the rule
+    # stated, the next reader sees seven paired literals and no reason for them.
+    body = text()
+    assert "the user's language" in body or "跟用户走" in body

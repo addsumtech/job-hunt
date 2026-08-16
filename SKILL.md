@@ -570,8 +570,9 @@ two are what make the first four checkable:
    session standing in for a logged-out one.
 5. Emit the **direction-level degraded output** instead: 3-5 目标方向, no `rows:`,
    so it cannot claim a posting exists.
-6. Fill in the disclosure table, whose answers ship pre-filled as 否 precisely so
-   that concealing a retry has to be an active overwrite rather than an omission.
+6. Fill in the disclosure table, whose answers ship pre-filled as 否 / no precisely
+   so that concealing a retry has to be an active overwrite rather than an
+   omission. Six lines, one language — `modes/discover.md` gives the block in both.
 
 The per-platform trigger strings are data and live in
 `references/risk-control-signals.yaml`; **this rule is not data and does not live
@@ -780,4 +781,8 @@ Told the user:
 - [ ] The workspace path and every output file, including the `.tex`.
 - [ ] In discover: the §0 来源与读取质量 table, the trigger reason, every row's band
       marked 「基于卡片信息的初判」, and — if the run degraded — the disclosure block
-      with its answers filled in.
+      with its answers filled in. **In the user's language**: an English round says
+      §0 Sources and read quality / "provisional, from card data only" / Logged in
+      this session:, and `modes/discover.md` carries both spellings of all seven
+      literals the gate requires. One language per document — Chinese furniture in
+      an English page passes every gate and still reads as a bug.

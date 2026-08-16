@@ -317,9 +317,10 @@ or invent one.
 A date going by while the code did not change should not stop the skill working. The CI
 lint (`check_conventions.py --all`) fails on the expired date so a person fixes it; the
 runtime gate downgrades it to `WARN_EXPIRED_REVIEW_BY` and instead requires the banner
-string 「已过复核期」 to appear in `fit-assessment.md` (`MISSING_STALE_BANNER`). Rendering
-a stale card without telling the reader it is stale is the one thing that is worse than
-either.
+string 「已过复核期」 to appear in `fit-assessment.md` (`MISSING_STALE_BANNER`). On an
+English card the banner is **"past its review date"** — like every other anchor in this
+file it is a pair, and the card follows the user's language. Rendering a stale card
+without telling the reader it is stale is the one thing that is worse than either.
 
 The one sentence you write in this section is where **this CV** stands against the
 convention, and it cites CV blocks like any other claim. List the ids you rendered in
@@ -413,7 +414,8 @@ say this passed.
       rubric with its source named on the next line.
 - [ ] Convention cards are verbatim from `references/market-conventions/<market>.yaml`,
       `applies_when` was honoured, and `conventions_rendered` lists their ids.
-- [ ] Any rendered entry whose `review_by` has passed carries the 「已过复核期」 banner.
+- [ ] Any rendered entry whose `review_by` has passed carries the 「已过复核期」 /
+      "past its review date" banner, in the card's own language.
 - [ ] Every consistency notice that fired is attached where it fired.
 - [ ] If the verdict is 大概率被筛掉 or 硬性阻断: **exactly one** strategy token from the
       closed set, a 30/60/90 table with a `验收标准` column, and a roadmap with an

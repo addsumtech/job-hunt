@@ -663,6 +663,24 @@ def test_an_expired_table_does_not_stop_the_skill_working(tmp_path):
                     "--skill-root", str(root), "--today", "2026-08-09"]) == 0
 
 
+def test_the_english_stale_banner_satisfies_the_same_rule(tmp_path):
+    # STALE_BANNER was the last unpaired anchor in an otherwise bilingual gate,
+    # and it starts mattering when the first `review_by` passes (2026-11-09), not
+    # today — which is exactly the kind of defect that ships. Sentence-initial is
+    # the natural rendering of an English banner, so the anchor is matched
+    # case-insensitively: "Past its review date — …" is the same banner.
+    market = copy.deepcopy(MARKET)
+    market["conventions"][0]["review_by"] = "2026-08-08"
+    ws, market_dir, root = build(tmp_path, market=market)
+    md = (ws / "fit-assessment.md").read_text(encoding="utf-8").replace(
+        "## 市场惯例\n\n",
+        "## 市场惯例\n\n> ⚠️ Past its review date — re-check before relying on it.\n\n")
+    (ws / "fit-assessment.md").write_text(md, encoding="utf-8")
+    findings = ca.check(ws, market_dir, TODAY, root)
+    assert not [f for f in findings if f.startswith("MISSING_STALE_BANNER")], findings
+    assert any(f.startswith("WARN_EXPIRED_REVIEW_BY:") for f in findings)
+
+
 def test_an_expired_entry_rendered_without_the_banner_fails(tmp_path):
     market = copy.deepcopy(MARKET)
     market["conventions"][0]["review_by"] = "2026-08-08"

@@ -118,17 +118,36 @@ _US_STATE = re.compile(
 EMPTINESS_PHRASES = ("没有匹配", "没有结果", "未找到", "无匹配", "零结果",
                      "no results", "no matching", "nothing found", "found nothing")
 
+# Every literal this gate requires a reader-facing document to CONTAIN is a
+# PAIR, for the reason check_assessment.py:69 already gives about its own
+# anchors: the shortlist follows the USER's language, not the market's (spec §10,
+# 「shortlist 跟用户走」), and `indeed`/`linkedin` with target_market nl/de/uk/us
+# make an English round an ordinary case. A constant that knows only the Chinese
+# spelling leaves a monolingual English run two options — fail the gate, or
+# staple a Chinese sentence into an English document — and the second one passes
+# every check, which makes it the worse one.
+#
+# Matching is case-insensitive (see _says) because these strings are sentence- and
+# heading-initial in English and "Provisional" is the natural rendering of an
+# anchor spelled `provisional`. Case is not the claim.
+
 # The degraded-output disclosure block. The last four answers ship pre-filled as
-# 否, so concealing a retry or a bypass has to be an active overwrite rather than
-# an omission.
-DISCLOSURE_LABELS = ("本次会话已登录：", "Adapter 返回：", "收到限制信号后重试：",
-                     "绕过任何平台控制：", "取得真实岗位：", "降级输出类型：")
+# 否 / no, so concealing a retry or a bypass has to be an active overwrite rather
+# than an omission.
+DISCLOSURE_LABELS = (
+    ("本次会话已登录：", "Logged in this session:"),
+    ("Adapter 返回：", "Adapter returned:"),
+    ("收到限制信号后重试：", "Retried after a stop signal:"),
+    ("绕过任何平台控制：", "Bypassed any platform control:"),
+    ("取得真实岗位：", "Obtained real postings:"),
+    ("降级输出类型：", "Degraded output type:"),
+)
 
 # The reader-facing half of the provisional stamp (spec §5.1 step 6: a discover
 # verdict 不带这个戳就不许渲染). `provisional: true` in shortlist.yaml is the
 # machine half, and nobody reading the round ever sees it — shortlist.md is what
 # the user actually reads, so that is where the claim has to be qualified.
-PROVISIONAL_STAMP = "基于卡片信息的初判"
+PROVISIONAL_STAMP = ("基于卡片信息的初判", "provisional, from card data only")
 
 # The yellow-tier round caps from references/source-policy.md, as numbers,
 # because a cap enforced by a paragraph is not a cap. brief.yaml must carry both
@@ -315,27 +334,65 @@ def check_rows(shortlist, raw_texts):
     return findings
 
 
+def _says(md_text, *spellings):
+    """Is any spelling of this anchor in the document? Case is not the claim.
+
+    Every anchor is a pair (zh, en) and the English half is usually
+    sentence-initial, so `"provisional, from card data only"` has to match
+    「Provisional, from card data only」 too. Casefold does not change the length
+    of any spelling here, which is what lets _answer_after slice by offset.
+    """
+    lowered = md_text.casefold()
+    return any(spelling.casefold() in lowered for spelling in spellings)
+
+
+def _both(pair):
+    """A pair as the reader must see it in a finding: both spellings, always.
+
+    Printing only the Chinese one is how the English reader learns the gate does
+    not know their language.
+    """
+    return " / ".join(pair)
+
+
+def _answer_after(line, label):
+    """What follows `label` on this line, matched case-insensitively, or None."""
+    index = line.casefold().find(label.casefold())
+    if index < 0:
+        return None
+    return line[index + len(label):].strip()
+
+
 def _check_disclosure(md_text):
-    missing = [label for label in DISCLOSURE_LABELS if label not in md_text]
+    missing = [pair for pair in DISCLOSURE_LABELS if not _says(md_text, *pair)]
     if len(missing) == len(DISCLOSURE_LABELS):
         return ["DEGRADED_WITHOUT_DISCLOSURE: no adapter exited 0 and the "
                 "shortlist is empty, so this run is a degraded output. It must "
-                "carry the disclosure block (" + "、".join(DISCLOSURE_LABELS)
+                "carry the disclosure block, in the language of the round ("
+                + "; ".join(_both(pair) for pair in DISCLOSURE_LABELS)
                 + ") with every answer filled in."]
     findings = []
     if missing:
         findings.append("DISCLOSURE_INCOMPLETE: the disclosure block is missing "
-                        "these lines: " + "、".join(missing))
-    for label in DISCLOSURE_LABELS:
-        if label in missing:
+                        "these lines: "
+                        + "; ".join(_both(pair) for pair in missing))
+    for pair in DISCLOSURE_LABELS:
+        if pair in missing:
             continue
-        for line in md_text.splitlines():
-            if label in line:
-                if not line.split(label, 1)[1].strip():
+        # Every spelling that is present is checked for its answer. One line per
+        # label is the normal shape, but a bilingual block has two, and the
+        # pre-filled answer is the whole point of the block — so neither half
+        # gets to be the unchecked one.
+        for label in pair:
+            for line in md_text.splitlines():
+                answer = _answer_after(line, label)
+                if answer is None:
+                    continue
+                if not answer:
                     findings.append(
                         f"DISCLOSURE_INCOMPLETE: disclosure line {label!r} has a "
-                        "blank answer. The answers ship pre-filled as 否 so that "
-                        "concealment has to be an active overwrite, not an "
+                        "blank answer. The answers ship pre-filled as 否 / no so "
+                        "that concealment has to be an active overwrite, not an "
                         "omission.")
                 break
     return findings
@@ -562,13 +619,14 @@ def check_run(workspace, shortlist, brief, md_text, calls):
 
     findings.extend(_check_caps(brief))
 
-    if rows and PROVISIONAL_STAMP not in md_text:
+    if rows and not _says(md_text, *PROVISIONAL_STAMP):
         findings.append(
             "MD_MISSING_PROVISIONAL_STAMP: shortlist.md renders rows without the "
-            f"「{PROVISIONAL_STAMP}」 label. `provisional: true` in shortlist.yaml "
-            "is the machine half of the stamp and no reader ever sees it; this is "
-            "the half they do see, and a discover verdict may not be rendered "
-            "without it.")
+            f"「{_both(PROVISIONAL_STAMP)}」 label — use the spelling of the "
+            "language the round is written in. `provisional: true` in "
+            "shortlist.yaml is the machine half of the stamp and no reader ever "
+            "sees it; this is the half they do see, and a discover verdict may "
+            "not be rendered without it.")
 
     if not rows:
         lowered = md_text.lower()

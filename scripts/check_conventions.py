@@ -13,9 +13,10 @@ README is what a person reads before adding an entry, so fix the script.
 
 EXPIRED_REVIEW_BY is a HARD finding here on purpose: this script is the CI lint, and CI
 is where a passed review date is supposed to stop the build. It is NOT hard at runtime --
-check_assessment.py re-prefixes it as WARN_ and requires a 「已过复核期」 banner instead,
-because a date passing while the code did not change should not stop the skill working
-(spec §10). The two behaviours are deliberate and live in two different scripts.
+check_assessment.py re-prefixes it as WARN_ and requires a 「已过复核期」 / "past its review
+date" banner instead, because a date passing while the code did not change should not stop
+the skill working (spec §10). The two behaviours are deliberate and live in two different
+scripts.
 
 Exit 2 still writes a receipt, verdict "could_not_run", unless the workspace directory
 itself is absent -- there is nothing to append to.

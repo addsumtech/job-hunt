@@ -6,10 +6,13 @@ interfaces rather than through Python imports.
 """
 import json
 import pathlib
+import re
 import subprocess
 import sys
 
 import discover_fixtures as fx
+
+CJK = re.compile(r"[　-〿一-鿿＀-￯]")
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 SCRIPTS = REPO / "scripts"
@@ -72,6 +75,80 @@ def test_a_hand_corrupted_source_id_is_caught_through_the_cli(tmp_path):
     receipt = journal_records(workspace)[-1]
     assert receipt["gate"] == "check_shortlist"
     assert receipt["verdict"] == "fail"
+
+
+def test_an_english_shortlist_passes_the_whole_chain(tmp_path):
+    """The acceptance test for a monolingual English round (spec §10: the
+    shortlist follows the USER's language, not the market's).
+
+    Not a unit test of two constants: an English capture, English rows and an
+    English shortlist.md, through the real command lines, with the document
+    asserted to contain no CJK at all. Before the literals were paired, this
+    document's only options were a gate failure or a Chinese sentence stapled
+    into an English page — and the second one gated green, which is worse,
+    because it reads to the user as a bug and no check reports it.
+    """
+    workspace = fx.build_english_workspace(tmp_path)
+
+    no_write = run("check_no_write.py", "--workspace", str(workspace), "--no-fetch")
+    assert no_write.returncode == 0, no_write.stdout + no_write.stderr
+
+    shortlist = run("check_shortlist.py", "--workspace", str(workspace))
+    assert shortlist.returncode == 0, shortlist.stdout + shortlist.stderr
+    assert shortlist.stdout == ""
+
+    body = (workspace / "shortlist.md").read_text(encoding="utf-8")
+    found = CJK.findall(body)
+    assert not found, f"Chinese scaffolding in an English shortlist: {found}"
+
+    receipt = journal_records(workspace)[-1]
+    assert receipt["gate"] == "check_shortlist"
+    assert receipt["verdict"] == "pass"
+
+
+def test_an_english_degraded_run_passes_with_an_english_disclosure_block(tmp_path):
+    workspace = fx.build_english_workspace(tmp_path)
+    data = fx.load_shortlist(workspace)
+    data["rows"] = []
+    data["sources"] = []
+    data["shortfall_reason"] = (
+        "No adapter returned a usable row this round; see the disclosure in §0.2.")
+    fx.save_shortlist(workspace, data)
+    fx.write_journal(workspace, [dict(fx.JOURNAL_EN[0], exit_code=1,
+                                      classification="not_logged_in", row_count=0,
+                                      auth_state="not_logged_in",
+                                      error_message="HTTP 403 Forbidden")])
+    fx.write_md(workspace, fx.DISCLOSURE_MD_EN)
+
+    result = run("check_shortlist.py", "--workspace", str(workspace))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout == ""
+    found = CJK.findall(fx.DISCLOSURE_MD_EN)
+    assert not found, f"Chinese scaffolding in an English disclosure: {found}"
+
+
+def test_a_blanked_english_disclosure_answer_is_caught_like_the_chinese_one(tmp_path):
+    # The backstop the pairing must not lose. The answers ship pre-filled as
+    # no/否 so that concealing a retry is an active overwrite, not an omission —
+    # if only the Chinese spellings were checked for a filled-in answer, the
+    # English half would ship without the one thing the block is for.
+    workspace = fx.build_english_workspace(tmp_path)
+    data = fx.load_shortlist(workspace)
+    data["rows"] = []
+    data["sources"] = []
+    data["shortfall_reason"] = "No adapter returned a usable row this round."
+    fx.save_shortlist(workspace, data)
+    fx.write_journal(workspace, [dict(fx.JOURNAL_EN[0], exit_code=1,
+                                      classification="not_logged_in", row_count=0)])
+    label = "Bypassed any platform control:"
+    fx.write_md(workspace, "\n".join(
+        label if label in line else line
+        for line in fx.DISCLOSURE_MD_EN.splitlines()))
+
+    result = run("check_shortlist.py", "--workspace", str(workspace))
+    assert result.returncode == 1
+    assert "DISCLOSURE_INCOMPLETE" in result.stdout
+    assert "active overwrite" in result.stdout
 
 
 def test_a_hand_added_fabricated_row_is_caught_through_the_cli(tmp_path):

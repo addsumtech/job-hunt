@@ -97,8 +97,8 @@ unverified:
   fact is re-issued yearly gets three months; one that moves with practice gets six;
   a statute or a stable mechanism gets twelve. An expired `review_by` **fails this
   lint** (so CI catches it), while at runtime the card still renders with a
-  「已过复核期」 banner — a date passing without the code changing should not stop the
-  skill working.
+  「已过复核期」 / "past its review date" banner (the card follows the user's language)
+  — a date passing without the code changing should not stop the skill working.
 - **`unverified` must name what it disclaims.** Every assertion an `unverified` note
   disclaims must be **removed from the rendered text**, not footnoted. The reader never
   sees `unverified`, so a footnote there protects nobody. The lint warns when a note

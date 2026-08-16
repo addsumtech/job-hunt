@@ -30,9 +30,10 @@ output and a gate that cries wolf is a gate people stop reading:
 
 One finding is deliberately downgraded. check_conventions.py fails hard on an expired
 review_by because it is the CI lint and that is where a stale date should stop a build.
-Here it becomes WARN_EXPIRED_REVIEW_BY and the card must instead carry a 「已过复核期」
-banner (spec §10). A date passing while the code did not change must not stop the skill
-working -- but rendering a stale card without saying so is worse than either.
+Here it becomes WARN_EXPIRED_REVIEW_BY and the card must instead carry a 「已过复核期」 /
+"past its review date" banner (spec §10). A date passing while the code did not change
+must not stop the skill working -- but rendering a stale card without saying so is worse
+than either.
 
 A mode may not claim success without a receipt. Exit 2 writes one too, verdict
 "could_not_run", unless the workspace directory itself is absent.
@@ -70,7 +71,12 @@ MODE = "assess"
 DISCLAIMER_ANCHORS = ("不是对结果的预判", "not a forecast of the outcome")
 VERDICT_MARKERS = ("投递建议：", "apply verdict:")
 DISQUALIFIER_HEADINGS = ("## 硬性阻断项", "## Hard blockers")
-STALE_BANNER = "已过复核期"
+# The last anchor here that knew only one language, and the one that could not be
+# caught by running the gate today: it cannot fire before the first `review_by`
+# passes (2026-11-09, twelve entries). Matched case-insensitively, because unlike
+# the anchors above it is a BANNER — sentence-initial by nature, so
+# "past its review date" has to match "Past its review date — …".
+STALE_BANNER = ("已过复核期", "past its review date")
 
 # The closed set modes/assess.md §10 defines. Exactly one of these, inside the section
 # below, on exactly the two verdicts below; the two column headers are where the
@@ -377,10 +383,12 @@ def check(workspace: pathlib.Path, market_dir: pathlib.Path,
             findings.append(f"CONVENTION_PARAPHRASED: {entry_id} was listed as rendered "
                             f"but neither text_en nor text_zh appears verbatim in "
                             f"fit-assessment.md")
-        if entry_id in expired and STALE_BANNER not in markdown:
+        if entry_id in expired and not any(
+                banner.casefold() in markdown.casefold() for banner in STALE_BANNER):
             findings.append(f"MISSING_STALE_BANNER: {entry_id} is past its review_by and "
-                            f"was rendered without the 「{STALE_BANNER}」 banner; the card "
-                            f"still renders, but the reader has to be told it is stale")
+                            f"was rendered without the 「{' / '.join(STALE_BANNER)}」 "
+                            f"banner; the card still renders, but the reader has to be "
+                            f"told it is stale")
     return findings
 
 

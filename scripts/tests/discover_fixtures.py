@@ -237,6 +237,212 @@ def build_workspace(root):
     return workspace
 
 
+# --------------------------------------------------------------- the English round
+#
+# 「shortlist 跟用户走」 (spec §10): the shortlist follows the USER's language, not
+# the market's. So a monolingual English round is an ordinary output, not an edge
+# case, and it gets a whole workspace rather than a translated constant — the two
+# gate-required literals are only worth pairing if a document that uses the
+# English spellings actually passes end to end.
+
+RAW_LINKEDIN_SEARCH = [
+    {"rank": 1, "title": "MRI Reconstruction Scientist",
+     "company": "Philips Research", "location": "Eindhoven, North Brabant",
+     "listed": "3 days ago", "salary": "",
+     "url": "https://www.linkedin.com/jobs/view/3987654321/"},
+    {"rank": 2, "title": "Senior Image Reconstruction Engineer",
+     "company": "Amsterdam UMC", "location": "Amsterdam, Noord-Holland",
+     "listed": "1 week ago", "salary": "€5,800 - €7,200 per month",
+     "url": "https://www.linkedin.com/jobs/view/3912345678/"},
+]
+
+HELP_LINKEDIN = """site: linkedin
+command_count: 3
+commands:
+  - name: search
+    access: read
+  - name: job-detail
+    access: read
+  - name: jobs-preferences
+    access: read
+"""
+
+BRIEF_EN = {
+    "slug": "2026-08-16-mri-recon-nl",
+    "created": "2026-08-16",
+    "trigger_reason": (
+        "The user asked for a first round in the Dutch market: the previous posting "
+        "was assessed likely_screen_out for missing production C++, so this round "
+        "has to surface roles that are visibly steadier, not merely similarly titled."),
+    "target_titles": ["MRI reconstruction", "beeldreconstructie onderzoeker",
+                      "image reconstruction engineer"],
+    "markets": ["nl"],
+    "locations": ["Amsterdam", "Eindhoven", "Utrecht"],
+    "seniority": "mid",
+    "employment_types": ["full_time"],
+    "work_models": ["onsite", "hybrid"],
+    "languages": ["English"],
+    "must_have_constraints": ["work authorization: EU work permit required"],
+    "nice_to_have": ["compressed sensing", "PyTorch"],
+    "avoid": ["agency and staffing intermediaries"],
+    "target_count": 2,
+    "max_rows_per_round": 25,
+    "max_pages_per_site": 2,
+    "max_age_days": 30,
+}
+
+ROWS_EN = [
+    {"id": "linkedin-3987654321",
+     "title": "MRI Reconstruction Scientist",
+     "company": "Philips Research",
+     "location": "Eindhoven, North Brabant",
+     "salary": "",
+     "url": "https://www.linkedin.com/jobs/view/3987654321/",
+     "source_site": "linkedin",
+     "source_id": "3987654321",
+     "extraction_method": "adapter_search",
+     "retrieved_at": "2026-08-16T09:14:02Z",
+     "quality": "card_only",
+     "verification": "collected_unverified",
+     "raw_text": ("MRI Reconstruction Scientist | Philips Research | "
+                  "Eindhoven, North Brabant | 3 days ago"),
+     "why_matched": ("brief.target_titles matches «MRI reconstruction»; raw location "
+                     "Eindhoven is in brief.locations. Card only, no detail fetched, "
+                     "so the salary field is empty in the capture too."),
+     "verdict": "worth_applying",
+     "provisional": True,
+     "effort": "evening"},
+    {"id": "linkedin-3912345678",
+     "title": "Senior Image Reconstruction Engineer",
+     "company": "Amsterdam UMC",
+     "location": "Amsterdam, Noord-Holland",
+     "salary": "€5,800 - €7,200 per month",
+     "url": "https://www.linkedin.com/jobs/view/3912345678/",
+     "source_site": "linkedin",
+     "source_id": "3912345678",
+     "extraction_method": "adapter_search",
+     "retrieved_at": "2026-08-16T09:14:02Z",
+     "quality": "card_only",
+     "verification": "collected_unverified",
+     "raw_text": ("Senior Image Reconstruction Engineer | Amsterdam UMC | "
+                  "Amsterdam, Noord-Holland | €5,800 - €7,200 per month | "
+                  "1 week ago"),
+     "why_matched": ("brief.target_titles matches «image reconstruction engineer»; "
+                     "raw location Amsterdam is in brief.locations; the card's "
+                     "monthly band clears brief salary_floor."),
+     "verdict": "strong_apply",
+     "provisional": True,
+     "effort": "quick"},
+]
+
+SHORTLIST_EN = {
+    "search_slug": "2026-08-16-mri-recon-nl",
+    "brief": "brief.yaml",
+    "shortfall_reason": None,
+    "detail_fetch_exceptions": [],
+    "sources": [
+        {"site": "linkedin",
+         "command": "search",
+         "access": "read",
+         "login_state": "logged_in",
+         "classification": "ok",
+         "invocations": 1,
+         "rows_returned": 2,
+         "identity_field": "title",
+         "identity_field_empty_rows": 0,
+         "detail_command": "opencli linkedin job-detail <job-url>",
+         "raw_files": ["raw/linkedin-1.json"]},
+    ],
+    "rows": ROWS_EN,
+}
+
+SHORTLIST_MD_EN = """# Shortlist — 2026-08-16 · MRI reconstruction · Netherlands
+
+## §0 Sources and read quality
+
+| site | command | access | login | calls | rows | identity field | empty identity | detail command | classification |
+|---|---|---|---|---|---|---|---|---|---|
+| linkedin | search | read | logged in | 1 | 2 | `title` | 0 | `opencli linkedin job-detail <job-url>` | ok |
+
+Raw captures: `raw/linkedin-1.json`. Every row's provenance ends in that file, and
+it is never edited. `indeed` was skipped for this round: it serves the US site and
+resolves `--location` against a US gazetteer, so it cannot search the Netherlands.
+
+## §0.1 Trigger
+
+The previous posting was assessed `likely_screen_out` for missing production C++,
+and the user asked for a Dutch-market round of visibly steadier roles.
+
+## §1 Candidates (all provisional, from card data only)
+
+1. **Senior Image Reconstruction Engineer** — Amsterdam UMC · Amsterdam,
+   Noord-Holland · €5,800 - €7,200 per month — `strong_apply` (provisional) ·
+   effort: quick
+2. **MRI Reconstruction Scientist** — Philips Research · Eindhoven, North Brabant
+   — `worth_applying` (provisional) · effort: evening · no detail fetched
+"""
+
+JOURNAL_EN = [
+    {"ts": "2026-08-16T09:14:02Z", "mode": "discover", "action": "adapter_call",
+     "site": "linkedin", "command": "search", "exit_code": 0,
+     "classification": "ok", "row_count": 2, "empty_result": False,
+     "identity_field": "title", "empty_identity_rows": [],
+     "needs_detail_recovery": False,
+     "detail_command": "opencli linkedin job-detail <job-url>",
+     "auth_state": "logged_in", "signal_id": None, "error_message": None,
+     "remedy": None, "stdout_file": "raw/linkedin-1.json",
+     "stderr_file": "raw/linkedin-1.err",
+     "command_line": ('opencli linkedin search "MRI reconstruction" --location '
+                      '"Netherlands" --date-posted week --start 0 --limit 10 '
+                      "--window background -f json")},
+]
+
+DISCLOSURE_MD_EN = """# Shortlist — 2026-08-16 · degraded output
+
+## §0 Sources and read quality
+
+No adapter returned a posting this round; see the disclosure below. The output is
+a direction-level shortlist.
+
+## §0.1 Trigger
+
+The user asked for a Dutch-market round of MRI reconstruction roles.
+
+## §0.2 Disclosure
+
+Logged in this session:         no
+Adapter returned:               linkedin request failed: HTTP 403 Forbidden
+Retried after a stop signal:    no
+Bypassed any platform control:  no
+Obtained real postings:         no
+Degraded output type:           direction-level shortlist
+
+## §1 Direction-level shortlist
+
+1. Image reconstruction (clinical MRI vendors) — search terms «MRI reconstruction»,
+   «beeldreconstructie» — …
+"""
+
+
+def build_english_workspace(root):
+    """A VALID English search workspace: an English capture, English rows, an
+    English shortlist.md. The acceptance test for the paired gate literals."""
+    import textwrap
+    workspace = pathlib.Path(root) / "2026-08-16-mri-recon-nl"
+    (workspace / "raw" / "opencli-help").mkdir(parents=True)
+    (workspace / "raw" / "linkedin-1.json").write_text(
+        json.dumps(RAW_LINKEDIN_SEARCH, ensure_ascii=False, indent=2),
+        encoding="utf-8")
+    (workspace / "raw" / "linkedin-1.err").write_text("", encoding="utf-8")
+    (workspace / "raw" / "opencli-help" / "linkedin.yaml").write_text(
+        textwrap.dedent(HELP_LINKEDIN), encoding="utf-8")
+    _dump_yaml(workspace / "brief.yaml", BRIEF_EN)
+    _dump_yaml(workspace / "shortlist.yaml", SHORTLIST_EN)
+    (workspace / "shortlist.md").write_text(SHORTLIST_MD_EN, encoding="utf-8")
+    write_journal(workspace, JOURNAL_EN)
+    return workspace
+
+
 def load_shortlist(workspace):
     return yaml.safe_load((workspace / "shortlist.yaml").read_text(encoding="utf-8"))
 

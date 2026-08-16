@@ -8,6 +8,16 @@ job listings with a provisional verdict on each. **What it does not do:** it nev
 chains into `apply`. Thirty rows do not become thirty CVs; the whole point of
 ranking a shortlist is to let a person choose.
 
+**The shortlist is written in the user's language** — spec §10: CV 跟市场走，评估 /
+shortlist / 面试复盘**跟用户走**. A Dutch- or US-market round run by someone who
+writes to you in English produces an English `shortlist.md`, and that is ordinary
+output, not an edge case. Every literal `check_shortlist.py` requires the document
+to contain therefore has two spellings — the section names, the provisional stamp
+and the six disclosure lines are all given below in both, and the gate accepts
+either. **Pick one and stay in it.** A document with English prose and Chinese
+furniture is worse than either language alone: it reads to the user as a bug, and
+no gate can report it, because both halves are individually correct.
+
 ## On entering this mode — before anything else
 
 ```bash
@@ -57,6 +67,8 @@ feature finds work by this shape:
   brief.yaml                 this round's reproducible search basis
   shortlist.yaml             the structured shortlist
   shortlist.md               readable: §0 来源与读取质量, §0.1 触发原因, §0.2 披露
+                             (English round: §0 Sources and read quality,
+                              §0.1 Trigger, §0.2 Disclosure)
   raw/<site>-<n>.json        adapter stdout, VERBATIM, never edited
   raw/<site>-<n>.err         adapter stderr for the same call
   raw/opencli-help/<site>.yaml   the adapter's own metadata for this run
@@ -112,7 +124,8 @@ steers months of searching.
 ## Step 0 — state the trigger reason BEFORE searching
 
 Say why this search is happening, then write it into `brief.yaml` as
-`trigger_reason` and into `shortlist.md` under `## §0.1 触发原因`. Stating it
+`trigger_reason` and into `shortlist.md` under `## §0.1 触发原因` (English round:
+`## §0.1 Trigger`; the gate keys on the language-agnostic `§0.1`). Stating it
 afterwards is a rationalisation; `check_shortlist.py` fires `NO_TRIGGER_REASON` and
 `NO_TRIGGER_SECTION` if either is missing.
 
@@ -329,9 +342,11 @@ user's next hour.
 it.** That is two obligations, and both are checked:
 
 - in `shortlist.yaml`, the field itself (`MISSING_PROVISIONAL`);
-- in `shortlist.md`, the words **「基于卡片信息的初判」** on the section that renders
-  the rows (`MD_MISSING_PROVISIONAL_STAMP`). A YAML boolean is not a disclosure —
-  nobody reading the round ever sees it, and `shortlist.md` is what they read.
+- in `shortlist.md`, the words **「基于卡片信息的初判」** — English round:
+  **"provisional, from card data only"** — on the section that renders the rows
+  (`MD_MISSING_PROVISIONAL_STAMP`; either spelling satisfies it, and case does
+  not matter). A YAML boolean is not a disclosure — nobody reading the round ever
+  sees it, and `shortlist.md` is what they read.
 
 The stamp is load-bearing: discover has a card, `assess` has the full JD and
 evidence blocks. Using one vocabulary without marking the confidence source would be
@@ -350,7 +365,8 @@ second, so it belongs in the shortfall, not in the list.
 
 Fetch detail pages **only** for `strong_apply`, `worth_applying` and `stretch`.
 `likely_screen_out` and `blocked` rows stay card-level and are labelled **未取详情**
-in `shortlist.md`; the user can name one to fetch anyway, which is recorded in
+(English round: **no detail fetched**) in `shortlist.md`; the user can name one to
+fetch anyway, which is recorded in
 `shortlist.yaml.detail_fetch_exceptions` with a reason. `check_shortlist.py` enforces
 this as `DETAIL_FETCH_OUT_OF_BAND`. This cap is where detail fan-out stops being a
 crawl, and it is the mechanism that keeps this mode inside the yellow tier of
@@ -398,13 +414,22 @@ its own heading, e.g. `## §1 候选（全部为基于卡片信息的初判 · p
 row shows its band and its `effort`. Rows below the top three are labelled
 **未取详情**.
 
+An English round writes the same document with the same numbering: `## §0 Sources
+and read quality`, `## §0.1 Trigger`, `## §0.2 Disclosure`, a row section headed
+e.g. `## §1 Candidates (all provisional, from card data only)`, and rows below the
+top three labelled **no detail fetched**. The `§n` markers are the same in both —
+they are what the gate keys on, so they are never translated away.
+
 ## Degraded output — when no real postings could be retrieved
 
 Emit a **direction-level shortlist** (3-5 directions), each with: 目标方向 ·
-检索词 · 建议筛选条件 · 为何比原 JD 更稳 · 要避开的标题与信号 · 手动收集优先序.
+检索词 · 建议筛选条件 · 为何比原 JD 更稳 · 要避开的标题与信号 · 手动收集优先序 —
+in English: direction · search terms · suggested filters · why it is steadier than
+the original JD · titles and signals to avoid · manual-collection priority.
 It has no `rows:`, so it cannot claim a posting exists.
 
-Then the disclosure block, verbatim, in `shortlist.md`:
+Then the disclosure block, verbatim, in `shortlist.md` — one language, all six
+lines, in whichever language the rest of the document is in:
 
 ```text
 本次会话已登录：        <是|否|不适用—无 auth adapter>
@@ -415,10 +440,21 @@ Adapter 返回：          <逐字错误信息>
 降级输出类型：          方向级 shortlist
 ```
 
-The last four answers ship **pre-filled as 否**. That is the design: concealing a
-retry or a bypass has to be an active overwrite, not an omission.
-`check_shortlist.py` fires `DEGRADED_WITHOUT_DISCLOSURE` when the block is absent and
-`DISCLOSURE_INCOMPLETE` when an answer is blank.
+```text
+Logged in this session:         <yes|no|n/a — no auth adapter>
+Adapter returned:               <verbatim error message>
+Retried after a stop signal:    no
+Bypassed any platform control:  no
+Obtained real postings:         no
+Degraded output type:           direction-level shortlist
+```
+
+The last four answers ship **pre-filled as 否 / no**, in both blocks. That is the
+design: concealing a retry or a bypass has to be an active overwrite, not an
+omission — which is why the pre-filled answer matters as much as the label, and why
+`check_shortlist.py` checks the answer of every spelling it finds, not just the
+Chinese one. It fires `DEGRADED_WITHOUT_DISCLOSURE` when the block is absent in both
+languages and `DISCLOSURE_INCOMPLETE` when a line is missing or an answer is blank.
 
 And the wording rule: **"没有匹配" is a claim, and it needs a receipt.** All-adapters-
 failed and genuinely-found-nothing produce the identical shape, so
@@ -450,8 +486,8 @@ exactly like a clean one.
 | `DUPLICATE_SOURCE_ID` | one retrieved posting appears as two rows | delete the duplicate; de-duplication removes rows, nothing adds them |
 | `SOURCE_REPORT_COUNT_MISMATCH` | the source report claims more than the receipts recorded | the receipts are right. Never reconcile by editing `raw/` or the journal. |
 | `EMPTY_RESULT_UNSUPPORTED` | "no results" wording with no adapter that exited 0 | rewrite as "every adapter failed", and emit the disclosure block |
-| `DEGRADED_WITHOUT_DISCLOSURE` | degraded run with no disclosure block | add the block, answers pre-filled 否 |
-| `MD_MISSING_PROVISIONAL_STAMP` | `shortlist.md` renders rows without 「基于卡片信息的初判」 | add the stamp to the section heading. The YAML flag is not a disclosure. |
+| `DEGRADED_WITHOUT_DISCLOSURE` | degraded run with no disclosure block in either language | add the block, answers pre-filled 否 / no |
+| `MD_MISSING_PROVISIONAL_STAMP` | `shortlist.md` renders rows without 「基于卡片信息的初判」 / "provisional, from card data only" | add the stamp, in the round's own language, to the section heading. The YAML flag is not a disclosure. |
 | `DETAIL_FETCH_OUT_OF_BAND` | a detail fetch below the top three verdicts | remove it, or record a named exception with a reason |
 | `CAP_MISSING` / `CAP_ABOVE_CEILING` | `brief.yaml`'s round caps are absent or raised | read `references/source-policy.md`; the caps are its enforceable half |
 | `SHORTFALL_NO_REASON` | fewer rows than `target_count`, no reason written | write the reason. Never pad. |
@@ -478,7 +514,11 @@ exactly like a clean one.
       used, every returned `location` read against `brief.markets` before the row
       was kept — the US site answers a London search with Ohio.
 - [ ] Every row carries `provisional: true` **and** `shortlist.md` carries
-      「基于卡片信息的初判」; no verdict copied into an assessment.
+      「基于卡片信息的初判」 / "provisional, from card data only"; no verdict copied
+      into an assessment.
+- [ ] `shortlist.md` is in **one** language — the user's — end to end: section
+      names, the stamp, the 未取详情 / no detail fetched labels and the disclosure
+      block, with no furniture left in the other one.
 - [ ] Every row carries an `effort` value, and rows are ordered by it within a band.
 - [ ] Cards that could not support any level were dropped and named in
       `shortfall_reason` — not listed as `insufficient_evidence` rows.

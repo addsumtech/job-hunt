@@ -158,6 +158,72 @@ def test_the_markdown_must_carry_the_card_based_stamp(tmp_path, capsys):
     assert "MD_MISSING_PROVISIONAL_STAMP" in codes(captured.out)
 
 
+def test_an_english_document_with_no_stamp_at_all_fires_and_names_both(
+        tmp_path, capsys):
+    workspace = fx.build_english_workspace(tmp_path)
+    text = (workspace / "shortlist.md").read_text(encoding="utf-8")
+    fx.write_md(workspace, text.replace(
+        "(all provisional, from card data only)", "(shortlist)"))
+    code, captured = run(workspace, capsys)
+    assert code == 1
+    assert "MD_MISSING_PROVISIONAL_STAMP" in codes(captured.out)
+    # An English reader must not be told to write a Chinese string, and a Chinese
+    # reader must not be told to write an English one. Print both, always.
+    for spelling in cs.PROVISIONAL_STAMP:
+        assert spelling in captured.out
+
+
+def test_the_stamp_is_matched_case_insensitively(tmp_path, capsys):
+    # The English spelling's natural home is the start of a heading, so the
+    # capitalised form is the ordinary output, not a deviation.
+    workspace = fx.build_english_workspace(tmp_path)
+    text = (workspace / "shortlist.md").read_text(encoding="utf-8")
+    fx.write_md(workspace, text.replace(
+        "## §1 Candidates (all provisional, from card data only)",
+        "## §1 Candidates\n\nProvisional, from card data only — every band below "
+        "is a first read of a search card."))
+    code, captured = run(workspace, capsys)
+    assert code == 0
+    assert captured.out == ""
+
+
+def test_an_english_disclosure_block_missing_a_line_names_both_spellings(
+        tmp_path, capsys):
+    dropped = "Retried after a stop signal:"
+    trimmed = "\n".join(line for line in fx.DISCLOSURE_MD_EN.splitlines()
+                        if dropped not in line)
+    workspace = fx.build_english_workspace(tmp_path)
+    data = fx.load_shortlist(workspace)
+    data["rows"] = []
+    data["sources"] = []
+    data["shortfall_reason"] = "No adapter returned a usable row this round."
+    fx.save_shortlist(workspace, data)
+    fx.write_journal(workspace, [dict(fx.JOURNAL_EN[0], exit_code=1,
+                                      classification="not_logged_in",
+                                      row_count=0)])
+    fx.write_md(workspace, trimmed)
+    code, captured = run(workspace, capsys)
+    assert code == 1
+    assert "DISCLOSURE_INCOMPLETE" in codes(captured.out)
+    assert "DEGRADED_WITHOUT_DISCLOSURE" not in codes(captured.out)
+    assert dropped in captured.out
+    assert "收到限制信号后重试：" in captured.out
+
+
+def test_every_reader_facing_literal_the_gate_requires_is_a_pair(tmp_path):
+    # The structural pin. Un-pairing either constant re-opens the defect, and a
+    # string where a pair belongs is the shape that did it last time.
+    assert isinstance(cs.PROVISIONAL_STAMP, tuple)
+    assert len(cs.PROVISIONAL_STAMP) == 2
+    assert all(isinstance(s, str) and s for s in cs.PROVISIONAL_STAMP)
+    assert len(cs.DISCLOSURE_LABELS) == 6
+    for pair in cs.DISCLOSURE_LABELS:
+        assert isinstance(pair, tuple) and len(pair) == 2, pair
+        zh, en = pair
+        assert zh.endswith("：") and en.endswith(":"), pair
+        assert zh != en
+
+
 def test_an_over_reported_rows_returned_fires(tmp_path, capsys):
     workspace = fx.build_workspace(tmp_path)
     data = fx.load_shortlist(workspace)
