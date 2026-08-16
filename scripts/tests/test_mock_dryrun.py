@@ -146,3 +146,56 @@ def test_the_real_vocabulary_scanner_is_also_quiet_on_a_resolved_round(
     apply_promotion(session)
     code, out = gate(session, capsys)
     assert code == 0, out
+
+
+# ------------------------------------------------------------------ the new demands,
+# proved on the SHIPPED fixture rather than only on the in-memory one. A check that a
+# real scaffolding never exercises is a check that is not there: the fixture is what a
+# reader copies, so if it can satisfy the gate without the artifact, so can a real run.
+
+def test_stage_c_needs_the_cheatsheet_the_fixture_ships(session, capsys):
+    apply_walkback(session)
+    apply_promotion(session)
+    (workspace(session) / "mock" / "cheatsheet.md").unlink()
+    code, out = gate(session, capsys)
+    assert code == 1
+    assert any(line.startswith("NO_CHEATSHEET:") for line in out), out
+
+
+def test_stage_c_needs_the_open_loops_the_fixture_ships(session, capsys):
+    apply_walkback(session)
+    apply_promotion(session)
+    (workspace(session) / "mock" / "open-loops.md").unlink()
+    code, out = gate(session, capsys)
+    assert code == 1
+    assert any(line.startswith("NO_OPEN_LOOPS:") for line in out), out
+
+
+def test_stage_c_checks_coverage_against_the_fixtures_own_posting(session, capsys):
+    """The fixture's posting.yaml carries one must-have and its assessment block
+    carries exactly one COVERAGE row for it. Widen the posting and the gate has to
+    name the new one — otherwise the check is passing by looking at nothing."""
+    apply_walkback(session)
+    apply_promotion(session)
+    posting = workspace(session) / "posting.yaml"
+    posting.write_text(
+        posting.read_text(encoding="utf-8").replace(
+            "must_haves:\n  - Measured performance work on reconstruction pipelines\n",
+            "must_haves:\n  - Measured performance work on reconstruction pipelines\n"
+            "  - Regulatory documentation (MDR)\n"),
+        encoding="utf-8")
+    code, out = gate(session, capsys)
+    assert code == 1
+    missing = [line for line in out if line.startswith("NO_COVERAGE_ROW:")]
+    assert len(missing) == 1 and "Regulatory documentation (MDR)" in missing[0], out
+
+
+def test_stage_c_demands_bands_on_the_fixtures_own_block(session, capsys):
+    apply_walkback(session)
+    apply_promotion(session)
+    path = workspace(session) / "mock" / "assessment-2.md"
+    path.write_text("\n".join(line for line in path.read_text(encoding="utf-8").splitlines()
+                              if not line.startswith("BAND:")) + "\n", encoding="utf-8")
+    code, out = gate(session, capsys)
+    assert code == 1
+    assert any(line.startswith("NO_BANDS:") for line in out), out

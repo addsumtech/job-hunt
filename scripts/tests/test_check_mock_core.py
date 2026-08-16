@@ -397,3 +397,177 @@ def test_a_failing_workspace_exits_1_and_prints_one_finding_per_line(
     out = capsys.readouterr().out.strip().splitlines()
     assert code == 1
     assert out and all(line.split(":")[0].isupper() for line in out)
+
+
+# ---------------------------------------------------------------- the empty assessment
+#
+# REPRODUCED 2026-08-16, before this section existed:
+#
+#   >>> check_mock.run(ws_with_headers_and_FINDINGS_none_in_both_blocks, 2)
+#   []
+#
+# Headers plus `FINDINGS: none` in both blocks was a fully passing round, and
+# modes/interview.md §7 tells the model to read that exit 0 as "the round holds up".
+# check_mock required no BAND, no COVERAGE and no SHAPE, so an assessor that produced
+# nothing produced a pass. Emptying the block also disarmed NO_QUESTION_HEADINGS, which
+# is gated on `any(block.records)` — so an empty assessment plus a transcript with zero
+# questions plus a deleted open-loops.md ALSO exited 0.
+#
+# It also voided the stated reason for keeping references/interview-shapes.md in layer 2:
+# "assessment-<n>.md cannot be written without the bands". It could.
+#
+# The reachable inputs are an under-producing assessor and an empty-transcript dispatch.
+# A timed-out assessor is NOT this case — that already fires MISSING_BLOCK, and the
+# checks below are gated on the block having parsed so they never double-report it.
+
+EMPTY_ASSESSMENT = """# Mock assessment — round 2
+
+MOCK-ASSESSMENT-V1
+ROUND: 2
+ROUND-TYPE: technical
+MARKET: nl
+FAMILY: ml-engineering
+FINDINGS: none
+END-MOCK-ASSESSMENT-V1
+
+MOCK-PROVENANCE-V1
+ROUND: 2
+FINDINGS: none
+END-MOCK-PROVENANCE-V1
+"""
+
+
+def test_an_assessment_that_reports_nothing_no_longer_passes(tmp_path):
+    findings = run(F.build(tmp_path, assessment=EMPTY_ASSESSMENT))
+    assert findings, "an empty assessment produced a clean round"
+    codes = {f.split(":")[0] for f in findings}
+    assert {"NO_BANDS", "NO_SHAPE"} <= codes, codes
+
+
+def test_the_empty_round_with_no_questions_and_no_open_loops_also_fails(tmp_path):
+    """The compound case: emptying the block disarmed NO_QUESTION_HEADINGS too, so
+    all three silences lined up into one exit 0."""
+    ws = F.build(tmp_path, assessment=EMPTY_ASSESSMENT,
+                 transcript="# Mock transcript — round 2\n\nnothing was asked\n")
+    (ws / "mock" / "open-loops.md").unlink()
+    findings = run(ws)
+    codes = {f.split(":")[0] for f in findings}
+    assert {"NO_BANDS", "NO_SHAPE", "NO_OPEN_LOOPS"} <= codes, codes
+
+
+def test_a_block_with_findings_but_no_bands_still_fails(tmp_path):
+    """The bands are not a by-product of finding defects. An assessor can emit three
+    FINDING lines and band nothing, and the bands are the half of the assessment the
+    candidate is actually rehearsing against."""
+    text = "\n".join(line for line in F.ASSESSMENT.splitlines()
+                     if not line.startswith("BAND:"))
+    assert any(f.startswith("NO_BANDS:") for f in run(F.build(tmp_path, assessment=text)))
+
+
+def test_a_block_with_no_shape_row_fails(tmp_path):
+    text = "\n".join(line for line in F.ASSESSMENT.splitlines()
+                     if not line.startswith("SHAPE:"))
+    assert any(f.startswith("NO_SHAPE:") for f in run(F.build(tmp_path, assessment=text)))
+
+
+def test_the_provenance_block_is_never_asked_for_bands_or_shape(tmp_path):
+    """The cry-wolf guard. MOCK-PROVENANCE-V1 legitimately carries ROUND: plus
+    FINDINGS: none — that is its documented clean shape, it has no BAND or SHAPE in
+    its ALLOWED_RECORDS at all, and firing on it would make both codes noise on every
+    honest round."""
+    findings = run(F.build(tmp_path))
+    assert not [f for f in findings if f.startswith(("NO_BANDS:", "NO_SHAPE:"))]
+    # ...and still not, when the provenance pass is the only empty one.
+    text = F.ASSESSMENT.replace(
+        "MOCK-PROVENANCE-V1\nROUND: 2\nFINDINGS: none",
+        "MOCK-PROVENANCE-V1\nROUND: 2\nFINDINGS: none")
+    assert not [f for f in run(F.build(tmp_path, assessment=text))
+                if f.startswith(("NO_BANDS:", "NO_SHAPE:"))]
+
+
+def test_a_missing_assessment_block_reports_only_that(tmp_path):
+    """A timed-out assessor is a different input and already has its own finding.
+    Reporting NO_BANDS beside MISSING_BLOCK would send the reader looking for a
+    half-written block that is not there at all."""
+    text = F.ASSESSMENT.split("MOCK-ASSESSMENT-V1")[0] + F.ASSESSMENT.split(
+        "END-MOCK-ASSESSMENT-V1")[1]
+    findings = run(F.build(tmp_path, assessment=text))
+    assert any(f.startswith("MISSING_BLOCK: MOCK-ASSESSMENT-V1") for f in findings)
+    assert not [f for f in findings if f.startswith(("NO_BANDS:", "NO_SHAPE:",
+                                                     "NO_COVERAGE_ROW:"))]
+
+
+# ---------------------------------------------------------------- coverage vs the posting
+
+def test_a_must_have_with_no_coverage_row_is_named(tmp_path):
+    """One row per must-have in posting.yaml, not a bare count. A count pressures the
+    assessor to invent a must-have to satisfy it; naming the missing one does not."""
+    text = "\n".join(line for line in F.ASSESSMENT.splitlines()
+                     if "Regulatory documentation" not in line)
+    findings = run(F.build(tmp_path, assessment=text))
+    missing = [f for f in findings if f.startswith("NO_COVERAGE_ROW:")]
+    assert len(missing) == 1, findings
+    assert "Regulatory documentation (MDR)" in missing[0]
+
+
+def test_every_must_have_covered_is_quiet(tmp_path):
+    assert not [f for f in run(F.build(tmp_path)) if f.startswith("NO_COVERAGE_ROW:")]
+
+
+def test_a_coverage_row_that_rewraps_or_repunctuates_the_must_have_still_counts(tmp_path):
+    """Cry-wolf guard. The assessor copies the must-have out of posting.yaml by hand;
+    a trailing period or a collapsed line break is not a missing coverage row."""
+    text = F.ASSESSMENT.replace(
+        "must_have=Regulatory documentation (MDR)",
+        "must_have=  Regulatory   documentation (MDR).  ")
+    assert not [f for f in run(F.build(tmp_path, assessment=text))
+                if f.startswith("NO_COVERAGE_ROW:")]
+
+
+def test_a_posting_that_is_missing_is_reported_rather_than_skipped(tmp_path):
+    ws = F.build(tmp_path)
+    (ws / "posting.yaml").unlink()
+    assert any(f.startswith("NO_POSTING:") for f in run(ws))
+
+
+def test_a_posting_with_no_must_haves_is_reported(tmp_path):
+    """Otherwise the whole coverage requirement evaporates by deleting one list, and
+    an assessment with no COVERAGE row passes again."""
+    ws = F.build(tmp_path)
+    (ws / "posting.yaml").write_text("role_title: MR engineer\nmust_haves: []\n",
+                                     encoding="utf-8")
+    assert any(f.startswith("NO_MUST_HAVES:") for f in run(ws))
+
+
+def test_an_unparseable_posting_is_reported_not_ignored(tmp_path):
+    ws = F.build(tmp_path)
+    (ws / "posting.yaml").write_text('role_title: "unclosed\n', encoding="utf-8")
+    assert any(f.startswith("POSTING_UNPARSEABLE:") for f in run(ws))
+
+
+# ---------------------------------------------------------------- the session artifacts
+
+def test_a_missing_open_loops_is_a_finding_not_a_skipped_check(tmp_path):
+    """check_vocabulary scanned these `if path.exists()`, so deleting one turned a
+    check into a skip that looks exactly like a pass."""
+    ws = F.build(tmp_path)
+    (ws / "mock" / "open-loops.md").unlink()
+    assert any(f.startswith("NO_OPEN_LOOPS:") for f in run(ws))
+
+
+def test_a_missing_cheatsheet_is_a_finding(tmp_path):
+    ws = F.build(tmp_path)
+    (ws / "mock" / "cheatsheet.md").unlink()
+    assert any(f.startswith("NO_CHEATSHEET:") for f in run(ws))
+
+
+def test_both_artifacts_present_is_quiet(tmp_path):
+    assert not [f for f in run(F.build(tmp_path))
+                if f.startswith(("NO_OPEN_LOOPS:", "NO_CHEATSHEET:"))]
+
+
+def test_an_empty_open_loops_file_is_still_a_finding(tmp_path):
+    """A zero-byte file satisfies exists(). The three buckets are the artifact."""
+    ws = F.build(tmp_path)
+    (ws / "mock" / "open-loops.md").write_text("\n", encoding="utf-8")
+    assert any(f.startswith("NO_OPEN_LOOPS:") for f in run(ws))

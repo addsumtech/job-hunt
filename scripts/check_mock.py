@@ -200,7 +200,63 @@ def _check_band(record, label: str, findings: list) -> None:
         )
 
 
-def check_assessment(assessment_text: str, transcript_text: str, round_no: int):
+def _must_haves(workspace: pathlib.Path) -> tuple:
+    """(must-haves from posting.yaml, findings about the posting itself).
+
+    Read rather than counted. A bare "the block must carry at least one COVERAGE
+    row" pressures an under-producing assessor to invent a must-have to satisfy it;
+    naming the one that has no row does not, and it is the same list modes/
+    interview.md §2 tells the round to build its questions from.
+    """
+    path = workspace / "posting.yaml"
+    if not path.exists():
+        return [], [
+            f"NO_POSTING: {path} is missing — modes/interview.md reads posting.yaml, "
+            "the transcript pass is handed it, and without it the round's COVERAGE "
+            "rows cannot be checked against anything at all"
+        ]
+    try:
+        posting = journal.load_yaml(path)
+    except journal.YamlUnreadable as exc:
+        return [], [f"POSTING_UNPARSEABLE: {exc}"]
+    rows = [str(m).strip() for m in (posting.get("must_haves") or []) if str(m).strip()]
+    if not rows:
+        return [], [
+            f"NO_MUST_HAVES: {path.name} lists no must_haves, so there is nothing for "
+            "the round's coverage to be checked against — re-extract the posting "
+            "(references/job-posting-extraction.md defaults an unqualified "
+            "requirement to must_have)"
+        ]
+    return rows, []
+
+
+def _coverage_findings(block, must_haves: list) -> list:
+    """One COVERAGE row per must-have, matched loosely on purpose.
+
+    The assessor copies the must-have out of posting.yaml by hand, so a trailing
+    period or a collapsed line wrap is not a missing row — and a check that fires on
+    those is one the reader learns to skip. Same tolerance check_letter.py already
+    uses for the employer name: normalise, then accept either containment direction.
+    """
+    def norm(text: str) -> str:
+        return MB.collapse_ws(str(text)).strip(" .。;；,，").casefold()
+
+    covered = [norm(r.fields["must_have"]) for r in block.records
+               if r.kind == "COVERAGE" and norm(r.fields["must_have"])]
+    findings = []
+    for must in must_haves:
+        wanted = norm(must)
+        if not any(wanted in row or row in wanted for row in covered):
+            findings.append(
+                f"NO_COVERAGE_ROW: no COVERAGE row for the must-have {must!r} — the "
+                "round either did not ask about it or the assessor did not say so, "
+                "and `not_asked` is a status the block can state"
+            )
+    return findings
+
+
+def check_assessment(assessment_text: str, transcript_text: str, round_no: int,
+                     must_haves=None):
     """Returns ({block kind: Block}, findings)."""
     findings: list = []
     blocks: dict = {}
@@ -251,6 +307,42 @@ def check_assessment(assessment_text: str, transcript_text: str, round_no: int):
                         f"{record.fields['status']!r} is not one of "
                         + " | ".join(V.SHAPE_STATUS)
                     )
+
+    # ── the assessment must actually assess something ──────────────────────────
+    #
+    # Headers plus `FINDINGS: none` in both blocks used to be a fully passing round,
+    # and modes/interview.md §7 tells the model to read that exit 0 as "the round
+    # holds up". Nothing required a BAND, a COVERAGE row or a SHAPE row, so an
+    # assessor that produced nothing produced a pass — and emptying the block also
+    # disarmed NO_QUESTION_HEADINGS above, which is gated on `any(block.records)`.
+    #
+    # ON THE ASSESSMENT BLOCK ONLY. MOCK-PROVENANCE-V1 legitimately carries ROUND:
+    # plus FINDINGS: none — that is its documented clean shape, and BAND and SHAPE
+    # are not even in its ALLOWED_RECORDS. Firing on it would be the cry-wolf that
+    # makes both codes noise on every honest round.
+    #
+    # Gated on the block having PARSED, so a timed-out assessor keeps reporting only
+    # MISSING_BLOCK: three more codes beside it would send the reader looking for a
+    # half-written block that is not there at all.
+    block = blocks.get(MB.ASSESSMENT)
+    if block is not None:
+        if not any(r.kind == "BAND" for r in block.records):
+            findings.append(
+                "NO_BANDS: the assessment block carries no BAND line. The five "
+                "dimensions in references/interview-shapes.md are what the candidate "
+                "rehearses against — an assessment with none of them has reported "
+                "nothing about how the answers were shaped, only whether a defect was "
+                "spotted"
+            )
+        if not any(r.kind == "SHAPE" for r in block.records):
+            findings.append(
+                "NO_SHAPE: the assessment block carries no SHAPE line. The loop shape "
+                "is half of what this mode is for, and `cannot_simulate` is an "
+                "accepted status — saying a round could not be run here is the honest "
+                "answer, saying nothing is not"
+            )
+        if must_haves:
+            findings += _coverage_findings(block, must_haves)
     return blocks, findings
 
 
@@ -414,8 +506,47 @@ def check_vocabulary(paths: list, scanner) -> list:
         )
     findings = []
     for path in paths:
+        # Still `if path.exists()`, but no longer the only thing that notices: a file
+        # that is not there is now its own finding from check_session_artifacts, so
+        # this skip reports "nothing to scan" rather than standing in for "clean".
         if path.exists():
             findings.extend(scanner(path.read_text(encoding="utf-8"), str(path)))
+    return findings
+
+
+# ----------------------------------------------------------------- session artifacts
+
+# modes/interview.md §5 requires both, and each has a distinct job: open-loops.md
+# splits what the candidate could not answer into three buckets with three different
+# actions, and cheatsheet.md is the one page they carry into the real room.
+SESSION_ARTIFACTS = (
+    ("NO_OPEN_LOOPS", "open-loops.md",
+     "modes/interview.md §5 requires the three buckets — a fact not recalled, a "
+     "genuine gap, and a tailoring error — because they have three completely "
+     "different actions and merging them destroys the artifact"),
+    ("NO_CHEATSHEET", "cheatsheet.md",
+     "modes/interview.md §5 requires the one page the candidate carries into the "
+     "real room: the stories, the honest gaps with their framing, what is still "
+     "unanswered, and the loop shape in the local vocabulary"),
+)
+
+
+def check_session_artifacts(mock_dir: pathlib.Path) -> list:
+    """The two round outputs whose absence check_vocabulary used to swallow.
+
+    It scanned them `if path.exists()`, which is a SKIP that looks exactly like a
+    pass: delete the file and the vocabulary lint reports nothing, the gate reports
+    nothing, and the round is recorded as holding up with two of its five required
+    artifacts never written. An empty file counts as absent for the same reason —
+    exists() is not the property anyone cared about.
+    """
+    findings = []
+    for code, name, why in SESSION_ARTIFACTS:
+        path = mock_dir / name
+        if not path.exists():
+            findings.append(f"{code}: {path} was never written — {why}")
+        elif not path.read_text(encoding="utf-8").strip():
+            findings.append(f"{code}: {path} is empty — {why}")
     return findings
 
 
@@ -577,6 +708,11 @@ def _inputs(workspace: pathlib.Path, round_no: int, answer_bank: pathlib.Path) -
         f"mock/assessment-{round_no}.md": workspace / "mock" / f"assessment-{round_no}.md",
         f"mock/transcript-{round_no}.md": workspace / "mock" / f"transcript-{round_no}.md",
         "mock/question-log.yaml": workspace / "mock" / "question-log.yaml",
+        "mock/open-loops.md": workspace / "mock" / "open-loops.md",
+        "mock/cheatsheet.md": workspace / "mock" / "cheatsheet.md",
+        # The coverage check is now a claim about THESE bytes: "every must-have has a
+        # row" is only auditable against the list it was checked against.
+        "posting.yaml": workspace / "posting.yaml",
         "interview-brief.md": workspace / "interview-brief.md",
         "claims.yaml": workspace / "claims.yaml",
         "answer-bank.md": answer_bank,
@@ -606,11 +742,16 @@ def run(workspace, round_no: int, answer_bank=None, today=None, vocab_scanner=_A
     assessment_text = assessment_path.read_text(encoding="utf-8")
     transcript_text = transcript_path.read_text(encoding="utf-8")
 
-    findings = check_mode_entry(workspace, skill_root)
-    blocks, block_findings = check_assessment(assessment_text, transcript_text, round_no)
+    # Reported whatever the assessor produced: posting.yaml is a required input of
+    # the mode, and its absence is not conditional on the block having parsed.
+    must_haves, posting_findings = _must_haves(workspace)
+    findings = check_mode_entry(workspace, skill_root) + posting_findings
+    blocks, block_findings = check_assessment(
+        assessment_text, transcript_text, round_no, must_haves=must_haves)
     findings += block_findings
     findings += check_question_log(workspace / "mock" / "question-log.yaml", today)
     findings += check_answer_bank(answer_bank)
+    findings += check_session_artifacts(workspace / "mock")
     findings += check_vocabulary(
         [
             assessment_path,

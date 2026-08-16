@@ -347,6 +347,14 @@ not run — fix the input, never proceed. **Do not report the round as complete 
 quoting the `check_mock` receipt from `<workspace>/journal.jsonl`.** A gate that was skipped
 produces no output, and that looks exactly like a gate that passed.
 
+The `MOCK-ASSESSMENT-V1` block must actually assess something: at least one `BAND:`
+(`NO_BANDS`), at least one `SHAPE:` (`NO_SHAPE`), and one `COVERAGE:` row per must-have in
+`posting.yaml` (`NO_COVERAGE_ROW`, which names the uncovered one). `mock/open-loops.md` and
+`mock/cheatsheet.md` must exist and be non-empty (`NO_OPEN_LOOPS`, `NO_CHEATSHEET`). None of
+these applies to `MOCK-PROVENANCE-V1`: `ROUND:` plus `FINDINGS: none` is its documented clean
+shape. Until 2026-08 none of them was checked at all, so headers plus `FINDINGS: none` in both
+blocks was a fully passing round — an assessor that produced nothing produced this exit 0.
+
 ## 8. Round n+1
 
 Carry forward an **open-loops summary** only — the unresolved probes and the questions that

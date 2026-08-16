@@ -1,0 +1,21 @@
+# The posting this dry-run round rehearses for. check_mock reads must_haves and
+# requires one COVERAGE row per entry — the transcript pass is handed this same file,
+# so the list it covers and the list it is checked against are one list.
+role_title: MR Reconstruction Engineer
+company: ASML
+seniority: mid
+location:
+  city: Veldhoven
+  country: NL
+  arrangement: onsite
+must_haves:
+  - Measured performance work on reconstruction pipelines
+nice_to_haves:
+  - PyTorch or JAX
+responsibilities:
+  - Own the offline reconstruction pipeline for a research scanner
+keywords:
+  - GPU
+  - reconstruction
+application_type: standard
+language: en

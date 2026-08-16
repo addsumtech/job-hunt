@@ -88,6 +88,38 @@ rejected:
     reason: wrong_country
 """
 
+# The two must-haves the ASSESSMENT block above carries a COVERAGE row for, one each.
+# check_mock reads this list rather than counting rows: a bare count pressures the
+# assessor to invent a must-have to satisfy it, and naming the uncovered one does not.
+POSTING = """role_title: MR Reconstruction Engineer
+company: ASML
+must_haves:
+  - MRI reconstruction pipelines in a clinical setting
+  - Regulatory documentation (MDR)
+nice_to_haves:
+  - PyTorch
+"""
+
+OPEN_LOOPS = """# Open loops — round 2
+
+## (i) A fact you have but did not recall
+- The before/after timings for the batched GPU rewrite.
+
+## (ii) A genuine gap
+- No MDR regulatory documentation experience.
+
+## (iii) A tailoring error
+- None this round.
+"""
+
+CHEATSHEET = """# Cheatsheet — ASML, MR Reconstruction Engineer
+
+- Story: batched GPU reconstruction on the 3T study (round 2 Q2).
+- Honest gap: no MDR regulatory documentation; research-side validation instead.
+- Still open: the measured before/after timings.
+- Loop: technisch gesprek met de vakinhoudelijke manager, then gesprek met het team.
+"""
+
 ANSWER_BANK = """# Answer bank
 
 ## Batched GPU reconstruction on the 3T study
@@ -139,7 +171,8 @@ def skill_root(workspace):
 
 
 def build(tmp_path, *, round_no=2, transcript=None, assessment=None, question_log=None,
-          answer_bank=None, brief=None, claims=None, enter=True):
+          answer_bank=None, brief=None, claims=None, posting=None, open_loops=None,
+          cheatsheet=None, enter=True):
     """Write the quiet-case workspace under tmp_path and return the workspace path.
 
     `enter=False` skips the mode-entry record, for the tests that pin NO_MODE_ENTRY.
@@ -162,6 +195,11 @@ def build(tmp_path, *, round_no=2, transcript=None, assessment=None, question_lo
       QUESTION_LOG if question_log is None else question_log)
     w(workspace / "interview-brief.md", BRIEF if brief is None else brief)
     w(workspace / "claims.yaml", CLAIMS if claims is None else claims)
+    w(workspace / "posting.yaml", POSTING if posting is None else posting)
+    w(workspace / "mock" / "open-loops.md",
+      OPEN_LOOPS if open_loops is None else open_loops)
+    w(workspace / "mock" / "cheatsheet.md",
+      CHEATSHEET if cheatsheet is None else cheatsheet)
     w(profile / "answer-bank.md", ANSWER_BANK if answer_bank is None else answer_bank)
     if enter:
         # enter_mode.main prints its "now read the file" reminder on stdout. Swallow it
