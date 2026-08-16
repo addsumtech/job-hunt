@@ -493,7 +493,7 @@ a fabrication the candidate then repeats back), and the shortlist's `why_matched
 | Gate | Script | Fires on |
 |---|---|---|
 | Personal data | `scripts/check_personal_data.py` | protected fields on a Cluster-1 target, or an unrecognised market |
-| Claim provenance | `scripts/check_claims.py` | a term with no source; a mutated master profile |
+| Claim provenance | `scripts/check_claims.py` | a term with no source (skills, certifications, titles, orgs, degrees, institutions, project roles, publications, awards, volunteer, board); a status qualifier dropped off a real credential ("in progress", "B1"); a mutated master profile |
 | Verdict parsing | `scripts/parse_verdicts.py` | anything that is not exactly PASS/REJECT; a non-unanimous round |
 | Render freshness | `scripts/check_render_freshness.py` | a judge that read a file the disk no longer has |
 | CV lint | `scripts/lint_cv.py` | clichés, weak openers, over-long bullets, repeated verbs |

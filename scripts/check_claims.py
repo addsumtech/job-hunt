@@ -9,10 +9,41 @@ automated signal in the system (an ATS REJECT on a missing keyword) rewarded the
 dishonest edit.
 
 Scope is a closed set of short atomic fields — skills leaves, certifications,
-experience titles, education degrees — because that is where the four named
-fabrication classes land and each is a string that compares exactly. Free prose
-is deliberately out: rewording prose IS the skill's job, and a gate that fires on
-every honest run is a gate people learn to skip.
+experience titles and orgs, education degrees and institutions, project roles,
+publications, awards, volunteer and board lines — because that is where the named
+fabrication classes land: each is one fact that is either true or fabricated, with
+no middle. Free prose is deliberately out (bullets, summary, achievements, project
+descriptions): rewording prose IS the skill's job, and a gate that fires on every
+honest run is a gate people learn to skip. Which section is which is written down
+in SCANNED_SECTIONS / OUT_OF_SCOPE_SECTIONS below, and a test derives that
+partition from render_cv's rendered sections — so a section added to the CV cannot
+be silently left unscanned, which is how org, institution, publications, awards,
+project roles, volunteer and board sat unchecked next to the fields that were.
+
+The master side is PARSED, and matched on whole tokens. `key in master_text` over
+the raw file made a claim "sourced" by any substring hit anywhere in it: `Go` by
+`django`, `Java` by `JavaScript`, `AI` by `email` — which every profile using the
+canonical schema contains, so `AI` was permanently unfalsifiable — a fabricated
+`MSc` certification by the real degree `MSc Computer Science`, and `PhD` by a YAML
+COMMENT in the shipped example profile. Parsing to leaves is what kills the comment
+class (a comment's words are still words, so word boundaries alone do not); whole
+tokens are what kill the sub-word class. Neither alone does both. A tailored term
+is sourced when it equals a master leaf, appears as a whole phrase inside one of
+the candidate's own prose leaves, is a phrase of a master leaf **of its own kind**
+(so "Acme" from "Acme BV" and the de-escalation "Senior ML Engineer" → "ML
+Engineer" stay quiet, while a fabricated `MSc` *certification* is not sourced by a
+*degree*), or has a claims.yaml row. `links` are excluded from the permitted set:
+an account on a service is not a skill. (Whole-token matching already makes a bare
+URL inert — one URL is one token — so what the exclusion still buys is the
+`{label, url}` form, whose label is a leaf like any other.)
+
+QUALIFIER_STRIPPED is deliberately narrow — only a dropped STATUS marker from a
+closed vocabulary ("(in progress)", "(expired 2023)", "(B1)", ", in progress"),
+where deleting it upgrades a real credential into a stronger one. It is NOT "the
+tailored term is a substring of a master leaf": that version fires on `Senior ML
+Engineer` → `ML Engineer` and on `PyTorch Lightning` → `PyTorch`, the truthful
+reframings this skill exists to permit, and a check that cries wolf on ordinary
+output is worse than no check, because the reader learns to skip the line.
 
 Also fails if profile.yaml changed during the run. Overwriting the master is
 destructive and unrecoverable, and the damage only surfaces on the NEXT
@@ -50,10 +81,195 @@ PRESENCE_ONLY_KEYS = ("retracted",)
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _PUNCT = re.compile(r"[^\w\s+#./-]", re.UNICODE)
 
+# ── the scope registry ───────────────────────────────────────────────────────
+# Keyed on render_cv's section keys, and scripts/tests/test_check_claims.py
+# asserts the two sets are the same set. Adding a section to the CV without
+# deciding whether it is checked now fails a test instead of passing silently.
+
+SCANNED_SECTIONS = {
+    "skills":         "skills.<group>[] — the invented-tool class",
+    "certifications": "certifications[] — the claimed-credential class",
+    "experience":     "experience[].title (inflated title), experience[].org "
+                      "(fabricated employer)",
+    "education":      "education[].degree (degree not held), "
+                      "education[].institution (fabricated alma mater)",
+    "projects":       "projects[].role — the same seniority claim as a job title",
+    "publications":   "publications[] — a fabricated paper is the most checkable "
+                      "lie on an academic CV",
+    "awards":         "awards[] — the same shape of credential as a certification",
+    "volunteer":      "volunteer[] — names a real post at a real organisation",
+    "board":          "board[] — a board seat is verifiable and often public record",
+}
+
+OUT_OF_SCOPE_SECTIONS = {
+    "summary": "Free prose. Rewording it is the skill's job (gap-analysis.md §2 "
+               "ALLOWED), so diffing it would fire on every honest run. Recorded "
+               "deliberately in docs/superpowers/plans/"
+               "2026-08-09-1-migration-and-p0-fixes.md, 'Scope, chosen deliberately'.",
+    "achievements": "The executive CV's bullet band — 3-5 quantified statements "
+                    "about work the candidate really did (cv-craft.md §1 'Senior "
+                    "leader / Executive', candidate-situations.md §6). "
+                    "gap-analysis.md §2 names "
+                    "'rewording real achievements using the posting's exact "
+                    "terminology' as ALLOWED, so scanning it fires on exactly the "
+                    "operation the skill exists to perform. Same class as bullets, "
+                    "same decision — and, like bullets, it is a permitted SOURCE.",
+}
+
+# Fields inside a scanned section that are still not scanned, and why. Not
+# machine-checked (a field is not a section), but written down for the same
+# reason: the next person should inherit a decision, not an omission.
+OUT_OF_SCOPE_FIELDS = {
+    "experience[].bullets":    "prose the candidate wrote about work they did",
+    "education[].details":     "prose ('Thesis on X; GPA 8.5/10')",
+    "projects[].description":  "prose",
+    "projects[].name":         "the candidate's own label for their own work, "
+                               "routinely renamed for readability; the checkable "
+                               "facts in a project are the role and the links",
+    "*.links":                 "a URL is not a claim, and is excluded from the "
+                               "permitted source set for the same reason",
+    "meta.headline":           "the positioning line, rewritten per posting by "
+                               "design; same class as summary",
+    "*.start / *.end":         "dates are not claims this gate models. Altering "
+                               "them is forbidden (gap-analysis.md §2 NOT-ALLOWED) "
+                               "but a date is sourced by any other date in the "
+                               "file, so scanning them here would be theatre — a "
+                               "field-wise diff of master vs tailored is the check "
+                               "that would work, and does not exist yet",
+}
+
+# Free-prose keys, matched by key name at any depth. These are the candidate's own
+# narrative about work they did, and they are the reason the bullet-only mention of
+# a real tool ("Built a PyTorch pipeline") sources surfacing it into Skills — the
+# cry-wolf guard this gate is pinned against. `publications` is here as well as in
+# the scanned set: gap-analysis.md §1 names the candidate's own papers as valid
+# evidence for a technical-depth claim.
+PROSE_KEYS = ("summary", "bullets", "details", "description", "highlights",
+              "notes", "achievements", "publications")
+LINK_KEYS = ("links",)
+
+# Qualifiers whose REMOVAL upgrades the claim. A CLOSED VOCABULARY, deliberately
+# not "any dropped text": dropping "(2024)" off a certification, "(native)" off a
+# language, "BV" off an employer or "(maternity cover)" off a title loses nothing a
+# reader would have believed, and firing on those is how a gate gets ignored.
+# `learning` and `studying` are deliberately absent though they name the class —
+# they would fire on the master idiom `PyTorch (deep learning)` → `PyTorch`, and a
+# rule that misfires on an ordinary ML CV is worse than a rule that misses
+# "(learning)", which `in progress` / `in training` / `coursework` already cover.
+_STATUS_TOKENS = frozenset("""
+    progress training ongoing expected anticipated planned pending prospective
+    partial incomplete unfinished discontinued withdrawn paused deferred
+    expired lapsed revoked suspended provisional candidate coursework audited
+    self-taught taught beginner basic elementary intermediate conversational
+    a1 a2 b1 b2 c1 c2 n1 n2 n3 n4 n5
+""".split())
+# Matched by containment, not equality: CJK writes without delimiters, so
+# "预计2027" is one token and set membership would miss it.
+_STATUS_CJK = ("在读", "在学", "预计", "已过期", "已失效", "待考", "初级", "入门")
+# Tokens that carry no claim either way, so their presence in the dropped material
+# neither triggers the finding nor blocks it. Anything with a digit is here (a year,
+# a date) — checked AFTER the status test, so the CEFR levels above still win.
+_IGNORABLE_TOKENS = frozenset(
+    "in of the to as at by on for and or level status since until from est "
+    "approx approximately self grade".split())
+
+# Scripts written without word delimiters. See `phrase_in`.
+_UNSEGMENTED_RE = re.compile(r"[฀-๿　-鿿가-힯豈-﫿]")
+
+SOURCED, QUALIFIER = "sourced", "qualifier"
+
 
 def normalize_term(s) -> str:
     s = unicodedata.normalize("NFKC", str(s or "")).lower()
     return " ".join(_PUNCT.sub(" ", s).split())
+
+
+def _token_list(text) -> list:
+    """Whole tokens of `text`, trailing sentence punctuation trimmed.
+
+    normalize_term keeps `+ # . / -` so that C++, C#, .NET and CI/CD survive as
+    themselves — the cost is that a term ending a sentence normalizes to
+    "kubernetes." and would then match nothing. Trailing dots are trimmed;
+    leading ones are not, because ".NET" is a name.
+    """
+    return [t for t in (tok.rstrip(".") for tok in normalize_term(text).split()) if t]
+
+
+def phrase_in(term, text) -> bool:
+    """True when `term` occurs in `text` as whole tokens, never inside a word.
+
+    Word boundaries are what stop `Java` being sourced by `JavaScript`, but they
+    are a property of space-delimited scripts. Chinese, Japanese, Korean and Thai
+    write without them, so a whole bullet is a single token and a token test would
+    report every skill on every CJK CV as unsourced — the cry-wolf failure, not a
+    fix. For a term in those scripts the test is containment within a single leaf,
+    which is still far narrower than the whole-file substring it replaces.
+    """
+    t = normalize_term(term)
+    if not t:
+        return False
+    if _UNSEGMENTED_RE.search(t):
+        return t in normalize_term(text)
+    wanted, have = _token_list(term), _token_list(text)
+    n = len(wanted)
+    return bool(n) and any(have[i:i + n] == wanted for i in range(len(have) - n + 1))
+
+
+def _is_status(token) -> bool:
+    return token in _STATUS_TOKENS or any(w in token for w in _STATUS_CJK)
+
+
+def _is_ignorable(token) -> bool:
+    return token in _IGNORABLE_TOKENS or any(ch.isdigit() for ch in token)
+
+
+def dropped_status(term, leaf):
+    """The status marker `term` drops off `leaf`, or None.
+
+    What the term dropped must be a status and NOTHING BUT a status (plus dates
+    and connectives, which say nothing either way). Both halves are load-bearing:
+
+    * "MSc Computer Science" off "MSc Computer Science (in progress, expected
+      2027)" drops `progress` + `expected` and two ignorables → fires.
+    * "ML Engineer" off "Senior ML Engineer" drops `senior`, "Acme" off "Acme BV"
+      drops `bv`, "AWS … Practitioner" off "… (2024)" drops a year → no status,
+      no finding. These are the honest reframings the gate must stay silent on.
+    * "Engineer" off "Engineer, Basic Materials Group" drops `basic` — a status
+      word — but also `materials` and `group`, which are not, so the dropped text
+      is a department name and not a qualifier. Requiring the whole dropped span
+      to be status is what tells those apart; a bare `contains a status word`
+      test fires on it.
+
+    Punctuation is whitespace by the time we compare, so "(B1)", ", in progress"
+    and " — expected 2027" are one rule rather than three, and a master that
+    writes the qualifier without brackets is not a way through.
+    """
+    wanted, have = _token_list(term), _token_list(leaf)
+    n = len(wanted)
+    if not n or len(have) <= n:
+        return None
+    at = next((i for i in range(len(have) - n + 1) if have[i:i + n] == wanted), None)
+    if at is None:
+        return None
+    dropped = have[:at] + have[at + n:]
+    if not any(_is_status(t) for t in dropped):
+        return None
+    if any(not _is_status(t) and not _is_ignorable(t) for t in dropped):
+        return None
+    return " ".join(dropped)
+
+
+def relation(term, leaf):
+    """How `term` relates to one master leaf of the same family.
+
+    SOURCED, QUALIFIER (the leaf says the same thing, and the term dropped a
+    status marker off it), or None.
+    """
+    if normalize_term(term) == normalize_term(leaf):
+        return SOURCED
+    if not phrase_in(term, leaf):
+        return None
+    return QUALIFIER if dropped_status(term, leaf) else SOURCED
 
 
 def _as_list(v):
@@ -70,26 +286,107 @@ def _flat(v):
     return str(v)
 
 
-def tailored_terms(profile) -> list:
-    """[(term, where)] over the closed set of fabrication-prone fields."""
+def atomic_claims(profile) -> list:
+    """[(term, field_path, family)] over the closed set of atomic claim fields.
+
+    ONE walker, run over both profiles: the tailored side supplies the claims to
+    check, the master side supplies the evidence they are checked against. Two
+    walkers is two things to drift — and the drift that already happened here was
+    `experience[].title` being scanned while `experience[].org`, the adjacent key
+    in the same dict, was not.
+    """
+    profile = profile if isinstance(profile, dict) else {}
     out = []
     skills = profile.get("skills") or {}
     if isinstance(skills, dict):
         for group, items in skills.items():
             for item in _as_list(items):
-                out.append((_flat(item), f"skills.{group}"))
+                out.append((_flat(item), f"skills.{group}", "skills"))
     else:
         for item in _as_list(skills):
-            out.append((_flat(item), "skills"))
-    for i, cert in enumerate(profile.get("certifications") or []):
-        out.append((_flat(cert), f"certifications[{i}]"))
-    for i, ex in enumerate(profile.get("experience") or []):
-        if isinstance(ex, dict) and ex.get("title"):
-            out.append((str(ex["title"]), f"experience[{i}].title"))
-    for i, ed in enumerate(profile.get("education") or []):
-        if isinstance(ed, dict) and ed.get("degree"):
-            out.append((str(ed["degree"]), f"education[{i}].degree"))
+            out.append((_flat(item), "skills", "skills"))
+    for i, ex in enumerate(_as_list(profile.get("experience"))):
+        if not isinstance(ex, dict):
+            continue
+        for field in ("title", "org"):
+            if ex.get(field):
+                out.append((_flat(ex[field]), f"experience[{i}].{field}",
+                            f"experience.{field}"))
+    for i, ed in enumerate(_as_list(profile.get("education"))):
+        if not isinstance(ed, dict):
+            continue
+        for field in ("degree", "institution"):
+            if ed.get(field):
+                out.append((_flat(ed[field]), f"education[{i}].{field}",
+                            f"education.{field}"))
+    for i, pr in enumerate(_as_list(profile.get("projects"))):
+        if isinstance(pr, dict) and pr.get("role"):
+            out.append((_flat(pr["role"]), f"projects[{i}].role", "projects.role"))
+    for section in ("certifications", "publications", "awards", "volunteer", "board"):
+        for i, item in enumerate(_as_list(profile.get(section))):
+            out.append((_flat(item), f"{section}[{i}]", section))
     return out
+
+
+def _leaf_strings(node):
+    """Every scalar leaf under `node`, as raw strings. `links` excluded.
+
+    The exclusion is one line here and covers both `contact.links` and
+    `projects[].links`, including the `{label, url}` form: the label of a link is
+    the name of a service, not evidence that the candidate has a skill.
+    """
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if str(key).strip().lower() not in LINK_KEYS:
+                yield from _leaf_strings(value)
+    elif isinstance(node, (list, tuple)):
+        for item in node:
+            yield from _leaf_strings(item)
+    elif node is not None and not isinstance(node, bool):
+        yield str(node)
+
+
+def _prose_strings(node):
+    """Every leaf under a free-prose key — the candidate's own narrative.
+
+    Only leaves *under* a PROSE_KEYS key are yielded, and they are collected by
+    `_leaf_strings`, so a `links:` list nested under one is dropped there rather
+    than needing a second guard here.
+    """
+    if isinstance(node, dict):
+        for key, value in node.items():
+            name = str(key).strip().lower()
+            yield from (_leaf_strings(value) if name in PROSE_KEYS
+                        else _prose_strings(value))
+    elif isinstance(node, (list, tuple)):
+        for item in node:
+            yield from _prose_strings(item)
+
+
+def master_sources(profile):
+    """(exact, prose, families) — the permitted evidence, parsed from leaves.
+
+    `exact` is every leaf normalized, so a term that is a whole field ANYWHERE in
+    the master is sourced wherever the tailoring puts it. That is a provenance
+    answer, not a semantic one: it says the candidate's own file states this exact
+    string. It is what lets a skill be regrouped, and what keeps a PhD candidate's
+    university quiet when it is both their `education[].institution` and their
+    `experience[].org`. Its cost, accepted knowingly: moving a `projects[].role`
+    verbatim into `experience[].title` is quiet too, and whether that restructure
+    is *appropriate* is a question this gate cannot answer without guessing — the
+    recruiter judge and the human read the CV for that.
+
+    `prose` is the free-text leaves, matched by whole phrase. `families` keeps each
+    atomic leaf under its own kind, because the looser phrase match is only safe
+    within a kind — a degree does not source a certification.
+    """
+    exact = {normalize_term(s) for s in _leaf_strings(profile)}
+    exact.discard("")
+    prose = [s for s in _prose_strings(profile) if normalize_term(s)]
+    families = {}
+    for term, _where, family in atomic_claims(profile):
+        families.setdefault(family, []).append(term)
+    return exact, prose, families
 
 
 def _claim_index(claims):
@@ -168,13 +465,24 @@ def main(argv=None) -> int:
     fp = json.loads(fp_path.read_text(encoding="utf-8"))
     master = pathlib.Path(fp["path"])
     findings = []
+    master_profile, readable = {}, False
     if not master.exists():
         findings.append(f"MASTER_MUTATED: {master} no longer exists — the master "
                         f"profile is never mutated by tailoring")
-        master_text = ""
     else:
         now = journal.sha256_file(master)
-        master_text = normalize_term(master.read_text(encoding="utf-8"))
+        try:
+            loaded = yaml.safe_load(master.read_text(encoding="utf-8"))
+            master_profile = loaded if isinstance(loaded, dict) else {}
+            readable = True
+        except yaml.YAMLError as exc:
+            # The gate compares against PARSED fields, so a master it cannot parse
+            # is a gate that verified nothing. Say that, and do not then emit an
+            # UNSOURCED line for every term in the CV: a flood derived from a file
+            # nobody could read is noise, and noise is what makes findings ignorable.
+            findings.append(f"MASTER_UNREADABLE: {master} is not parseable YAML "
+                            f"({str(exc).splitlines()[0]}) — no claim was verified "
+                            f"against it; fix the master and re-run")
         if now != fp["sha256"]:
             findings.append(f"MASTER_MUTATED: profile.yaml content changed during this "
                             f"run ({fp['sha256'][:12]}… → {now[:12]}…) — the master "
@@ -193,11 +501,28 @@ def main(argv=None) -> int:
     live, retracted, claim_findings = _claim_index(claims)
     findings += claim_findings
 
-    for term, where in tailored_terms(tailored):
+    exact, prose, families = master_sources(master_profile)
+    # No readable master, nothing to check against: the MASTER_* finding above is
+    # the answer, and it already fails the gate.
+    for term, where, family in (atomic_claims(tailored) if readable else []):
         key = normalize_term(term)
-        if len(key) < 2 or key in master_text:
+        if not key or key in exact:
+            continue
+        if any(phrase_in(term, leaf) for leaf in prose):
+            continue
+        kin = [(relation(term, leaf), leaf) for leaf in families.get(family, ())]
+        if any(rel == SOURCED for rel, _leaf in kin):
             continue
         if key in live:
+            continue
+        stripped = next((leaf for rel, leaf in kin if rel == QUALIFIER), None)
+        if stripped is not None:
+            findings.append(f'QUALIFIER_STRIPPED: "{term}" at '
+                            f'tailored-profile.yaml:{where} drops the status '
+                            f'qualifier off profile.yaml\'s "{stripped}" — the '
+                            f'unqualified form reads as a completed, current '
+                            f'credential. Keep the qualifier, or add a claims.yaml '
+                            f'row for the fact that it no longer applies')
             continue
         if key in retracted:
             findings.append(f'RETRACTED_CLAIM: "{term}" at '

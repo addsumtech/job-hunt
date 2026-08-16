@@ -41,5 +41,9 @@ awards:
   - "Best Paper Award, SysCon 2021"
 certifications:
   - "Certified Kubernetes Administrator (CKA), 2022"
+achievements:
+  - "Cut checkout latency from 900ms to 450ms across the retail platform."
+board:
+  - "Advisory board member, TechForward (2020–present)"
 volunteer:
   - "Mentor at CoderDojo Amsterdam, 2020–present"
