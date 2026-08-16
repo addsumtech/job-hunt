@@ -23,6 +23,46 @@ def _self_check_section() -> str:
     return m.group(0)
 
 
+def _self_check_items() -> str:
+    """Only the CHECKLIST ITEMS — each `- [ ]` line plus its indented continuations.
+
+    `_self_check_section()` runs to end-of-file, because `## Self-check` is the last
+    heading. So `"references/cv-craft.md" in section` is satisfied by the name appearing
+    ANYWHERE below that heading, including in ordinary prose. Measured: deleting
+    cv-craft.md's READ trigger line and mentioning the filename in a sentence appended
+    at the end left all 59 structure tests green. A checklist whose entries can be
+    satisfied by prose is not a checklist — and this section is spec section 6's third
+    backstop, the one that is supposed to catch a reference file nobody routed to.
+
+    Naive `^- \\[ \\]` filtering is wrong in the other direction: it reports 17 false
+    missing entries, because most items wrap onto indented continuation lines."""
+    lines = _self_check_section().split("\n")
+    out, in_item = [], False
+    for line in lines:
+        if re.match(r"^\s*- \[ \]", line):
+            in_item = True
+            out.append(line)
+        elif in_item and line.strip() and line.startswith((" ", "\t")):
+            out.append(line)          # a continuation of the item above
+        else:
+            in_item = False
+    return "\n".join(out)
+
+
+def test_the_self_check_is_the_last_section_so_its_boundary_is_known():
+    """Everything above depends on where this section ends. It has no closing marker —
+    the regex stops at the next `## ` or at EOF — so a section appended AFTER it is
+    swallowed whole. That has already happened once: plan 3 appended a discovery block
+    and two reference files silently inherited a pass from prose inside the swallowed
+    region (fixed in 54b20fc). Appending here is exactly what a later plan is told to
+    do, so the invariant has to be a test rather than a convention."""
+    headings = re.findall(r"^## .*$", SKILL.read_text(encoding="utf-8"), re.M)
+    assert headings[-1].startswith("## Self-check"), (
+        f"SKILL.md's last section is {headings[-1]!r}, not the self-check. Move the new "
+        f"section ABOVE '## Self-check' — the self-check has no closing marker, so "
+        f"anything below it is read as part of it and its guards start passing on prose.")
+
+
 @pytest.mark.parametrize("anchor", ANCHORS, ids=lambda a: a["text"][:40])
 def test_every_layer1_rule_is_inline_in_skill_md(anchor):
     """Each of these fails SILENTLY if skipped — no lint, no artifact, no test
@@ -32,19 +72,19 @@ def test_every_layer1_rule_is_inline_in_skill_md(anchor):
 
 
 def test_the_self_check_names_every_reference_file():
-    section = _self_check_section()
+    section = _self_check_items()
     for f in sorted((ROOT / "references").glob("*.md")):
         assert f"references/{f.name}" in section, f"self-check does not name {f.name}"
 
 
 def test_the_self_check_names_every_agent_file():
-    section = _self_check_section()
+    section = _self_check_items()
     for f in sorted((ROOT / "agents").glob("*.md")):
         assert f"agents/{f.name}" in section
 
 
 def test_the_self_check_names_every_mode_file():
-    section = _self_check_section()
+    section = _self_check_items()
     for f in sorted((ROOT / "modes").glob("*.md")):
         assert f"modes/{f.name}" in section
 
@@ -64,7 +104,7 @@ def test_the_self_check_names_every_script():
     skip = {"journal.py", "paths.py", "rounds.py", "vocab.py",
             "opencli_meta.py",                    # Plan 3 — leave it
             "mock_vocab.py", "mock_blocks.py"}    # imported, never invoked
-    section = _self_check_section()
+    section = _self_check_items()
     for f in sorted((ROOT / "scripts").glob("*.py")):
         if f.name in skip:
             continue
@@ -338,17 +378,35 @@ def _paragraphs(path: pathlib.Path) -> list[str]:
     return out
 
 
+# The number of paragraphs SKILL.md and modes/apply.md carry word-for-word. Spec
+# section 6 requires the duplication; this pins its SIZE, which is the only thing that
+# moves when a copy drifts.
+SHARED_WITH_APPLY = 16
+
+
 def test_the_paragraphs_layer_1_shares_with_a_mode_file_are_byte_identical():
-    """The copies that exist must match exactly. This does not police WHICH text is
-    duplicated — that is spec section 6's call — only that a paragraph appearing in
-    both places says the same thing in both."""
+    """Pinned as a COUNT, and the reason is worth keeping.
+
+    The obvious version of this test — `shared = set(skill) & set(mode); assert shared`
+    — cannot detect drift at all. A set intersection is byte-identical by construction,
+    so a paragraph that has drifted simply drops OUT of it: the assertion never sees the
+    changed text, and every drop moves toward the only condition being checked
+    (non-empty). Confirmed by mutating 15 of the 16 shared paragraphs — the whole suite
+    stayed green, and `check_skill_lossless` reported 1317/1317 too, because a paragraph
+    drifting between two CURRENT files leaves every BASELINE line still present.
+
+    Pinning the count goes red on drift and on deletion, with no threshold to tune and
+    no normalisation to get wrong. It does not say WHICH paragraph changed — read the
+    diff — but it says that one did, which is the part nothing else could see."""
     skill = _paragraphs(SKILL)
-    for mode_file in sorted(_MODES.glob("*.md")):
-        shared = set(skill) & set(_paragraphs(mode_file))
-        assert shared or mode_file.name != "apply.md", (
-            "SKILL.md and modes/apply.md share no paragraph at all — spec section 6 "
-            "requires the judge loop and workspace conventions in both, so either the "
-            "duplication was removed deliberately (update this test) or layer 1 lost it")
+    shared = set(skill) & set(_paragraphs(_MODES / "apply.md"))
+    assert len(shared) == SHARED_WITH_APPLY, (
+        f"SKILL.md and modes/apply.md now share {len(shared)} word-for-word paragraphs, "
+        f"not {SHARED_WITH_APPLY}. FEWER means a copy DRIFTED (or was deleted) — the two "
+        f"layers now say different things about the same rule, which is how the required "
+        f"disclaimer came to fail its own gate. MORE means new duplication that spec "
+        f"section 6 has not decided on. Either way, look at the diff, then update this "
+        f"number deliberately.")
 
 
 @pytest.mark.parametrize("phrase", [
