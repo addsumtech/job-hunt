@@ -49,6 +49,35 @@ MATCH = ("strong", "partial", "gap", "no_evidence")
 RECENCY = ("current", "recent", "dated", "undated")
 EFFORT = ("quick", "evening", "multi_day", "not_closable")
 
+# ── top-level fit-assessment.yaml fields (spec 5.2, the schema in
+#    modes/assess.md §6) ────────────────────────────────────────────────────
+# `effort` above is BOTH axes: per row it prices closing that row, at the top
+# level it prices closing the remaining gaps as a whole. One set, deliberately,
+# because a card that priced the two on different scales would be unreadable.
+#
+# LEVEL_DIRECTION was spelled in no module at all for as long as the coverage
+# card printed it. count_coverage.py filled the hole with `.get(..., "unclear")`
+# and the zh label map filled it again with 「不明」, so an assessment that judged
+# neither still shipped a card stating both as facts. A closed set has to exist
+# somewhere before a script can tell "nobody assessed this" from "assessed as
+# unclear" — those are different claims and only one of them is honest.
+LEVEL_DIRECTION = ("step_up", "lateral", "step_down", "unclear")
+
+# The candidate's own statement about their right to work, self-reported and
+# never inferred. `unknown` is IN the set on purpose: consistency.py must be
+# able to read "we asked and could not establish it" without that reading as a
+# downgrade, and a field the model may not write at all is a field it omits.
+WORK_STATUS = ("authorized", "needs_sponsorship", "student_or_graduate",
+               "temporary_route", "unknown")
+
+# Work-authorization-style conditions read off the posting, and what the posting
+# does about each. consistency.py compares a `stance` against a WORK_STATUS; a
+# value outside these sets makes that comparison return None, which looks exactly
+# like "the two agree".
+CONDITION_TYPES = ("sponsorship", "work_authorization", "citizenship", "clearance",
+                   "licence", "onsite_location", "other")
+STANCE = ("requires_existing", "offers_support", "unclear")
+
 # ── mock-interview bands (spec 5.4) ───────────────────────────────────────
 # "held_under_probe" is the ceiling on purpose: a higher band would require
 # knowing what this level's expectations are, and this skill does not.

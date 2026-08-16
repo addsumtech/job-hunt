@@ -223,6 +223,169 @@ def test_a_complete_other_half_on_likely_screen_out_passes(tmp_path):
                 or f.startswith("NO_ACCEPTANCE")]
 
 
+# ---------- the two fields the card PRINTS ----------
+
+# The §8 refusal: no verdict from the five, no coverage block, and therefore no
+# level_direction and no effort either. Every new finding below must stay silent
+# here — `counts["invalid"]` is appended BEFORE `refusing` is computed, so an
+# unscoped check hard-fails the one path the mode file designs for.
+REFUSAL = {"market": vocab.NO_MARKET, "verdict": vocab.REFUSAL, "provisional": False,
+           "requirements": [], "actions": [], "conventions_rendered": []}
+REFUSAL_MD = ("# Fit assessment\n\n## 证据不足\n\n"
+              "岗位原文只取到一个登录墙，读不到任何 requirements 段落。"
+              "请把完整的岗位描述贴给我，我再重新评估。\n")
+
+
+def test_an_assessment_that_judged_no_level_direction_says_so(tmp_path):
+    broken = copy.deepcopy(ASSESSMENT)
+    del broken["level_direction"]
+    ws, market_dir, root = build(tmp_path, assessment=broken)
+    assert any(f.startswith("MISSING_LEVEL_DIRECTION:")
+               for f in ca.check(ws, market_dir, TODAY, root))
+
+
+def test_an_assessment_that_judged_no_effort_says_so(tmp_path):
+    """The shipped card said 「可补缺口所需投入：补不上」 beside 「强烈建议投」 on an
+    assessment that had judged neither. Nothing reported it: COUNT_MISMATCH
+    compares render_block against render_block, so two identical invented
+    strings compare equal."""
+    broken = copy.deepcopy(ASSESSMENT)
+    del broken["effort"]
+    ws, market_dir, root = build(tmp_path, assessment=broken)
+    assert any(f.startswith("MISSING_EFFORT:")
+               for f in ca.check(ws, market_dir, TODAY, root))
+
+
+def test_an_out_of_enum_value_for_either_field_is_reported(tmp_path):
+    broken = copy.deepcopy(ASSESSMENT)
+    broken["level_direction"] = "sideways"
+    broken["effort"] = "a_weekend"
+    ws, market_dir, root = build(tmp_path, assessment=broken)
+    findings = ca.check(ws, market_dir, TODAY, root)
+    assert any(f.startswith("MISSING_LEVEL_DIRECTION:") and "sideways" in f
+               for f in findings)
+    assert any(f.startswith("MISSING_EFFORT:") and "a_weekend" in f for f in findings)
+
+
+def test_both_fields_present_and_in_enum_are_quiet(tmp_path):
+    ws, market_dir, root = build(tmp_path)
+    assert not [f for f in ca.check(ws, market_dir, TODAY, root)
+                if f.startswith("MISSING_EFFORT")
+                or f.startswith("MISSING_LEVEL_DIRECTION")]
+
+
+def test_the_refusal_path_is_clean_with_neither_field(tmp_path):
+    """§8 by design has no verdict from the five, no coverage block, and no
+    reason to have judged either field. A check that fired here would fail the
+    skill's own refusal floor — the one output that is always correct."""
+    ws, market_dir, root = build(tmp_path, assessment=REFUSAL, markdown=REFUSAL_MD)
+    assert ca.check(ws, market_dir, TODAY, root) == []
+
+
+def test_the_refusal_path_still_exits_zero(tmp_path, capsys):
+    ws, market_dir, root = build(tmp_path, assessment=REFUSAL, markdown=REFUSAL_MD)
+    capsys.readouterr()
+    assert ca.main(["--workspace", str(ws), "--market-dir", str(market_dir),
+                    "--skill-root", str(root), "--today", "2026-08-09"]) == 0
+    assert capsys.readouterr().out.strip() == ""
+
+
+# ---------- the two work-authorization fields, and the notices they wake ----------
+
+def test_a_work_auth_conflict_now_fires_and_must_be_attached(tmp_path):
+    """Reachability, end to end. Both these fields were named in no mode file, so
+    NOTICE_WORK_AUTH_CONFLICT could not fire on any real run — the model was never
+    told the fields existed."""
+    broken = copy.deepcopy(ASSESSMENT)
+    broken["declared_work_status"] = "needs_sponsorship"
+    ws, market_dir, root = build(tmp_path, assessment=broken)
+    assert any(f.startswith("NOTICE_NOT_ATTACHED:") and "WORK_AUTH_CONFLICT" in f
+               for f in ca.check(ws, market_dir, TODAY, root))
+
+
+def test_a_work_auth_verify_notice_fires_on_a_student_route(tmp_path):
+    broken = copy.deepcopy(ASSESSMENT)
+    broken["declared_work_status"] = "student_or_graduate"
+    ws, market_dir, root = build(tmp_path, assessment=broken)
+    assert any(f.startswith("NOTICE_NOT_ATTACHED:") and "WORK_AUTH_VERIFY" in f
+               for f in ca.check(ws, market_dir, TODAY, root))
+
+
+def test_attaching_the_work_auth_notice_clears_it(tmp_path):
+    broken = copy.deepcopy(ASSESSMENT)
+    broken["declared_work_status"] = "needs_sponsorship"
+    ws, market_dir, root = build(tmp_path, assessment=broken)
+    md = (ws / "fit-assessment.md").read_text(encoding="utf-8")
+    (ws / "fit-assessment.md").write_text(
+        md + "\n> 岗位要求已持有工作许可，而你声明需要担保：这两条看起来冲突，"
+             "请你自己向雇主核实。\n", encoding="utf-8")
+    assert not [f for f in ca.check(ws, market_dir, TODAY, root)
+                if f.startswith("NOTICE_NOT_ATTACHED")]
+
+
+def test_a_misspelled_work_status_is_reported_not_silently_ignored(tmp_path):
+    """`needs-sponsorship` with a hyphen makes work_authorization_alignment
+    return None, which is indistinguishable from 'the two agree'. The notice
+    switches itself off and the card looks clean."""
+    broken = copy.deepcopy(ASSESSMENT)
+    broken["declared_work_status"] = "needs-sponsorship"
+    ws, market_dir, root = build(tmp_path, assessment=broken)
+    assert any(f.startswith("BAD_WORK_STATUS:") and "needs-sponsorship" in f
+               for f in ca.check(ws, market_dir, TODAY, root))
+
+
+def test_a_misspelled_stance_or_condition_type_is_reported(tmp_path):
+    broken = copy.deepcopy(ASSESSMENT)
+    broken["declared_work_status"] = "needs_sponsorship"
+    broken["stated_conditions"][0]["stance"] = "requires-existing"
+    ws, market_dir, root = build(tmp_path, assessment=broken)
+    findings = ca.check(ws, market_dir, TODAY, root)
+    assert any(f.startswith("BAD_STATED_CONDITION:") and "requires-existing" in f
+               for f in findings)
+    broken["stated_conditions"][0]["stance"] = "requires_existing"
+    broken["stated_conditions"][0]["type"] = "visa"
+    ws2, market_dir2, root2 = build(tmp_path / "b", assessment=broken)
+    assert any(f.startswith("BAD_STATED_CONDITION:") and "visa" in f
+               for f in ca.check(ws2, market_dir2, TODAY, root2))
+
+
+def test_every_legal_work_status_and_stance_is_quiet(tmp_path):
+    """The quiet case, over the whole closed set rather than one sample of it.
+    A value the schema tells the model to write must never be a finding."""
+    for index, status in enumerate(vocab.WORK_STATUS):
+        for stance in vocab.STANCE:
+            ok = copy.deepcopy(ASSESSMENT)
+            ok["declared_work_status"] = status
+            ok["stated_conditions"][0]["stance"] = stance
+            ws, market_dir, root = build(tmp_path / f"{index}-{stance}", assessment=ok)
+            assert not [f for f in ca.check(ws, market_dir, TODAY, root)
+                        if f.startswith("BAD_WORK_STATUS")
+                        or f.startswith("BAD_STATED_CONDITION")
+                        or f.startswith("WARN_NO_WORK_STATUS")]
+
+
+def test_an_unrecorded_work_status_warns_without_failing_the_gate(tmp_path, capsys):
+    """§4 already makes the model ASK. Not writing the answer down is worth a
+    line, but it is not worth refusing the card: an absent status suppresses the
+    notices, which is the safe direction, and §4's knockout row is the primary
+    path with NO_DISQUALIFIER_SECTION behind it."""
+    broken = copy.deepcopy(ASSESSMENT)
+    del broken["declared_work_status"]
+    ws, market_dir, root = build(tmp_path, assessment=broken)
+    findings = ca.check(ws, market_dir, TODAY, root)
+    assert any(f.startswith("WARN_NO_WORK_STATUS:") for f in findings)
+    assert not [f for f in findings if not f.startswith("WARN_")]
+    capsys.readouterr()
+    assert ca.main(["--workspace", str(ws), "--market-dir", str(market_dir),
+                    "--skill-root", str(root), "--today", "2026-08-09"]) == 0
+
+
+def test_the_refusal_path_is_not_asked_for_a_work_status(tmp_path):
+    ws, market_dir, root = build(tmp_path, assessment=REFUSAL, markdown=REFUSAL_MD)
+    assert not [f for f in ca.check(ws, market_dir, TODAY, root)
+                if "WORK_STATUS" in f]
+
+
 # ---------- the layer-1.5 backstop ----------
 
 def test_no_mode_entry_fails(tmp_path, capsys):

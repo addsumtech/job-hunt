@@ -43,6 +43,28 @@ LEVEL_DIRECTION_ZH = {"step_up": "上跳", "lateral": "平级", "step_down": "�
 EFFORT_ZH = {"quick": "当天", "evening": "一晚", "multi_day": "数日",
              "not_closable": "补不上"}
 VERDICT_ZH = vocab.VERDICT_ZH
+# Labels for every member and nothing else, so the not-assessed token below is
+# reachable only by a field being absent or out of enum. A member with no label
+# would render as "not assessed" and read as a judgement nobody made.
+assert set(LEVEL_DIRECTION_ZH) == set(vocab.LEVEL_DIRECTION)
+assert set(EFFORT_ZH) == set(vocab.EFFORT)
+
+# What the card says when the assessment judged neither of the two fields it
+# prints. This used to be `.get("level_direction", "unclear")` and
+# `.get("effort", "not_closable")` -- and then AGAIN as the default of each zh
+# dict lookup, so the default `--lang zh` card kept inventing a value even with
+# the obvious two fallbacks removed. Four fallbacks, one shipped card reading
+# 「投递建议：强烈建议投 / 可补缺口所需投入：补不上」 off an assessment whose only
+# gapped row said `effort: evening` and carried a how_to_close.
+#
+# It is not a member of either set and never can be: a reader has to be able to
+# tell "nobody judged this" from "judged, and the answer is unclear", and a
+# pessimistic guess printed in the same column as a real value is the one thing
+# that makes those two indistinguishable. check_assessment.py reports the same
+# state as MISSING_LEVEL_DIRECTION / MISSING_EFFORT, so the card admits the hole
+# and the gate names it.
+NOT_ASSESSED_EN = "not assessed"
+NOT_ASSESSED_ZH = "未评估"
 
 
 def cannot_run(workspace: pathlib.Path, reason: str) -> int:
@@ -100,18 +122,32 @@ def coverage(rows: list[dict] | None) -> dict:
     return counts
 
 
+def _assessed(value, allowed: tuple, zh_labels: dict, lang: str) -> str:
+    """The value as the reader should see it, or the not-assessed token.
+
+    One function for both languages on purpose. Printing the raw token in en
+    while zh printed a default was how the same file produced two cards making
+    different claims, and the default `--lang zh` one was the one nobody read
+    in English.
+    """
+    if value not in allowed:
+        return NOT_ASSESSED_ZH if lang == "zh" else NOT_ASSESSED_EN
+    return zh_labels[value] if lang == "zh" else value
+
+
 def render_block(assessment: dict, counts: dict, lang: str = "zh") -> str:
     verdict = assessment.get("verdict", "insufficient_evidence")
-    direction = assessment.get("level_direction", "unclear")
-    effort = assessment.get("effort", "not_closable")
+    direction = _assessed(assessment.get("level_direction"), vocab.LEVEL_DIRECTION,
+                          LEVEL_DIRECTION_ZH, lang)
+    effort = _assessed(assessment.get("effort"), vocab.EFFORT, EFFORT_ZH, lang)
     if lang == "zh":
         return (
             f"must-have 强证据：   {counts['must_strong']} of {counts['must_total']}   "
             f"（partial {counts['must_partial']}，gap {counts['must_gap']}，"
             f"无证据 {counts['must_no_evidence']}）\n"
             f"核心职责已证实：     {counts['resp_demonstrated']} of {counts['resp_total']}\n"
-            f"职级匹配：           {LEVEL_DIRECTION_ZH.get(direction, '不明')}\n"
-            f"可补缺口所需投入：   {EFFORT_ZH.get(effort, '补不上')}\n"
+            f"职级匹配：           {direction}\n"
+            f"可补缺口所需投入：   {effort}\n"
             f"投递建议：           {VERDICT_ZH.get(verdict, '证据不足—不出结论')}")
     return (
         f"must-haves strongly evidenced:   {counts['must_strong']} of "

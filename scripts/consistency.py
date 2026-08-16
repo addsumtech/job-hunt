@@ -42,7 +42,14 @@ GATE = "consistency"
 # makes that claim checkable rather than a comment nobody reads.
 CONFLICT_EFFORTS = ("multi_day", "not_closable")
 assert set(CONFLICT_EFFORTS) <= set(vocab.EFFORT)
+
+# The condition types that are about the right to work, which is a subset of the
+# seven a posting can state -- a `licence` or an `onsite_location` is a real wall
+# and simply not one this comparison knows how to make. Same assertion for the
+# same reason as above: rename a type in vocab and this tuple would keep matching
+# nothing at all, which reads from the outside exactly like "no conflict found".
 AUTH_CONDITION_TYPES = ("sponsorship", "work_authorization", "citizenship")
+assert set(AUTH_CONDITION_TYPES) <= set(vocab.CONDITION_TYPES)
 
 NOTICE_CODES = ("NOTICE_VERDICT_EFFORT", "NOTICE_LOOSE_KNOCKOUTS", "NOTICE_GAP_ACTIONS",
                 "NOTICE_WORK_AUTH_CONFLICT", "NOTICE_WORK_AUTH_VERIFY")

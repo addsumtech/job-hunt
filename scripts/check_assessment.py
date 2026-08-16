@@ -144,6 +144,14 @@ def check(workspace: pathlib.Path, market_dir: pathlib.Path,
     squeezed = _squeeze(markdown)
     block_ids = refs.load_block_ids(workspace / "evidence-blocks.json")
 
+    # Computed HERE, before anything appends, and not down in rule 5 where it used to
+    # live. §8's refusal has no verdict from the five, no coverage block and nothing to
+    # count, so every rule that presumes an assessment has to be able to scope itself
+    # off this flag -- and a flag computed halfway down invites the next rule to be
+    # written above it and hard-fail the one output that is always correct.
+    verdict = assessment.get("verdict")
+    refusing = verdict == vocab.REFUSAL
+
     # 0. The layer-1.5 backstop, mirrored from check_apply.py. modes/assess.md is
     #    loaded unconditionally on entering the mode; this is what makes that real.
     entry = enter_mode.latest_mode_entry(workspace, MODE)
@@ -204,12 +212,59 @@ def check(workspace: pathlib.Path, market_dir: pathlib.Path,
                             f"is nowhere in fit-assessment.md; attach it beside the "
                             f"thing it qualifies")
 
+    # 4b. The two fields those notices read. Neither is inferred and neither may be:
+    #     one is the candidate's own statement, the other is the posting's own words.
+    #     consistency.work_authorization_alignment returns None for anything outside
+    #     these sets, and None is indistinguishable from "the two agree" -- so a hyphen
+    #     in `needs-sponsorship` switches the notice off and leaves a clean-looking card.
+    status = assessment.get("declared_work_status")
+    if status is not None and status not in vocab.WORK_STATUS:
+        findings.append(f"BAD_WORK_STATUS: declared_work_status is {status!r}, not one "
+                        f"of {vocab.WORK_STATUS}; a value outside that set reads to the "
+                        f"work-authorization notices exactly like agreement")
+    for index, condition in enumerate(assessment.get("stated_conditions") or []):
+        condition = condition or {}
+        for field, allowed in (("type", vocab.CONDITION_TYPES),
+                               ("stance", vocab.STANCE)):
+            value = condition.get(field)
+            if value not in allowed:
+                findings.append(
+                    f"BAD_STATED_CONDITION: stated_conditions[{index}].{field} is "
+                    f"{value!r}, not one of {allowed}; the comparison that reads it "
+                    f"returns nothing rather than reporting a mismatch, so the row is "
+                    f"inert and looks like a row that found nothing")
+    # A WARNING, not a failure, and the asymmetry is the point. An ABSENT status
+    # suppresses both notices, which is the safe direction and is exactly what
+    # consistency.py intends by "the default must never trigger a downgrade"; §4's
+    # `screening: knockout` row is the primary path here, with NO_DISQUALIFIER_SECTION
+    # hard behind it. An absent `effort` below is the opposite case -- it makes the card
+    # PRINT something -- which is why that one is hard and this one is a line of text.
+    if not refusing and status is None:
+        findings.append("WARN_NO_WORK_STATUS: modes/assess.md §4 has you ask about work "
+                        "authorization; declared_work_status records the answer, and "
+                        "`unknown` is a legal answer. Without it the two work-auth "
+                        "notices cannot fire at all")
+
     # 5. The counting path is the only counting path.
     counts = coverage.coverage(assessment.get("requirements"))
     findings += counts["invalid"]
-    verdict = assessment.get("verdict")
-    refusing = verdict == vocab.REFUSAL
     if not refusing:
+        # The two lines of the card that are read off the TOP LEVEL rather than counted
+        # off the rows. count_coverage.py used to invent both when they were absent --
+        # `unclear` and `not_closable`, then again inside the zh label lookups -- and
+        # nothing could see it, because COUNT_MISMATCH compares render_block's output
+        # against render_block's output and two identical invented strings are equal.
+        # The card now prints "not assessed"; this is what says whose fault that is.
+        for field, allowed, code in (
+                ("level_direction", vocab.LEVEL_DIRECTION, "MISSING_LEVEL_DIRECTION"),
+                ("effort", vocab.EFFORT, "MISSING_EFFORT")):
+            value = assessment.get(field)
+            if value not in allowed:
+                findings.append(
+                    f"{code}: {field} is {value!r}, not one of {allowed}; the coverage "
+                    f"card prints this line, so leaving it unset ships "
+                    f"「{coverage.NOT_ASSESSED_ZH}」/'{coverage.NOT_ASSESSED_EN}' where "
+                    f"the reader expects a judgement — assess it or say why you cannot")
         rendered = [coverage.render_block(assessment, counts, lang) for lang in ("zh", "en")]
         if not any(block in markdown for block in rendered):
             findings.append("COUNT_MISMATCH: fit-assessment.md does not contain the "

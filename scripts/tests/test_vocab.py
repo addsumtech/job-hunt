@@ -42,6 +42,28 @@ def test_requirement_row_enums():
     assert vocab.EFFORT == ("quick", "evening", "multi_day", "not_closable")
 
 
+def test_the_top_level_assessment_enums():
+    """The fields the coverage card PRINTS, and the two the work-authorization
+    notices read. Before these lived here, `level_direction` was spelled in no
+    module at all and `declared_work_status`/`stance` in none either — so
+    count_coverage.py invented a value for a field no vocabulary defined, and a
+    typo in `stance` silently switched a notice off with nothing to compare
+    against."""
+    assert vocab.LEVEL_DIRECTION == ("step_up", "lateral", "step_down", "unclear")
+    assert vocab.WORK_STATUS == ("authorized", "needs_sponsorship",
+                                 "student_or_graduate", "temporary_route", "unknown")
+    assert vocab.CONDITION_TYPES == ("sponsorship", "work_authorization", "citizenship",
+                                     "clearance", "licence", "onsite_location", "other")
+    assert vocab.STANCE == ("requires_existing", "offers_support", "unclear")
+
+
+def test_unknown_is_a_work_status_and_not_an_absence():
+    """consistency.py treats a missing declared_work_status and an explicit
+    `unknown` identically — neither may downgrade anyone. The token has to be IN
+    the set for the mode file to be able to tell the model to write it."""
+    assert "unknown" in vocab.WORK_STATUS
+
+
 def test_mock_bands_are_unnumbered_and_contradicted_is_not_one_of_them():
     assert vocab.BANDS == ("not_present", "asserted", "instanced", "held_under_probe")
     assert vocab.CONTRADICTED == "contradicted"
@@ -54,7 +76,8 @@ def test_every_closed_set_is_an_immutable_tuple():
     """A list would let a caller append to the shared vocabulary at import
     time, and the drift this module exists to stop would come back invisible."""
     for name in ("VERDICTS", "MARKET_KEYS", "LEVELS", "SCREENING", "MATCH",
-                 "RECENCY", "EFFORT", "BANDS", "DEFECT_TAGS"):
+                 "RECENCY", "EFFORT", "LEVEL_DIRECTION", "WORK_STATUS",
+                 "CONDITION_TYPES", "STANCE", "BANDS", "DEFECT_TAGS"):
         assert isinstance(getattr(vocab, name), tuple), f"{name} must be a tuple"
     assert isinstance(vocab.VERDICT_ZH, dict)
 

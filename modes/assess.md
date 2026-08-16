@@ -129,6 +129,17 @@ Writing in English? The heading is `## Hard blockers`. Those two spellings are t
 ones `check_assessment.py` recognises — the section is a heading it has to find, so it
 is the one place here where the exact string matters.
 
+**Write the answer down, in the two §6 fields built for it.** What the posting demands
+goes in `stated_conditions` (a `type`, a `stance`, and an evidence ref to the JD block
+it came from); what the user told you goes in `declared_work_status` — their own words
+about their own status, never inferred, and `unknown` when the answer was not clear.
+`consistency.py` compares the two and prints `NOTICE_WORK_AUTH_CONFLICT` or
+`NOTICE_WORK_AUTH_VERIFY`, which always say *these two appear to conflict, check it
+yourself* and never *you are not eligible*. Asking and then not recording the answer
+leaves those notices unable to fire at all (`WARN_NO_WORK_STATUS`), and a misspelled
+token switches them off silently (`BAD_WORK_STATUS`, `BAD_STATED_CONDITION`). This is a
+second line behind the knockout row below, not a replacement for it.
+
 Write the barrier in your own words, in the reader's language — paraphrase is expected
 and correct. The **id** is the mechanical handle, and it is what `check_assessment.py`
 looks for: `NO_DISQUALIFIER_SECTION` when the section is absent,
@@ -150,10 +161,73 @@ profile. Do not hand-write `evidence-blocks.json`; it is derived.
 resolves guarantees the claim points at something real. It does **not** guarantee the
 claim follows from it. It is a plausibility bound, not a proof.
 
-## 6. The requirement table
+## 6. `fit-assessment.yaml` — the complete schema
 
-One row per must-have and per named responsibility. This schema is defined here and
-nowhere else; `check_assessment.py` requires it.
+This schema is defined here and nowhere else; `check_assessment.py` requires it. It has
+two halves and for a while only the second one was written down. The requirement rows
+were here; the **top-level fields** were not, and three scripts read them. A field this
+file never names is a field a faithful run never writes — and `count_coverage.py` then
+had to print two of them anyway.
+
+**The top level. `level_direction` and `effort` are PRINTED on the coverage card in §7.**
+
+```yaml
+market: cn                      # vocab.MARKET_KEYS (cn | nl | de | uk | us), or
+                                # vocab.NO_MARKET ("other") when no table applies.
+                                # Never "none" — the sixth token is "other" everywhere.
+verdict: worth_applying         # one of the five, or insufficient_evidence
+provisional: false              # always false in an assessment; discover rows carry true
+effort: evening                 # overall: quick | evening | multi_day | not_closable
+level_direction: lateral        # step_up | lateral | step_down | unclear
+declared_work_status: needs_sponsorship
+                                # authorized | needs_sponsorship | student_or_graduate
+                                # | temporary_route | unknown
+stated_conditions:              # work-authorization style conditions read off the posting
+  - type: sponsorship           # sponsorship | work_authorization | citizenship | clearance
+                                # | licence | onsite_location | other
+    stance: requires_existing   # requires_existing | offers_support | unclear
+    evidence: [{ref: JD-004}]
+actions:                        # the single authoritative to-do list
+  - action: "Publish the torchrun port"
+    acceptance: "Repo README shows a two-GPU run log"
+    when: before_apply          # now | before_apply | later
+conventions_rendered: [cn-boss-profile-is-the-screen]
+```
+
+`effort` appears twice in this file and prices two different things on one scale: at the
+top level, closing the remaining gaps **as a whole**; on a row, closing **that row**.
+Nothing compares the two automatically — set the top-level one by reading your own rows,
+because a `not_closable` above a table of `evening`s is a contradiction only a reader
+will catch. What `consistency.py` does check is the top-level `effort` against the
+**verdict**: `strong_apply` beside `multi_day` or `not_closable` prints
+`NOTICE_VERDICT_EFFORT`. Note what that means for leaving the field out — it reads the
+raw field, so an absent `effort` fired nothing while the card printed 「补不上」 anyway.
+The detector built for exactly that contradiction could not see it, because the
+contradiction existed only on the card.
+
+**These two are not optional, and the reason is that the card prints them.**
+`count_coverage.py` used to fill an absent `level_direction` with `unclear` and an absent
+`effort` with `not_closable` — and then again inside its Chinese label lookups, so the
+default `--lang zh` card invented a value even after the obvious defaults were removed.
+The result shipped 「投递建议：强烈建议投」 directly above 「可补缺口所需投入：补不上」 on
+an assessment whose only gapped row said `effort: evening` and carried a `how_to_close`,
+with every gate at exit 0. A card is allowed to say **nobody judged this** — it renders
+「未评估」 / `not assessed` — but it may never invent the most pessimistic value and print
+it in the same column as an assessed one. `check_assessment.py` fails with
+`MISSING_LEVEL_DIRECTION` and `MISSING_EFFORT` when either is absent or out of enum, on
+every verdict except the §8 refusal, where by design there is no card to print.
+
+`declared_work_status` is the user's **own statement**, from the §4 question — never
+inferred from a name, a university, or a location. `unknown` is a real answer and the
+right one when you did not get a clear reply; it suppresses both work-authorization
+notices, which is the safe direction, so `check_assessment.py` only warns
+(`WARN_NO_WORK_STATUS`) when the field is missing. What it does **not** tolerate is a
+value outside the set: `consistency.py` compares a `stance` against this field and
+returns nothing for any token it does not recognise, so a hyphen in `needs-sponsorship`
+switches the notice off and leaves a card that looks clean. That is `BAD_WORK_STATUS`,
+and `BAD_STATED_CONDITION` for the same fault in a `type` or a `stance`.
+
+**The requirement rows.** One row per must-have and per named responsibility.
 
 ```yaml
 requirements:
@@ -196,6 +270,14 @@ must-have 强证据：   8 of 11   （partial 2，gap 1，无证据 0）
 
 `强证据` counts `strong` only. `partial` and `gap` are never merged into a covered
 number. Evidence that is only `dated` counts as `partial`.
+
+The middle three lines come from three different places, and mixing them up is how a
+card ends up stating something nobody worked out. The two count lines are computed off
+the §6 rows. 「职级匹配」 and 「可补缺口所需投入」 are read **straight off the top-level
+`level_direction` and `effort`** — nothing derives them from the rows. Leave either unset
+and the line reads 「未评估」 (`not assessed` on the English card) and
+`check_assessment.py` fails: that token means *nobody judged this*, and it is never a
+value you may write into the YAML.
 
 **Required disclaimer, immediately under the block. Ship one of these two, unchanged:**
 
@@ -319,6 +401,12 @@ say this passed.
 - [ ] Disqualifiers were asked about, and a `## 硬性阻断项` section names each blocking
       row **by id**, **before** the verdict.
 - [ ] Every requirement row prints its evidence reference; no block id appears in prose.
+- [ ] `fit-assessment.yaml` carries the top-level fields too, not just the rows:
+      `level_direction` and `effort` are both set and both in enum — the card prints
+      them, and 「未评估」 on a shipped card means nobody judged a line the reader will
+      read as judged.
+- [ ] The §4 work-authorization answer is recorded: `declared_work_status` (`unknown`
+      is a legal answer) and a `stated_conditions` entry for what the posting demands.
 - [ ] The coverage block is the one `count_coverage.py` produced, byte for byte.
 - [ ] The disclaimer is present, unchanged, directly under the block.
 - [ ] No percentage, no `n/m` score, no prediction word — except a quoted employer

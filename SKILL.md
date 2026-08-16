@@ -508,7 +508,7 @@ a fabrication the candidate then repeats back), and the shortlist's `why_matched
 | Contradictions | `scripts/consistency.py` | verdict vs effort, loose knockouts, gaps with no action, work-authorization conflicts — reports, never repairs |
 | Coverage counts | `scripts/count_coverage.py` | the only count-producing path; a hand-written second number cannot be reconciled |
 | Market tables | `scripts/check_conventions.py` | digits/percent in prose, source provenance, protected traits, duplicate ids, expired `review_by` (CI-hard) |
-| Assess | `scripts/check_assessment.py` | composes the six above and requires their receipts; disclaimer, disqualifier section, the 「那该怎么办」 half, verbatim conventions, stale-review banner |
+| Assess | `scripts/check_assessment.py` | composes the six above and requires their receipts; disclaimer, disqualifier section, the 「那该怎么办」 half, verbatim conventions, stale-review banner; a top-level `level_direction` or `effort` the card prints but nobody assessed, and a work-authorization token spelled outside its set |
 | Migration losslessness (CI only) | `scripts/check_skill_lossless.py` | a baseline line that exists nowhere in this tree |
 | Adapter classification | `scripts/check_opencli_result.py` | *(wrapper, not a gate)* a non-zero exit, a login wall, a platform stop-signal, or an empty identity field |
 | Read-only | `scripts/check_no_write.py` | a journaled command whose published `access:` is `write`, or whose access cannot be resolved at all |
