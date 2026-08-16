@@ -44,10 +44,19 @@ def _help_yaml(site, cache_dir, allow_fetch, timeout=60):
 def load_site_metadata(site, cache_dir=None, allow_fetch=True):
     """{command-or-alias: {"name": canonical, "access": "read"|"write"|None}}."""
     text = _help_yaml(site, cache_dir, allow_fetch)
+    # journal.load_yaml is path-based and this is a STRING captured from a
+    # subprocess, so the same three shapes are handled here by hand — including the
+    # third one, which was missing: `--help -f yaml` printing a bare string or a list
+    # made `doc.get("commands")` raise AttributeError, and an AttributeError is not a
+    # MetadataUnavailable, so the caller's could-not-run path never saw it.
     try:
         doc = yaml.safe_load(text) or {}
     except yaml.YAMLError as exc:
         raise MetadataUnavailable(f"{site}: help yaml did not parse: {exc}") from exc
+    if not isinstance(doc, dict):
+        raise MetadataUnavailable(
+            f"{site}: help yaml parses to a {type(doc).__name__}, not a mapping — "
+            f"there is no commands: table to read off it")
     table = {}
     for command in doc.get("commands") or []:
         if not isinstance(command, dict):

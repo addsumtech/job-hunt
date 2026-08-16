@@ -131,6 +131,33 @@ def test_an_expired_review_by_fails(tmp_path):
                for f in cck.check_file(write(tmp_path, data), TODAY))
 
 
+def test_a_well_shaped_but_impossible_date_is_a_finding_not_a_crash(tmp_path):
+    """`2026-13-45` satisfies `^\\d{4}-\\d{2}-\\d{2}$` and then explodes inside
+    date.fromisoformat. The ValueError escaped check_file, aborted the entry loop, and
+    took every finding already collected with it — so the one table with a typo in a
+    date reported nothing at all about its other twelve entries."""
+    data = mutate(review_by="2026-13-45",
+                  text_en="Employers here weigh nationality when shortlisting.",
+                  text_zh="这里的雇主在初筛时会看国籍。")
+    findings = cck.check_file(write(tmp_path, data), TODAY)
+    assert any(f.startswith("BAD_DATE:") and "2026-13-45" in f for f in findings)
+    # The findings collected before the bad date must survive it.
+    assert any(f.startswith("PROTECTED_TRAIT:") for f in findings)
+
+
+def test_an_impossible_added_date_is_also_a_finding(tmp_path):
+    data = mutate(added="2026-02-30")
+    assert any(f.startswith("BAD_DATE:") and "2026-02-30" in f
+               for f in cck.check_file(write(tmp_path, data), TODAY))
+
+
+def test_an_ordinary_pair_of_dates_produces_no_date_finding(tmp_path):
+    """The quiet direction: 2026-08-09 / 2027-02-09 are real dates and must stay
+    silent, or BAD_DATE becomes the line everyone skips."""
+    assert not [f for f in cck.check_file(write(tmp_path, GOOD), TODAY)
+                if f.startswith("BAD_DATE:")]
+
+
 def test_a_duplicate_id_fails(tmp_path):
     data = json.loads(json.dumps(GOOD))
     data["conventions"].append(json.loads(json.dumps(GOOD["conventions"][0])))

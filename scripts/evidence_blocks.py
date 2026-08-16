@@ -110,10 +110,20 @@ def split_into_chunks(text: str) -> list[str]:
     return [c for c in chunks if len(c) >= MIN_CHUNK_CHARS]
 
 
-def build_blocks(text: str, prefix: str, source: str) -> list[dict]:
-    chunks = split_into_chunks(text)[:MAX_BLOCKS_PER_SOURCE]
-    return [{"id": f"{prefix}-{index + 1:03d}", "source": source, "text": chunk}
-            for index, chunk in enumerate(chunks)]
+def build_blocks(text: str, prefix: str, source: str) -> tuple[list[dict], int]:
+    """(blocks, chunks the source actually produced).
+
+    The second value is returned rather than discarded because the ceiling below it
+    is a DELETION. Measured on a 147KB posting: 129 chunks, 80 kept, 39% of the
+    document gone — and the receipt read `BLOCKS: 81`, which is exactly what a
+    complete run of a shorter posting looks like. Every analytical sentence in an
+    assessment is supposed to point at a block; a citation into the dropped tail
+    cannot resolve, and there was nothing anywhere saying a tail existed.
+    """
+    chunks = split_into_chunks(text)
+    kept = chunks[:MAX_BLOCKS_PER_SOURCE]
+    return ([{"id": f"{prefix}-{index + 1:03d}", "source": source, "text": chunk}
+             for index, chunk in enumerate(kept)], len(chunks))
 
 
 def flatten_yaml_to_text(obj, prefix: str = "") -> str:
@@ -137,24 +147,38 @@ def flatten_yaml_to_text(obj, prefix: str = "") -> str:
 
 
 def read_source(path: pathlib.Path) -> str:
-    raw = path.read_text(encoding="utf-8")
+    """The source as text. Raises journal.YamlUnreadable on an unusable input.
+
+    Both branches raise it — a .txt that cannot be read is the same class of failure
+    as a .yaml that cannot be parsed, and main() routes both to the same cannot_run.
+    Silently returning "" instead would produce ZERO blocks, and zero blocks is a
+    state the rest of assess mode reads as "the posting says nothing".
+    """
     if path.suffix.lower() in {".yaml", ".yml"}:
-        import yaml
-        return flatten_yaml_to_text(yaml.safe_load(raw) or {})
-    return raw
+        return flatten_yaml_to_text(journal.load_yaml(path))
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise journal.YamlUnreadable(path, f"is not valid UTF-8 ({exc.reason})") from exc
+    except OSError as exc:
+        raise journal.YamlUnreadable(
+            path, f"could not be read ({exc.strerror or exc})") from exc
 
 
-def cannot_run(workspace: pathlib.Path, reason: str) -> int:
+def cannot_run(workspace: pathlib.Path, reason: str, code: str = "NO_INPUT") -> int:
     """Exactly one receipt on the could-not-run path, then exit 2.
 
     A skipped gate produces no output, and no output looks exactly like a clean run --
     so the one state that most needs a receipt is this one. The exception is a
     workspace directory that is not there: nothing to append to, and conjuring one
     would leave a journal for a run that never happened.
+
+    `code` is NO_INPUT for a file that is absent and journal.UNREADABLE_INPUT for one
+    that is present and unusable. Those are different instructions to the reader.
     """
     print(f"cannot run: {reason}", file=sys.stderr)
     if workspace.is_dir():
-        journal.receipt(workspace, GATE, {}, "could_not_run", [f"NO_INPUT: {reason}"])
+        journal.receipt(workspace, GATE, {}, "could_not_run", [f"{code}: {reason}"])
     return 2
 
 
@@ -177,8 +201,23 @@ def main(argv: list[str] | None = None) -> int:
         if not path.exists():
             return cannot_run(workspace, f"{label} not found at {path}")
 
-    blocks = build_blocks(read_source(jd_path), "JD", "jd")
-    blocks += build_blocks(read_source(cv_path), "CV", "cv")
+    blocks: list[dict] = []
+    findings: list[str] = []
+    for prefix, source, path in (("JD", "jd", jd_path), ("CV", "cv", cv_path)):
+        try:
+            text = read_source(path)
+        except journal.YamlUnreadable as exc:
+            return cannot_run(workspace, str(exc), journal.UNREADABLE_INPUT)
+        produced, total = build_blocks(text, prefix, source)
+        blocks += produced
+        if total > MAX_BLOCKS_PER_SOURCE:
+            findings.append(
+                f"SOURCE_TRUNCATED: {path.name} produced {total} blocks and only the "
+                f"first {MAX_BLOCKS_PER_SOURCE} were kept — {total - MAX_BLOCKS_PER_SOURCE} "
+                f"were dropped, so nothing in the assessment can cite the tail of this "
+                f"source and a citation into it will simply not resolve. Split the "
+                f"source, or say in the assessment which part of it was read")
+
     payload = {
         "generated_at": _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "sources": {
@@ -192,8 +231,10 @@ def main(argv: list[str] | None = None) -> int:
     journal.receipt(
         workspace, GATE,
         {"jd": payload["sources"]["jd"]["sha256"], "cv": payload["sources"]["cv"]["sha256"]},
-        "recorded", [f"BLOCKS: {len(blocks)}"])
+        "recorded", [f"BLOCKS: {len(blocks)}"] + findings)
     print(f"BLOCKS: {len(blocks)} written to {out_path}")
+    for finding in findings:
+        print(finding)
     return 0
 
 

@@ -57,7 +57,6 @@ import journal  # noqa: E402
 import lint_no_prediction as prediction  # noqa: E402
 import paths  # noqa: E402
 import vocab  # noqa: E402
-import yaml  # noqa: E402
 
 GATE = "check_assessment"
 MODE = "assess"
@@ -125,11 +124,15 @@ def _first_section(lines: list[str], headings) -> tuple[int, list[str]] | None:
     return None
 
 
-def cannot_run(workspace: pathlib.Path, reason: str) -> int:
-    """Exactly one receipt on the could-not-run path, then exit 2."""
+def cannot_run(workspace: pathlib.Path, reason: str, code: str = "NO_INPUT") -> int:
+    """Exactly one receipt on the could-not-run path, then exit 2.
+
+    `code` is NO_INPUT for a file that is absent and journal.UNREADABLE_INPUT for one
+    that is present and unusable. Those are different instructions to the reader.
+    """
     print(f"cannot run: {reason}", file=sys.stderr)
     if workspace.is_dir():
-        journal.receipt(workspace, GATE, {}, "could_not_run", [f"NO_INPUT: {reason}"])
+        journal.receipt(workspace, GATE, {}, "could_not_run", [f"{code}: {reason}"])
     return 2
 
 
@@ -137,8 +140,10 @@ def check(workspace: pathlib.Path, market_dir: pathlib.Path,
           today: datetime.date, skill_root: pathlib.Path | None = None) -> list[str]:
     findings: list[str] = []
     root = pathlib.Path(skill_root) if skill_root else paths.SKILL_ROOT
-    assessment = yaml.safe_load(
-        (workspace / "fit-assessment.yaml").read_text(encoding="utf-8")) or {}
+    # Raises journal.YamlUnreadable, which main() routes to cannot_run. Deliberately
+    # not caught here: check() returns findings, and a findings list is exactly what
+    # "the gate could not read its input" must NOT be reported as.
+    assessment = journal.load_yaml(workspace / "fit-assessment.yaml")
     markdown = (workspace / "fit-assessment.md").read_text(encoding="utf-8")
     lines = markdown.splitlines()
     squeezed = _squeeze(markdown)
@@ -401,7 +406,10 @@ def main(argv: list[str] | None = None) -> int:
         if not path.exists():
             return cannot_run(workspace, f"{path.name} not found at {path}")
 
-    findings = check(workspace, market_dir, today, skill_root)
+    try:
+        findings = check(workspace, market_dir, today, skill_root)
+    except journal.YamlUnreadable as exc:
+        return cannot_run(workspace, str(exc), journal.UNREADABLE_INPUT)
     hard = [f for f in findings if not f.startswith("WARN_")]
     for finding in findings:
         print(finding)

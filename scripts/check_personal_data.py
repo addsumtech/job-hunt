@@ -15,8 +15,6 @@ import argparse
 import pathlib
 import sys
 
-import yaml
-
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import journal
 import render_cv
@@ -65,7 +63,13 @@ def main(argv=None) -> int:
         print(f"cannot run {GATE}: {path} does not exist", file=sys.stderr)
         return 2
 
-    profile = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    try:
+        profile = journal.load_yaml(path)
+    except journal.YamlUnreadable as exc:
+        journal.receipt(ws, GATE, {}, "could_not_run", [exc.finding])
+        print(f"cannot run {GATE}: {exc}", file=sys.stderr)
+        return 2
+
     findings = findings_for(profile)
     for f in findings:
         print(f)

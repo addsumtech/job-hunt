@@ -312,6 +312,11 @@ def test_a_failed_mode_entry_leaves_a_trace_in_the_journal(tmp_path):
     root = tmp_path / "skill"
     (root / "modes").mkdir(parents=True)
     ws = tmp_path / "ws"
+    # The workspace has to exist for this test to be about what it says it is about.
+    # enter_mode no longer creates it — see scripts/tests/test_enter_mode.py — and a
+    # non-existent workspace exits 2 on a different branch, before the mode file is
+    # ever looked at, so it would pass this test while proving nothing about traces.
+    ws.mkdir()
     assert enter_mode.main(["--workspace", str(ws), "--mode", "apply",
                             "--skill-root", str(root)]) == 2
     recs = [json.loads(l) for l in

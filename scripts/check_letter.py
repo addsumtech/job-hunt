@@ -21,7 +21,6 @@ import re
 import sys
 import unicodedata
 
-import yaml
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import journal
@@ -119,8 +118,13 @@ def main(argv=None) -> int:
             journal.receipt(ws, GATE, {}, "could_not_run", [f"MISSING_INPUT: {p}"])
             print(f"cannot run {GATE}: {p} does not exist", file=sys.stderr)
             return 2
-    letter = yaml.safe_load(lp.read_text(encoding="utf-8")) or {}
-    posting = yaml.safe_load(pp.read_text(encoding="utf-8")) or {}
+    try:
+        letter = journal.load_yaml(lp)
+        posting = journal.load_yaml(pp)
+    except journal.YamlUnreadable as exc:
+        journal.receipt(ws, GATE, {}, "could_not_run", [exc.finding])
+        print(f"cannot run {GATE}: {exc}", file=sys.stderr)
+        return 2
     findings = findings_for(letter, posting)
     for f in findings:
         print(f)

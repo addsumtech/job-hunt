@@ -30,7 +30,6 @@ import sys
 import unicodedata
 import zlib
 
-import yaml
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import journal
@@ -363,7 +362,12 @@ def main(argv=None) -> int:
 
     today_year = int((args.today or
                       datetime.date.today().isoformat())[:4])
-    profile = yaml.safe_load(prof.read_text(encoding="utf-8")) or {}
+    try:
+        profile = journal.load_yaml(prof)
+    except journal.YamlUnreadable as exc:
+        journal.receipt(ws, GATE, {}, "could_not_run", [exc.finding])
+        print(f"cannot run {GATE}: {exc}", file=sys.stderr)
+        return 2
     findings = findings_for(cv, profile, today_year, letter)
     for f in findings:
         print(f)

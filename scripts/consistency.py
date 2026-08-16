@@ -34,7 +34,6 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 import journal  # noqa: E402
 import vocab  # noqa: E402
-import yaml  # noqa: E402
 
 GATE = "consistency"
 
@@ -55,11 +54,15 @@ NOTICE_CODES = ("NOTICE_VERDICT_EFFORT", "NOTICE_LOOSE_KNOCKOUTS", "NOTICE_GAP_A
                 "NOTICE_WORK_AUTH_CONFLICT", "NOTICE_WORK_AUTH_VERIFY")
 
 
-def cannot_run(workspace: pathlib.Path, reason: str) -> int:
-    """Exactly one receipt on the could-not-run path, then exit 2."""
+def cannot_run(workspace: pathlib.Path, reason: str, code: str = "NO_INPUT") -> int:
+    """Exactly one receipt on the could-not-run path, then exit 2.
+
+    `code` is NO_INPUT for a file that is absent and journal.UNREADABLE_INPUT for one
+    that is present and unusable. Those are different instructions to the reader.
+    """
     print(f"cannot run: {reason}", file=sys.stderr)
     if workspace.is_dir():
-        journal.receipt(workspace, GATE, {}, "could_not_run", [f"NO_INPUT: {reason}"])
+        journal.receipt(workspace, GATE, {}, "could_not_run", [f"{code}: {reason}"])
     return 2
 
 
@@ -232,7 +235,10 @@ def main(argv: list[str] | None = None) -> int:
         return cannot_run(args.workspace,
                           f"fit-assessment.yaml not found at {path}")
 
-    assessment = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    try:
+        assessment = journal.load_yaml(path)
+    except journal.YamlUnreadable as exc:
+        return cannot_run(args.workspace, str(exc), journal.UNREADABLE_INPUT)
     findings = [f"{n['code']}: {n['text_en']}" for n in notices(assessment)]
     for finding in findings:
         print(finding)

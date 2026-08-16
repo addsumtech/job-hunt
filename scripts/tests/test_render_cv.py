@@ -817,5 +817,8 @@ def test_the_shipped_example_and_fixtures_satisfy_their_own_schema(tmp_path):
     for rel in ("assets/profile.example.yaml",
                 "scripts/tests/fixtures/full_profile.yaml",
                 "scripts/tests/fixtures/sample_profile.yaml"):
+        # Through load_profile, which is what a user's run actually calls: it parses
+        # with journal.load_yaml and applies this same rule, so a fixture that fails
+        # it raises here with the field names rather than yielding a bare [] mismatch.
         assert render_cv.missing_required_fields(
-            render_cv.yaml.safe_load((root / rel).read_text(encoding="utf-8"))) == [], rel
+            render_cv.load_profile(root / rel)) == [], rel

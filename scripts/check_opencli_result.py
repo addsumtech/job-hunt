@@ -67,10 +67,16 @@ DEFAULT_SIGNALS_FILE = paths.SKILL_ROOT / "references" / "risk-control-signals.y
 
 
 def load_signals(path):
-    """Compile references/risk-control-signals.yaml into matchers."""
+    """Compile references/risk-control-signals.yaml into matchers.
+
+    Raises journal.YamlUnreadable, which main() turns into exit 2. An empty matcher
+    list on a file that failed to parse would be the worst outcome available here:
+    every risk-control signal would stop matching and the classifier would report
+    `ok` on a login wall.
+    """
     if path is None or not pathlib.Path(path).is_file():
         return []
-    data = yaml.safe_load(pathlib.Path(path).read_text(encoding="utf-8")) or {}
+    data = journal.load_yaml(path)
     out = []
     for entry in data.get("signals") or []:
         pattern = entry.get("pattern")
@@ -318,8 +324,16 @@ def main(argv=None):
         except json.JSONDecodeError:
             auth_rows = None
 
+    # Not a gate — this wrapper appends an adapter_call record, never a receipt — so
+    # exit 2 and a message on stderr is the whole of "could not run" available here.
+    try:
+        signals = load_signals(args.signals_file)
+    except journal.YamlUnreadable as exc:
+        print(f"{journal.UNREADABLE_INPUT}: {exc}", file=sys.stderr)
+        return 2
+
     result = classify(args.site, args.command, args.exit_code, stdout_text,
-                      stderr_text, auth_rows, load_signals(args.signals_file))
+                      stderr_text, auth_rows, signals)
 
     record = dict(result)
     record["action"] = ADAPTER_CALL_ACTION

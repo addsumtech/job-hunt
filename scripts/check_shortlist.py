@@ -19,7 +19,6 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-import yaml  # noqa: E402
 
 import journal  # noqa: E402  (Plan 1)
 import enter_mode  # noqa: E402  (Plan 1)
@@ -455,22 +454,17 @@ def main(argv=None):
     if not shortlist_path.is_file():
         return _fail_to_run(workspace, f"missing input: {shortlist_path}")
     try:
-        shortlist = yaml.safe_load(shortlist_path.read_text(encoding="utf-8")) or {}
-    except yaml.YAMLError as exc:
-        return _fail_to_run(workspace, f"unparsable shortlist.yaml: {exc}")
-    if not isinstance(shortlist, dict):
-        return _fail_to_run(
-            workspace, "shortlist.yaml must be a mapping with a `rows:` list")
+        shortlist = journal.load_yaml(shortlist_path)
+    except journal.YamlUnreadable as exc:
+        return _fail_to_run(workspace, exc.finding)
 
     brief_path = workspace / "brief.yaml"
     if not brief_path.is_file():
         return _fail_to_run(workspace, f"missing input: {brief_path}")
     try:
-        brief = yaml.safe_load(brief_path.read_text(encoding="utf-8")) or {}
-    except yaml.YAMLError as exc:
-        return _fail_to_run(workspace, f"unparsable brief.yaml: {exc}")
-    if not isinstance(brief, dict):
-        return _fail_to_run(workspace, "brief.yaml must be a mapping")
+        brief = journal.load_yaml(brief_path)
+    except journal.YamlUnreadable as exc:
+        return _fail_to_run(workspace, exc.finding)
 
     md_path = workspace / "shortlist.md"
     md_text = (md_path.read_text(encoding="utf-8", errors="replace")

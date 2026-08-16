@@ -46,11 +46,15 @@ _BRACKETED = re.compile(
     r"[\(（\[【]\s*(?:CV|JD)-\d{3}(?:\s*[,、;；]\s*(?:CV|JD)-\d{3})*\s*[\)）\]】]")
 
 
-def cannot_run(workspace: pathlib.Path, reason: str) -> int:
-    """Exactly one receipt on the could-not-run path, then exit 2."""
+def cannot_run(workspace: pathlib.Path, reason: str, code: str = "NO_INPUT") -> int:
+    """Exactly one receipt on the could-not-run path, then exit 2.
+
+    `code` is NO_INPUT for a file that is absent and journal.UNREADABLE_INPUT for one
+    that is present and unusable. Those are different instructions to the reader.
+    """
     print(f"cannot run: {reason}", file=sys.stderr)
     if workspace.is_dir():
-        journal.receipt(workspace, GATE, {}, "could_not_run", [f"NO_INPUT: {reason}"])
+        journal.receipt(workspace, GATE, {}, "could_not_run", [f"{code}: {reason}"])
     return 2
 
 
@@ -135,7 +139,10 @@ def main(argv: list[str] | None = None) -> int:
         findings.append("NO_BLOCKS: evidence-blocks.json holds no blocks; "
                         "re-run evidence_blocks.py before assessing")
 
-    assessment = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+    try:
+        assessment = journal.load_yaml(yaml_path)
+    except journal.YamlUnreadable as exc:
+        return cannot_run(workspace, str(exc), journal.UNREADABLE_INPUT)
     assessment, ref_findings = drop_unresolvable_refs(assessment, ids)
     findings += ref_findings
 

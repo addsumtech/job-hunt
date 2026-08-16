@@ -11,7 +11,16 @@ Exit 0 = entered. Exit 2 = the mode file does not exist; a `mode_entry_failed`
 record is written first, because a failed entry that left no trace looks exactly
 like an entry nobody attempted — the same silence the record exists to break.
 
-Usage: python3 scripts/enter_mode.py --workspace W --mode apply
+Exit 2 also, and with NOTHING written, when the WORKSPACE does not exist. This
+script does not create it. paths.py and four separate gates carry the same
+sentence about why — "a helper that created directories would materialise an
+empty workspace on a typo, and the resume lookup would then find a shell" — and
+this was the one script that defeated it, because journal.append() mkdirs. One
+mistyped --workspace left a directory holding a single mode_entry line, which
+`paths.workspace()`'s <company>-<role>-<date> lookup then finds by shape and
+offers to resume from. Make the directory first; the mode files say so.
+
+Usage: mkdir -p W && python3 scripts/enter_mode.py --workspace W --mode apply
 """
 from __future__ import annotations
 
@@ -60,6 +69,14 @@ def main(argv=None) -> int:
     root = pathlib.Path(args.skill_root) if args.skill_root else paths.SKILL_ROOT
     path = paths.mode_file(args.mode, root)
     ws = pathlib.Path(args.workspace)
+    # Checked BEFORE the mode file, because the mode-file branch journals — and
+    # journaling into a workspace that is not there is what creates it.
+    if not ws.is_dir():
+        print(f"cannot enter mode {args.mode}: workspace {ws} does not exist. "
+              f"Create it first (mkdir -p) — this script will not, because a typo "
+              f"would leave an empty workspace that the resume lookup finds by name "
+              f"and offers to continue from.", file=sys.stderr)
+        return 2
     if not path.exists():
         journal.append(ws, {
             "ts": _now(),

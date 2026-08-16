@@ -31,7 +31,6 @@ import pathlib
 import re
 import sys
 
-import yaml
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import enter_mode
@@ -274,12 +273,13 @@ def check_question_log(path: pathlib.Path, today: datetime.date) -> list:
             f"NO_QUESTION_LOG: {path} is missing — modes/interview.md requires the log "
             "seeded before the round, and it is the only record of where a question came from"
         ]
+    # A finding, not exit 2: the docstring's split holds — question-log.yaml is a
+    # required OUTPUT of the mode, so anything wrong with it is the defect being
+    # reported, not a reason the gate could not run.
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    except yaml.YAMLError as exc:
-        return [f"QUESTION_LOG_UNPARSEABLE: {path}: {exc}"]
-    if not isinstance(data, dict):
-        return [f"QUESTION_LOG_UNPARSEABLE: {path}: top level is not a mapping"]
+        data = journal.load_yaml(path)
+    except journal.YamlUnreadable as exc:
+        return [f"QUESTION_LOG_UNPARSEABLE: {exc}"]
 
     findings: list = []
     posting_country = str(data.get("posting_country") or "").strip().upper()
@@ -499,11 +499,11 @@ def check_walkback(blocks: dict, brief_path: pathlib.Path, claims_path: pathlib.
     promoted = []
     if claims_path.exists():
         try:
-            rows = yaml.safe_load(claims_path.read_text(encoding="utf-8")) or []
-        except yaml.YAMLError as exc:
-            findings.append(f"CLAIMS_UNPARSEABLE: {claims_path}: {exc}")
+            rows = journal.load_yaml(claims_path, expect=list)
+        except journal.YamlUnreadable as exc:
+            findings.append(f"CLAIMS_UNPARSEABLE: {exc}")
             rows = []
-        for row in rows if isinstance(rows, list) else []:
+        for row in rows:
             if not isinstance(row, dict) or row.get("source_kind") != "session-answer":
                 continue
             if transcript_name not in str(row.get("source_ref", "")):

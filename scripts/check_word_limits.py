@@ -29,7 +29,6 @@ import pathlib
 import re
 import sys
 
-import yaml
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import journal
@@ -114,7 +113,12 @@ def main(argv=None) -> int:
             journal.receipt(ws, GATE, {}, "could_not_run", [f"MISSING_INPUT: {p}"])
             print(f"cannot run {GATE}: {p} does not exist", file=sys.stderr)
             return 2
-    posting = yaml.safe_load(pp.read_text(encoding="utf-8")) or {}
+    try:
+        posting = journal.load_yaml(pp)
+    except journal.YamlUnreadable as exc:
+        journal.receipt(ws, GATE, {}, "could_not_run", [exc.finding])
+        print(f"cannot run {GATE}: {exc}", file=sys.stderr)
+        return 2
     findings = findings_for(sp.read_text(encoding="utf-8"), posting)
     for f in findings:
         print(f)

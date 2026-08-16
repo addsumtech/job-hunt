@@ -60,7 +60,6 @@ import re
 import sys
 import unicodedata
 
-import yaml
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import journal
@@ -472,17 +471,22 @@ def main(argv=None) -> int:
     else:
         now = journal.sha256_file(master)
         try:
-            loaded = yaml.safe_load(master.read_text(encoding="utf-8"))
-            master_profile = loaded if isinstance(loaded, dict) else {}
+            master_profile = journal.load_yaml(master)
             readable = True
-        except yaml.YAMLError as exc:
+        except journal.YamlUnreadable as exc:
             # The gate compares against PARSED fields, so a master it cannot parse
             # is a gate that verified nothing. Say that, and do not then emit an
             # UNSOURCED line for every term in the CV: a flood derived from a file
             # nobody could read is noise, and noise is what makes findings ignorable.
-            findings.append(f"MASTER_UNREADABLE: {master} is not parseable YAML "
-                            f"({str(exc).splitlines()[0]}) — no claim was verified "
-                            f"against it; fix the master and re-run")
+            #
+            # A finding rather than exit 2, and that is the deliberate divergence:
+            # the master lives OUTSIDE the workspace, MASTER_MUTATED and
+            # MASTER_TOUCHED below are findings about that same file, and the other
+            # half of this gate — the claims index, the tailored profile — still has
+            # something to say. `readable` stays False, so nothing downstream treats
+            # the empty mapping as a verified master.
+            findings.append(f"MASTER_UNREADABLE: {exc.reason} — no claim was verified "
+                            f"against {master}; fix the master and re-run")
         if now != fp["sha256"]:
             findings.append(f"MASTER_MUTATED: profile.yaml content changed during this "
                             f"run ({fp['sha256'][:12]}… → {now[:12]}…) — the master "
@@ -493,11 +497,21 @@ def main(argv=None) -> int:
                             f"run though its content is identical — something wrote to "
                             f"the master; confirm nothing is editing it")
 
-    tailored = yaml.safe_load(tailored_path.read_text(encoding="utf-8")) or {}
-    claims_path = ws / "claims.yaml"
-    claims = []
-    if claims_path.exists():
-        claims = yaml.safe_load(claims_path.read_text(encoding="utf-8")) or []
+    # Both exit 2, unlike the master above, and for the reason the master is the
+    # exception: these two ARE the comparison. A claims.yaml that is present and
+    # unreadable is not the same as one that is absent — absent honestly means
+    # "nothing was sourced" and every UNSOURCED line that follows is true, while
+    # unreadable would print that same flood about a file that may well have sourced
+    # every one of them.
+    try:
+        tailored = journal.load_yaml(tailored_path)
+        claims_path = ws / "claims.yaml"
+        claims = (journal.load_yaml(claims_path, expect=list)
+                  if claims_path.exists() else [])
+    except journal.YamlUnreadable as exc:
+        journal.receipt(ws, GATE, {}, "could_not_run", [exc.finding])
+        print(f"cannot run {GATE}: {exc}", file=sys.stderr)
+        return 2
     live, retracted, claim_findings = _claim_index(claims)
     findings += claim_findings
 

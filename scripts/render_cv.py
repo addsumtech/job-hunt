@@ -29,7 +29,13 @@ import subprocess
 import sys
 import unicodedata
 
-import yaml
+
+# journal.py owns load_yaml — the one reader that turns an unparseable, wrongly
+# shaped or unreadable input into a single comprehensible failure instead of a
+# traceback. Imported here even though a renderer writes no receipt: one dialect for
+# "this file is not usable" across the whole skill is the point of having one reader.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import journal  # noqa: E402
 
 
 # ── i18n headings ────────────────────────────────────────────────────────────
@@ -365,8 +371,16 @@ def missing_required_fields(profile) -> list:
 
 
 def load_profile(path):
-    with open(path, "r", encoding="utf-8") as f:
-        profile = yaml.safe_load(f)
+    """The profile as a mapping. Raises journal.YamlUnreadable on an unusable file.
+
+    A renderer is NOT a gate: there is no workspace, so there is no receipt and no
+    exit-2-with-a-receipt available to it. What is available is the exit code, and
+    main() spends it — 2 for "could not read the input", which stays distinct from
+    1, "rendered, and the PDF step failed". That distinction is the whole reason
+    this does not just let a yaml traceback out: a traceback exits 1, which for this
+    script already means something else.
+    """
+    profile = journal.load_yaml(path)
     missing = missing_required_fields(profile)
     if missing:
         raise ValueError(
@@ -1454,7 +1468,14 @@ def main(argv=None):
     ap.add_argument("--out", required=True)
     args = ap.parse_args(argv)
 
-    profile = load_profile(args.profile)
+    try:
+        profile = load_profile(args.profile)
+    except journal.YamlUnreadable as exc:
+        # Exit 2 = "could not run", the same meaning it carries in every gate. A
+        # renderer has no receipt to leave, so the exit code and this line are the
+        # whole of the report — which is why it must not be a traceback.
+        print(f"cannot render: {exc}", file=sys.stderr)
+        return 2
     out = pathlib.Path(args.out)
 
     if args.format == "md":

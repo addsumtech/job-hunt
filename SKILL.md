@@ -383,6 +383,12 @@ python3 scripts/enter_mode.py --workspace <ws> --mode <mode>
 then read `modes/<mode>.md` in full. The entry writes the mode file's content hash to
 `journal.jsonl`; `check_apply.py` fails if it is absent or stale.
 
+**Create `<ws>` yourself first** (`mkdir -p`). `enter_mode.py` refuses a workspace that
+does not exist rather than creating one, for the same reason every gate refuses: one
+mistyped `--workspace` would leave a directory holding a single `mode_entry` line, and
+the "resume an in-progress application" lookup finds a workspace **by name** — so it
+would offer to continue from an empty shell.
+
 ## The advice block, and the disclaimer that is not optional
 
 Whenever this skill states how good a fit a posting is, it states it in exactly this

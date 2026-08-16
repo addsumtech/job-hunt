@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""The append-only run journal, and the receipt every gate leaves in it.
+"""The append-only run journal, the receipt every gate leaves in it, and the one
+reader that keeps a malformed input file from skipping both.
 
 Risk-register #12: a gate that was skipped produces no output, and no output
 looks exactly like a clean run. So each gate writes one receipt here before it
@@ -7,6 +8,12 @@ exits — on every exit path, including the "could not run" one — and a mode m
 not claim success without quoting its receipts. The receipt carries the hashes
 of what the gate actually read, so "the gate passed" is a claim about specific
 bytes rather than about a moment in time.
+
+`load_yaml` lives here rather than in paths.py because it exists FOR that
+contract, not as a general YAML utility: its whole job is to turn the three ways
+a file can be unusable into the could-not-run receipt above. paths.py is pure
+path arithmetic and says so; a reader who found a file-parsing function there
+would reasonably conclude the two modules were interchangeable.
 """
 from __future__ import annotations
 
@@ -14,6 +21,8 @@ import datetime
 import hashlib
 import json
 import pathlib
+
+import yaml
 
 # The closed set a receipt's verdict may take. The last two are NOT synonyms and
 # the difference is load-bearing:
@@ -119,3 +128,93 @@ def read_receipts(workspace, gate: str | None = None) -> list:
     return [rec for rec in _records(workspace)
             if rec.get("action") == "gate"
             and (gate is None or rec.get("gate") == gate)]
+
+
+# --------------------------------------------------------------- reading YAML input
+
+# The code every gate prints and journals when an input file is present and
+# unusable. Deliberately NOT "NO_INPUT", which the same gates use for a file that
+# is absent: a reader told NO_INPUT goes looking for a file that is right there,
+# and "the file could not be parsed" is a different instruction from "the file
+# says something wrong".
+UNREADABLE_INPUT = "UNREADABLE_INPUT"
+
+
+class YamlUnreadable(Exception):
+    """An input file could not be turned into the document shape a gate expects.
+
+    Carries `.path`, `.reason` and `.finding` — the last already prefixed with
+    UNREADABLE_INPUT, so a gate routing this into its cannot_run path does not
+    have to re-spell the code and cannot spell it differently from its neighbour.
+    """
+
+    def __init__(self, path, reason: str):
+        self.path = pathlib.Path(path)
+        self.reason = reason
+        super().__init__(f"{self.path}: {reason}")
+
+    @property
+    def finding(self) -> str:
+        return f"{UNREADABLE_INPUT}: {self.path}: {self.reason}"
+
+
+_EMPTY = {dict: "mapping", list: "list"}
+
+
+def load_yaml(path, expect: type = dict):
+    """Parse a YAML file into `expect` (dict or list), or raise YamlUnreadable.
+
+    WHY THIS EXISTS — reproduced 2026-08-16, and worth reading before anyone
+    "simplifies" it back to `yaml.safe_load(path.read_text(...)) or {}`. On a
+    workspace whose fit-assessment.yaml had one unclosed quote:
+
+        consistency          exit=1   (a yaml parse traceback)
+        count_coverage       exit=1   (a yaml parse traceback)
+        journal.jsonl        2 lines  — only from the gates that exited 2 cleanly
+
+    In this repo's contract exit 1 means "the gate ran and found problems". So a
+    caller reading exit codes was told there were findings, a caller reading the
+    journal saw nothing, and check_apply — whose whole composition rule is reading
+    those receipts — saw a gate that never ran. The one state the journal exists to
+    make visible was the one state that produced no journal line. There were 25
+    `yaml.safe_load` call sites and 8 of them caught YAMLError.
+
+    Three failures land in that same place and all three are handled here:
+
+      * the document does not parse (yaml.YAMLError);
+      * the file cannot be read at all — absent, unreadable, not UTF-8 (OSError,
+        UnicodeDecodeError);
+      * the document parses to a string or a list where a mapping is expected, so
+        the caller's very next `.get()` raises AttributeError.
+
+    An empty or comment-only file is NOT one of those: it yields the empty mapping
+    (or list), which is what every call site's `or {}` meant and what the callers
+    downstream are written against.
+
+    The caller catches YamlUnreadable and routes it to its own cannot_run / exit-2
+    path, so the workspace-does-not-exist exception stays where each gate documents
+    it: nothing to append to, stderr only, no receipt.
+    """
+    if expect not in _EMPTY:
+        raise ValueError(f"expect must be dict or list, not {expect!r}")
+    path = pathlib.Path(path)
+    try:
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise YamlUnreadable(path, f"is not valid UTF-8 ({exc.reason})") from exc
+    except OSError as exc:
+        raise YamlUnreadable(
+            path, f"could not be read ({exc.strerror or exc})") from exc
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        detail = " ".join(str(exc).split())
+        raise YamlUnreadable(path, f"did not parse as YAML ({detail})") from exc
+    if data is None:
+        return expect()
+    if not isinstance(data, expect):
+        raise YamlUnreadable(
+            path,
+            f"parses to a {type(data).__name__}, not a {_EMPTY[expect]} — "
+            f"the gate reads named fields off it and cannot read them off this")
+    return data

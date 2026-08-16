@@ -33,7 +33,6 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import journal  # noqa: E402
 import paths  # noqa: E402
 import vocab  # noqa: E402
-import yaml  # noqa: E402
 
 GATE = "check_conventions"
 
@@ -86,16 +85,23 @@ _LATIN_TOKEN = re.compile(r"[A-Za-z]{6,}")
 _CJK_TOKEN = re.compile(r"[一-鿿]{3,}")
 
 
-def cannot_run(workspace: pathlib.Path, reason: str) -> int:
-    """Exactly one receipt on the could-not-run path, then exit 2."""
+def cannot_run(workspace: pathlib.Path, reason: str, code: str = "NO_INPUT") -> int:
+    """Exactly one receipt on the could-not-run path, then exit 2.
+
+    `code` is NO_INPUT for a file that is absent and journal.UNREADABLE_INPUT for one
+    that is present and unusable. Those are different instructions to the reader.
+    """
     print(f"cannot run: {reason}", file=sys.stderr)
     if workspace.is_dir():
-        journal.receipt(workspace, GATE, {}, "could_not_run", [f"NO_INPUT: {reason}"])
+        journal.receipt(workspace, GATE, {}, "could_not_run", [f"{code}: {reason}"])
     return 2
 
 
 def load_market_file(path: pathlib.Path) -> dict:
-    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    """Raises journal.YamlUnreadable; main() and check_assessment.main() route it to
+    their could-not-run path. A table that cannot be parsed is not a table with bad
+    entries, and a findings list cannot say the difference."""
+    return journal.load_yaml(path)
 
 
 def conventions_by_id(data: dict) -> dict[str, dict]:
@@ -192,7 +198,18 @@ def check_file(path: pathlib.Path, today: datetime.date) -> list[str]:
             if not _ISO_DATE.match(value):
                 findings.append(f"BAD_DATE: {entry_id}.{field} is {value!r}, "
                                 f"not YYYY-MM-DD")
-            elif field == "review_by" and datetime.date.fromisoformat(value) < today:
+                continue
+            # The regex only proves the SHAPE. `2026-13-45` passes it and then raises
+            # inside fromisoformat — and that ValueError used to escape check_file,
+            # abort the entry loop, and discard every finding already collected, so a
+            # table with one date typo reported nothing about any of its other entries.
+            try:
+                parsed = datetime.date.fromisoformat(value)
+            except ValueError:
+                findings.append(f"BAD_DATE: {entry_id}.{field} is {value!r} — the shape "
+                                f"is right but that is not a real date")
+                continue
+            if field == "review_by" and parsed < today:
                 findings.append(f"EXPIRED_REVIEW_BY: {entry_id} was due for review on "
                                 f"{value}; re-check the source or re-date it")
 
@@ -298,13 +315,13 @@ def main(argv: list[str] | None = None) -> int:
     files = list(args.market_file)
     if args.all:
         files += [CONVENTIONS_DIR / f"{key}.yaml" for key in MARKET_KEYS]
-    def _cannot_run(reason: str) -> int:
+    def _cannot_run(reason: str, code: str = "NO_INPUT") -> int:
         """In --ci mode there is no journal to write to, so say why on stderr and exit 2.
         Exit 2 stays 'could not run', distinct from 1 = 'a table is bad', in both modes."""
         if args.ci:
-            print(f"NO_INPUT: {reason}", file=sys.stderr)
+            print(f"{code}: {reason}", file=sys.stderr)
             return 2
-        return cannot_run(args.workspace, reason)
+        return cannot_run(args.workspace, reason, code)
 
     if not files:
         return _cannot_run("pass --market-file or --all")
@@ -315,8 +332,18 @@ def main(argv: list[str] | None = None) -> int:
     findings: list[str] = []
     hashes: dict[str, str] = {}
     for path in files:
-        hashes[path.name] = journal.sha256_file(path)
-        findings += check_file(path, today)
+        # A table that cannot be read is not a table with bad entries. Exit 2 rather
+        # than reporting findings over the tables that did parse: a partial lint that
+        # exits 1 is read as "these are the problems", and the unread file is not
+        # among them.
+        try:
+            hashes[path.name] = journal.sha256_file(path)
+            findings += check_file(path, today)
+        except journal.YamlUnreadable as exc:
+            return _cannot_run(str(exc), journal.UNREADABLE_INPUT)
+        except OSError as exc:
+            return _cannot_run(f"{path} could not be read ({exc.strerror or exc})",
+                               journal.UNREADABLE_INPUT)
 
     for finding in findings:
         print(finding)

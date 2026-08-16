@@ -42,7 +42,6 @@ import argparse
 import pathlib
 import sys
 
-import yaml
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import enter_mode
@@ -94,10 +93,8 @@ def _structured(ws: pathlib.Path) -> bool:
     if not p.exists():
         return False
     try:
-        posting = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
-    except (yaml.YAMLError, UnicodeDecodeError, OSError):
-        return False
-    if not isinstance(posting, dict):
+        posting = journal.load_yaml(p)
+    except journal.YamlUnreadable:
         return False
     return str(posting.get("application_type") or "").strip().lower() == "structured"
 
@@ -249,7 +246,19 @@ def main(argv=None) -> int:
                             f"the same machine signal and mean opposite things to the "
                             f"user")
         else:
-            stop = yaml.safe_load(stop_path.read_text(encoding="utf-8")) or {}
+            # A FINDING, not exit 2, and deliberately so: this gate composes a dozen
+            # other checks and is the one that decides whether a package may be
+            # delivered. Aborting the composition here would discard everything
+            # already collected — the exact defect this pass exists to close — and
+            # the receipt still carries the named reason either way.
+            try:
+                stop = journal.load_yaml(stop_path)
+            except journal.YamlUnreadable as exc:
+                stop = {}
+                findings.append(
+                    f"{exc.finding} — the stop cannot be classified from a file "
+                    f"nothing can read, and an unclassified stop is the one thing "
+                    f"NO_PASS_NO_STOP exists to prevent")
             if stop.get("classification") not in CLASSIFICATIONS:
                 findings.append(f"BAD_STOP_CLASSIFICATION: honest-stop.yaml "
                                 f"classification {stop.get('classification')!r} is not "

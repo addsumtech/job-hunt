@@ -13,16 +13,18 @@ import pathlib
 import subprocess  # noqa: F401
 import sys
 
-import yaml
 
 # Reuse LaTeX helpers from render_cv (same directory).
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
+import journal
 import render_cv
 
 
 def load(path):
-    with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+    """Raises journal.YamlUnreadable; main() prints it and exits 2. Same reasoning as
+    render_cv.load_profile — no workspace, so no receipt, and the exit code is the
+    only channel left. 2 stays "could not read the input", 1 stays "the PDF failed"."""
+    return journal.load_yaml(path)
 
 
 def render_markdown(d):
@@ -125,7 +127,11 @@ def main(argv=None):
     ap.add_argument("--format", choices=["md", "docx", "pdf"], default="md")
     ap.add_argument("--out", required=True)
     args = ap.parse_args(argv)
-    d = load(args.letter)
+    try:
+        d = load(args.letter)
+    except journal.YamlUnreadable as exc:
+        print(f"cannot render: {exc}", file=sys.stderr)
+        return 2
     out = pathlib.Path(args.out)
     if args.format == "md":
         out.write_text(render_markdown(d), encoding="utf-8")
