@@ -518,7 +518,7 @@ a fabrication the candidate then repeats back), and the shortlist's `why_matched
 | Migration losslessness (CI only) | `scripts/check_skill_lossless.py` | a baseline line that exists nowhere in this tree |
 | Adapter classification | `scripts/check_opencli_result.py` | *(wrapper, not a gate)* a non-zero exit, a login wall, a platform stop-signal, or an empty identity field |
 | Read-only | `scripts/check_no_write.py` | a journaled command whose published `access:` is `write`, or whose access cannot be resolved at all |
-| Shortlist | `scripts/check_shortlist.py` | a row whose `source_id` is in no raw capture; a duplicated or over-counted source report; "no results" with no adapter that exited 0; a missing disclosure block or provisional stamp; a detail fetch outside the top three; an uncapped brief; a missing or stale mode entry |
+| Shortlist | `scripts/check_shortlist.py` | a row whose `source_id` or `raw_text` is in no raw capture, or whose `id` is not `<site>-<source_id>`; a duplicated or over-counted source report; "no results" with no adapter that exited 0; a missing disclosure block or provisional stamp; a detail fetch outside the top three; an uncapped brief; a missing or stale mode entry. Warns (does not fail) when a row's location names a country outside `brief.markets` |
 
 **No mode may claim success while `journal.jsonl` lacks a receipt for its gates.** A skipped script produces no output, and no output is exactly what a clean run looks like. `scripts/check_skill_lossless.py` is the one exception and is marked as such: it is a repo-level CI check with no workspace and no receipt, so requiring one would be requiring evidence that cannot exist.
 
@@ -529,9 +529,24 @@ a fabrication the candidate then repeats back), and the shortlist's `why_matched
 | site | search | detail | login state (2026-08-09) | identity field |
 |---|---|---|---|---|
 | `51job` | `opencli 51job search "<kw>" --area <city> --page 1 --limit 20 --window background -f json` | `opencli 51job detail <jobId>` | no auth adapter | `title` |
-| `indeed` | `opencli indeed search "<kw>" --location "<loc>" --fromage 7 --start 0 --limit 15 --window background -f json` | `opencli indeed job <id>` | no auth adapter | `title` — **measured EMPTY**, recover via detail |
+| `indeed` | `opencli indeed search "<kw>" --location "<loc>" --fromage 7 --start 0 --limit 15 --window background -f json` | `opencli indeed job <id>` | no auth adapter | `title` — **measured EMPTY**, recover via detail. **US site only**, see below |
 | `linkedin` | `opencli linkedin search "<kw>" --location "<loc>" --date-posted week --start 0 --limit 10 --window background -f json` | `opencli linkedin job-detail <job-url>` | logged in (cookie session) | `title` |
 | `boss` | `opencli boss search "<kw>" --city <城市> --page 1 --limit 15 --window background -f json` | `opencli boss detail <security_id>` | logged in (cookie session) | `name`, **not** `title` |
+
+**`indeed` serves the US site, and `--location` is resolved against a US
+gazetteer.** A non-US place name does not fail — it silently returns US rows:
+`--location "London"` came back with every row in Columbus, Ohio (London, OH is
+25 miles away), exit 0, `classification: ok`, and `--location "Manchester, United
+Kingdom"` returned California and New York (measured 2026-08-16; the adapter's own
+`opencli indeed --help` describes it as "rendered DOM via browser session, US
+site"). So for a `uk`/`nl`/`de` market, prefer `linkedin` and record that `indeed`
+was skipped and why — and if you use it anyway, read every returned `location`
+before it becomes a row. This is a third shape of risk-register row 2: not
+found-nothing and not all-adapters-failed, but **adapter-succeeded-and-searched-
+the-wrong-country**, where every receipt is green and the honest conclusion
+("there are no London backend roles") is the wrong one. `check_shortlist.py`
+answers only the row half of this, as the warning `WARN_ROW_OUTSIDE_BRIEF_MARKET`;
+nothing can report the empty half, which is why it is written here instead.
 
 Always `-f json`. Always `--window background`.
 And **always branch on the exit code before you read stdout**:

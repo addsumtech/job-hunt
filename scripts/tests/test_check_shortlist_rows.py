@@ -49,7 +49,7 @@ def test_a_site_with_no_raw_capture_fires(tmp_path, capsys):
     workspace = fx.build_workspace(tmp_path)
     data = fx.load_shortlist(workspace)
     row = dict(data["rows"][0])
-    row.update({"id": "linkedin-1", "source_site": "linkedin",
+    row.update({"id": "linkedin-3812345678", "source_site": "linkedin",
                 "source_id": "3812345678",
                 "url": "https://www.linkedin.com/jobs/view/3812345678/"})
     data["rows"].append(row)
@@ -82,6 +82,118 @@ def test_the_full_url_with_tracking_params_is_quiet(tmp_path, capsys):
     code, captured = run(workspace, capsys)
     assert code == 0
     assert captured.out == ""
+
+
+def test_a_real_source_id_pasted_onto_an_invented_row_fires(tmp_path, capsys):
+    # The reproduction this rule was written for: ONE genuine card in raw/, and a
+    # row that keeps its jobId and invents title, company, location, salary and
+    # raw_text. Verifying source_id and stopping passed it with zero findings.
+    import json
+    workspace = fx.build_workspace(tmp_path)
+    (workspace / "raw" / "51job-1.json").write_text(
+        json.dumps([{"jobId": "173215361", "name": "算法工程师",
+                     "company": "某公司", "salary": "30-50K", "city": "上海"}],
+                   ensure_ascii=False, indent=2), encoding="utf-8")
+    brief = fx.load_brief(workspace)
+    brief["target_count"] = 1
+    fx.save_brief(workspace, brief)
+    data = fx.load_shortlist(workspace)
+    data["rows"] = [{
+        "id": "51job-173215361",
+        "title": "Principal MRI Reconstruction Scientist",
+        "company": "Philips Research",
+        "location": "Eindhoven",
+        "salary": "€120,000",
+        "url": "",
+        "source_site": "51job",
+        "source_id": "173215361",
+        "extraction_method": "adapter_search",
+        "retrieved_at": "2026-08-09T14:02:11Z",
+        "quality": "card_only",
+        "verification": "collected_unverified",
+        "raw_text": ("Principal MRI Reconstruction Scientist | Philips Research | "
+                     "Eindhoven, Netherlands | €120,000 per year | PhD in medical "
+                     "imaging; compressed sensing; deep-learning reconstruction"),
+        "why_matched": "brief.target_titles 命中「算法工程师」；薪资在 brief 区间内。",
+        "verdict": "strong_apply",
+        "provisional": True,
+        "effort": "quick",
+    }]
+    fx.save_shortlist(workspace, data)
+    code, captured = run(workspace, capsys)
+    assert code == 1
+    assert "RAW_TEXT_NOT_IN_RAW" in codes(captured.out)
+    # The source_id itself is real, so the old check stays silent — which is the
+    # whole point of anchoring a second field.
+    assert "SOURCE_ID_NOT_IN_RAW" not in codes(captured.out)
+
+
+def test_a_title_normalised_in_step_6_stays_quiet(tmp_path, capsys):
+    # Step 6 legitimately normalises titles (de-duplication compares on a
+    # normalised title), so `title` is NOT the anchored field. A row whose title
+    # has been cleaned up while raw_text still carries the card must pass.
+    workspace = fx.build_workspace(tmp_path)
+    data = fx.load_shortlist(workspace)
+    data["rows"][0]["title"] = "高级算法工程师"      # brackets and tail dropped
+    data["rows"][1]["title"] = "高级 AI 算法工程师"  # J-code dropped, spaces added
+    fx.save_shortlist(workspace, data)
+    code, captured = run(workspace, capsys)
+    assert code == 0
+    assert captured.out == ""
+
+
+def test_a_raw_text_the_capture_does_not_support_fires(tmp_path, capsys):
+    workspace = fx.build_workspace(tmp_path)
+    data = fx.load_shortlist(workspace)
+    data["rows"][0]["raw_text"] = (
+        "资深医学影像重建科学家 | 飞利浦研究院 | 埃因霍温 | 年薪 120 万 | "
+        "要求压缩感知与深度学习重建经验")
+    fx.save_shortlist(workspace, data)
+    code, captured = run(workspace, capsys)
+    assert code == 1
+    assert "RAW_TEXT_NOT_IN_RAW" in codes(captured.out)
+    assert "飞利浦研究院" in captured.out          # names what was not found
+    assert "why_matched" in captured.out           # and where paraphrase belongs
+
+
+def test_a_raw_text_with_one_added_annotation_stays_quiet(tmp_path, capsys):
+    # The quiet twin of the rule above. A card summary is joined by hand, so a
+    # trailing note or a re-wrap must not read as fabrication — only a raw_text
+    # that is MOSTLY not in the capture does.
+    workspace = fx.build_workspace(tmp_path)
+    data = fx.load_shortlist(workspace)
+    data["rows"][0]["raw_text"] = (
+        data["rows"][0]["raw_text"].replace(" | ", "\n") + "\n（仅卡片信息，未取详情）")
+    fx.save_shortlist(workspace, data)
+    code, captured = run(workspace, capsys)
+    assert code == 0
+    assert captured.out == ""
+
+
+def test_an_empty_raw_text_fires(tmp_path, capsys):
+    workspace = fx.build_workspace(tmp_path)
+    data = fx.load_shortlist(workspace)
+    data["rows"][0]["raw_text"] = "   "
+    fx.save_shortlist(workspace, data)
+    code, captured = run(workspace, capsys)
+    assert code == 1
+    assert "NO_RAW_TEXT" in codes(captured.out)
+
+
+def test_a_row_id_that_is_not_site_dash_source_id_fires(tmp_path, capsys):
+    # modes/discover.md:244 documents `id: <site>-<source_id>`, and until this
+    # check nothing tied the two together — so the id could name a posting the
+    # provenance chain never touched.
+    workspace = fx.build_workspace(tmp_path)
+    data = fx.load_shortlist(workspace)
+    data["rows"][0]["id"] = "51job-173190000"
+    fx.save_shortlist(workspace, data)
+    code, captured = run(workspace, capsys)
+    assert code == 1
+    assert "BAD_ROW_ID" in codes(captured.out)
+    assert "51job-173198362" in captured.out       # names the id it should be
+    # The provenance chain itself is untouched, so nothing else fires.
+    assert "SOURCE_ID_NOT_IN_RAW" not in codes(captured.out)
 
 
 def test_empty_title_fires(tmp_path, capsys):

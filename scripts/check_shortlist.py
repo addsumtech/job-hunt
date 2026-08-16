@@ -6,15 +6,34 @@ field has the right shape — so shape is not what gets checked. What gets check
 is that each row's identifier appears VERBATIM in a raw capture from the site it
 claims, because that is the one thing a fabricated row cannot do.
 
-Exit codes: 0 = passed, 1 = findings on stdout, 2 = could not run. On exit 2 one
-receipt with verdict "could_not_run" is appended — EXCEPT when the workspace
-directory itself does not exist, because then there is nothing to append to. If
-you find no receipt at all, that is the case you are in.
+**One field is not enough.** Verifying `source_id` and stopping passed a row that
+kept a real jobId and invented title, company, location, salary and `raw_text` —
+copying an identifier out of a capture costs nothing. So two more anchors tie the
+row to the bytes: `raw_text` must be mostly FOUND in that site's captures, and
+`id` must be exactly `<site>-<source_id>` (the format modes/discover.md defines).
+`title` is deliberately NOT anchored: step 6 normalises titles on purpose, and a
+gate that fires on a normalised title is a gate people route around.
+
+Findings prefixed `WARN_` do not fail the gate — the split is the same one
+check_conventions.py and check_assessment.py already make. Market fit is the only
+one: an `indeed` search for London returns Columbus, Ohio (measured), so a row
+whose location names a country outside `brief.markets` is worth saying out loud,
+but deciding "this location is in the Netherlands" needs a gazetteer, and a
+gazetteer will be wrong about `Remote in EU`, `Randstad` and `Noord-Holland`. A
+check that cries wolf on ordinary output is worse than no check: the reader
+learns to skip the line, and it stops working on the run that mattered.
+
+Exit codes: 0 = passed (warnings do not change this), 1 = hard findings on
+stdout, 2 = could not run. On exit 2 one receipt with verdict "could_not_run" is
+appended — EXCEPT when the workspace directory itself does not exist, because
+then there is nothing to append to. If you find no receipt at all, that is the
+case you are in.
 """
 from __future__ import annotations
 
 import argparse
 import pathlib
+import re
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -53,6 +72,45 @@ VERIFICATIONS = ("fresh_verified", "collected_unverified", "stale_possible")
 # Shorter than this and a verbatim substring search would match almost any
 # capture, which makes the provenance check vacuous rather than strict.
 MIN_SOURCE_ID_LEN = 4
+
+# `raw_text` is the card text the evaluator actually saw, so it is checked
+# against the capture the way source_id is — but in pieces, because a card
+# summary is JOINED BY HAND out of adapter fields and is never one contiguous
+# substring of the JSON. Split it on the separators people join with, then ask
+# how much of it the capture accounts for, weighted by length so that one
+# invented sentence outweighs three copied words.
+_RAW_TEXT_SPLIT = re.compile(r"[|｜,，、;；/\n\r\t]+")
+_WHITESPACE = re.compile(r"\s+")
+MIN_RAW_TEXT_SEGMENT = 2
+# Deliberately below 1.0 — hand-joined summaries lose characters to punctuation
+# and re-wrapping — and well above half, because a row that invents most of its
+# card text is a fabricated row wearing a real identifier.
+RAW_TEXT_FLOOR = 0.7
+
+# Market fit, and why it is only a WARNING. The rule is one-directional in the
+# same sense as the count checks below: it fires on POSITIVE evidence that a row
+# names a country outside brief.markets, never on failure to recognise the right
+# one. `Remote in EU`, `Randstad` and `Noord-Holland` resolve to nothing here and
+# stay silent; `Columbus, OH` and `Remote in United States` resolve to `us` and
+# speak up. Country-level tokens only: city names are ambiguous across markets
+# (London, Ohio is 25 miles from Columbus and is exactly what `opencli indeed
+# search --location "London"` returns), which is the reason this check exists.
+MARKET_TOKENS = {
+    "cn": ("china", "中国", "中國", "中华人民共和国"),
+    "nl": ("netherlands", "nederland", "holland", "the hague"),
+    "de": ("germany", "deutschland"),
+    "uk": ("united kingdom", "great britain", "england", "scotland", "wales",
+           "northern ireland"),
+    "us": ("united states", "u.s.a", "usa"),
+}
+# The 50 states plus DC, matched CASE-SENSITIVELY after a comma, because that is
+# how every adapter renders a US location ("Columbus, OH 43215") and because
+# lowercase `in`/`or`/`me` are ordinary English words. Two letters are ambiguous
+# by nature — "Amsterdam, NH" would read as New Hampshire — and that residue is
+# precisely why the finding is a WARN_ the reader may overrule in one line.
+_US_STATE = re.compile(
+    r",\s*(A[KLRZ]|C[AOT]|D[CE]|FL|GA|HI|I[ADLN]|K[SY]|LA|M[ADEINOST]|"
+    r"N[CDEHJMVY]|OH|OK|OR|P[A]|RI|S[CD]|T[NX]|UT|V[AT]|W[AIVY])\b")
 
 # Wording that asserts the run found nothing. Only consulted when the shortlist
 # has ZERO rows: with rows present, "没有匹配到 staff 级别的岗位" is a qualified
@@ -95,6 +153,34 @@ def load_raw_texts(workspace):
     return out
 
 
+def _normalise(text):
+    """Whitespace and case are not the claim; the words are.
+
+    A card copied through YAML comes back re-wrapped (a block scalar folds its
+    newlines into spaces), and demanding the model reproduce the wrap points
+    would fail a raw_text copied character-for-character.
+    """
+    return _WHITESPACE.sub(" ", str(text)).strip().casefold()
+
+
+def _raw_text_coverage(raw_text, captures):
+    """(fraction of raw_text the captures account for, the segments they do not).
+
+    None when raw_text has no segment long enough to search for, which is the
+    can't-tell case rather than the it-failed case.
+    """
+    haystacks = [_normalise(text) for text in captures]
+    segments = [seg.strip() for seg in _RAW_TEXT_SPLIT.split(str(raw_text))]
+    segments = [seg for seg in segments if len(seg) >= MIN_RAW_TEXT_SEGMENT]
+    if not segments:
+        return None, []
+    missing = [seg for seg in segments
+               if not any(_normalise(seg) in hay for hay in haystacks)]
+    total = sum(len(seg) for seg in segments)
+    lost = sum(len(seg) for seg in missing)
+    return (total - lost) / total, missing
+
+
 def _check_provenance(label, row, site, raw_texts):
     findings = []
     source_id = str(row.get("source_id") or "").strip()
@@ -119,6 +205,23 @@ def _check_provenance(label, row, site, raw_texts):
         findings.append(
             f"SOURCE_ID_NOT_IN_RAW: {label} source_id {source_id!r} does not "
             f"appear verbatim in any of {', '.join(sorted(captures))}")
+
+    # The second anchor. An identifier is one field to copy; the card text is the
+    # row's whole claim about what the posting says, and it is the field an
+    # invented row has to invent.
+    raw_text = str(row.get("raw_text") or "").strip()
+    if raw_text:
+        covered, missing = _raw_text_coverage(raw_text, captures.values())
+        if covered is not None and covered < RAW_TEXT_FLOOR:
+            shown = "; ".join(missing[:4]) + ("; …" if len(missing) > 4 else "")
+            findings.append(
+                f"RAW_TEXT_NOT_IN_RAW: {label} raw_text is only {covered:.0%} "
+                f"accounted for by {', '.join(sorted(captures))} (floor "
+                f"{RAW_TEXT_FLOOR:.0%}). Not found in any capture: {shown}. "
+                "raw_text is the card text the adapter returned, copied — not a "
+                "summary, not a translation, and never a posting you did not "
+                "retrieve. Your own words belong in why_matched.")
+
     url = str(row.get("url") or "").strip()
     if url:
         stem = url.split("?", 1)[0].split("#", 1)[0]
@@ -149,6 +252,11 @@ def check_rows(shortlist, raw_texts):
                 f"EMPTY_TITLE: {label} has an empty title — the identifying "
                 f"field was never recovered (run the detail command for "
                 f"{site or 'this site'})")
+        if not str(row.get("raw_text") or "").strip():
+            findings.append(
+                f"NO_RAW_TEXT: {label} has an empty raw_text — the card text is "
+                "what ties the row's claims to the capture, so a row without it "
+                "asserts a posting nobody can check")
         if not str(row.get("why_matched") or "").strip():
             findings.append(f"NO_WHY_MATCHED: {label} has no why_matched")
         if not str(row.get("retrieved_at") or "").strip():
@@ -172,6 +280,19 @@ def check_rows(shortlist, raw_texts):
                     f"BAD_ENUM: {label} {field}={row.get(field)!r} is not one of "
                     f"{', '.join(allowed)}")
         findings.extend(_check_provenance(label, row, site, raw_texts))
+
+        # The third anchor, and the cheapest: modes/discover.md defines `id` as
+        # `<site>-<source_id>`, so an id that is anything else names a posting
+        # the provenance chain above never touched. Reported after provenance
+        # because a wrong id is the smaller of the two claims.
+        row_id = str(row.get("id") or "").strip()
+        source_id = str(row.get("source_id") or "").strip()
+        if site and source_id and row_id != f"{site}-{source_id}":
+            findings.append(
+                f"BAD_ROW_ID: {label} must be id {site}-{source_id} — "
+                "modes/discover.md defines the row id as `<site>-<source_id>`, "
+                "and that is the only thing tying the id a reader quotes to the "
+                "capture the row was traced to.")
 
     # One retrieved row may not become two shortlist rows. Without this, count
     # conservation is decorative: the source report can honestly say "2 rows
@@ -290,11 +411,73 @@ def _check_sources(workspace, shortlist, rows, calls):
                 "field hides exactly the gap needs_detail_recovery exists to "
                 "surface.")
 
+        # ONE convention: raw_files entries are workspace-relative and carry the
+        # `raw/` prefix, exactly as modes/discover.md writes them. The bare
+        # basename resolved to <ws>/51job-1.json, which is not where a capture
+        # ever is — so the same correct file, reported the other way, produced
+        # SOURCE_REPORT_MISSING_RAW and looked like a missing capture.
         for name in entry.get("raw_files") or []:
+            name = str(name)
+            if not name.startswith("raw/") or ".." in name.split("/"):
+                findings.append(
+                    f"SOURCE_REPORT_RAW_PATH: sources[{site}] names {name!r}. "
+                    "raw_files entries are workspace-relative paths under the "
+                    f"capture directory — write "
+                    f"{'raw/' + name.rsplit('/', 1)[-1]!r}. One spelling, so a "
+                    "name that resolves is a name that was captured.")
+                continue
             if not (workspace / name).is_file():
                 findings.append(
                     f"SOURCE_REPORT_MISSING_RAW: sources[{site}] names "
                     f"{name!r}, which does not exist")
+    return findings
+
+
+def _check_market_fit(brief, rows):
+    """WARN when a row names a country the brief did not ask for (spec §5.1).
+
+    This exists because `opencli indeed search --location "London"` returns rows
+    in Columbus, Ohio — the adapter serves the US site and resolves the place
+    name against a US gazetteer, so it succeeds, exits 0, and answers a question
+    nobody asked. Nothing else in this gate reads brief.markets at all.
+
+    A WARNING on purpose. It fires only on positive evidence of the wrong
+    country, never on failure to recognise the right one, because the second
+    shape needs a gazetteer and a gazetteer is wrong about `Remote in EU`,
+    `Randstad` and `Noord-Holland`. The learned response to a false hard failure
+    would be padding brief.locations until the gate shut up — one silent failure
+    traded for a loud one.
+    """
+    markets = {str(m).strip().casefold() for m in (brief.get("markets") or [])
+               if str(m).strip()}
+    if not markets or "other" in markets:
+        # `other` is a legitimate answer (modes/discover.md) and means there is
+        # no convention data for the market. Guessing anyway is what this file
+        # keeps telling the reader not to do.
+        return []
+    findings = []
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            continue
+        location = str(row.get("location") or "").strip()
+        if not location:
+            continue
+        lowered = _normalise(location)
+        named = {market for market, tokens in MARKET_TOKENS.items()
+                 if any(token in lowered for token in tokens)}
+        if _US_STATE.search(location):
+            named.add("us")
+        if not named or named & markets:
+            continue
+        findings.append(
+            f"WARN_ROW_OUTSIDE_BRIEF_MARKET: row {index} (id={row.get('id')!r}) "
+            f"has location {location!r}, which names {'/'.join(sorted(named))} "
+            f"while brief.markets is {sorted(markets)}. Check the adapter's "
+            "geography before keeping the row: `indeed` serves the US site only "
+            "and resolves --location against a US gazetteer, so a search for "
+            "London returns London, Ohio with classification `ok`. If the row "
+            "really is in the brief's market, this line is the false alarm — "
+            "leave it and say so.")
     return findings
 
 
@@ -402,6 +585,7 @@ def check_run(workspace, shortlist, brief, md_text, calls):
 
     findings.extend(_check_sources(workspace, shortlist, rows, calls))
     findings.extend(_check_detail_cap(shortlist, rows))
+    findings.extend(_check_market_fit(brief, rows))
     return findings
 
 
@@ -488,11 +672,14 @@ def main(argv=None):
             input_hashes[f"raw/{name}"] = journal.sha256_file(
                 workspace / "raw" / name)
 
+    # The WARN_ split check_conventions.py and check_assessment.py already make:
+    # a warning is recorded in the receipt and printed, and does not fail a run.
+    hard = [f for f in findings if not f.startswith("WARN_")]
     journal.receipt(workspace, GATE, input_hashes,
-                    "fail" if findings else "pass", findings)
+                    "fail" if hard else "pass", findings)
     for line in findings:
         print(line)
-    return 1 if findings else 0
+    return 1 if hard else 0
 
 
 if __name__ == "__main__":

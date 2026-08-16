@@ -322,6 +322,152 @@ def test_a_source_report_naming_a_missing_raw_file_fires(tmp_path, capsys):
     assert "SOURCE_REPORT_MISSING_RAW" in codes(captured.out)
 
 
+def test_a_raw_file_named_without_the_raw_prefix_fires(tmp_path, capsys):
+    # One convention, pinned: raw_files entries are workspace-relative and carry
+    # the `raw/` prefix, exactly as modes/discover.md writes them. A bare
+    # basename resolved to <ws>/51job-1.json, which is not where the capture is,
+    # so the SAME correct file reported two ways gave two different verdicts.
+    workspace = fx.build_workspace(tmp_path)
+    data = fx.load_shortlist(workspace)
+    data["sources"][0]["raw_files"] = ["51job-1.json",
+                                       "51job-detail-173199597.json"]
+    fx.save_shortlist(workspace, data)
+    code, captured = run(workspace, capsys)
+    assert code == 1
+    assert "SOURCE_REPORT_RAW_PATH" in codes(captured.out)
+    assert "raw/51job-1.json" in captured.out      # names the spelling it wants
+
+
+def test_a_raw_file_escaping_the_workspace_fires(tmp_path, capsys):
+    workspace = fx.build_workspace(tmp_path)
+    data = fx.load_shortlist(workspace)
+    data["sources"][0]["raw_files"] = ["raw/../../elsewhere/51job-1.json"]
+    fx.save_shortlist(workspace, data)
+    code, captured = run(workspace, capsys)
+    assert code == 1
+    assert "SOURCE_REPORT_RAW_PATH" in codes(captured.out)
+
+
+def test_the_prefixed_raw_file_names_the_mode_doc_writes_are_quiet(tmp_path, capsys):
+    # The quiet twin. This is also what discover_fixtures writes, so the whole
+    # suite would go red if the pinned convention were the other one.
+    workspace = fx.build_workspace(tmp_path)
+    assert fx.load_shortlist(workspace)["sources"][0]["raw_files"] == [
+        "raw/51job-1.json", "raw/51job-detail-173199597.json"]
+    code, captured = run(workspace, capsys)
+    assert code == 0
+    assert captured.out == ""
+
+
+# ---------------------------------------------------------------- market fit
+#
+# A WARNING in both directions, and the asymmetry is deliberate: the measured
+# failure (an `indeed` search for London returning Columbus, Ohio) is caught by
+# positive evidence of the WRONG country, never by failure to recognise the
+# right one. `Remote in EU`, `Randstad` and `Noord-Holland` name no country a
+# gazetteer of five markets can resolve, and a hard finding on those would teach
+# the reader to pad brief.locations until the gate shut up.
+
+def _uk_brief(workspace):
+    brief = fx.load_brief(workspace)
+    brief["markets"] = ["uk"]
+    brief["locations"] = ["London", "Manchester", "Remote (UK)"]
+    fx.save_brief(workspace, brief)
+
+
+def test_a_row_in_another_market_warns_without_failing_the_gate(tmp_path, capsys):
+    workspace = fx.build_workspace(tmp_path)
+    _uk_brief(workspace)
+    data = fx.load_shortlist(workspace)
+    data["rows"][0]["location"] = "Hybrid work in Columbus, OH 43215"
+    fx.save_shortlist(workspace, data)
+    code, captured = run(workspace, capsys)
+    assert code == 0, "market fit is a warning, not a finding"
+    assert "WARN_ROW_OUTSIDE_BRIEF_MARKET" in codes(captured.out)
+    assert "Columbus, OH 43215" in captured.out
+    assert "uk" in captured.out
+
+
+def test_the_warning_is_recorded_in_the_receipt_and_still_verdict_pass(
+        tmp_path, capsys):
+    import json
+    workspace = fx.build_workspace(tmp_path)
+    _uk_brief(workspace)
+    data = fx.load_shortlist(workspace)
+    data["rows"][0]["location"] = "Remote in United States"
+    fx.save_shortlist(workspace, data)
+    assert cs.main(["--workspace", str(workspace)]) == 0
+    capsys.readouterr()
+    receipt = json.loads((workspace / "journal.jsonl").read_text(
+        encoding="utf-8").strip().splitlines()[-1])
+    assert receipt["verdict"] == "pass"
+    assert any(f.startswith("WARN_ROW_OUTSIDE_BRIEF_MARKET")
+               for f in receipt["findings"])
+
+
+def test_a_us_row_under_a_us_brief_is_quiet(tmp_path, capsys):
+    workspace = fx.build_workspace(tmp_path)
+    brief = fx.load_brief(workspace)
+    brief["markets"] = ["us"]
+    brief["locations"] = ["Columbus, OH"]
+    fx.save_brief(workspace, brief)
+    data = fx.load_shortlist(workspace)
+    data["rows"][0]["location"] = "Hybrid work in Columbus, OH 43215"
+    fx.save_shortlist(workspace, data)
+    code, captured = run(workspace, capsys)
+    assert code == 0
+    assert captured.out == ""
+
+
+def test_the_locations_a_naive_match_would_cry_wolf_on_are_quiet(
+        tmp_path, capsys):
+    for location in ("Remote in EU", "Noord-Holland", "Randstad",
+                     "Amsterdam-Zuidoost", "Hybrid · Eindhoven",
+                     "Fully remote"):
+        workspace = fx.build_workspace(tmp_path / location.replace("/", "-"))
+        brief = fx.load_brief(workspace)
+        brief["markets"] = ["nl"]
+        brief["locations"] = ["Amsterdam"]
+        fx.save_brief(workspace, brief)
+        data = fx.load_shortlist(workspace)
+        data["rows"][0]["location"] = location
+        fx.save_shortlist(workspace, data)
+        code, captured = run(workspace, capsys)
+        assert code == 0, f"{location!r} should not fail the gate"
+        assert captured.out == "", f"{location!r} cried wolf: {captured.out}"
+
+
+def test_a_london_ohio_row_still_warns_despite_matching_a_brief_location(
+        tmp_path, capsys):
+    # The trap the measured defect actually sets: `--location "London"` resolves
+    # against the US gazetteer, so the returned rows CONTAIN the brief's own
+    # location string. Positive evidence of the wrong country outranks it.
+    workspace = fx.build_workspace(tmp_path)
+    _uk_brief(workspace)
+    data = fx.load_shortlist(workspace)
+    data["rows"][0]["location"] = "London, OH 43140"
+    fx.save_shortlist(workspace, data)
+    code, captured = run(workspace, capsys)
+    assert code == 0
+    assert "WARN_ROW_OUTSIDE_BRIEF_MARKET" in codes(captured.out)
+
+
+def test_a_brief_with_no_markets_or_market_other_says_nothing(tmp_path, capsys):
+    for index, markets in enumerate(([], ["other"], ["uk", "other"])):
+        workspace = fx.build_workspace(tmp_path / f"markets-{index}")
+        brief = fx.load_brief(workspace)
+        brief["markets"] = markets
+        fx.save_brief(workspace, brief)
+        data = fx.load_shortlist(workspace)
+        data["rows"][0]["location"] = "Columbus, OH 43215"
+        fx.save_shortlist(workspace, data)
+        code, captured = run(workspace, capsys)
+        assert code == 0
+        assert captured.out == "", (
+            f"markets={markets!r} has no market to compare against; a warning "
+            "here is a guess")
+
+
 def test_a_detail_fetch_on_a_screened_out_row_fires(tmp_path, capsys):
     workspace = fx.build_workspace(tmp_path)
     data = fx.load_shortlist(workspace)

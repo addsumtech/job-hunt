@@ -180,6 +180,21 @@ every documented column populated. `indeed` also works without login but returns
 empty titles (Step 4). For the four inlined adapters, use the command pairs in
 SKILL.md. For anything else, read `references/discovery-sources.md` first.
 
+**`indeed` serves the US site only, and its `--location` is inert outside the US.**
+It does not fail on a non-US place — it resolves the name against a US gazetteer
+and returns US rows: `opencli indeed search … --location "London"` came back with
+every row in Columbus, Ohio (London, OH), exit 0, `classification: ok`; `--location
+"Manchester, United Kingdom"` returned California and New York (measured
+2026-08-16). So **for a `uk`, `nl` or `de` market, `indeed` is not the no-login
+default** — use `linkedin` and record in `§0` that `indeed` was skipped, with this
+reason. If you use it anyway, read every returned `location` before it becomes a
+row, and never let it produce a "no results" conclusion: the adapter searched a
+different country, which is not the same as the country having no jobs. Downstream,
+`check_shortlist.py` warns with `WARN_ROW_OUTSIDE_BRIEF_MARKET` on a row whose
+location names a country outside `brief.markets` — but an empty shortlist has no
+rows to warn about, so the only thing standing between a UK user and "there are no
+London backend roles" is this paragraph, read before the call.
+
 ## Step 3 — generate queries in BOTH languages
 
 Generate the keyword set in English **and** in the market's local language, and run
@@ -276,6 +291,20 @@ nowhere else; `check_shortlist.py` requires all seventeen fields.
 - De-duplicate across platforms on company + normalised title + location; keep the
   row with the higher `quality`.
 
+**Three fields anchor the row to the capture — and `title` is deliberately not one
+of them.** Verifying `source_id` alone let a row keep a real jobId and invent
+title, company, location, salary and `raw_text`: an identifier is one field to
+copy. So `check_shortlist.py` also requires
+
+- `raw_text` — the card text **copied**, not summarised and not translated. It is
+  checked in pieces against `raw/<site>-*.json` (a hand-joined card is never one
+  contiguous substring of the JSON) and most of it must be found there, or
+  `RAW_TEXT_NOT_IN_RAW` fires and names the parts that were not. Your own words
+  belong in `why_matched`. Normalising the title above is expected output, and is
+  exactly why the title is not the anchored field.
+- `id` — exactly `<site>-<source_id>`, or `BAD_ROW_ID`. It is the only thing tying
+  the id a reader quotes back to the capture the row was traced to.
+
 **`why_matched` is one of exactly three places where the no-fabrication fence is
 restated, and this is that restatement.** Cite the brief field and the raw field
 that made the match — "brief.target_titles 命中「算法工程师」；raw salaryMin 30000
@@ -358,6 +387,11 @@ rows: [...]
 SKILL.md come from `references/discovery-sources.md`. There is no other source for
 them, which is why `SOURCE_REPORT_MISSING` is that file's backstop.
 
+`raw_files` entries are **workspace-relative and keep the `raw/` prefix** —
+`raw/51job-1.json`, never the bare basename. One spelling, so that a name which
+resolves is a name that was captured; `SOURCE_REPORT_RAW_PATH` fires on the other
+one rather than letting a correct file report as a missing capture.
+
 `shortlist.md` carries `## §0 来源与读取质量`, `## §0.1 触发原因`, and — when the run
 is degraded — `## §0.2 披露`. The section that lists the rows carries the stamp in
 its own heading, e.g. `## §1 候选（全部为基于卡片信息的初判 · provisional）`, and each
@@ -407,6 +441,11 @@ exactly like a clean one.
 | `NO_MODE_ENTRY` | `journal.jsonl` has no `mode_entry` for discover | run `scripts/enter_mode.py --workspace <ws> --mode discover` and read this file — it was not loaded |
 | `MODE_FILE_CHANGED` | this file changed after the run entered the mode | what you read is not what is on disk. Re-enter and re-read. |
 | `SOURCE_ID_NOT_IN_RAW` | a row's identifier is in no capture from that site | delete the row. It was not retrieved. Do not "fix" it by editing `raw/`. |
+| `RAW_TEXT_NOT_IN_RAW` | most of a row's card text is in no capture from that site | copy the card text the adapter returned. If you cannot, the row was not retrieved — delete it. Paraphrase belongs in `why_matched`. |
+| `NO_RAW_TEXT` | a row has an empty `raw_text` | recover the card text, or drop the row; nothing else ties its claims to the capture |
+| `BAD_ROW_ID` | a row's `id` is not `<site>-<source_id>` | rewrite the id. It is the handle a reader quotes, and it must name the posting the row was traced to. |
+| `SOURCE_REPORT_RAW_PATH` | a `raw_files` entry is not a `raw/…` workspace-relative path | write `raw/<site>-<n>.json`. One spelling for one file. |
+| `WARN_ROW_OUTSIDE_BRIEF_MARKET` | *(warning, does not fail)* a row's location names a country outside `brief.markets` | check the adapter's geography — see `indeed` in Step 2. Drop the row, or keep it and say why the warning is a false alarm. |
 | `URL_NOT_FROM_ADAPTER` | the URL was assembled, not returned | replace it with the adapter's URL or drop the field |
 | `DUPLICATE_SOURCE_ID` | one retrieved posting appears as two rows | delete the duplicate; de-duplication removes rows, nothing adds them |
 | `SOURCE_REPORT_COUNT_MISMATCH` | the source report claims more than the receipts recorded | the receipts are right. Never reconcile by editing `raw/` or the journal. |
@@ -433,6 +472,11 @@ exactly like a clean one.
 - [ ] Every adapter call classified by `scripts/check_opencli_result.py`.
 - [ ] Queries generated in both languages of the market.
 - [ ] Identity field asserted non-empty on every row; `indeed` rows recovered.
+- [ ] Every row's `raw_text` is the card text **copied** from the capture, and its
+      `id` is `<site>-<source_id>`.
+- [ ] `indeed` not used as the no-login default for a non-US market, and if it was
+      used, every returned `location` read against `brief.markets` before the row
+      was kept — the US site answers a London search with Ohio.
 - [ ] Every row carries `provisional: true` **and** `shortlist.md` carries
       「基于卡片信息的初判」; no verdict copied into an assessment.
 - [ ] Every row carries an `effort` value, and rows are ordered by it within a band.

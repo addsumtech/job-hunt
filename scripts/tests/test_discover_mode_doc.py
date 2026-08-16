@@ -117,10 +117,40 @@ def test_the_platform_limit_stop_rule_is_absolute():
 
 def test_the_finding_codes_an_operator_must_react_to_are_explained():
     body = text()
-    for code in ("SOURCE_ID_NOT_IN_RAW", "EMPTY_RESULT_UNSUPPORTED",
+    for code in ("SOURCE_ID_NOT_IN_RAW", "RAW_TEXT_NOT_IN_RAW", "NO_RAW_TEXT",
+                 "BAD_ROW_ID", "SOURCE_REPORT_RAW_PATH",
+                 "WARN_ROW_OUTSIDE_BRIEF_MARKET", "EMPTY_RESULT_UNSUPPORTED",
                  "DETAIL_FETCH_OUT_OF_BAND", "DEGRADED_WITHOUT_DISCLOSURE",
                  "WRITE_COMMAND", "UNKNOWN_ACCESS"):
         assert code in body
+
+
+def test_the_row_id_format_and_the_raw_text_anchor_are_both_stated():
+    # The gate requires three anchors and the mode file defines all three, or a
+    # run produces rows its own gate rejects for a reason nobody wrote down.
+    body = text()
+    assert "<site>-<source_id>" in body
+    assert "raw/<site>-*.json" in body
+    # And the reason `title` is NOT one of them, because step 6 normalises it.
+    assert "not the anchored field" in body
+
+
+def test_the_indeed_us_site_restriction_is_stated_before_the_first_call():
+    # Measured 2026-08-16: `--location "London"` returns Columbus, Ohio with
+    # exit 0. An empty shortlist has no rows for the gate to warn about, so this
+    # paragraph is the only backstop on the false-empty branch — and it has to
+    # arrive before Step 4 runs the search.
+    body = text()
+    assert "US site" in body
+    assert "Columbus, Ohio" in body
+    assert body.index("US site") < body.index("## Step 4"), (
+        "the restriction has to be read before the search, not after it")
+
+
+def test_the_raw_files_path_convention_is_pinned_to_one_spelling():
+    body = text()
+    assert "`raw/` prefix" in body
+    assert "SOURCE_REPORT_RAW_PATH" in body
 
 
 def test_the_workspace_path_shape_is_load_bearing_and_stated():
