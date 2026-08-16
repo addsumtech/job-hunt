@@ -500,7 +500,7 @@ a fabrication the candidate then repeats back), and the shortlist's `why_matched
 | Letter | `scripts/check_letter.py` | markdown in a body string, length, duplicated name, wrong company/role |
 | Page count | `scripts/check_pages.py` | a PDF longer than the market's table allows; a letter over one page; an unreadable PDF |
 | Word limits | `scripts/check_word_limits.py` | a supporting-statement criterion over its stated limit, empty, or with no limit recorded |
-| Apply completion | `scripts/check_apply.py` | a missing receipt, an unclassified stop, a missing brief |
+| Apply completion | `scripts/check_apply.py` | a missing receipt; a gate that only ran its `--record` setup (`NOT_VERIFIED`); ANY gate left failing, named or not; an unclassified stop; a missing brief |
 | Mock interview | `scripts/check_mock.py` | an invented tag or band; a tag with no quote, or a quote that is not in the transcript; a pass emitting the other pass's tags; a scraped question with no id, no date, or the wrong country; an answer-bank entry with no source; a collapsed claim with no walk-back; an unsourced fact neither promoted nor walked back |
 | Evidence blocks | `scripts/evidence_blocks.py` | the posting and CV cut into addressable `JD-nnn` / `CV-nnn`; the only chunker |
 | Evidence refs | `scripts/check_evidence_refs.py` | refs that resolve to no block; block ids left in reader-facing prose |
@@ -681,17 +681,38 @@ Dispatched:
 - [ ] `agents/mock-assessor-transcript.md` and `agents/mock-assessor-provenance.md` were
       each pasted IN FULL into their own assessor, with **different** input packs.
 
-Ran, with a receipt in `journal.jsonl` — `scripts/check_apply.py` requires each of these:
+Ran, with a receipt in `journal.jsonl` — `scripts/check_apply.py` requires each of these
+unconditionally:
 - [ ] `scripts/check_personal_data.py`
-- [ ] `scripts/check_claims.py`
-- [ ] `scripts/check_render_freshness.py` (recorded before dispatch, verified after)
-- [ ] `scripts/parse_verdicts.py`
+- [ ] `scripts/check_claims.py` — the VERIFYING run. The `--record` run at mode entry
+      fingerprints the master and checks nothing; its receipt says `baseline_recorded`
+      and `check_apply` reports it as `NOT_VERIFIED`, not as a pass.
+- [ ] `scripts/check_render_freshness.py` — recorded before dispatch AND verified after.
+      Same rule: the dispatch record is `baseline_recorded`, the verifying run is the
+      one that counts, and re-recording for the next round does not carry the last one.
+- [ ] `scripts/parse_verdicts.py` — its receipt reports on the PARSE. A cleanly parsed
+      round is `recorded` whatever the three judges said; `fail` means a judge returned
+      no usable `VERDICT:` line and must be re-dispatched.
 - [ ] `scripts/lint_cv.py`
-- [ ] `scripts/check_letter.py` (if a letter was produced)
-- [ ] `scripts/check_pages.py` (if a PDF was produced)
-- [ ] `scripts/check_word_limits.py` (if `application_type: structured`)
-- [ ] `scripts/check_apply.py`
-- [ ] `scripts/check_mock.py` (once per mock-interview round)
+
+Required too, but only when the artifact they read is on disk — `check_apply` keys each
+one on the file, so "it did not apply" is never guesswork:
+- [ ] `scripts/check_letter.py` (when `letter.yaml` exists)
+- [ ] `scripts/check_pages.py` (when `cv.pdf` AND `tailored-profile.yaml` exist — both
+      are its inputs, and a `could_not_run` receipt does not satisfy it)
+- [ ] `scripts/check_word_limits.py` (when `supporting-statement.md` exists, or
+      `posting.yaml` says `application_type: structured` and the statement is missing)
+
+Ran, with a receipt — but `scripts/check_apply.py` does NOT require these, so skipping
+one is silent and only this line reports it:
+- [ ] `scripts/check_apply.py` — the composer itself; it cannot require its own receipt.
+- [ ] `scripts/check_mock.py` (once per mock-interview round — interview mode, not apply)
+
+`check_apply` also fails on ANY gate in this workspace's journal whose latest receipt
+says `fail`, named on the lists above or not — a receipt from another mode excepted.
+Enumerating gates does not keep up with the gates: `check_pages` and `check_word_limits`
+were both off the required list, so either could run, print `CV_TOO_LONG` / `OVER_LIMIT`,
+and have `check_apply` write its own `pass` three lines below it in the same file.
 
 Ran, leaving a `mode_entry` record rather than a gate receipt:
 - [ ] `scripts/enter_mode.py` — and its recorded hash still matches `modes/apply.md`.

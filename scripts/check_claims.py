@@ -148,7 +148,12 @@ def main(argv=None) -> int:
         fp_path.write_text(json.dumps({
             "path": str(master), "sha256": digest,
             "mtime_ns": master.stat().st_mtime_ns}, indent=2) + "\n", encoding="utf-8")
-        journal.receipt(ws, GATE, {"profile.yaml": digest}, "recorded", [])
+        # "baseline_recorded", not "recorded": this path fingerprints the master
+        # and checks nothing at all. While it shared "recorded" with the gates that
+        # DO check, check_apply.py counted it as a pass — so a run that did only
+        # this documented mode-entry step delivered a package whose claims nobody
+        # had verified, and a `--record` re-run on resume erased a real failure.
+        journal.receipt(ws, GATE, {"profile.yaml": digest}, "baseline_recorded", [])
         return 0
 
     tailored_path = ws / "tailored-profile.yaml"

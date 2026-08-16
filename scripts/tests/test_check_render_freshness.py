@@ -82,4 +82,9 @@ def test_each_run_leaves_exactly_one_receipt_including_the_exit_2_paths(tmp_path
     crf.main(["--workspace", str(ws), "--round", "9"])                     # never recorded
     crf.main(["--workspace", str(ws), "--round", "3", "--record", str(ws / "nope.md")])
     verdicts = [r["verdict"] for r in journal.read_receipts(ws, "check_render_freshness")]
-    assert verdicts == ["recorded", "pass", "could_not_run", "could_not_run"]
+    # "baseline_recorded", not "recorded". This gate's record and verify receipts
+    # are otherwise identical — same gate, same input hashes — so the verdict is
+    # the only thing that distinguishes "hashed before dispatch" from "confirmed
+    # the judges read what is on disk", and check_apply.py needs that distinction.
+    assert verdicts == ["baseline_recorded", "pass", "could_not_run", "could_not_run"]
+    assert set(verdicts) <= set(journal.VERDICTS)

@@ -99,8 +99,10 @@ def test_main_writes_the_artifact_and_a_receipt(tmp_path):
     receipts = [json.loads(line) for line in
                 (tmp_path / "journal.jsonl").read_text(encoding="utf-8").splitlines()]
     assert [r["gate"] for r in receipts] == ["evidence_blocks"]
-    # "recorded", not "produced": Plan 1's check_apply.PASSING_VERDICTS is
-    # ("pass", "recorded"), so any other string reads downstream as a failure.
+    # "recorded", not "produced": the composer that reads this receipt is
+    # check_assessment.py, whose PASSING_VERDICTS is ("pass", "recorded"), so any
+    # other string reads downstream as a failure. Not "baseline_recorded" either —
+    # this gate ran and had nothing to report; it did not store a baseline.
     assert receipts[0]["verdict"] == "recorded"
 
 

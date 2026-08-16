@@ -173,3 +173,57 @@ def test_every_exit_path_leaves_exactly_one_receipt(tmp_path):
     pv.main(argv)
     receipts = journal.read_receipts(ws, "parse_verdicts")
     assert len(receipts) == 2 and receipts[-1]["verdict"] == "could_not_run"
+
+
+# ── the receipt reports on the parse, not on the round ───────────────────────
+
+
+def test_a_cleanly_parsed_reject_is_a_recorded_receipt_not_a_failed_one(tmp_path):
+    """A REJECT that parsed cleanly is a SUCCESSFUL parse. Writing `fail` here made
+    check_apply's whole honest-stop.yaml branch unreachable — this gate is in
+    check_apply.REQUIRED_GATES, so an honest stretch could never reach exit 0 and
+    was reported to the user as a failed review. The REJECT is not lost: it is in
+    judge-round-<n>.json's combined_verdict, which check_apply reads."""
+    ws, argv = _files(tmp_path, rec=REC_PASS.replace("VERDICT: PASS", "VERDICT: REJECT"))
+    assert pv.main(argv) == 1                              # the exit code is unchanged
+    assert rounds.load_round(ws, 1)["combined_verdict"] == "REJECT"
+    receipt = journal.read_receipts(ws, "parse_verdicts")[-1]
+    assert receipt["verdict"] == "recorded"
+    assert receipt["findings"] == ["REJECT: recruiter returned REJECT"]
+
+
+def test_a_clean_pass_is_also_recorded(tmp_path):
+    """One verdict for one question. The receipt says whether the PARSE worked;
+    reading the round's outcome out of it is what put the two on the same axis."""
+    ws, argv = _files(tmp_path)
+    assert pv.main(argv) == 0
+    assert journal.read_receipts(ws, "parse_verdicts")[-1]["verdict"] == "recorded"
+
+
+def test_a_round_with_no_usable_verdict_still_writes_a_failed_receipt(tmp_path):
+    """The direction that must NOT go quiet. combine() also returns AMBIGUOUS when
+    a judge emitted no VERDICT line at all, so a blanket exemption for this gate
+    would let a round nobody judged exit check_apply behind an honest-stop.yaml."""
+    ws, argv = _files(tmp_path, ats=ATS_PASS.replace("VERDICT: PASS", "VERDICT: maybe"))
+    assert pv.main(argv) == 1
+    receipt = journal.read_receipts(ws, "parse_verdicts")[-1]
+    assert receipt["verdict"] == "fail"
+    assert receipt["findings"] and receipt["findings"][0].startswith("AMBIGUOUS: ats")
+
+
+def test_a_judge_that_said_nothing_at_all_writes_a_failed_receipt(tmp_path):
+    ws, argv = _files(tmp_path, hm="I had a look and it seems reasonable overall.\n")
+    assert pv.main(argv) == 1
+    receipt = journal.read_receipts(ws, "parse_verdicts")[-1]
+    assert receipt["verdict"] == "fail"
+    assert any(f.startswith("NO_VERDICT: hiring_manager") for f in receipt["findings"])
+
+
+def test_every_verdict_this_gate_writes_is_in_the_journal_vocabulary(tmp_path):
+    ws, argv = _files(tmp_path)
+    pv.main(argv)
+    pv.main(_files(tmp_path / "b", ats=ATS_PASS.replace("VERDICT: PASS", "x"))[1])
+    (ws / "rec.txt").unlink()
+    pv.main(argv)
+    assert {r["verdict"] for r in journal.read_receipts(ws, "parse_verdicts")} \
+        <= set(journal.VERDICTS)

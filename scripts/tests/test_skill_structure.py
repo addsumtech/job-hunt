@@ -6,6 +6,7 @@ import sys
 import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
+import check_apply
 import enter_mode
 import vocab
 
@@ -68,6 +69,82 @@ def test_the_self_check_names_every_script():
         if f.name in skip:
             continue
         assert f"scripts/{f.name}" in section, f"self-check does not name {f.name}"
+
+
+def _self_check_block(header_fragment: str) -> str:
+    """The blank-line-delimited block of the self-check whose heading says this."""
+    for block in re.split(r"\n\s*\n", _self_check_section()):
+        if header_fragment in " ".join(block.split()):
+            return block
+    raise AssertionError(
+        f"SKILL.md's self-check has no block whose heading says {header_fragment!r} — "
+        f"the required / not-required partition is pinned against check_apply.py by "
+        f"name, so renaming a heading has to be a deliberate edit here too")
+
+
+def _gates_in(block: str) -> set:
+    """The gates a block's checklist BULLETS name — not its heading, which names
+    `scripts/check_apply.py` itself in every one of these blocks."""
+    bullets = [ln for ln in block.split("\n") if ln.lstrip().startswith("- [ ]")]
+    return set(re.findall(r"`?scripts/([a-z_]+)\.py`?", "\n".join(bullets)))
+
+
+def test_the_self_check_partition_matches_what_check_apply_actually_requires():
+    """The heading over this list used to say `check_apply.py` requires all ten
+    gates. Two of them — check_pages and check_word_limits — were not in
+    REQUIRED_GATES at all, and a checklist that overstates its backstop is worse
+    than none: it converts "I skipped it" into "check_apply covered it", and the
+    reader has no way to tell which line is the decorative one.
+
+    Pinned against the code in BOTH directions, so the doc cannot drift and neither
+    can the tuples: adding a gate to REQUIRED_GATES without listing it here goes red,
+    and listing one here that the gate does not require goes red too."""
+    unconditional = _gates_in(_self_check_block("requires each of these"))
+    assert unconditional == set(check_apply.REQUIRED_GATES), (
+        f"the self-check's unconditional list is {sorted(unconditional)} but "
+        f"check_apply.REQUIRED_GATES is {sorted(check_apply.REQUIRED_GATES)}")
+
+    conditional = _gates_in(_self_check_block("only when the artifact they read is on disk"))
+    assert conditional == set(check_apply.CONDITIONAL_GATES), (
+        f"the self-check's conditional list is {sorted(conditional)} but "
+        f"check_apply.CONDITIONAL_GATES is {sorted(check_apply.CONDITIONAL_GATES)}")
+
+    not_required = _gates_in(_self_check_block("does NOT require these"))
+    assert not_required, "the not-required block names no script at all"
+    overlap = not_required & (unconditional | conditional)
+    assert not overlap, (
+        f"{sorted(overlap)} is listed as both required and not required by "
+        f"check_apply.py — one of the two lines is teaching the reader a backstop "
+        f"that is not there")
+    assert "check_apply" in not_required, (
+        "the composer cannot require its own receipt, and the checklist has to say "
+        "so — otherwise skipping check_apply.py itself is the one silent skip left")
+
+
+def test_apply_mode_actually_runs_every_gate_its_own_composer_requires():
+    """The other half of the partition, and the one that bites at runtime. A gate
+    added to REQUIRED_GATES that modes/apply.md never invokes makes every apply run
+    fail its own completion gate — and the mode file is layer 1.5, read on entry,
+    so nothing else compares the two lists."""
+    text = (ROOT / "modes" / "apply.md").read_text(encoding="utf-8")
+    for gate in check_apply.REQUIRED_GATES + check_apply.CONDITIONAL_GATES:
+        assert f"scripts/{gate}.py" in text, (
+            f"check_apply requires {gate} but modes/apply.md never runs it")
+
+
+def test_every_conditionally_required_gate_names_its_trigger_file():
+    """A conditional line whose trigger is vaguer than the code's is how
+    check_word_limits came to be listed as "if application_type: structured" while
+    check_apply keyed on nothing at all. The reader must be able to evaluate the
+    condition from the checklist alone."""
+    block = _self_check_block("only when the artifact they read is on disk")
+    for gate, trigger in (("check_letter", "letter.yaml"),
+                          ("check_pages", "cv.pdf"),
+                          ("check_pages", "tailored-profile.yaml"),
+                          ("check_word_limits", "supporting-statement.md")):
+        assert gate in block and trigger in block, (
+            f"the self-check's {gate} line does not name {trigger}, which is the file "
+            f"check_apply.conditional_gates() actually keys on")
 
 
 def test_every_path_the_self_check_names_exists():

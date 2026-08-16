@@ -184,9 +184,25 @@ def main(argv=None) -> int:
     })
     for f in findings:
         print(f)
+    # The receipt reports on the PARSE, not on the round. A round that parsed
+    # cleanly is a successful parse whatever the three judges said, so it is
+    # "recorded"; the REJECT itself is carried by judge-round-<n>.json, which
+    # check_apply.py reads separately and acts on.
+    #
+    # Writing "fail" here made the honest-stretch branch unreachable. This gate is
+    # in check_apply.REQUIRED_GATES, so every REJECT round failed the composer —
+    # and the entire honest-stop.yaml path, validated four findings deep and the
+    # reason that code exists, could never reach exit 0. A stretch candidate whose
+    # application was as strong as it could truthfully be was told the run failed.
+    #
+    # "fail" is kept for the parse that produced no usable verdict (AMBIGUOUS /
+    # NO_VERDICT). Exempting this gate from the composer outright would have been
+    # the wrong fix: combine() also returns AMBIGUOUS when a judge emitted nothing,
+    # and a round nobody judged would then exit 0 behind an honest-stop.yaml —
+    # one silent failure traded for another.
     journal.receipt(ws, GATE,
                     {n: journal.sha256_file(p) for n, p in paths.items()},
-                    "pass" if combined == "PASS" else "fail", findings)
+                    "fail" if combined == "AMBIGUOUS" else "recorded", findings)
     return 0 if combined == "PASS" else 1
 
 

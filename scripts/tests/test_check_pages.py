@@ -96,7 +96,16 @@ def test_a_pdf_with_no_readable_page_tree_is_reported_not_ignored(tmp_path, caps
 
 def test_no_pdf_is_exit_2_not_a_pass(tmp_path, capsys):
     """A markdown-only run has no PDF to measure. That is 'could not run', not
-    'within budget' — check_apply only requires this receipt when cv.pdf exists."""
+    'within budget'.
+
+    This docstring used to end "— check_apply only requires this receipt when
+    cv.pdf exists", stated as fact while check_apply did not require the receipt
+    under ANY condition: check_pages was absent from REQUIRED_GATES, so a
+    three-page CV could be rendered, measured, reported CV_TOO_LONG and delivered
+    anyway. It is true now — check_apply.conditional_gates() keys the receipt on
+    cv.pdf AND tailored-profile.yaml, and could_not_run does not satisfy it — and
+    scripts/tests/test_check_apply.py holds that end up rather than this sentence.
+    """
     ws = _ws(tmp_path, MID, cv_pages=2)
     (ws / "cv.pdf").unlink()
     assert check_pages.main(["--workspace", str(ws)]) == 2

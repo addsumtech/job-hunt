@@ -6,6 +6,22 @@ this asserts that each of them actually ran, on this workspace, and passed —
 because a skipped script produces no output and no output is exactly what a
 clean run looks like.
 
+Three rules make "actually ran" mean something, and each closes a way this gate
+used to write `pass` over a run that had not been checked:
+
+  * A `--record` receipt is SETUP, not a check. modes/apply.md runs check_claims
+    and check_render_freshness with --record at mode entry and before dispatch;
+    both store a baseline and verify nothing, and both say "baseline_recorded"
+    so this gate can tell them from a verification pass. NOT_VERIFIED — never
+    UPSTREAM_FAILED, because nothing failed.
+  * Some gates are required only when their input is on disk. The trigger is a
+    file, read by conditional_gates(), so "it did not apply" is never guesswork.
+  * ANY gate whose latest receipt in this journal says `fail` blocks the package,
+    named on either list or not. Enumerating gates does not keep up with the
+    gates: check_pages and check_word_limits were both off the list, so either
+    could run, print CV_TOO_LONG or OVER_LIMIT, write `verdict: fail`, and have
+    this gate write its own `pass` three lines below it in the same file.
+
 Two things it adds. First, the round must have PASSed or the run must record an
 honest stop that is classified: **poorly built** (a fixable tailoring miss) or
 **honest stretch** (as strong as it can truthfully be, and the candidate is
@@ -36,15 +52,86 @@ import rounds
 import vocab
 
 GATE = "check_apply"
+MODE = "apply"
 # parse_verdicts is in this list for a reason that is easy to miss:
 # judge-round-<n>.json is a plain JSON file, so without its receipt a
 # hand-written `combined_verdict: PASS` passes this gate with no evidence the
 # parser ever ran — the exact substitution parse_verdicts.py exists to prevent.
 REQUIRED_GATES = ("check_personal_data", "check_claims", "check_render_freshness",
                   "parse_verdicts", "lint_cv")
+# Required too, but only when the artifact they read is on disk — see
+# conditional_gates(). Declared as a tuple as well because SKILL.md's self-check
+# is pinned against BOTH lists: a heading that promises "check_apply requires all
+# of these" over a gate it does not require converts "I skipped it" into
+# "check_apply covered it", which is worse than no checklist line at all.
+CONDITIONAL_GATES = ("check_letter", "check_pages", "check_word_limits")
 CLASSIFICATIONS = ("poorly_built", "honest_stretch")
 VERDICTS = vocab.VERDICTS
+# What a gate receipt has to say for this composer to accept it. "recorded" is
+# here for parse_verdicts, whose clean verdict on a cleanly-parsed round is
+# "recorded" whatever the judges decided.
 PASSING_VERDICTS = ("pass", "recorded")
+# ...and what a `--record` step says. It is journalled — a skipped setup must not
+# be silent either — but it stores a baseline and verifies nothing, so it is not
+# evidence that the gate ever checked anything, which is the only question this
+# composer asks. Both spellings were "recorded" until 2026-08, and that single
+# token bought nothing and cost the whole composition guarantee: a workspace that
+# ran only modes/apply.md's documented entry steps exited 0 here while check_claims
+# run properly on it reported UNSOURCED fabrications, and re-running the entry step
+# after a real failure — which a resume or a round 2 does — put a passing receipt
+# on top of the failing one.
+SETUP_VERDICTS = ("baseline_recorded",)
+
+
+def _structured(ws: pathlib.Path) -> bool:
+    """Does posting.yaml declare a criterion-scored application?
+
+    An unreadable posting.yaml answers "no": it is somebody's finding, but not
+    this branch's, and guessing "structured" from a file nobody could parse would
+    demand a gate on a run with no supporting statement anywhere in sight.
+    """
+    p = ws / "posting.yaml"
+    if not p.exists():
+        return False
+    try:
+        posting = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    except (yaml.YAMLError, UnicodeDecodeError, OSError):
+        return False
+    if not isinstance(posting, dict):
+        return False
+    return str(posting.get("application_type") or "").strip().lower() == "structured"
+
+
+def conditional_gates(ws: pathlib.Path) -> list:
+    """[(gate, the visible trigger)] for the gates this workspace also requires.
+
+    Every trigger is a file on disk, as visible to this gate as it was to the run
+    that should have invoked it. That is the whole test for whether a gate belongs
+    here rather than in the "not required" list: if the condition cannot be read
+    off the workspace, requiring it would fire on runs where it does not apply.
+    """
+    out = []
+    if (ws / "letter.yaml").exists():
+        out.append(("check_letter", "letter.yaml exists"))
+    # BOTH of check_pages' inputs, not just the PDF. With tailored-profile.yaml
+    # absent the gate can only answer could_not_run, and that missing profile is
+    # already check_claims' finding — two gates reporting one cause is how a
+    # findings list stops being read.
+    if (ws / "cv.pdf").exists() and (ws / "tailored-profile.yaml").exists():
+        out.append(("check_pages", "cv.pdf and tailored-profile.yaml exist"))
+    # references/structured-applications.md routes all three judges away from the
+    # supporting statement, so this gate is the ONLY reader of the artifact that
+    # is actually scored. Keyed on the statement first — the artifact, not a proxy
+    # — and on the posting second, so that a structured application whose
+    # statement was never written is reported rather than being the quietest
+    # outcome available.
+    if (ws / "supporting-statement.md").exists():
+        out.append(("check_word_limits", "supporting-statement.md exists"))
+    elif _structured(ws):
+        out.append(("check_word_limits",
+                    "posting.yaml says application_type: structured, and there is "
+                    "no supporting-statement.md"))
+    return out
 
 
 def _latest_round(ws: pathlib.Path):
@@ -85,24 +172,65 @@ def main(argv=None) -> int:
                         "re-enter the mode and re-read it")
 
     # ── every upstream gate ran, on this workspace, and passed ────────────
-    required = list(REQUIRED_GATES)
-    if (ws / "letter.yaml").exists():
-        required.append("check_letter")
+    conditional = conditional_gates(ws)
+    trigger = dict(conditional)
+    required = list(REQUIRED_GATES) + [g for g, _ in conditional]
     for gate in required:
         receipts = journal.read_receipts(ws, gate)
         if not receipts:
             # `CODE: subject` — the subject comes first so a reader (and a test)
             # can grep `MISSING_RECEIPT: check_claims` the way every other
             # finding in this skill is greppable.
+            because = f" ({trigger[gate]})" if gate in trigger else ""
             findings.append(f"MISSING_RECEIPT: {gate} has no receipt in "
-                            f"journal.jsonl — the gate was never run, and a "
+                            f"journal.jsonl{because} — the gate was never run, and a "
                             f"skipped gate looks exactly like a clean one")
             continue
         last = receipts[-1]
-        if last.get("verdict") not in PASSING_VERDICTS:
+        verdict = last.get("verdict")
+        if verdict in SETUP_VERDICTS:
+            # A distinct code, and deliberately not UPSTREAM_FAILED: nothing
+            # failed. Diagnosing "never ran" as "failed" sends the reader hunting
+            # for a defect that is not there and, finding none, concluding the
+            # gate is noisy.
+            findings.append(f"NOT_VERIFIED: {gate} has only a '{verdict}' receipt — "
+                            f"that is the --record step, which stores a baseline for "
+                            f"a later comparison and checks nothing. Nothing failed; "
+                            f"the verification pass was never run. Run {gate} again "
+                            f"without --record, once the files it reads are final")
+        elif verdict not in PASSING_VERDICTS:
             detail = "; ".join(last.get("findings") or []) or "no findings recorded"
-            findings.append(f"UPSTREAM_FAILED: {gate} verdict={last.get('verdict')} "
+            findings.append(f"UPSTREAM_FAILED: {gate} verdict={verdict} "
                             f"({detail})")
+
+    # ── any other gate that ran and failed ────────────────────────────────
+    # Enumerating gates cannot keep up with the gates: check_pages and
+    # check_word_limits were both absent from the list above, so either could RUN,
+    # print CV_TOO_LONG or OVER_LIMIT, write `verdict: fail` — and this gate wrote
+    # its own `pass` three lines below it in the same journal.jsonl. A failing
+    # receipt is a failing receipt, whether or not anyone remembered to name it.
+    #
+    # Scoped by the receipt's mode stamp, and only when the stamp names a
+    # DIFFERENT mode: check_mock writes into this same workspace, a failed mock
+    # round is check_mock's finding, and no edit available in apply mode clears
+    # it. Unstamped and "unknown" receipts are checked, not skipped — a gate run
+    # before the mode entry is exactly the case that must not slip through, so the
+    # default is to look.
+    other_modes = tuple(m for m in enter_mode.MODES if m != MODE)
+    latest = {}
+    for rec in journal.read_receipts(ws):
+        if rec.get("gate"):
+            latest[rec["gate"]] = rec
+    for gate, last in latest.items():
+        if gate == GATE or gate in required or last.get("verdict") != "fail":
+            continue
+        if last.get("mode") in other_modes:
+            continue
+        detail = "; ".join(last.get("findings") or []) or "no findings recorded"
+        findings.append(f"UPSTREAM_FAILED: {gate} verdict=fail ({detail}) — this gate "
+                        f"is not on the required list and it still ran and failed; a "
+                        f"package is not deliverable over a failing gate. Fix it and "
+                        f"re-run it, or re-run it to a pass")
 
     # ── the round passed, or the stop is classified ───────────────────────
     n = _latest_round(ws)

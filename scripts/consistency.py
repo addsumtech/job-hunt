@@ -19,8 +19,10 @@ never suppresses a finding.
 
 Exit 2 still writes a receipt, verdict "could_not_run", unless the workspace directory
 itself is absent -- there is nothing to append to. A clean run's verdict is "recorded":
-this script reports, it does not judge, and Plan 1's check_apply.PASSING_VERDICTS is
-("pass", "recorded").
+this script reports, it does not judge, and the composer that reads it --
+check_assessment.py, not check_apply.py -- has PASSING_VERDICTS ("pass", "recorded").
+"recorded" here means "ran, nothing to report", never "stored a baseline"; the setup
+half of a two-step gate is "baseline_recorded". See journal.VERDICTS.
 """
 from __future__ import annotations
 

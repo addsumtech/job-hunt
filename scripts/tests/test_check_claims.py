@@ -159,4 +159,8 @@ def test_each_run_leaves_exactly_one_receipt_including_the_exit_2_path(tmp_path)
     (ws / check_claims.FINGERPRINT).unlink()
     assert check_claims.main(["--workspace", str(ws)]) == 2
     verdicts = [r["verdict"] for r in journal.read_receipts(ws, "check_claims")]
-    assert verdicts == ["recorded", "pass", "could_not_run"]
+    # "baseline_recorded", not "recorded": --record fingerprints the master and
+    # verifies nothing, and check_apply.py must be able to tell that apart from a
+    # verification pass that found nothing. See journal.VERDICTS.
+    assert verdicts == ["baseline_recorded", "pass", "could_not_run"]
+    assert set(verdicts) <= set(journal.VERDICTS)

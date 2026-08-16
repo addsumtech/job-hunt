@@ -211,9 +211,12 @@ python3 scripts/check_claims.py --workspace <workspace> \
 python3 scripts/check_personal_data.py --workspace <ws>
 python3 scripts/check_claims.py --workspace <ws>
 python3 scripts/lint_cv.py --workspace <ws>
-python3 scripts/check_letter.py --workspace <ws>          # only if letter.yaml exists
-python3 scripts/check_pages.py --workspace <ws>           # only if cv.pdf was produced
-python3 scripts/check_word_limits.py --workspace <ws>     # only if application_type: structured
+python3 scripts/check_letter.py --workspace <ws>          # required once letter.yaml exists
+python3 scripts/check_pages.py --workspace <ws>           # required once cv.pdf exists
+python3 scripts/check_word_limits.py --workspace <ws>     # required once supporting-statement.md
+                                                          # exists — and for a structured
+                                                          # posting that has none, which is
+                                                          # a missing deliverable, not a skip
 python3 scripts/check_render_freshness.py --workspace <ws> --round <n> \
     --record <ws>/cv.md <ws>/posting.yaml <ws>/letter.md  # letter.md only if produced
 
@@ -226,6 +229,18 @@ python3 scripts/check_render_freshness.py --workspace <ws> --round <n>
 # ... at the end of the mode ...
 python3 scripts/check_apply.py --workspace <ws>
 ```
+
+**The `--record` runs are setup; the runs without it are the checks.** `check_claims
+--record` and `check_render_freshness --record` store a baseline and verify nothing —
+their receipt says `baseline_recorded`, and `check_apply.py` reports a gate whose LATEST
+receipt is one of those as `NOT_VERIFIED`. So the order above is not cosmetic: run each
+verifying pass **after** the last `--record` for that gate. On a round 2 or a resumed
+run this bites — re-recording the dispatch hashes for the new round leaves the previous
+round's verification behind, and only the new round's verifying run clears it.
+
+**`check_apply.py` also fails on any gate in `journal.jsonl` whose latest receipt says
+`fail`** — including gates it does not require by name. A gate that ran, found something
+and was left failing blocks the package; fix the finding and re-run that gate.
 
 ## `honest-stop.yaml` — required whenever the loop ends without a PASS
 

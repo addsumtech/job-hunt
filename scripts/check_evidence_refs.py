@@ -19,9 +19,12 @@ workspace directory that does not exist: there is nothing to append to, and crea
 would leave a journal for a run that never happened.
 
 A clean run's verdict is "recorded" whether or not --check-only was passed. The same
-state must never produce two different verdicts: Plan 1's check_apply.PASSING_VERDICTS
-is ("pass", "recorded"), so a second spelling of "this was fine" reads downstream as a
-failure.
+state must never produce two different verdicts: the composer that reads this receipt
+-- check_assessment.py, not check_apply.py -- has PASSING_VERDICTS ("pass", "recorded"),
+so a second spelling of "this was fine" reads downstream as a failure. Note the other
+direction too: "recorded" here means "ran, nothing to report". A gate whose clean path
+stores a baseline instead of checking one writes "baseline_recorded" -- see
+journal.VERDICTS for why the two must not share a token.
 """
 from __future__ import annotations
 

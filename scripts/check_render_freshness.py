@@ -62,7 +62,13 @@ def main(argv=None) -> int:
                           .strftime("%Y-%m-%dT%H:%M:%SZ"),
             "input_hashes": hashes,
         }})
-        journal.receipt(ws, GATE, hashes, "recorded", [])
+        # "baseline_recorded", not "recorded". This gate's two receipts are
+        # otherwise identical — same gate, same input hashes, same shape — so the
+        # verdict is the ONLY thing that can tell "hashed the files before
+        # dispatch" from "confirmed the judges read what is on disk now". Sharing
+        # one token let a round that was recorded and never verified satisfy
+        # check_apply.py, which is the substitution this gate exists to prevent.
+        journal.receipt(ws, GATE, hashes, "baseline_recorded", [])
         return 0
 
     dispatch = (rounds.load_round(ws, args.round) or {}).get("dispatch") or {}

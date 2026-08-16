@@ -15,6 +15,23 @@ import hashlib
 import json
 import pathlib
 
+# The closed set a receipt's verdict may take. The last two are NOT synonyms and
+# the difference is load-bearing:
+#
+#   "recorded"          — the gate ran and has no pass/fail to report. The
+#                         assess-mode reporters (consistency, count_coverage,
+#                         check_evidence_refs, evidence_blocks) and parse_verdicts
+#                         on a cleanly-parsed round. A clean CHECK.
+#   "baseline_recorded" — the `--record` half of a two-step gate: it stored a
+#                         fingerprint for a later comparison and verified nothing.
+#                         SETUP, not a check.
+#
+# They shared the token "recorded" until 2026-08. check_apply.py treated it as
+# passing — correctly, for the reporters — so a workspace that ran only the
+# documented mode-entry setup satisfied the one gate whose entire job is proving
+# the checks ran, and re-running the setup after a real failure erased it.
+VERDICTS = ("pass", "fail", "could_not_run", "recorded", "baseline_recorded")
+
 
 def append(workspace, record: dict) -> None:
     """Append one JSON record as a line to <workspace>/journal.jsonl."""
@@ -74,7 +91,9 @@ def receipt(workspace, gate: str, input_hashes: dict, verdict: str,
             findings=None) -> dict:
     """Build, journal and return one gate receipt.
 
-    `verdict` is one of "pass" | "fail" | "could_not_run" | "recorded". `mode`
+    `verdict` is one of `VERDICTS` above: "pass" | "fail" | "could_not_run" |
+    "recorded" | "baseline_recorded" — read that comment before picking one, the
+    last two mean different things. `mode`
     is read from the latest mode_entry record in this workspace's journal
     (see current_mode) rather than passed in, because the gate signature is
     fixed by the shared contract and does not carry it.
