@@ -127,18 +127,34 @@ def test_parity_all_sections_md_docx_latex(full_profile, tmp_path):
         assert proj in text,  f"{label} missing project"
 
 
-def test_latex_preamble_has_unicode_packages(full_profile):
-    """BUG 2: LaTeX preamble must include inputenc and fontenc for UTF-8 safety."""
-    tex = render_cv.build_latex(full_profile)
+def test_latex_preamble_matches_the_engine_that_will_compile_it(full_profile):
+    """The encoding preamble is chosen by ENGINE, never by content.
+
+    This test used to be called `test_latex_preamble_has_unicode_packages`, and its
+    docstring said "must include inputenc and fontenc for UTF-8 safety". Both were
+    wrong in the one way that mattered: `inputenc`/`fontenc` is the *pdfLaTeX*
+    preamble, `find_latex_engine` prefers **tectonic**, and tectonic is XeTeX-based
+    — it reads the file as Unicode and hands each codepoint to an 8-bit T1 font
+    that has no Latin-Extended-A glyph, drops it with a `Missing character`
+    warning, and exits 0. So the green test was pinning the defect: `Łukasz
+    Wójcik` was delivered to recruiters as `ukasz Wójcik`. UTF-8 safety under a
+    Unicode engine is fontspec, and only pdflatex may keep the T1 pair."""
+    for engine in ("tectonic", "/opt/homebrew/bin/tectonic", "xelatex", "lualatex", None):
+        tex = render_cv.build_latex(full_profile, engine=engine)
+        assert r"\usepackage{fontspec}" in tex, engine
+        assert "inputenc" not in tex and "fontenc" not in tex, engine
+
+    tex = render_cv.build_latex(full_profile, engine="/usr/bin/pdflatex")
     assert r"\usepackage[utf8]{inputenc}" in tex
     assert r"\usepackage[T1]{fontenc}" in tex
+    assert "fontspec" not in tex, "fontspec under pdflatex is a hard compile error"
 
 
 def test_latex_no_raw_middot(full_profile):
-    """BUG 2: LaTeX must not contain raw · (U+00B7); accented name passes as UTF-8."""
+    """BUG 2: LaTeX must not contain raw · (U+00B7); accented name survives as UTF-8."""
     tex = render_cv.build_latex(full_profile)
     assert "·" not in tex, "Raw middle dot found in LaTeX output"
-    assert "José García" in tex, "Accented name must appear as raw UTF-8 (handled by inputenc)"
+    assert "José García" in tex, "Accented name must appear as raw UTF-8"
 
 
 def test_latex_links_hyperlinked(full_profile):
@@ -376,10 +392,16 @@ def test_cjk_latex_uses_xecjk_preamble():
     assert r"\usepackage{xeCJK}" in tex
     assert r"\setCJKmainfont" in tex
     assert "inputenc" not in tex                     # pdfLaTeX-only, must be gone
-    # A Latin CV keeps the pdfLaTeX preamble.
-    latin = render_cv.build_latex({"meta": {"name": "Jane Doe"}})
-    assert "inputenc" in latin
-    assert "xeCJK" not in latin
+    # xeCJK is the one part of the preamble that IS content-driven: it exists for
+    # CJK line-breaking and needs a CJK font, so a Latin CV must not load it —
+    # under either engine.
+    for engine in ("tectonic", "/usr/bin/pdflatex", None):
+        latin = render_cv.build_latex({"meta": {"name": "Jane Doe"}}, engine=engine)
+        assert "xeCJK" not in latin, engine
+        assert "setCJKmainfont" not in latin, engine
+    # And the pdfLaTeX preamble is still what pdflatex gets.
+    assert "inputenc" in render_cv.build_latex({"meta": {"name": "Jane Doe"}},
+                                               engine="/usr/bin/pdflatex")
 
 
 def test_cjk_engine_selection_requires_unicode_engine(monkeypatch):
@@ -558,6 +580,115 @@ def test_has_cjk_detects_scripts():
     assert render_cv._has_cjk("ประสบการณ์") is True  # Thai
     assert render_cv._has_cjk("Berufserfahrung") is False
     assert render_cv._has_cjk("Café résumé") is False
+
+
+# ── the U+00FF threshold, and the warnings that used to be discarded ──────────
+
+def test_needs_unicode_font_is_a_threshold_not_a_script_list():
+    """`_has_cjk` was doing this job, and because it enumerates scripts it
+    answered False for Latin Extended-A — so `Łukasz Wójcik` was routed to an
+    8-bit font with no Ł in it and reached recruiters as `ukasz Wójcik`.
+
+    The whole point of the replacement is that it names no script. Every
+    assertion below that is NOT CJK is a character `_has_cjk` returns False for,
+    and each is an ordinary letter in a market this skill targets."""
+    for text in ("Łukasz Wójcik",     # Polish, Latin Extended-A
+                 "Politechnika Śląska",
+                 "Škoda", "Ștefan",   # Czech, Romanian
+                 "Ģirts", "Ceyhun İpek",  # Latvian, Turkish
+                 "Иван Петров", "Γεωργίου",  # Cyrillic, Greek
+                 "李明", "김철수"):     # and CJK, which it must still catch
+        assert render_cv._needs_unicode_font(text) is True, text
+    for text in ("Berufserfahrung", "Café résumé naïve", "Ångström", "Zoë",
+                 "100% & more_", ""):
+        assert render_cv._needs_unicode_font(text) is False, text
+    # …and it reaches into the whole profile, not just one field.
+    assert render_cv.profile_needs_unicode_font(
+        {"experience": [{"org": "Politechnika Śląska"}]}) is True
+    assert render_cv.profile_needs_unicode_font(
+        {"experience": [{"org": "Acme BV"}]}) is False
+
+
+def test_is_unicode_engine_dispatches_on_the_basename():
+    for engine in ("tectonic", "/opt/homebrew/bin/tectonic", "xelatex",
+                   "/Library/TeX/texbin/lualatex", None):
+        assert render_cv._is_unicode_engine(engine) is True, engine
+    for engine in ("pdflatex", "/usr/bin/pdflatex", "latex"):
+        assert render_cv._is_unicode_engine(engine) is False, engine
+
+
+def test_missing_characters_reads_both_engine_dialects():
+    """The engine reports the drop and exits 0; this scan is what turns that back
+    into a failure. Both wordings are real output measured on this machine.
+
+    Note the mojibake in the tectonic line: tectonic writes the character itself
+    as U+FFFD before anyone here can read it, so the codepoint in the parentheses
+    is the only trustworthy part and the character is rebuilt from it."""
+    log = (
+        'warning: cv.tex:12: Missing character: There is no �� ("141) '
+        'in font ec-lmbx12!\n'
+        'warning: cv.tex:19: Missing character: There is no �� ("15A) '
+        'in font ec-lmr10!\n'
+        'Missing character: There is no � (U+0418) in font '
+        '[lmroman10-regular]:mapping=tex-text;!\n'
+    )
+    assert render_cv.missing_characters(log) == [
+        "U+0141 'Ł' in font ec-lmbx12",
+        "U+015A 'Ś' in font ec-lmr10",
+        "U+0418 'И' in font [lmroman10-regular]:mapping=tex-text",
+    ]
+
+
+def test_missing_characters_deduplicates_and_is_quiet_on_a_clean_log():
+    log = 'Missing character: There is no x ("141) in font f!\n' * 12
+    assert render_cv.missing_characters(log) == ["U+0141 'Ł' in font f"]
+    assert render_cv.missing_characters("") == []
+    assert render_cv.missing_characters(None) == []
+    assert render_cv.missing_characters("note: Writing `cv.pdf` (24 KiB)") == []
+
+
+def test_a_compile_that_drops_glyphs_deletes_the_pdf_and_fails(tmp_path, monkeypatch):
+    """A PDF with dropped glyphs is a WRONG artifact, not a degraded one — the
+    recruiter cannot tell, and neither can the candidate, because cv.md is
+    intact. So it must not be left on disk to be attached to an email."""
+    tex = tmp_path / "cv.tex"
+    tex.write_text("x", encoding="utf-8")
+    out = tmp_path / "cv.pdf"
+
+    def fake_run(cmd, **kw):
+        out.write_bytes(b"%PDF-1.5\n")            # the engine "succeeds"
+        class R:
+            returncode = 0
+            stdout = ""
+            stderr = ('Missing character: There is no �� ("141) '
+                      'in font ec-lmbx12!\n')
+        return R()
+
+    monkeypatch.setattr(render_cv.subprocess, "run", fake_run)
+    reasons = []
+    assert render_cv.compile_latex("tectonic", tex, out, reasons=reasons) is False
+    assert reasons == [render_cv.MISSING_CHARACTERS]
+    assert not out.exists()
+    assert tex.exists()                            # the .tex is still delivered
+
+
+def test_the_cli_exits_nonzero_when_a_compilable_machine_produced_no_pdf(
+        tmp_path, monkeypatch, sample_profile_path):
+    """`Wrote cv.pdf` + exit 0 is how the wrong artifact got delivered. A missing
+    engine keeps exit 0 — modes/apply.md documents that degradation and expects
+    the run to carry on with .md/.docx — but a machine that could have compiled
+    and did not produce a correct PDF has failed."""
+    out = tmp_path / "cv.pdf"
+    monkeypatch.setattr(render_cv, "find_latex_engine", lambda cjk=False: None)
+    assert render_cv.main([str(sample_profile_path), "--format", "pdf",
+                           "--out", str(out)]) == 0
+
+    monkeypatch.setattr(render_cv, "find_latex_engine", lambda cjk=False: "tectonic")
+    monkeypatch.setattr(render_cv, "compile_latex",
+                        lambda *a, **kw: render_cv._note(kw.get("reasons"),
+                                                         render_cv.MISSING_CHARACTERS))
+    assert render_cv.main([str(sample_profile_path), "--format", "pdf",
+                           "--out", str(out)]) == 1
 
 
 # ── engine argv: one helper, two renderers ────────────────────────────────

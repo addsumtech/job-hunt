@@ -938,19 +938,108 @@ def _engine_cmd(engine, tex_path, out_dir):
     return [engine, "-interaction=nonstopmode", "-output-directory", out_dir, tex_path]
 
 
+_UNICODE_ENGINES = ("tectonic", "xelatex", "lualatex")
+
+
+def _is_unicode_engine(engine):
+    """True when `engine` reads its input as Unicode and wants `fontspec`.
+
+    tectonic is XeTeX-based, so it belongs here with xelatex and lualatex; only
+    pdflatex wants the 8-bit `inputenc`/`fontenc` preamble. `None` — no engine
+    installed — resolves to True, because the `.tex` we leave behind in that case
+    is the one `modes/apply.md` tells the user to compile after installing
+    **tectonic**; handing them a pdfLaTeX preamble to compile with the engine we
+    just recommended is how this went wrong in the first place.
+
+    Dispatch on the BASENAME, for the same reason `_engine_cmd` does:
+    find_latex_engine returns an absolute path when the engine is not on PATH.
+    """
+    if engine is None:
+        return True
+    return pathlib.Path(str(engine)).stem in _UNICODE_ENGINES
+
+
 def _has_cjk(text):
-    """True if text contains CJK / Hangul / Thai characters, which need a
-    Unicode LaTeX engine (XeTeX/LuaTeX) and a CJK font rather than the default
-    Latin-script setup."""
+    """True if text contains CJK / Hangul / Thai characters.
+
+    Narrow on purpose, and NOT the test for "needs a Unicode font" — that is
+    `_needs_unicode_font`. What this answers is the narrower question "does this
+    document need the ``xeCJK`` package and an installed CJK font on top of a
+    Unicode engine", which really is script-specific: xeCJK exists to fix CJK
+    line-breaking and inter-script spacing, and pdflatex cannot typeset these
+    scripts at any font. Do not reach for this function to decide anything about
+    encodings or Latin fonts — see the comment on `_needs_unicode_font`.
+    """
     return any("　" <= ch <= "鿿" or "가" <= ch <= "힣"
                or "฀" <= ch <= "๿" for ch in text)
 
 
+def _needs_unicode_font(text):
+    """True if text contains any character above U+00FF.
+
+    A THRESHOLD, not a script list, and that distinction is the whole bug this
+    function was added to close. `_has_cjk` used to be asked "does this need the
+    Unicode/fontspec path?", and because it enumerates scripts — CJK, Hangul,
+    Thai — everything in Latin Extended-A and beyond fell through to the 8-bit
+    T1 path: `Łukasz Wójcik` compiled, exit 0, and reached the recruiter as
+    `ukasz Wójcik`. That is Polish, Czech, Slovak, Croatian, Hungarian, Turkish,
+    Romanian and Latvian names and employers, in exactly the nl/de/uk markets
+    this skill is built for. Enumerating scripts is what produced it; the next
+    script would produce it again, so the test is a boundary instead: U+00FF is
+    where an 8-bit font's coverage stops being something you can assume.
+    """
+    return any(ord(ch) > 0xFF for ch in text)
+
+
 def profile_has_cjk(profile):
     """Whether any rendered text in the profile is CJK/Hangul/Thai. Drives the
-    XeLaTeX-vs-pdfLaTeX preamble choice. A flat string dump is enough — we only
-    need to know whether such characters appear anywhere."""
+    xeCJK/CJK-font half of the preamble and the engine requirement. A flat string
+    dump is enough — we only need to know whether such characters appear."""
     return _has_cjk(str(profile))
+
+
+def profile_needs_unicode_font(profile):
+    """Whether any rendered text in the profile sits above U+00FF."""
+    return _needs_unicode_font(str(profile))
+
+
+# The engine prints one of these per dropped glyph and still exits 0 — so this
+# is a *warning* that destroys the artifact. Two dialects, both covered:
+#   XeTeX/tectonic:  `Missing character: There is no Ł (U+0141) in font [lmroman10-regular]…`
+#   pdfTeX/8-bit:    `Missing character: There is no Ł ("141) in font ec-lmr10!`
+_MISSING_CHAR_RE = re.compile(
+    r"Missing character: There is no (.+?) in font ([^\n!]*)")
+# Measured: tectonic 0.16.9 writes the character itself as U+FFFD U+FFFD in its
+# own log — `There is no �� ("141)` — so the character is already lost
+# before this code sees it and only the codepoint is trustworthy. Read that, and
+# rebuild the character from it, or the message names the dropped glyph as "??".
+_CODEPOINT_RE = re.compile(r'\((?:U\+|")([0-9A-Fa-f]{2,6})\)')
+
+
+def missing_characters(log):
+    """Every distinct `Missing character` the engine reported, in order.
+
+    The information was always there — `render_pdf` captured the engine output
+    and threw it away, which is why a CV whose name had lost a letter reported
+    success and printed "Wrote cv.pdf". Returns a list of
+    "U+0141 'Ł' in font ec-lmbx12" strings.
+    """
+    seen, out = set(), []
+    for described, font in _MISSING_CHAR_RE.findall(log or ""):
+        m = _CODEPOINT_RE.search(described)
+        if m:
+            code = int(m.group(1), 16)
+            try:
+                what = f"U+{code:04X} {chr(code)!r}"
+            except ValueError:
+                what = f"U+{code:04X}"
+        else:
+            what = described.strip()
+        item = f"{what} in font {font.strip().rstrip(':;')}"
+        if item not in seen:
+            seen.add(item)
+            out.append(item)
+    return out
 
 
 # Cross-platform CJK font fallback. xeCJK needs a real installed CJK font, and
@@ -968,24 +1057,100 @@ _CJK_FONT_FALLBACKS = [
 ]
 
 
+def _font_chain(fonts, setter):
+    """A nested `\\IfFontExistsTF` chain: the first font actually installed wins,
+    and the innermost branch is empty, leaving the engine's own default.
+
+    `\\IfFontExistsTF` is used rather than a bare `\\setmainfont`/`\\setCJKmainfont`
+    because naming a font that is not installed is a FATAL fontspec error, not a
+    fallback — measured under tectonic 0.16.9, `\\setmainfont{Latin Modern Roman}`
+    halts with "The font ... cannot be found" even though Latin Modern is the very
+    font the engine is about to use by default. A `.tex` is a deliverable that gets
+    recompiled on other machines, so it must not name a font it cannot check for.
+
+    One chain builder, two callers (main font and CJK font), for the reason
+    `_engine_cmd` gives: two copies is two things to be wrong.
+    """
+    setup = "{}"
+    for f in reversed(list(fonts)):
+        setup = r"\IfFontExistsTF{%s}{\%s{%s}}{%s}" % (f, setter, f, setup)
+    return setup
+
+
 def _cjk_font_setup(meta):
     fonts = [str(meta["cjk_font"])] if meta.get("cjk_font") else []
-    fonts += _CJK_FONT_FALLBACKS
-    setup = "{}"  # innermost: leave xeCJK's own default
-    for f in reversed(fonts):
-        setup = r"\IfFontExistsTF{%s}{\setCJKmainfont{%s}}{%s}" % (f, f, setup)
-    return setup
+    return _font_chain(fonts + _CJK_FONT_FALLBACKS, "setCJKmainfont")
+
+
+def _main_font_setup(meta):
+    """The Latin main-font chain for the fontspec path.
+
+    Deliberately empty by default: fontspec's own default under a Unicode engine
+    is Latin Modern Roman, which is the OpenType cut of the same typeface the
+    pdfLaTeX path uses (ec-lmr10), so the PDF looks unchanged — and, measured,
+    it covers Latin-1 and Latin Extended-A (Ł ą Š Ș all render). What it does not
+    cover — Cyrillic, Greek — is now caught loudly by the `Missing character`
+    scan in `render_pdf` rather than dropped, and `meta.main_font` is the answer
+    the scan's message points at.
+    """
+    fonts = [str(meta["main_font"])] if meta.get("main_font") else []
+    return _font_chain(fonts, "setmainfont")
+
+
+def latex_preamble(engine=None, cjk=False, meta=None, margin="2cm"):
+    """The documentclass + encoding/font lines, chosen by ENGINE, not by content.
+
+    This is the fix for the defect that shipped a recruiter a CV missing letters
+    out of the candidate's own name. The preamble has to match the engine that
+    will compile it, because that is what decides how the bytes are read:
+
+      * tectonic / xelatex / lualatex read the file as Unicode and hand each
+        codepoint straight to the font, so they need **fontspec**. Given
+        `inputenc`+`fontenc` instead they load an 8-bit T1 font, silently drop
+        every glyph it lacks, print `Missing character`, and exit 0.
+      * pdflatex needs **inputenc + fontenc**, and with them genuinely does
+        handle Latin Extended-A (inputenc composes `Ś` as `\\'S`). Emitting
+        fontspec for pdflatex would trade a silent glyph drop for a hard compile
+        failure, which is why this is not decided by looking at the text.
+
+    `find_latex_engine` prefers tectonic and `modes/apply.md` tells the user to
+    install it, so the Unicode branch is the one taken on a normal machine — and
+    it is also what an unknown engine (`None`) gets, since the `.tex` left behind
+    when nothing is installed is meant to be compiled with tectonic later.
+
+    One preamble builder, both renderers: render_letter.py had its own copy of
+    the pdfLaTeX lines and therefore its own copy of this bug.
+    """
+    meta = meta or {}
+    lines = [r"\documentclass[11pt,a4paper]{article}"]
+    if _is_unicode_engine(engine):
+        lines.append(r"\usepackage{fontspec}")
+        main = _main_font_setup(meta)
+        if main != "{}":
+            lines.append(main)
+        if cjk:
+            lines += [r"\usepackage{xeCJK}", _cjk_font_setup(meta)]
+    else:
+        lines += [r"\usepackage[utf8]{inputenc}", r"\usepackage[T1]{fontenc}"]
+    lines.append(r"\usepackage[margin=%s]{geometry}" % margin)
+    return lines
 
 
 # ── LaTeX renderer ────────────────────────────────────────────────────────────
 
-def build_latex(profile, cjk=None):
+def build_latex(profile, cjk=None, engine=None):
     """Assemble the LaTeX source.
 
-    `cjk` selects the engine-specific preamble: a CJK CV needs a XeLaTeX setup
-    (fontspec + xeCJK + a system CJK font) instead of the pdfLaTeX
-    inputenc/fontenc setup, which cannot render CJK glyphs at all. When `cjk`
-    is None we auto-detect from the profile content.
+    `engine` is the engine that will compile this file, and it selects the
+    encoding/font half of the preamble — see `latex_preamble` for why that has to
+    be an engine decision and not a content one. `None` means "unknown", which
+    resolves to the Unicode/fontspec preamble because tectonic is what
+    `find_latex_engine` prefers and what `modes/apply.md` tells the user to
+    install. `render_pdf` always passes the engine it actually resolved.
+
+    `cjk` adds xeCJK and a system CJK font on top: that part IS content-driven,
+    because xeCJK exists for CJK line-breaking and needs a CJK font installed.
+    When `cjk` is None we auto-detect from the profile content.
     """
     _warn_unknown_market(profile)
     e = latex_escape
@@ -997,24 +1162,9 @@ def build_latex(profile, cjk=None):
     meta = profile.get("meta", {}) or {}
     if cjk is None:
         cjk = profile_has_cjk(profile)
-    if cjk:
-        preamble = [
-            r"\documentclass[11pt,a4paper]{article}",
-            r"\usepackage[margin=2cm]{geometry}",
-            r"\usepackage{enumitem}",
-            r"\usepackage{fontspec}",
-            r"\usepackage{xeCJK}",
-            _cjk_font_setup(meta),
-        ]
-    else:
-        preamble = [
-            r"\documentclass[11pt,a4paper]{article}",
-            r"\usepackage[utf8]{inputenc}",
-            r"\usepackage[T1]{fontenc}",
-            r"\usepackage[margin=2cm]{geometry}",
-            r"\usepackage{enumitem}",
-        ]
+    preamble = latex_preamble(engine=engine, cjk=cjk, meta=meta, margin="2cm")
     parts = preamble + [
+        r"\usepackage{enumitem}",
         r"\usepackage[hidelinks]{hyperref}",
         r"\usepackage{graphicx}",
         r"\setlist{nosep,leftmargin=*}",
@@ -1132,17 +1282,113 @@ def build_latex(profile, cjk=None):
 
 # ── PDF renderer ──────────────────────────────────────────────────────────────
 
-def render_pdf(profile, out_path):
+# Why a PDF was not produced.
+NO_ENGINE, UNSUPPORTED_SCRIPT, COMPILE_FAILED, MISSING_CHARACTERS = (
+    "NO_ENGINE", "UNSUPPORTED_SCRIPT", "COMPILE_FAILED", "MISSING_CHARACTERS")
+
+# The first two are limitations of the machine or the template that modes/apply.md
+# documents and expects the run to continue past on .md/.docx, so they keep exit 0.
+# The other two mean a machine that CAN build PDFs did not build a correct one —
+# exiting 0 on that is how the CV with the missing letters got delivered.
+TOLERATED_PDF_FAILURES = (NO_ENGINE, UNSUPPORTED_SCRIPT)
+
+
+def pdf_failure_is_tolerated(reasons):
+    return bool(reasons) and all(r in TOLERATED_PDF_FAILURES for r in reasons)
+
+
+def _note(reasons, reason):
+    if reasons is not None:
+        reasons.append(reason)
+    return False
+
+
+def compile_latex(engine, tex_path, out_path, reasons=None):
+    """Run `engine` on `tex_path` and land the result at `out_path`.
+
+    Returns True only if a PDF was produced AND every glyph in it survived. One
+    compile helper, both renderers — the same reason `_engine_cmd` is shared.
+    `reasons`, if given, collects the failure token (see above) for a caller that
+    needs to pick an exit code.
+
+    The `Missing character` scan is the point of this function. The engine prints
+    one such warning per dropped glyph and still exits 0, and the old code ran
+    `subprocess.run(..., capture_output=True)` and discarded the output — so a CV
+    whose name had lost a letter printed "Wrote cv.pdf" and passed every gate.
+    A PDF with dropped glyphs is a WRONG artifact, not a degraded one: the
+    recruiter cannot tell it is wrong, and the candidate cannot tell either
+    because cv.md is intact. So the file is deleted rather than left to be sent,
+    and the `.tex` (always a deliverable here) stays behind.
+    """
+    tex_path, out_path = pathlib.Path(tex_path), pathlib.Path(out_path)
+    cmd = _engine_cmd(engine, tex_path, out_path.parent)
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
+    except (OSError, subprocess.CalledProcessError):
+        # OSError is the real one: find_latex_engine can return a path from
+        # _ENGINE_DIRS that turns out not to be executable. CalledProcessError
+        # cannot come from this call (there is no check=True — the output is
+        # needed on the failure path too, and check=True would throw it away),
+        # but it is caught so a caller that stubs subprocess.run the old way
+        # still degrades instead of crashing.
+        proc = None
+    if proc is None or getattr(proc, "returncode", 1) != 0:
+        log = "" if proc is None else _engine_log(proc)
+        print(f"WARNING: LaTeX compile failed. PDF could not be produced. "
+              f"LaTeX source is at: {tex_path}", file=sys.stderr)
+        for line in log.strip().splitlines()[-15:]:
+            print(f"  | {line}", file=sys.stderr)
+        return _note(reasons, COMPILE_FAILED)
+
+    # If the engine wrote the PDF next to the .tex but the caller requested a
+    # different name, move it into place.
+    produced = tex_path.with_suffix(".pdf")
+    if not out_path.exists() and produced.exists():
+        produced.replace(out_path)
+
+    dropped = missing_characters(_engine_log(proc))
+    if dropped:
+        for p in (out_path, produced):
+            if p.exists():
+                p.unlink()
+        print(f"ERROR: {len(dropped)} character(s) could not be typeset and were "
+              f"DROPPED from the PDF — the engine reported this and exited 0, so "
+              f"the file would have looked fine while a recruiter read a name with "
+              f"letters missing. No PDF was written. The LaTeX source is at "
+              f"{tex_path}.", file=sys.stderr)
+        for item in dropped[:20]:
+            print(f"  missing: {item}", file=sys.stderr)
+        if len(dropped) > 20:
+            print(f"  … and {len(dropped) - 20} more", file=sys.stderr)
+        print("Fix it by pointing the renderer at a font that covers these "
+              "characters: set `meta.main_font` (Latin) or `meta.cjk_font` (CJK) "
+              "in the profile to a font installed on this machine. Markdown and "
+              ".docx are unaffected.", file=sys.stderr)
+        return _note(reasons, MISSING_CHARACTERS)
+    return True
+
+
+def _engine_log(proc):
+    """stdout + stderr of a finished engine run, as one string."""
+    return "".join(str(getattr(proc, s, "") or "") for s in ("stdout", "stderr"))
+
+
+def render_pdf(profile, out_path, reasons=None):
     """Build PDF via LaTeX. Always writes the `.tex` next to out_path (it is a
     deliverable in its own right, not just a failure breadcrumb). Returns True
-    on success, False if no engine / compile failed."""
+    on success, False if no engine / compile failed / glyphs were dropped;
+    `reasons`, if given, collects which of the three it was."""
     out_path = pathlib.Path(out_path)
     tex_path = out_path.with_suffix(".tex")
     cjk = profile_has_cjk(profile)
-    tex = build_latex(profile, cjk=cjk)
+
+    # Resolve the engine BEFORE building the source: the preamble has to match
+    # the engine that will compile it, and getting that pairing wrong is what
+    # dropped Latin Extended-A out of every PDF this renderer produced.
+    engine = find_latex_engine(cjk=cjk)
+    tex = build_latex(profile, cjk=cjk, engine=engine)
     tex_path.write_text(tex, encoding="utf-8")
 
-    engine = find_latex_engine(cjk=cjk)
     if engine is None:
         if cjk:
             print("WARNING: no Unicode LaTeX engine found for this CJK CV. "
@@ -1151,30 +1397,20 @@ def render_pdf(profile, out_path):
                   f".docx still render correctly. Wrote the XeLaTeX source to "
                   f"{tex_path} — compile it with `xelatex` once an engine and a "
                   "CJK font are available.", file=sys.stderr)
+        elif profile_needs_unicode_font(profile):
+            print("WARNING: no LaTeX engine (tectonic/pdflatex) found, and this "
+                  "CV contains characters above U+00FF (accented or non-Latin "
+                  f"letters). Wrote the XeLaTeX source to {tex_path}: compile it "
+                  "with `tectonic` (or xelatex/lualatex), NOT pdflatex — the "
+                  "source uses fontspec so those characters survive.",
+                  file=sys.stderr)
         else:
             print("WARNING: no LaTeX engine (tectonic/pdflatex) found. "
                   f"Wrote {tex_path}; install tectonic to produce a PDF.",
                   file=sys.stderr)
-        return False
+        return _note(reasons, NO_ENGINE)
 
-    cmd = _engine_cmd(engine, tex_path, out_path.parent)
-    try:
-        subprocess.run(cmd, check=True, capture_output=True)
-    except subprocess.CalledProcessError:
-        print(
-            f"WARNING: LaTeX compile failed. PDF could not be produced. "
-            f"LaTeX source is at: {tex_path}",
-            file=sys.stderr,
-        )
-        return False
-
-    # If the engine wrote the PDF next to the .tex but the caller requested a
-    # different name, move it into place.
-    if not out_path.exists():
-        produced = tex_path.with_suffix(".pdf")
-        if produced.exists():
-            produced.replace(out_path)
-    return True
+    return compile_latex(engine, tex_path, out_path, reasons=reasons)
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
@@ -1195,19 +1431,23 @@ def main(argv=None):
     elif args.format == "docx":
         render_docx(profile, out)
     elif args.format == "pdf":
-        ok = render_pdf(profile, out)
+        reasons = []
+        ok = render_pdf(profile, out, reasons=reasons)
         tex = out.with_suffix(".tex")
         if ok:
             # The .tex is delivered alongside every PDF, by design.
             print(f"Wrote {out} (LaTeX source alongside it: {tex})")
-        else:
-            print(
-                f"PDF could not be built (no LaTeX engine found). "
-                f"LaTeX source written to: {tex} — install tectonic to compile it.",
-                file=sys.stderr,
-            )
-        return
+            return 0
+        # Deliberately does NOT name a cause: render_pdf already printed the
+        # specific one (no engine / compile failed / glyphs dropped) and this
+        # line used to assert "no LaTeX engine found" for all three, which told
+        # a user whose glyphs had just been dropped to install an engine they
+        # already had.
+        print(f"PDF could not be built — see the warning above. "
+              f"LaTeX source written to: {tex}", file=sys.stderr)
+        return 0 if pdf_failure_is_tolerated(reasons) else 1
     print(f"Wrote {out}")
+    return 0
 
 
 if __name__ == "__main__":

@@ -498,7 +498,7 @@ a fabrication the candidate then repeats back), and the shortlist's `why_matched
 | Render freshness | `scripts/check_render_freshness.py` | a judge that read a file the disk no longer has |
 | CV lint | `scripts/lint_cv.py` | clichés, weak openers, over-long bullets, repeated verbs |
 | Letter | `scripts/check_letter.py` | markdown in a body string, length, duplicated name, wrong company/role |
-| Page count | `scripts/check_pages.py` | a PDF longer than the market's table allows; a letter over one page; an unreadable PDF |
+| Page count and PDF text | `scripts/check_pages.py` | a PDF longer than the market's table allows; a letter over one page; an unreadable PDF; a PDF whose text is missing `meta.name` or an `experience[].org`, or whose text cannot be read at all (`UNVERIFIED_PDF_TEXT` — not a pass) |
 | Word limits | `scripts/check_word_limits.py` | a supporting-statement criterion over its stated limit, empty, or with no limit recorded |
 | Apply completion | `scripts/check_apply.py` | a missing receipt; a gate that only ran its `--record` setup (`NOT_VERIFIED`); ANY gate left failing, named or not; an unclassified stop; a missing brief |
 | Mock interview | `scripts/check_mock.py` | an invented tag or band; a tag with no quote, or a quote that is not in the transcript; a pass emitting the other pass's tags; a scraped question with no id, no date, or the wrong country; an answer-bank entry with no source; a collapsed claim with no walk-back; an unsourced fact neither promoted nor walked back |

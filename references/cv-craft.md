@@ -124,6 +124,8 @@ So, when `meta.target_market` is a **Cluster-1** country (US, CA, UK, IE, AU, NZ
 
 `.docx` for ATS/portal submission (see §4); PDF for the human-facing copy or when the posting requests it. Markdown/.docx for any CJK/Thai CV (PDF caveat above).
 
+**Accents and non-Latin letters in the PDF.** The renderer emits a `fontspec` source for `tectonic`/`xelatex`/`lualatex` and an `inputenc`/`fontenc` source for `pdflatex`, so `Łukasz Wójcik`, `Politechnika Śląska`, `Škoda` and `Ștefan` come out intact under either. If a character is not in the font, the engine drops it and still exits 0 — so `render_cv.py` scans the engine's `Missing character` warnings, refuses to write the PDF, and names the codepoints; `scripts/check_pages.py` independently re-reads the finished PDF and fails if `meta.name` or any `experience[].org` is not in it. The fix when it fires is `meta.main_font: "<a font installed here>"` (Latin) or `meta.cjk_font` (CJK); the default Latin Modern covers Latin-1 and Latin Extended-A but not Cyrillic or Greek. Never hand over a PDF the renderer refused — `.md` and `.docx` are unaffected and can look perfect while the PDF has lost letters out of the candidate's own name.
+
 ---
 
 ## 3. The Bullet Pattern

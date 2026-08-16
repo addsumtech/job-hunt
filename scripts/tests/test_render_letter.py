@@ -27,11 +27,29 @@ def test_render_docx_letter(tmp_path):
     assert "Acme" in text
 
 
-def test_letter_latex_preamble_has_unicode_packages():
-    """BUG 2: render_letter.build_latex must include inputenc for UTF-8 safety."""
+def test_letter_latex_preamble_matches_the_engine():
+    """Same fix, same reason as test_render_cv's engine-aware preamble test.
+
+    This file shipped its own copy of the `inputenc`+`fontenc` preamble and
+    therefore its own copy of the defect: a letter to `Ștefan Ionescu` at
+    `Politechnika Śląska` compiled under tectonic, exited 0, and printed
+    "tefan Ionescu" at "Politechnika lska". It now shares
+    `render_cv.latex_preamble`, so there is one place to be right."""
     data = render_letter.load(FIXTURES / "sample_letter.yaml")
-    tex = render_letter.build_latex(data)
-    assert r"\usepackage[utf8]{inputenc}" in tex
+    for engine in ("tectonic", "xelatex", None):
+        tex = render_letter.build_latex(data, engine=engine)
+        assert r"\usepackage{fontspec}" in tex, engine
+        assert "inputenc" not in tex, engine
+    pdf_tex = render_letter.build_latex(data, engine="/usr/bin/pdflatex")
+    assert r"\usepackage[utf8]{inputenc}" in pdf_tex
+    assert r"\usepackage[T1]{fontenc}" in pdf_tex
+
+
+def test_letter_and_cv_share_one_preamble_builder():
+    """Two call sites cannot drift if there is one — the lesson `_engine_cmd`
+    already learned in this repo, applied to the preamble that broke next."""
+    import render_cv
+    assert render_letter.render_cv.latex_preamble is render_cv.latex_preamble
 
 
 def test_letter_pdf_degrades_without_engine(tmp_path, monkeypatch):
@@ -43,13 +61,39 @@ def test_letter_pdf_degrades_without_engine(tmp_path, monkeypatch):
 
 
 def test_letter_cjk_warns_and_degrades(tmp_path, capsys):
-    """A CJK letter must warn and degrade, not silently emit a broken PDF."""
+    """A CJK letter must warn and degrade, not silently emit a broken PDF.
+
+    Still keyed on CJK/Thai specifically, and deliberately not widened to the
+    U+00FF threshold: this template has no xeCJK and no CJK font chain, so those
+    scripts genuinely cannot be set here — but Ł, ą, Š and Ș now compile, and
+    refusing them would have been a second wrong answer to the same question."""
     data = {"sender": {"name": "山田"}, "recipient": {"company": "会社"},
             "salutation": "拝啓", "body": ["貴社を志望します。"], "closing": "敬具"}
     out = tmp_path / "letter.pdf"
-    assert render_letter.render_pdf(data, out) is False
+    reasons = []
+    assert render_letter.render_pdf(data, out, reasons=reasons) is False
+    assert reasons == [render_letter.render_cv.UNSUPPORTED_SCRIPT]
     assert (tmp_path / "letter.tex").exists()
     assert "CJK" in capsys.readouterr().err
+    # …and it is a tolerated degradation, like a missing engine: the run carries
+    # on with .md/.docx rather than being reported as a broken renderer.
+    assert render_letter.render_cv.pdf_failure_is_tolerated(reasons) is True
+
+
+def test_letter_diacritics_are_not_refused(tmp_path, monkeypatch):
+    """The other half of the same guard: a Polish sender is not CJK and must not
+    be turned away — before the fix it was not turned away either, it was
+    silently mangled."""
+    monkeypatch.setattr(render_letter.render_cv, "find_latex_engine", lambda: None)
+    data = {"sender": {"name": "Łukasz Wójcik"},
+            "recipient": {"company": "Politechnika Śląska"},
+            "salutation": "Dear Ștefan,", "body": ["Škoda."], "closing": "Sincerely,"}
+    reasons = []
+    assert render_letter.render_pdf(data, tmp_path / "letter.pdf",
+                                    reasons=reasons) is False
+    assert reasons == [render_letter.render_cv.NO_ENGINE]   # not UNSUPPORTED_SCRIPT
+    tex = (tmp_path / "letter.tex").read_text(encoding="utf-8")
+    assert r"\usepackage{fontspec}" in tex and "Łukasz Wójcik" in tex
 
 
 def test_letter_pdf_uses_the_tectonic_argv_for_an_absolute_engine_path(tmp_path, monkeypatch):

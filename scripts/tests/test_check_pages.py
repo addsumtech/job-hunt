@@ -8,29 +8,59 @@ sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 import check_pages
 import journal
 
-JUNIOR = {"meta": {"name": "Z"}, "experience": [{"org": "A", "start": "2025-01"}]}
-MID = {"meta": {"name": "Z"}, "experience": [{"org": "A", "start": "2018-03"}]}
+JUNIOR = {"meta": {"name": "Zoë Nowak"},
+          "experience": [{"org": "Acme BV", "start": "2025-01"}]}
+MID = {"meta": {"name": "Zoë Nowak"},
+       "experience": [{"org": "Acme BV", "start": "2018-03"}]}
 
 
-def _pdf(path, pages, compress=False):
-    """A minimal PDF with `pages` page objects. Uncompressed by default; the
-    compressed variant exercises the object-stream path tectonic actually emits."""
+def _profile_text(profile):
+    """What a correctly rendered PDF of `profile` would say."""
+    parts = [str((profile.get("meta") or {}).get("name") or "")]
+    parts += [str((ex or {}).get("org") or "") for ex in profile.get("experience") or []]
+    return " ".join(p for p in parts if p)
+
+
+def _pdf(path, pages, compress=False, text=""):
+    """A minimal PDF with `pages` page objects and, optionally, readable text.
+
+    Uncompressed by default; the compressed variant exercises the object-stream
+    path tectonic actually emits. `text` is written the way a real PDF carries
+    text — a content stream of string literals plus a /ToUnicode CMap that maps
+    the codes back to Unicode — because check_pages now reads the words out of
+    the file, and a fixture with no words in it would be asserting against the
+    "cannot read this" branch by accident.
+    """
     body = b"".join(b"%d 0 obj\n<< /Type /Page /Parent 1 0 R >>\nendobj\n" % (i + 2)
                     for i in range(pages))
     if compress:
         blob = zlib.compress(body)
         body = (b"1 0 obj\n<< /Type /ObjStm /Filter /FlateDecode /Length %d >>\nstream\n"
                 % len(blob)) + blob + b"\nendstream\nendobj\n"
-    path.write_bytes(b"%PDF-1.5\n" + body + b"trailer\n<< >>\n%%EOF\n")
+    extra = b""
+    if text:
+        # Latin-1 codes with an identity /ToUnicode map — the 8-bit shape a
+        # pdflatex-produced CV has.
+        payload = text.encode("latin-1", "replace").replace(b"\\", b"") \
+                      .replace(b"(", b"").replace(b")", b"")
+        cmap = (b"begincmap\n1 beginbfrange\n<00> <FF> <0000>\n"
+                b"endbfrange\nendcmap\n")
+        extra = (b"90 0 obj\n<< /Length %d >>\nstream\n" % (len(cmap))
+                 + cmap + b"endstream\nendobj\n"
+                 + b"91 0 obj\n<< >>\nstream\nBT /F1 12 Tf (" + payload
+                 + b") Tj ET\nendstream\nendobj\n")
+    path.write_bytes(b"%PDF-1.5\n" + body + extra + b"trailer\n<< >>\n%%EOF\n")
     return path
 
 
-def _ws(tmp_path, profile=MID, cv_pages=2, letter_pages=None, compress=False):
+def _ws(tmp_path, profile=MID, cv_pages=2, letter_pages=None, compress=False,
+        cv_text=None):
     ws = tmp_path / "acme-engineer-2026-08-09"
     ws.mkdir(parents=True, exist_ok=True)
     (ws / "tailored-profile.yaml").write_text(
         yaml.safe_dump(profile, allow_unicode=True), encoding="utf-8")
-    _pdf(ws / "cv.pdf", cv_pages, compress)
+    _pdf(ws / "cv.pdf", cv_pages, compress,
+         text=_profile_text(profile) if cv_text is None else cv_text)
     if letter_pages is not None:
         _pdf(ws / "letter.pdf", letter_pages, compress)
     return ws
@@ -110,6 +140,62 @@ def test_no_pdf_is_exit_2_not_a_pass(tmp_path, capsys):
     (ws / "cv.pdf").unlink()
     assert check_pages.main(["--workspace", str(ws)]) == 2
     assert "cv.pdf" in capsys.readouterr().err
+
+
+# ── the PDF still says who the candidate is ───────────────────────────────────
+
+def test_a_pdf_that_lost_the_candidates_name_is_caught(tmp_path, capsys):
+    """The defect this half of the gate exists for, in miniature.
+
+    Measured on this repo before the fix: render_cv emitted a pdfLaTeX
+    inputenc/fontenc preamble, find_latex_engine handed the file to tectonic
+    (XeTeX), and every character above Latin-1 was dropped with an exit-0
+    warning — `Łukasz Wójcik` was delivered as `ukasz Wójcik`. Page count was
+    right, the compile "succeeded", cv.md was perfect, and all three judges read
+    the correct name. Nothing looked at the bytes the recruiter opens."""
+    ws = _ws(tmp_path, MID, cv_pages=2, cv_text="Zo Nowak Acme BV")   # ë dropped
+    assert check_pages.main(["--workspace", str(ws), "--today", "2026-08-09"]) == 1
+    out = capsys.readouterr().out
+    assert "TEXT_MISSING_FROM_PDF" in out and "meta.name" in out and "Zoë Nowak" in out
+
+
+def test_a_pdf_that_lost_an_employer_is_caught(tmp_path, capsys):
+    ws = _ws(tmp_path, MID, cv_pages=2, cv_text="Zoë Nowak Acme")
+    assert check_pages.main(["--workspace", str(ws), "--today", "2026-08-09"]) == 1
+    out = capsys.readouterr().out
+    assert "TEXT_MISSING_FROM_PDF" in out and "experience[].org" in out
+
+
+def test_unreadable_text_is_UNVERIFIED_not_a_pass(tmp_path, capsys):
+    """A gate that cannot run must not look like a gate that passed.
+
+    There is no way from here to tell "this PDF has no text" from "this reader
+    cannot read this PDF", so the honest answer is to say so and fail, not to
+    find nothing missing and report clean."""
+    ws = _ws(tmp_path, MID, cv_pages=2, cv_text="")
+    assert check_pages.main(["--workspace", str(ws), "--today", "2026-08-09"]) == 1
+    out = capsys.readouterr().out
+    assert "UNVERIFIED_PDF_TEXT" in out and "NOT a pass" in out
+
+
+def test_no_name_or_orgs_declared_means_nothing_to_assert(tmp_path, capsys):
+    """A profile with neither a name nor an employer gives this check nothing to
+    look for, and inventing a finding there would be the cry-wolf failure the
+    page-budget half was calibrated to avoid."""
+    ws = _ws(tmp_path, {"meta": {}}, cv_pages=1, cv_text="")
+    assert check_pages.main(["--workspace", str(ws), "--today", "2026-08-09"]) == 0
+    assert capsys.readouterr().out.strip() == ""
+
+
+def test_matching_survives_typesetting_but_not_a_real_omission():
+    """Line-break hyphenation, ligature glyphs and missing word spaces are things
+    a typesetter is entitled to do; a dropped letter is not."""
+    readings = ["ZoëNowakPolitech-nikaŚląskaoﬃce"]
+    assert check_pages.pdf_contains(readings, "Zoë Nowak")
+    assert check_pages.pdf_contains(readings, "Politechnika Śląska")
+    assert check_pages.pdf_contains(readings, "office")
+    assert not check_pages.pdf_contains(readings, "Zoe Nowak")
+    assert not check_pages.pdf_contains(readings, "Politechnika Slaska")
 
 
 def test_each_run_leaves_exactly_one_receipt_including_the_exit_2_path(tmp_path):
