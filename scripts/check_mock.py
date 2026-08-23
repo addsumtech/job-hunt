@@ -124,17 +124,31 @@ def _check_headers(block, round_no: int, findings: list) -> None:
 def _check_quote(record, label: str, transcript: str, refs: set, findings: list) -> None:
     what = record.fields.get("tag") or record.fields.get("dimension") or record.kind
     quote = record.fields.get("quote", "")
+    ref_field = record.fields.get("ref", "")
+    # The quote must come from the answer it cites, spoken by the candidate.
+    # Searching the whole transcript let a Q1 finding be evidenced by Q3's words,
+    # or by the interviewer's own question — and the candidate then edits a real
+    # CV bullet against a sentence they never said. When the ref is unusable the
+    # whole transcript is still the haystack: UNKNOWN_REF below reports the ref
+    # itself, and reporting the same defect twice trains both findings away.
+    haystack, where = transcript, "the transcript"
+    if ref_field and ref_field in refs:
+        section = MB.transcript_sections(transcript).get(ref_field)
+        if section is not None:
+            haystack = MB.candidate_only(section)
+            where = f"the candidate's answer at {ref_field}"
     if not MB.normalize_quote(quote):
         findings.append(
             f"NO_QUOTE: {label} line {record.line_no}: {record.kind} {what} has an "
             "empty quote= — no quote, no tag"
         )
-    elif not MB.quote_is_in(quote, transcript):
+    elif not MB.quote_is_in(quote, haystack):
         findings.append(
             f"QUOTE_NOT_IN_TRANSCRIPT: {label} line {record.line_no}: "
-            f"{MB.normalize_quote(quote)[:70]!r} does not appear in the transcript"
+            f"{MB.normalize_quote(quote)[:70]!r} does not appear, in that order, in "
+            f"{where}"
         )
-    ref = record.fields.get("ref", "")
+    ref = ref_field
     # `refs` empty means the transcript has no question headings at all; that is
     # reported once, by check_assessment, rather than N times here.
     if refs and ref not in refs:
@@ -359,7 +373,8 @@ def _parse_stamp(raw: str):
     return None
 
 
-def check_question_log(path: pathlib.Path, today: datetime.date) -> list:
+def check_question_log(path: pathlib.Path, today: datetime.date,
+                       refs: set = None) -> list:
     if not path.exists():
         return [
             f"NO_QUESTION_LOG: {path} is missing — modes/interview.md requires the log "
@@ -444,6 +459,30 @@ def check_question_log(path: pathlib.Path, today: datetime.date) -> list:
             findings.append(
                 f"UNKNOWN_REJECT_REASON: {entry.get('id', '?')}: {reason!r} is not one of "
                 + " | ".join(V.REJECT_REASONS)
+            )
+
+    # Reconcile the log against what was actually asked. Without this the log is
+    # only ever checked against itself, so every rule above — the country rule
+    # included, which modes/interview.md calls the most dangerous failure this
+    # source offers — binds only the rows the model chose to write down. Omitting
+    # the row, or typing `source: generated` on a scraped one, switched all of
+    # them off, and the agent deciding that is the same one that would make the
+    # mistake.
+    if refs is not None:
+        logged = {str(e.get("id") or "").strip()
+                  for e in questions if isinstance(e, dict)}
+        for ref in sorted(refs - logged):
+            findings.append(
+                f"LOG_MISSING_QUESTION: {ref} was asked in the transcript but has no "
+                f"questions: row in question-log.yaml — an unlogged question is one "
+                f"whose source nobody recorded"
+            )
+        asked = {str(e.get("id") or "").strip() for e in questions
+                 if isinstance(e, dict) and e.get("asked")}
+        for qid in sorted(asked - refs):
+            findings.append(
+                f"LOG_QUESTION_NOT_ASKED: {qid} is logged with asked: true but has no "
+                f"'## {qid}' heading in the transcript"
             )
     return findings
 
@@ -577,8 +616,121 @@ def walkback_entries(brief_text: str) -> list:
     return entries
 
 
+def _phrase_in(term: str, text: str) -> bool:
+    """Whole-token containment, reusing check_claims' implementation.
+
+    Imported rather than re-spelled: check_claims.phrase_in already handles the
+    part that is easy to get wrong — CJK, Thai and other unsegmented scripts have
+    no word boundaries, so a token test there would report every skill on every
+    Chinese CV as unsourced. Two copies of that reasoning is one copy that drifts.
+    """
+    try:
+        import check_claims
+    except ImportError:  # pragma: no cover - both live in scripts/
+        return MB.collapse_ws(term).lower() in MB.collapse_ws(text).lower()
+    return check_claims.phrase_in(term, text)
+
+
+def _promotion_ref_resolves(row: dict, workspace: pathlib.Path) -> bool:
+    """Whether `source_ref` names a file that actually exists in the workspace.
+
+    `source_ref` was never resolved by any script in this skill — not here, not in
+    check_claims — so one row citing a transcript was enough to silence UNSOURCED
+    for any term, whether or not the cited file existed or contained anything.
+    The ref carries a `#Q<n>` fragment by convention, which is stripped before the
+    path is tested.
+    """
+    ref = str(row.get("source_ref", "")).strip()
+    if not ref:
+        return False
+    path_part = ref.split("#", 1)[0].strip()
+    if not path_part:
+        return False
+    candidate = pathlib.Path(path_part)
+    if candidate.is_absolute():
+        return candidate.is_file()
+    # Workspace-relative, exactly as modes/interview.md:329 writes it
+    # (`mock/transcript-2.md#Q1`). Deliberately NOT a search for the basename
+    # anywhere under the workspace: that fallback would resolve any wrong
+    # directory to the right file and leave this check unable to fail, which is
+    # the shape of gate this audit spent its time finding.
+    return (workspace / candidate).is_file()
+
+
+def _check_promotions(claims_path: pathlib.Path, transcript_name: str,
+                      transcript_text: str, workspace: pathlib.Path):
+    """Validate every `session-answer` row citing this transcript.
+
+    Returns `(findings, promoted)` — `promoted` holding only the rows that
+    survived, so nothing downstream can discharge a fact with a row this
+    function rejected.
+    """
+    findings: list = []
+    promoted = []
+    if claims_path.exists():
+        try:
+            rows = journal.load_yaml(claims_path, expect=list)
+        except journal.YamlUnreadable as exc:
+            findings.append(f"CLAIMS_UNPARSEABLE: {exc}")
+            rows = []
+        for row in rows:
+            if not isinstance(row, dict) or row.get("source_kind") != "session-answer":
+                continue
+            if transcript_name not in str(row.get("source_ref", "")):
+                continue
+            missing = [f for f in _CLAIM_FIELDS if f not in row]
+            if missing:
+                findings.append(
+                    f"CLAIM_ROW_INCOMPLETE: the promotion row for "
+                    f"{row.get('term', '?')!r} is missing {', '.join(missing)}"
+                )
+            term = str(row.get("term", "")).strip()
+            # These three run for EVERY promotion row, not only when an
+            # UNSOURCED-FACT happens to have fired. They used to sit inside the
+            # `for record in unsourced:` loop below, so on the documented clean
+            # round — `FINDINGS: none` — a row claiming the transcript as its
+            # source got no scrutiny at all, and check_claims then treated it as
+            # provenance for putting the term on the tailored CV.
+            if row.get("retracted"):
+                # check_claims.py:415 already sorts rows this way. A claim the
+                # candidate withdrew is the strongest possible evidence AGAINST
+                # it, and reading that record as the claim's source is the worst
+                # version of this defect: the workspace contains the retraction.
+                findings.append(
+                    f"PROMOTION_RETRACTED: the promotion row for {term!r} is marked "
+                    "retracted, so it cannot source anything — a withdrawn claim is "
+                    "evidence against the fact, not for it"
+                )
+                continue
+            if not term:
+                findings.append(
+                    "PROMOTION_NO_TERM: a session-answer row citing "
+                    f"{transcript_name} has an empty term"
+                )
+                continue
+            if not _promotion_ref_resolves(row, workspace):
+                findings.append(
+                    f"PROMOTION_REF_MISSING: the promotion row for {term!r} cites "
+                    f"source_ref {str(row.get('source_ref', ''))!r}, which names no "
+                    f"file that exists under {workspace} — an unresolvable source is "
+                    "not a source"
+                )
+                continue
+            if not _phrase_in(term, transcript_text):
+                findings.append(
+                    f"PROMOTION_NOT_IN_TRANSCRIPT: the promotion row for {term!r} "
+                    f"cites {transcript_name}, but {term!r} does not appear in it — "
+                    "the candidate never said this, so it has no session-answer source"
+                )
+                continue
+            promoted.append(row)
+
+    return findings, promoted
+
+
 def check_walkback(blocks: dict, brief_path: pathlib.Path, claims_path: pathlib.Path,
-                   transcript_name: str) -> list:
+                   transcript_name: str, transcript_text: str = "",
+                   workspace: pathlib.Path = None) -> list:
     records = [
         record
         for block in blocks.values()
@@ -587,13 +739,25 @@ def check_walkback(blocks: dict, brief_path: pathlib.Path, claims_path: pathlib.
     ]
     fired = [r for r in records if r.fields["tag"] in V.WALKBACK_TAGS]
     unsourced = [r for r in records if r.fields["tag"] == "UNSOURCED-FACT"]
+
+    workspace = pathlib.Path(workspace) if workspace is not None else claims_path.parent
+
+    # Promotion rows are validated FIRST and UNCONDITIONALLY. This function used
+    # to return here when no tag had fired, which meant the documented clean
+    # round — both blocks emitting `FINDINGS: none` — never opened claims.yaml at
+    # all. A `session-answer` row is a claim that the candidate said something in
+    # this transcript, and check_claims treats it as provenance for putting that
+    # term on the tailored CV. It has to be true whether or not an assessor
+    # happened to flag anything, and the round where nobody flagged anything is
+    # exactly the round where nothing else is looking.
+    findings, promoted = _check_promotions(
+        claims_path, transcript_name, transcript_text, workspace)
+
     if not fired and not unsourced:
-        return []
+        return findings
 
     brief_text = brief_path.read_text(encoding="utf-8") if brief_path.exists() else ""
     entries = walkback_entries(brief_text)
-
-    findings = []
     if fired and _WB_SECTION not in brief_text:
         findings.append(
             "WALKBACK_MISSING: "
@@ -627,34 +791,13 @@ def check_walkback(blocks: dict, brief_path: pathlib.Path, claims_path: pathlib.
                 "be one of " + " | ".join(V.DEFECT_TAGS)
             )
 
-    promoted = []
-    if claims_path.exists():
-        try:
-            rows = journal.load_yaml(claims_path, expect=list)
-        except journal.YamlUnreadable as exc:
-            findings.append(f"CLAIMS_UNPARSEABLE: {exc}")
-            rows = []
-        for row in rows:
-            if not isinstance(row, dict) or row.get("source_kind") != "session-answer":
-                continue
-            if transcript_name not in str(row.get("source_ref", "")):
-                continue
-            promoted.append(row)
-            missing = [f for f in _CLAIM_FIELDS if f not in row]
-            if missing:
-                findings.append(
-                    f"CLAIM_ROW_INCOMPLETE: the promotion row for "
-                    f"{row.get('term', '?')!r} is missing {', '.join(missing)}"
-                )
-
     for record in unsourced:
         quote = MB.normalize_quote(record.fields["quote"])
         walked = any(MB.quote_is_in(record.fields["quote"], e["quote"]) for e in entries)
-        claimed = any(
-            str(row.get("term", "")).strip()
-            and MB.collapse_ws(str(row["term"])).lower() in quote.lower()
-            for row in promoted
-        )
+        # Whole-token matching, borrowed from the gate that already got this
+        # right: a bare `in` let an honest `term: Java` row silently discharge an
+        # unrelated finding about "the JavaScript dashboard".
+        claimed = any(_phrase_in(str(row["term"]), quote) for row in promoted)
         if not (walked or claimed):
             findings.append(
                 f"UNRESOLVED_FACT: UNSOURCED-FACT at {record.fields['ref']} "
@@ -749,7 +892,8 @@ def run(workspace, round_no: int, answer_bank=None, today=None, vocab_scanner=_A
     blocks, block_findings = check_assessment(
         assessment_text, transcript_text, round_no, must_haves=must_haves)
     findings += block_findings
-    findings += check_question_log(workspace / "mock" / "question-log.yaml", today)
+    findings += check_question_log(workspace / "mock" / "question-log.yaml", today,
+                                  refs=transcript_refs(transcript_text))
     findings += check_answer_bank(answer_bank)
     findings += check_session_artifacts(workspace / "mock")
     findings += check_vocabulary(
@@ -765,6 +909,8 @@ def run(workspace, round_no: int, answer_bank=None, today=None, vocab_scanner=_A
         workspace / "interview-brief.md",
         workspace / "claims.yaml",
         f"transcript-{round_no}.md",
+        transcript_text=transcript_text,
+        workspace=workspace,
     )
     return findings
 

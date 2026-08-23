@@ -133,6 +133,11 @@ def parse_block(text: str, kind: str) -> Block:
 _WS = re.compile(r"\s+")
 _ELLIPSIS = re.compile(r"\.\.\.|…|\[\.\.\.\]")
 MIN_SEGMENT = 8
+# The question headings a transcript is divided by. check_mock.transcript_refs
+# uses the same shape to collect the ref set; this copy exists because the
+# splitting has to happen where the quote helpers live, and both are pinned
+# against each other by test_mock_blocks.py.
+_Q_HEADING_FULL = re.compile(r"^##\s+(Q\d+)\b", re.M)
 
 
 def collapse_ws(s: str) -> str:
@@ -148,23 +153,93 @@ def normalize_quote(s: str) -> str:
 
 
 def quote_segments(quote: str) -> list[str]:
+    """Every non-empty piece of the quote, split on the assessor's elisions.
+
+    Nothing is discarded for being short. The previous version kept only segments
+    of at least MIN_SEGMENT characters *whenever a longer one existed*, so
+    `"I owned the recon pipeline ... at NASA ... and shipped it in March"` was
+    checked as its two long halves and `at NASA` was never compared to anything.
+    Every fabricated number, employer and acronym is short: `40%`, `n=200`,
+    `MDR`, `p<0.05`, `at GE`. In Chinese the threshold was worse than in English —
+    `带过五人团队` is a complete claim in six characters.
+
+    A short quote is still a quote: `"we did"` is terse, not fabricated, and
+    rejecting it would report honest assessors as liars. The defect was never
+    that short text is unconvincing — it is that short text went UNCHECKED.
+    Every segment is now compared; MIN_SEGMENT is retained only as documentation
+    of the old threshold and for tests that pin this history.
+    """
     whole = normalize_quote(quote)
-    segments = [collapse_ws(p) for p in _ELLIPSIS.split(whole)]
-    long_enough = [s for s in segments if len(s) >= MIN_SEGMENT]
-    if long_enough:
-        return long_enough
-    return [whole] if whole else []
+    if not whole:
+        return []
+    return [s for s in (collapse_ws(p) for p in _ELLIPSIS.split(whole)) if s]
 
 
 def quote_is_in(quote: str, haystack: str) -> bool:
-    """True when every substantial segment of the quote appears in the haystack.
+    """True when the quote's segments appear in `haystack`, IN ORDER.
 
-    Tolerant of line wrapping, of one layer of quotation marks, and of an elision the
-    assessor put in the middle of a long quote — intolerant of an invented quote,
-    which is the thing worth catching.
+    Two changes from the substring-anywhere test this replaces, both of which were
+    reachable with the gate green:
+
+      * order. `all(seg in hay)` accepted a sentence assembled backwards out of
+        two different answers — Q3's clause followed by Q1's — as a verbatim
+        quote. An elision means "I left something out here", not "these phrases
+        occur somewhere in this document", so the segments must advance.
+      * no length filter (see `quote_segments`).
+
+    Scoping the haystack to the cited answer is the caller's job — `_check_quote`
+    in check_mock.py — because only the caller knows which `ref=` was given.
     """
     segments = quote_segments(quote)
     if not segments:
         return False
     hay = collapse_ws(haystack)
-    return all(seg in hay for seg in segments)
+    at = 0
+    for seg in segments:
+        found = hay.find(seg, at)
+        if found < 0:
+            return False
+        at = found + len(seg)
+    return True
+
+
+_SPEAKER = re.compile(r"^\*\*([^*:]+):\*\*", re.M)
+CANDIDATE_SPEAKER = "candidate"
+
+
+def transcript_sections(text: str) -> dict:
+    """`{"Q1": "<the text under that heading>", ...}`.
+
+    A quote has to come from the answer it cites. Searching the whole transcript
+    let a finding about Q1 be "evidenced" by words the candidate said in Q3 — or
+    by the interviewer's own question, which is the worst version, because the
+    candidate then rewrites a real CV bullet against a sentence they never said.
+    """
+    sections: dict = {}
+    matches = list(_Q_HEADING_FULL.finditer(text or ""))
+    for i, m in enumerate(matches):
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        sections[m.group(1)] = text[m.end():end]
+    return sections
+
+
+def candidate_only(section: str) -> str:
+    """The candidate's own turns within one section.
+
+    Falls back to the whole section when the transcript carries no `**Speaker:**`
+    markers at all. That fallback is deliberate: the marker convention is
+    described in modes/interview.md but enforced nowhere, and a stricter reading
+    would report every quote in an otherwise valid round as fabricated — the
+    cry-wolf failure, which is how a gate gets switched off. Section scoping
+    still applies in that case, so the cross-answer splice stays closed.
+    """
+    speakers = list(_SPEAKER.finditer(section or ""))
+    if not speakers:
+        return section or ""
+    out = []
+    for i, m in enumerate(speakers):
+        if m.group(1).strip().lower() != CANDIDATE_SPEAKER:
+            continue
+        end = speakers[i + 1].start() if i + 1 < len(speakers) else len(section)
+        out.append(section[m.end():end])
+    return "\n".join(out)
