@@ -248,6 +248,25 @@ def _check_provenance(label, row, site, raw_texts):
             findings.append(
                 f"URL_NOT_FROM_ADAPTER: {label} url {url!r} was not returned by "
                 f"an adapter ({stem!r} appears in no {site}-*.json capture)")
+
+    # The fields the reader acts on. 55e4f84 anchored the identifier and the card
+    # text and stopped there, so `company`, `location` and `salary` stayed free
+    # text a row could invent — and could invent in flat contradiction to the
+    # very capture it cites. Salary is the one a job-seeker acts on hardest and
+    # the one a model most readily hallucinates out of a blank field; measured on
+    # both shipped fixtures, a presence check on these passes 4/4, so this costs
+    # no false alarms.
+    for field, code in (("company", "COMPANY_NOT_IN_RAW"),
+                        ("salary", "SALARY_NOT_IN_RAW")):
+        value = str(row.get(field) or "").strip()
+        if not value:
+            continue
+        if not any(_normalise(value) in _normalise(text) for text in captures.values()):
+            findings.append(
+                f"{code}: {label} {field} {value[:60]!r} does not appear in any "
+                f"of {', '.join(sorted(captures))}. This is the field the reader "
+                "acts on, and the capture this row cites does not support it — "
+                "copy what the adapter returned, or leave it empty.")
     return findings
 
 
@@ -565,6 +584,109 @@ def _check_caps(brief):
     return findings
 
 
+_MD_URL = re.compile(r"https?://[^\s)\]>\"'|]+")
+
+
+def _check_md_rows(md_text, rows):
+    """Every posting URL rendered in shortlist.md must exist in shortlist.yaml.
+
+    All of commit 55e4f84's provenance anchors run over `shortlist.yaml`.
+    `shortlist.md` — the only artifact a human reads, hand-authored with no
+    renderer — was checked for four narrow things (a §0.1 section, the
+    provisional stamp, an emptiness phrase, a disclosure block) and never
+    reconciled row by row. A wholly invented posting present only in the .md
+    passed both discover gates with a `pass` receipt.
+
+    The sharpest way in was the gate's own remediation. modes/discover.md tells
+    the round to "delete the row" on SOURCE_ID_NOT_IN_RAW / RAW_TEXT_NOT_IN_RAW /
+    URL_NOT_FROM_ADAPTER, and never said to delete it from the .md too — so the
+    documented fix for a provenance failure moved the fabricated row OUT of the
+    checked file and LEFT it in the read one, and the round went green. That
+    sentence is corrected in modes/discover.md alongside this check; the check is
+    what makes the correction enforceable.
+
+    URLs only. They are unambiguous, every rendered row carries one, and matching
+    on prose would fire on an honest summary that mentions a company twice.
+    """
+    if not rows:
+        return []
+    known = set()
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        for field in ("url", "source_id", "id"):
+            value = str(row.get(field) or "").strip()
+            if value:
+                known.add(value)
+                known.add(value.split("?", 1)[0].split("#", 1)[0])
+    findings = []
+    for url in dict.fromkeys(_MD_URL.findall(md_text or "")):
+        stem = url.split("?", 1)[0].split("#", 1)[0].rstrip("/.,;")
+        if any(stem == k or stem in k or k in stem for k in known if k):
+            continue
+        findings.append(
+            f"MD_ROW_NOT_IN_SHORTLIST: shortlist.md renders {url!r}, which "
+            "matches no row in shortlist.yaml. The .md is the document the user "
+            "reads and acts on; a posting that exists only there was retrieved "
+            "by nothing. If a row was deleted for a provenance finding, delete "
+            "it from BOTH files.")
+    return findings
+
+
+_PAGE_ARG = re.compile(r"--page[= ]\s*(\d+)")
+
+
+def _pages_per_site(calls):
+    """{site: {page numbers actually requested}} from the recorded command lines.
+
+    DISTINCT page numbers, not a count of search calls: modes/discover.md Step 3
+    tells the round to query in both languages, so two calls landing on page 1
+    are two queries and one page. Counting calls would report that honest round
+    as a crawl, and a cap that fires on correct behaviour gets raised until it
+    fires on nothing.
+    """
+    pages: dict = {}
+    for call in calls:
+        if call.get("command") != "search" or call.get("exit_code") != 0:
+            continue
+        site = str(call.get("site") or "")
+        found = _PAGE_ARG.search(str(call.get("command_line") or ""))
+        # A search with no --page is page 1: that is what the platform returns.
+        pages.setdefault(site, set()).add(int(found.group(1)) if found else 1)
+    return pages
+
+
+def _check_caps_against_the_run(brief, shortlist, rows, calls):
+    """The half of the cap check that looks at what the round actually did.
+
+    `_check_caps` validates that brief.yaml DECLARES numbers within the ceilings,
+    and that was the whole of it: a round could declare `max_pages_per_site: 2`,
+    journal thirteen paginated searches against one site, and exit 0. Only
+    under-reporting fired. references/source-policy.md:78 states plainly that
+    "the cap is enforced by a script", and it names this one — so the cap has to
+    be compared to the run, not only to the ceiling.
+    """
+    findings = []
+    max_pages = brief.get("max_pages_per_site")
+    if isinstance(max_pages, int) and not isinstance(max_pages, bool) and max_pages >= 1:
+        for site, pages in sorted(_pages_per_site(calls).items()):
+            if len(pages) > max_pages:
+                findings.append(
+                    f"PAGES_ABOVE_CAP: {site} was searched across {len(pages)} "
+                    f"pages ({', '.join(str(p) for p in sorted(pages))}) but "
+                    f"brief.yaml declares max_pages_per_site={max_pages}. Two "
+                    "pages of a keyword search a human asked for is not a "
+                    "scrape; an uncapped crawl is, and the cap is the "
+                    "difference — see references/source-policy.md.")
+    max_rows = brief.get("max_rows_per_round")
+    if isinstance(max_rows, int) and not isinstance(max_rows, bool) and max_rows >= 1:
+        if len(rows) > max_rows:
+            findings.append(
+                f"ROWS_ABOVE_CAP: the shortlist carries {len(rows)} rows but "
+                f"brief.yaml declares max_rows_per_round={max_rows}")
+    return findings
+
+
 def _check_detail_cap(shortlist, rows):
     findings = []
     exempt = {str(entry.get("id"))
@@ -641,6 +763,8 @@ def check_run(workspace, shortlist, brief, md_text, calls):
         if not ok_calls:
             findings.extend(_check_disclosure(md_text))
 
+    findings.extend(_check_caps_against_the_run(brief, shortlist, rows, calls))
+    findings.extend(_check_md_rows(md_text, rows))
     findings.extend(_check_sources(workspace, shortlist, rows, calls))
     findings.extend(_check_detail_cap(shortlist, rows))
     findings.extend(_check_market_fit(brief, rows))
