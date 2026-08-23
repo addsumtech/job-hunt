@@ -61,9 +61,13 @@ conventions.**
 
 ## 3. Extract `posting.yaml` — the complete field list
 
-Twelve names, and this list is byte-identical to `SKILL.md`'s extraction field table.
-Two copies is one thing; two copies that disagree is a downstream gate failing on a file
-the upstream mode was told to write.
+Twelve names, in this order — the same names in the same order as `SKILL.md`'s
+extraction field table, `references/job-posting-extraction.md`, and `modes/apply.md`
+Step 2. Two copies is one thing; two copies that disagree is a downstream gate failing
+on a file the upstream mode was told to write. This used to claim the copies were
+*byte-identical*, which was never true and was worse than the drift it described: it
+told the next maintainer the copies were in sync, so they would not diff them.
+`scripts/tests/test_posting_schema_agreement.py` now diffs all four.
 
 ```yaml
 role_title: "..."          # exactly as written in the posting

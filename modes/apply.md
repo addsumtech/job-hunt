@@ -33,7 +33,15 @@ Read `references/job-posting-extraction.md` and follow it.
 - Try `WebFetch` on the posting URL.
 - **Sanity-check the fetched content before extracting.** Many portals (LinkedIn / Workday / Greenhouse / Indeed) return a `200 OK` that is actually a login wall, cookie banner, or error page — not the posting. If the fetched text lacks recognizable posting structure (no responsibilities, no requirements, looks like a sign-in/search page), treat the fetch as **failed** — do not extract requirements from a login wall (you'd fabricate must-haves). Ask the user to paste the full posting text instead.
 - If the fetch is blocked or thin, ask the user to paste the full posting text. **Terminal behavior:** if no posting can be obtained at all (URL dead, user can't paste), stop gracefully and say so — never invent a posting or proceed on guessed requirements.
-- Extract the structured object: `role_title`, `seniority`, `location`, `must_haves`, `nice_to_haves`, `responsibilities`, `keywords`, `company_values_tone`, `red_flags`.
+- Extract the structured object — **all twelve names, in this order**, the same list
+  as `SKILL.md`'s extraction field table and `modes/assess.md` §3:
+  `role_title`, `company`, `seniority`, `location`, `must_haves`, `nice_to_haves`,
+  `responsibilities`, `keywords`, `company_values_tone`, `red_flags`, `salary_range`,
+  `application_type`.
+  This list used to be nine. `company` is what `check_letter.py` verifies the letter's
+  recipient against, and `application_type: structured` is the only signal that routes
+  to the supporting-statement branch — the document a UK NHS or Civil Service panel
+  actually scores. Dropping either is silent: the run simply never produces it.
 - **Detect a structured / competency-based application.** If the posting splits requirements into **Essential / Desirable** criteria, names **behaviours / "Success Profiles"**, or instructs the applicant to "evidence how you meet each criterion" / provide a scored supporting statement (common for UK NHS, Civil Service, public-sector, and many academic roles), the deliverable is a criterion-mapped **supporting statement**, not just a CV. Read and follow `references/structured-applications.md`, and tell the user before proceeding.
 - **Confirm the must-haves and keywords with the user** before moving on.
 - After confirmation, write the extracted and confirmed posting to `posting.yaml` in the application workspace (defined in Step 4 below). This persists the posting for re-runs and the user's records.
@@ -60,6 +68,43 @@ Read `references/gap-analysis.md` and follow it.
 ```
 
 This workspace contains: `tailored-profile.yaml`, `letter.yaml` (if any), `posting.yaml`, and the rendered outputs (`cv.md`, `cv.docx`, `cv.pdf`, `letter.*`). The master profile at `~/.claude/job-profiles/<name>/profile.yaml` is **NEVER** mutated.
+
+### `claims.yaml` — write it as you tailor, not afterwards
+
+The checkpoint in Step 3 is enforced by `scripts/check_claims.py`, and the ledger
+it reads is `<workspace>/claims.yaml`. **Append a row at the moment you write each
+REFRAME or KEYWORD-INSERT.** A term in the tailored CV that is neither in the
+master profile nor sourced by a row here is `UNSOURCED`, and `check_apply.py` will
+not let the package be delivered over it.
+
+That matters because the wrong way out is the easy one. Faced with `UNSOURCED`
+and no spec for this file, the two visible escapes are to delete a keyword the
+candidate has genuinely earned — the under-selling failure this skill names as
+its own — or to invent a row shape. Neither is necessary: the file is six keys.
+
+```yaml
+- term: PACS export                       # the exact string as it appears in the CV
+  where: cv.md:experience[0].bullets[1]   # artifact and place it was inserted
+  source_kind: session-answer             # profile-line | session-answer | fetched-artifact
+  source_ref: mock/transcript-2.md#Q1     # a real path under the workspace, or a profile field
+  session_date: "2026-08-09"              # YYYY-MM-DD
+  retracted: null                         # null while live; true once withdrawn
+```
+
+- **All six keys on every row.** `retracted` is required even when null: in a
+  schema where "absent" and "not retracted" look the same, a withdrawn claim
+  leaves no scar, and the scar is why the field exists.
+- **Three source kinds, and there is no fourth.** `profile-line` (already in
+  `profile.yaml` — the ordinary case), `session-answer` (the candidate said it,
+  in a recorded session), `fetched-artifact` (a paper, repo or page this run
+  fetched).
+- **Append-only.** A claim that turns out to be wrong is marked
+  `retracted: true`, never deleted. A retracted row stops being a source:
+  `check_mock.py` refuses to let it discharge an `UNSOURCED-FACT`.
+- `source_ref` must resolve. For a `session-answer` row, `check_mock.py` requires
+  it to name a file that exists under the workspace **and** to contain the term.
+
+A worked file, including a retracted row, is in `assets/claims.example.yaml`.
 
 - Write the tailored copy to `<workspace>/tailored-profile.yaml`. **Never edit the master.**
 - Apply the tailoring plan: reorder, re-emphasize, weave in exact keywords **where truthful**, and trim to the market's length conventions (see `references/cv-craft.md`).

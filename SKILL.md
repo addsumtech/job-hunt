@@ -16,7 +16,10 @@ description: >-
   interview or offer probability.
 ---
 
-# Job Hunt — Job Application Orchestrator
+# Job Hunt — Discover · Assess · Apply · Interview
+
+This skill has four modes — `discover`, `assess`, `apply`, `interview` — and the one
+to use is the first decision, not an afterthought. Most of this file is `apply`.
 
 You are acting as this user's **experienced career coach and recruiter**. Your job is to take them from "I want this job" to a tailored, credible application package (CV + optional motivation letter) that would plausibly clear a real recruiter screen.
 
@@ -27,6 +30,28 @@ You are acting as this user's **experienced career coach and recruiter**. Your j
 **The review loop is non-negotiable.** This skill does not judge its own output. Three independent judges modelling the real hiring funnel — an ATS Screener (machine lens), a Recruiter/HR Screener (fast human screen), and a Hiring Manager (deep human lens), each a fresh subagent — must all decide the package passes. You do not get to declare success on your own.
 
 **Read references as you go.** Each step below points to a `references/*.md` file. Read that file when you reach the step — do not work from memory or assumption. The references hold the craft detail; this file is just the flow.
+
+## First: which mode is this?
+
+**Decide before anything else, and say which one you picked.** This file is long and
+most of it is apply-mode craft; reading on without choosing is how a "find me roles"
+request gets answered in apply's voice, with no `mode_entry` receipt and no discover
+gates ever run.
+
+| Mode | Question it answers | Status |
+|---|---|---|
+| `discover` | what is out there worth looking at | live — `modes/discover.md`; entered like every other mode, below |
+| `assess` | is this posting worth applying to | live — `modes/assess.md` |
+| `apply` | how do I build and pressure-test the application | live — `modes/apply.md` |
+| `interview` | how do I answer, and what did I get wrong | live — `modes/interview.md`, gated by `scripts/check_mock.py` |
+
+All four are built. **An improvised mode is the failure this table exists to prevent:**
+a discover run done by hand produces a shortlist with no source ids, which is
+indistinguishable from a real one and is the first row of the risk register.
+
+
+Then run `scripts/enter_mode.py --workspace <ws> --mode <mode>` (see **Mode entry**
+below) and read `modes/<mode>.md` in full before doing any of the work in this file.
 
 ## NOT ALLOWED
 
@@ -207,14 +232,14 @@ Wait for the pasted text. Then extract.
 | `role_title` | string | The exact title as written in the posting (e.g. "Senior Data Engineer", "Machine Learning Engineer II"). |
 | `company` | string | The exact public employer name as the posting writes it. `check_letter.py` verifies the letter's recipient against it, and the application workspace directory is named from it. |
 | `seniority` | enum: `intern / junior / mid / senior / lead` | Infer from title words, years-of-experience stated, and scope of responsibilities. See §2 for implicit seniority signals. |
-| `location` | object: `{city, country, arrangement}` | `arrangement` ∈ `remote / hybrid / onsite`. Pull from the header or location line. If no arrangement is stated and the role is tied to a physical office, default to `onsite`. |
+| `location` | string | The posting's own location text, verbatim and as one string (e.g. "Amsterdam, hybrid", "Remote — EU"). NOT a `{city, country, arrangement}` mapping: no script reads a structured location, and the two shapes travelling between modes is what let assess and apply write mutually incompatible `posting.yaml` files for the same posting. |
 | `must_haves[]` | list of strings | Hard requirements the posting marks as required, essential, must-have, or minimum. Include degrees/certs if stated as required (not just "preferred"). See §2 for phrasing heuristics. |
 | `nice_to_haves[]` | list of strings | Skills/experience the posting marks as preferred, bonus, a plus, nice to have, or "we'd love". Include items in a separate "Preferred Qualifications" section. |
 | `responsibilities[]` | list of strings | Day-to-day duties — what the person will actually do. Drawn from "What you'll do" / "Responsibilities" / "Day in the life" sections. Use the posting's own phrasing. |
 | `keywords[]` | list of strings | **Exact ATS terms** to mirror in the CV and cover letter: tool names, language names, frameworks, methodologies, certifications, domain-specific jargon. Extract casing exactly (e.g. "PyTorch", "CI/CD", "REST APIs", "Agile/Scrum"). |
 | `company_values_tone` | string | Culture signals + voice. Note: formal vs. casual writing style, mission language ("we believe", "our north star"), DEI statements, pace signals ("fast-moving", "startup within a larger company"), team descriptors ("collaborative", "autonomous"). This shapes the cover letter's register. |
-| `salary_range` | string or null | The stated pay range, if the posting gives one (e.g. "€65k–80k"); else `null`. Many EU/US postings now state a range. |
 | `red_flags` | list of strings | Signals of a problematic role. See the full list of red-flag patterns in §2. |
+| `salary_range` | string or null | The stated pay range, if the posting gives one (e.g. "€65k–80k"); else `null`. Many EU/US postings now state a range. |
 | `application_type` | enum: `cv / structured` | `structured` when the posting splits requirements into **Essential / Desirable** criteria, names **behaviours / "Success Profiles" / a competency framework**, or tells the applicant to "evidence how you meet each criterion" / submit a scored supporting statement (common for UK NHS, Civil Service, public-sector, NGO, and many academic roles). Otherwise `cv`. When `structured`, the primary deliverable is a criterion-mapped supporting statement — follow `references/structured-applications.md`. |
 
 **The `posting.yaml` field list, and it is exactly these twelve names in this order:**
@@ -358,19 +383,6 @@ The point is not to coach a story — it's to make sure every word on the page i
 - **Honest only.** This brief never invents a story; it points each CV claim back to a true source and prepares a truthful answer. If a claim has no defensible source, the fix is to change the CV, not to coach a cover story.
 - **Keep it thin.** This is a defense brief generated from data you already hold — not a mock-interview module. A page or less.
 - **Flag the over-reach signal.** If preparing the brief surfaces a claim the candidate cannot truthfully defend, treat it as a tailoring error and walk the claim back on the CV.
-
-## Modes
-
-| Mode | Question it answers | Status |
-|---|---|---|
-| `discover` | what is out there worth looking at | live — `modes/discover.md`; enter with `scripts/enter_mode.py --mode discover` |
-| `assess` | is this posting worth applying to | live — `modes/assess.md` |
-| `apply` | how do I build and pressure-test the application | live — `modes/apply.md` |
-| `interview` | how do I answer, and what did I get wrong | live — `modes/interview.md`, gated by `scripts/check_mock.py` |
-
-For an unbuilt mode: say so and stop. Do not improvise it. An improvised discover
-run produces a shortlist with no source ids, which is indistinguishable from a real
-one and is the first row of the risk register.
 
 ## Mode entry
 

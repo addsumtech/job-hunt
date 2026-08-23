@@ -152,6 +152,21 @@ Before writing any REFRAME or KEYWORD-INSERT that introduces a skill, tool, tech
 
 > Failure mode this prevents: models routinely invent plausible skills (Kubernetes, AWS, Terraform, etc.) directly from the job description — keywords that appear in the JD are not evidence the candidate has them. Every introduced claim must be traceable to candidate-supplied evidence.
 
+**Where the trace is written down.** The checkpoint is not a habit of mind; it is a
+file. Append a row to `<workspace>/claims.yaml` at the moment you write each
+REFRAME or KEYWORD-INSERT — `scripts/check_claims.py` reads it, and a term in the
+tailored CV that is neither in the master profile nor sourced by a row there is
+`UNSOURCED`, which `check_apply.py` will not let a package be delivered over.
+
+The three sources above are exactly the three legal `source_kind` values —
+`profile-line`, `session-answer`, `fetched-artifact` — and there is no fourth.
+The six required keys, the append-only/`retracted` rule, and a worked example are
+in `modes/apply.md` Step 4 and `assets/claims.example.yaml`.
+
+This is written here as well as there on purpose: this file owns the rule, and a
+rule whose only remedy is documented in a mode file loaded for a *different* mode
+is a rule a run can obey and still be unable to satisfy.
+
 ---
 
 ## 3. Phrasing Gaps to the User and Supplementary Questions

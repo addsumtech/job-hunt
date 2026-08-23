@@ -331,7 +331,12 @@ def test_every_script_named_in_layer_1_or_a_mode_file_exists_or_is_declared_pend
     and a name there that resolves to nothing sends the model to run a command that is
     not there. Nothing else reports that."""
     for name, where in sorted(_named_scripts().items()):
-        if (ROOT / "scripts" / name).exists():
+        # Anywhere under scripts/, not only as a direct child. The mode files
+        # legitimately cite a test (scripts/tests/…) to name the guard that keeps
+        # a documented invariant true, and a guard that cannot express "this file
+        # lives in a subdirectory" pushes the author into not naming it at all —
+        # which is the opposite of what this check is for.
+        if any((ROOT / "scripts").rglob(name)):
             continue
         assert name in NOT_YET_BUILT, (
             f"{' and '.join(where)} names scripts/{name}, which does not exist and is "

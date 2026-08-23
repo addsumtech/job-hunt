@@ -21,15 +21,16 @@ Extract exactly these fields. Populate each as described below.
 | Field | Type | How to populate |
 |---|---|---|
 | `role_title` | string | The exact title as written in the posting (e.g. "Senior Data Engineer", "Machine Learning Engineer II"). |
+| `company` | string | The exact public employer name as the posting writes it. `check_letter.py` hard-fails with `NO_COMPANY_IN_POSTING` without it, and the application workspace directory is named from it. |
 | `seniority` | enum: `intern / junior / mid / senior / lead` | Infer from title words, years-of-experience stated, and scope of responsibilities. See §2 for implicit seniority signals. |
-| `location` | object: `{city, country, arrangement}` | `arrangement` ∈ `remote / hybrid / onsite`. Pull from the header or location line. If no arrangement is stated and the role is tied to a physical office, default to `onsite`. |
+| `location` | string | The posting's own location text, verbatim and as one string (e.g. "Amsterdam, hybrid", "Remote — EU"). NOT a `{city, country, arrangement}` mapping: no script reads a structured location, and the two shapes travelling between modes is what let assess and apply write mutually incompatible `posting.yaml` files for the same posting. |
 | `must_haves[]` | list of strings | Hard requirements the posting marks as required, essential, must-have, or minimum. Include degrees/certs if stated as required (not just "preferred"). See §2 for phrasing heuristics. |
 | `nice_to_haves[]` | list of strings | Skills/experience the posting marks as preferred, bonus, a plus, nice to have, or "we'd love". Include items in a separate "Preferred Qualifications" section. |
 | `responsibilities[]` | list of strings | Day-to-day duties — what the person will actually do. Drawn from "What you'll do" / "Responsibilities" / "Day in the life" sections. Use the posting's own phrasing. |
 | `keywords[]` | list of strings | **Exact ATS terms** to mirror in the CV and cover letter: tool names, language names, frameworks, methodologies, certifications, domain-specific jargon. Extract casing exactly (e.g. "PyTorch", "CI/CD", "REST APIs", "Agile/Scrum"). |
 | `company_values_tone` | string | Culture signals + voice. Note: formal vs. casual writing style, mission language ("we believe", "our north star"), DEI statements, pace signals ("fast-moving", "startup within a larger company"), team descriptors ("collaborative", "autonomous"). This shapes the cover letter's register. |
-| `salary_range` | string or null | The stated pay range, if the posting gives one (e.g. "€65k–80k"); else `null`. Many EU/US postings now state a range. |
 | `red_flags` | list of strings | Signals of a problematic role. See the full list of red-flag patterns in §2. |
+| `salary_range` | string or null | The stated pay range, if the posting gives one (e.g. "€65k–80k"); else `null`. Many EU/US postings now state a range. |
 | `application_type` | enum: `cv / structured` | `structured` when the posting splits requirements into **Essential / Desirable** criteria, names **behaviours / "Success Profiles" / a competency framework**, or tells the applicant to "evidence how you meet each criterion" / submit a scored supporting statement (common for UK NHS, Civil Service, public-sector, NGO, and many academic roles). Otherwise `cv`. When `structured`, the primary deliverable is a criterion-mapped supporting statement — follow `references/structured-applications.md`. |
 
 **Salary fit (when a range is stated):** if `salary_range` is present, ask the user **once** whether it fits their expectation — a band mismatch is a common silent screen-out, and it's better surfaced now than after a full application. Keep it a single optional question; if no range is stated, don't ask (don't volunteer salary the posting didn't raise).
@@ -39,12 +40,9 @@ Extract exactly these fields. Populate each as described below.
 ```json
 {
   "role_title": "Senior Backend Engineer",
+  "company": "Example B.V.",
   "seniority": "senior",
-  "location": {
-    "city": "Amsterdam",
-    "country": "Netherlands",
-    "arrangement": "hybrid"
-  },
+  "location": "Amsterdam, Netherlands — hybrid",
   "must_haves": [
     "5+ years of backend engineering experience",
     "Proficiency in Go or Python",
@@ -248,12 +246,9 @@ Incorporate all corrections, then proceed to gap analysis.
 ```json
 {
   "role_title": "Data Analyst",
+  "company": "Example Analytics Ltd",
   "seniority": "junior",
-  "location": {
-    "city": "London",
-    "country": "United Kingdom",
-    "arrangement": "hybrid"
-  },
+  "location": "London, United Kingdom — hybrid",
   "must_haves": [
     "2+ years of experience in an analytical role",
     "Strong SQL skills",

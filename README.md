@@ -1,6 +1,26 @@
-# job-application
+# job-hunt
 
-A Claude Code skill that takes a user from "I want this job" to a tailored, credible application package. It interviews the user, parses or builds a CV into a canonical `profile.yaml`, fetches and analyses the target job posting, tailors the CV through honest reframing (never fabrication), optionally drafts a motivation letter, and pressure-tests the package through a review loop that models the real hiring funnel — three independent judges, an ATS Screener (machine lens), a Recruiter/HR Screener (fast human screen), and a Hiring Manager (deep human lens), must all pass — iterating until they do or reporting honestly if they cannot. Outputs Markdown, .docx, and PDF (via LaTeX).
+A Claude Code / Codex skill for the whole job hunt, in four modes:
+
+| Mode | Question it answers | Gate |
+|---|---|---|
+| `discover` | what is out there worth looking at | `check_shortlist.py`, `check_no_write.py` |
+| `assess` | is this posting worth applying to | `check_assessment.py` (composes six) |
+| `apply` | how do I build and pressure-test the application | `check_apply.py` (composes the rest) |
+| `interview` | how do I answer, and what did I get wrong | `check_mock.py` |
+
+They do not auto-chain: finding thirty postings does not generate thirty CVs.
+
+`apply` is the largest. It interviews the user, parses or builds a CV into a
+canonical `profile.yaml`, extracts the target posting, tailors through honest
+reframing (never fabrication), optionally drafts a motivation letter, and
+pressure-tests the package through a review loop modelling the real hiring funnel
+— an ATS Screener, a Recruiter/HR Screener and a Hiring Manager, three independent
+judges, all of whom must pass. Outputs Markdown, .docx, and PDF (via LaTeX).
+
+Two rules run through all four: **never fabricate** — honest reframing only — and
+**never predict an interview or offer probability**, or any 0–100 score. Both are
+enforced by scripts, not only by prose.
 
 ---
 
@@ -60,54 +80,79 @@ python scripts/render_letter.py LETTER.yaml --format md|docx|pdf --out OUTPUT_PA
 
 ```
 job-hunt/
-├── SKILL.md                        # Orchestrator instructions — layer 1, always in context
+├── SKILL.md                        # Orchestrator instructions — layer 1, always in context; routes to a mode first
 ├── README.md
 ├── requirements.txt
 ├── Makefile                        # make check = tests + losslessness + conventions
-├── .github/workflows/checks.yml    # the same three checks, for whenever this repo gains a remote
-├── modes/
-│   └── apply.md                    # Layer 1.5 — the apply pipeline, loaded on mode entry
-├── references/
-│   ├── cv-craft.md                 # CV writing conventions (markets, links, bullets, ordering)
-│   ├── gap-analysis.md             # Gap analysis + tailoring methodology
+├── .github/workflows/checks.yml    # the same three checks in CI
+├── modes/                          # Layer 1.5 — exactly one is loaded, on mode entry
+│   ├── discover.md                  # Layer 1.5 — find roles (read-only)
+│   ├── assess.md                    # Layer 1.5 — judge one posting
+│   ├── apply.md                     # Layer 1.5 — build and pressure-test the package
+│   └── interview.md                 # Layer 1.5 — rehearse and debrief
+├── references/                     # Layer 2 — read on demand
+│   ├── candidate-situations.md      # Non-standard candidates (gap, switch, exec, military, intl)
+│   ├── cv-craft.md                  # CV writing conventions (markets, links, bullets, ordering)
+│   ├── discovery-sources.md         # Per-adapter catalogue for discover
+│   ├── gap-analysis.md              # Gap analysis, tailoring methodology, claim provenance
+│   ├── interview-prep.md            # Interview-readiness brief
+│   ├── interview-shapes.md          # Round types, tags and bands for the mock interview
 │   ├── job-posting-extraction.md   # How to parse a posting (+ fetch sanity, application type)
-│   ├── candidate-situations.md     # Non-standard candidates (gap, switch, exec, military, intl)
-│   ├── role-families.md            # Non-tech / regulated role conventions (clinical, sales, legal…)
-│   ├── structured-applications.md  # Competency-form applications (NHS, Civil Service)
-│   ├── motivation-letter.md        # Letter craft guide
-│   ├── interview-prep.md           # Interview-readiness brief
-│   └── rirekisho.md                # Japanese 履歴書 form guide
-├── agents/                         # Three review judges (hiring funnel)
+│   ├── motivation-letter.md         # Letter craft guide
+│   ├── rirekisho.md                 # Japanese 履歴書 form guide
+│   ├── risk-control-signals.yaml    # Platform stop-signals discover must obey
+│   ├── role-families.md             # Non-tech / regulated role conventions (clinical, sales, legal…)
+│   ├── source-policy.md             # What discover may and may not do to a platform
+│   ├── structured-applications.md   # Competency-form applications (NHS, Civil Service)
+│   └── market-conventions/         # nl / us / cn / uk / de tables + README
+├── agents/                         # Three review judges (hiring funnel) + two mock assessors
 │   ├── ats-screener.md             # Judge 1 of 3 — machine lens (keyword coverage)
 │   ├── recruiter-screener.md       # Judge 2 of 3 — fast human screen (skim/logistics)
-│   └── hiring-manager.md           # Judge 3 of 3 — deep human lens (fit/credibility)
+│   ├── hiring-manager.md           # Judge 3 of 3 — deep human lens (fit/credibility)
+│   ├── mock-assessor-transcript.md  # interview pass 1 — what the answers did
+│   └── mock-assessor-provenance.md  # interview pass 2 — where the facts came from
 ├── assets/
-│   └── profile.example.yaml        # Canonical profile schema
+│   ├── profile.example.yaml        # canonical profile schema
+│   └── claims.example.yaml         # the provenance ledger, with a retracted row
 ├── docs/                           # spec, plans, research — outside the skill corpus
 └── scripts/
-    ├── journal.py                  # gate receipts in journal.jsonl (library)
-    ├── paths.py                    # the one definition of the workspace shape (library)
-    ├── vocab.py                    # every closed vocabulary in the skill (library)
-    ├── rounds.py                   # judge-round-<n>.json read/merge (library)
-    ├── enter_mode.py               # mode entry + the mode file's content hash
-    ├── check_personal_data.py      # Cluster-1 interlock
-    ├── check_claims.py             # claim provenance + master-profile immutability
-    ├── check_render_freshness.py   # the judges read the files still on disk
-    ├── parse_verdicts.py           # PASS/REJECT parsing, fail-closed on AMBIGUOUS
-    ├── lint_cv.py                  # clichés, weak openers, bullet length, repeated verbs
-    ├── check_letter.py             # letter body constraints
-    ├── check_pages.py              # page count of the artifact actually submitted
-    ├── check_word_limits.py        # supporting-statement per-criterion word limits
-    ├── check_apply.py              # the composing gate: every receipt present
-    ├── check_skill_lossless.py     # CI only — the migration moved content, not deleted it
+    ├── check_apply.py               # the composing gate: every receipt present, and about current bytes
+    ├── check_assessment.py          # assess mode's composing gate (requires six upstream receipts)
+    ├── check_claims.py              # claim provenance + master-profile immutability
+    ├── check_conventions.py         # CI — market-convention table lint
+    ├── check_evidence_refs.py       # evidence refs resolve; no block ids in reader prose
+    ├── check_letter.py              # letter body constraints
+    ├── check_mock.py                # interview mode's gate: quotes, tags, promotions, question log
+    ├── check_no_write.py            # discover is read-only — a journaled write command fails
+    ├── check_opencli_result.py      # adapter result classifier (wrapper, not a gate)
+    ├── check_pages.py               # page count + the text actually inside the delivered PDF
+    ├── check_personal_data.py       # Cluster-1 personal-data interlock
+    ├── check_render_freshness.py    # the judges read the files still on disk
+    ├── check_shortlist.py           # discover's gate: row provenance, caps, md↔yaml agreement
+    ├── check_skill_lossless.py      # CI only — the migration moved content, did not delete it
+    ├── check_word_limits.py         # supporting-statement per-criterion word limits
+    ├── consistency.py               # contradictions between assessment fields — reports, never repairs
+    ├── count_coverage.py            # the ONLY path that produces coverage counts
+    ├── enter_mode.py                # mode entry + the mode file's content hash
+    ├── evidence_blocks.py           # cuts posting and CV into addressable JD-nnn / CV-nnn blocks
+    ├── journal.py                   # gate receipts in journal.jsonl (library)
+    ├── lint_cv.py                   # clichés, weak openers, bullet length, repeated verbs
+    ├── lint_no_prediction.py        # no probabilities, no 0–100 scores — EN + ZH
+    ├── mock_blocks.py               # fail-closed parser for the assessor blocks (library)
+    ├── mock_vocab.py                # the interview mode's closed vocabularies (library)
+    ├── opencli_meta.py              # resolves an adapter command's published access: (library)
+    ├── parse_verdicts.py            # PASS/REJECT parsing, fail-closed on AMBIGUOUS
+    ├── paths.py                     # the one definition of the workspace shape (library)
+    ├── render_cv.py                 # CV → md / docx / pdf(LaTeX)
+    ├── render_letter.py             # motivation letter → md / docx / pdf
+    ├── render_rirekisho.py          # Japanese 履歴書 form renderer
+    ├── rounds.py                    # judge-round-<n>.json read/merge (library)
+    ├── vocab.py                     # every closed vocabulary in the skill (library)
     ├── lossless-allowlist.json     # deliberate deletions, each with a written reason
-    ├── render_cv.py
-    ├── render_letter.py
-    ├── render_rirekisho.py         # Japanese 履歴書 form renderer
     └── tests/
         ├── fixtures/
         ├── required_inline.json    # layer-1 rules that must stay inline, each with its why
-        └── test_*.py               # one module per script above
+        └── test_*.py               # one module per script above, plus the seam suites
 ```
 
 ### A workspace
@@ -153,3 +198,18 @@ cd scripts && python -m pytest tests/ -v
 
 Everything must pass. `make check` additionally runs the migration losslessness
 check and the market-convention lint.
+
+## Evaluation — what `make check` does and does not prove
+
+**No end-to-end behavioural evaluation has ever been run on this skill.** The
+harness for it is specified (`docs/superpowers/plans/2026-08-09-5-eval-rebuild.md`,
+twenty scenarios) and is **not built**: there is no `evals/` directory.
+
+So `make check` green means exactly this: the unit tests agree with themselves,
+the market tables lint, and no line of the pre-migration skill was lost. It does
+**not** mean any mode was measured against a baseline arm, and no claim in this
+repo should be read as saying otherwise.
+
+The reason to state that plainly: `check_skill_lossless.py` proves the bytes
+survived the layering, not that they arrive in context when they are needed. Only
+a run proves the second thing, and nothing here runs one.
