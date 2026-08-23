@@ -98,6 +98,11 @@ def build_latex(d, engine=None):
 def render_pdf(d, out_path, reasons=None):
     out_path = pathlib.Path(out_path)
     tex_path = out_path.with_suffix(".tex")
+    # Any PDF here is from an earlier run; this call either replaces it or must
+    # leave none. Same reasoning, same helper, as render_cv.render_pdf — the two
+    # early returns below (unsupported script, no engine) are exactly the paths
+    # that used to leave a superseded letter sitting under the delivered name.
+    render_cv._discard_pdf(out_path, tex_path)
     # Resolve the engine first: the preamble has to match whatever will compile it.
     engine = render_cv.find_latex_engine()
     tex = build_latex(d, engine=engine)
@@ -132,6 +137,7 @@ def main(argv=None):
     except journal.YamlUnreadable as exc:
         print(f"cannot render: {exc}", file=sys.stderr)
         return 2
+    render_cv.reset_photo_warnings()
     out = pathlib.Path(args.out)
     if args.format == "md":
         out.write_text(render_markdown(d), encoding="utf-8")
@@ -141,6 +147,8 @@ def main(argv=None):
         reasons = []
         ok = render_pdf(d, out, reasons=reasons)
         if ok:
+            if not render_cv.confirm_written(out, "pdf"):
+                return 1
             print(f"Wrote {out}")
             return 0
         print(f"PDF not built; LaTeX source at {out.with_suffix('.tex')}",
@@ -149,6 +157,8 @@ def main(argv=None):
         # a script this template cannot set are documented degradations; anything
         # else means this machine could have produced a correct PDF and did not.
         return 0 if render_cv.pdf_failure_is_tolerated(reasons) else 1
+    if not render_cv.confirm_written(out, args.format):
+        return 1
     print(f"Wrote {out}")
     return 0
 

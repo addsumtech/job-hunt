@@ -571,19 +571,113 @@ def personal_items(profile):
         yield label, normalize_text(value)
 
 
+# Formats BOTH renderers can embed. LaTeX (via graphicx under a Unicode engine)
+# takes PDF/PNG/JPEG; python-docx takes PNG/JPEG/GIF/BMP/TIFF. The intersection is
+# PNG and JPEG, and the intersection is what may be accepted: anything else means
+# the .docx and the .pdf disagree about whether the CV has a photo, which is the
+# one outcome nobody can see until a recruiter has one of the two.
+_PHOTO_MAGIC = ((b"\x89PNG\r\n\x1a\n", "png"), (b"\xff\xd8\xff", "jpeg"))
+SUPPORTED_PHOTO_FORMATS = ("PNG", "JPEG")
+_PHOTO_WARNED = []
+
+
+def reset_photo_warnings():
+    _PHOTO_WARNED.clear()
+
+
+def photo_format(path):
+    """'png'/'jpeg' from the file's magic bytes, or None if it is neither.
+
+    Magic bytes rather than the extension, because the extension is what the
+    user's phone or browser happened to write and is routinely wrong — a `.jpg`
+    that is really HEIC is exactly the file an iPhone hands over.
+    """
+    try:
+        with pathlib.Path(path).open("rb") as fh:
+            head = fh.read(12)
+    except OSError:
+        return None
+    for magic, name in _PHOTO_MAGIC:
+        if head.startswith(magic):
+            return name
+    return None
+
+
 def photo_path(profile):
     """Resolved filesystem path of the CV photo, or None.
 
     Suppressed for Cluster-1 targets (a US/UK photo CV invites discrimination-law
-    exposure and auto-rejection). Returns None if unset or the file is missing,
-    so a stale path degrades to a photo-less CV rather than a crash."""
+    exposure and auto-rejection). Returns None if unset, missing, or in a format
+    the renderers do not agree on, so a bad path degrades to a photo-less CV
+    rather than a crash — but never SILENTLY, which is what it used to do.
+
+    The silence was the defect. `render_docx` swallowed an unsupported image with
+    a bare `except Exception: pass` while the LaTeX path died on the same file
+    with an error naming a BoundingBox, so a WebP or HEIC photo — every browser
+    download and every iPhone picture — produced a photo-less .docx the candidate
+    believed had a photo, and a failed PDF compile that then left the previous
+    round's PDF in place. The skill tells the agent to set `meta.photo` for EU
+    and Asian markets and never says which formats work; this is that list.
+    """
     if _is_cluster1(profile):
         return None
     p = (profile.get("meta") or {}).get("photo")
     if not p:
         return None
     path = pathlib.Path(str(p)).expanduser()
-    return path if path.is_file() else None
+    if not path.is_file():
+        _warn_photo(path, f"meta.photo points at {path}, which is not a file")
+        return None
+    if photo_format(path) is None:
+        _warn_photo(path,
+                    f"meta.photo is {path.name}, which is not a "
+                    f"{' or '.join(SUPPORTED_PHOTO_FORMATS)} image (checked by "
+                    f"content, not by extension). Convert it — e.g. "
+                    f"`sips -s format png {path.name} --out photo.png` on macOS "
+                    f"— or remove meta.photo. Rendering WITHOUT the photo")
+        return None
+    return path
+
+
+def _warn_photo(path, message):
+    """One warning per path per run: photo_path is called by all three renderers."""
+    if str(path) in _PHOTO_WARNED:
+        return
+    _PHOTO_WARNED.append(str(path))
+    print(f"WARNING: {message}.", file=sys.stderr)
+
+
+def _photo_include_name(ph, asset_dir=None, asset_stem="cv"):
+    """The name to hand `\\includegraphics`, staging the file if we can.
+
+    A photo at `~/Documents/My_Photo #2.png` is an ordinary thing for a user to
+    have, and it is unusable as a LaTeX filename: `#` raises "Illegal parameter
+    number", `%` starts a comment, `_`/`&`/`~` are special, and spaces end the
+    argument. `\\detokenize` is not enough — measured, `#` still halts the
+    engine — and `latex_escape` is wrong here because graphicx needs the real
+    filename, not `\\_`.
+
+    So when the caller knows where the `.tex` is going, copy the image next to it
+    under an ASCII name we choose and reference it relatively. That fixes every
+    hostile character at once instead of one class at a time, and it makes the
+    `.tex` self-contained — which matters because this repo treats the `.tex` as
+    a deliverable the user recompiles elsewhere, and an absolute path into
+    someone's home directory does not survive that trip.
+    """
+    ph = pathlib.Path(ph)
+    if asset_dir is None:
+        return str(ph)
+    suffix = ".png" if photo_format(ph) == "png" else ".jpg"
+    staged = pathlib.Path(asset_dir) / f"{asset_stem}-photo{suffix}"
+    try:
+        if ph.resolve() != staged.resolve():
+            shutil.copyfile(ph, staged)
+    except OSError as exc:
+        _warn_photo(ph, f"could not stage the photo beside the LaTeX source "
+                        f"({exc}); referencing it by absolute path, which will "
+                        f"break if the .tex is compiled on another machine")
+        return str(ph)
+    return staged.name
 
 
 def as_list(v):
@@ -806,8 +900,15 @@ def render_docx(profile, out_path):
         try:
             from docx.shared import Inches
             doc.add_picture(str(ph), width=Inches(1.3))
-        except Exception:
-            pass  # an unreadable/unsupported image must not sink the whole render
+        except Exception as exc:
+            # Still not fatal — a photo is not worth losing the whole .docx over —
+            # but no longer silent. `photo_path` has already rejected the formats
+            # this is likely to be, so reaching here means something rarer, and a
+            # candidate who believes their .docx has a photo when it does not is
+            # the exact failure this used to produce.
+            _warn_photo(ph, f"the photo {ph.name} could not be embedded in the "
+                            f".docx ({type(exc).__name__}: {exc}). The .docx was "
+                            f"written WITHOUT it")
 
     def summary():
         if profile.get("summary"):
@@ -910,11 +1011,32 @@ _LATEX_REPLACEMENTS = {
     "‘": "`", "’": "'", "“": "``", "”": "''",
 }
 
-# Whitespace sitting *between* two CJK characters is almost always an artifact of
-# a YAML folded scalar (`>`), which joins wrapped lines with a space — but CJK has
-# no inter-character spaces, so it shows up as a gap mid-word. Strip it.
-_CJK = r"　-鿿豈-﫿가-힣぀-ヿ"
-_CJK_GAP_RE = re.compile(r"(?<=[%s])[ \t]+(?=[%s])" % (_CJK, _CJK))
+# Whitespace sitting *between* two Han/kana characters is almost always an
+# artifact of a YAML folded scalar (`>`), which joins wrapped lines with a space
+# — but Chinese and Japanese have no inter-word spaces, so it shows up as a gap
+# mid-word. Strip it.
+#
+# HANGUL IS DELIBERATELY ABSENT from this class, and that is the whole point of
+# spelling the blocks out. Korean 띄어쓰기 makes inter-word spacing mandatory
+# orthography, not a folded-scalar artifact, so stripping it turns
+# `데이터 엔지니어` into `데이터엔지니어` — which reads to a Korean
+# recruiter roughly the way `dataengineer` reads to an English one. The previous
+# range included Hangul twice: `가-히` named the syllables outright, and
+# U+3000-U+9FFF additionally covers U+3130-U+318F, the Hangul compatibility jamo.
+# One block per script is the point — the next script added has to be a deliberate
+# answer to "does this script use inter-word spaces?", which is the question a
+# catch-all range never forces anyone to ask.
+#
+# `_has_cjk` keeps Hangul on purpose: it answers the *font* question (does this
+# document need xeCJK and an installed CJK font), and Korean genuinely does.
+_CJK_NO_INTERWORD_SPACE = (
+    "\u3000-\u312f"   # CJK punctuation, hiragana, katakana, bopomofo
+    "\u3190-\u9fff"   # kanbun → CJK unified  (skips U+3130-318F Hangul jamo)
+    "\uf900-\ufaff"   # CJK compatibility ideographs
+)
+_CJK_GAP_RE = re.compile(
+    r"(?<=[%s])[ \t]+(?=[%s])"
+    % (_CJK_NO_INTERWORD_SPACE, _CJK_NO_INTERWORD_SPACE))
 
 
 def normalize_text(text):
@@ -925,13 +1047,44 @@ def normalize_text(text):
     return _CJK_GAP_RE.sub("", str(text))
 
 
+# A token at least this long has a real chance of not fitting the column; below
+# it the inserted break points would be noise in the source for no benefit. The
+# measured overflows on an ordinary academic profile came from DOIs of 30-40
+# characters, so this sits well under the shortest one that actually broke.
+_LONG_TOKEN_CHARS = 24
+# Break AFTER these, which is where a reader expects a URL or path to wrap. `\_`
+# is matched (not a bare `_`) because escaping has already run by this point.
+_BREAK_AFTER_RE = re.compile(r"(/|\\_|-|\.|=|&amp;|\?)")
+
+
+def _allow_breaks(escaped):
+    """Insert `\\allowbreak{}` after the separators inside long unspaced tokens.
+
+    `\\sloppy` and `\\emergencystretch` (see `latex_preamble`) fix an overfull line
+    whenever the line has some break point on it. A bare DOI or repo URL is the
+    case where it has none: TeX cannot hyphenate a token it has no pattern for,
+    so it sets the whole thing past the right margin. Measured on a profile with
+    three ordinary publication DOIs: one line 86pt over, which put four digits of
+    the DOI off the edge of the sheet, and `check_pages` passed it.
+
+    Scoped to long tokens so an ordinary hyphenated word, a date, or a decimal is
+    untouched — inserting break points everywhere would let `co-` / `ordinator`
+    split across lines in a job title, which is a different kind of wrong.
+    """
+    parts = re.split(r"(\s+)", escaped)
+    for i, chunk in enumerate(parts):
+        if chunk.strip() and len(chunk) >= _LONG_TOKEN_CHARS:
+            parts[i] = _BREAK_AFTER_RE.sub(r"\1\\allowbreak{}", chunk)
+    return "".join(parts)
+
+
 def latex_escape(text):
     if text is None:
         return ""
     out = []
     for ch in normalize_text(text):
         out.append(_LATEX_REPLACEMENTS.get(ch, ch))
-    return "".join(out)
+    return _allow_breaks("".join(out))
 
 
 # Standard install locations searched when an engine isn't on PATH. A
@@ -1087,6 +1240,32 @@ def missing_characters(log):
     return out
 
 
+_OVERFULL_RE = re.compile(r"Overfull \\hbox \(([0-9]+(?:\.[0-9]+)?)pt too wide\)")
+
+# The geometry margin latex_preamble sets by default. An overfull box narrower
+# than this still lands on the paper (inside the margin): ugly, and worth saying
+# so, but the reader can read it. One WIDER than the margin has run off the edge
+# of the sheet, and the characters past the edge are simply gone from the printed
+# and on-screen page — the same class of loss as a dropped glyph, arrived at from
+# the other direction, so it gets the same treatment.
+_PT_PER_CM = 28.4527559
+OFF_PAGE_PT = 2.0 * _PT_PER_CM
+
+
+def overfull_boxes(log):
+    """Every `Overfull \\hbox` the engine reported, widest first, in points.
+
+    The engine already writes this into the same log string `missing_characters`
+    reads, and it was already being captured and dropped — the identical mistake,
+    on the identical data. A bare DOI, a repo URL, a long file path or a German/
+    Dutch compound is one unbreakable token, and when it does not fit, TeX does
+    not shrink it: it prints it past the right edge of the text block, warns, and
+    exits 0. Measured on a three-publication academic profile: overflows of 28,
+    50 and 79pt, and one of 86pt that put four digits of a DOI off the sheet.
+    """
+    return sorted((float(pt) for pt in _OVERFULL_RE.findall(log or "")), reverse=True)
+
+
 # Cross-platform CJK font fallback. xeCJK needs a real installed CJK font, and
 # the right name differs per OS (macOS PingFang, Windows YaHei/Malgun, Linux
 # Noto). We emit a nested \IfFontExistsTF chain that picks the first font that
@@ -1094,12 +1273,36 @@ def missing_characters(log):
 # Linux box without hand-editing. `meta.cjk_font` jumps the queue. If none is
 # found, xeCJK falls back to its own default (and may error — the .tex is still
 # delivered for the user to point at a font they have).
-_CJK_FONT_FALLBACKS = [
-    "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC", "Hiragino Sans GB",
-    "Microsoft YaHei", "SimSun",                       # Chinese
-    "Noto Sans CJK JP", "Hiragino Sans", "Yu Gothic",  # Japanese
-    "Noto Sans CJK KR", "Apple SD Gothic Neo", "Malgun Gothic",  # Korean
-]
+# Keyed by `meta.language`, because a flat list silently resolves to the wrong
+# script. The old list was Chinese-first and consulted no language at all, so on
+# a stock macOS the Korean chain reached PingFang SC first — a font with no
+# Hangul — and every Hangul codepoint was dropped, which `compile_latex` then
+# correctly refused, leaving `ko` with NO PDF at all despite
+# `references/cv-craft.md:104` promising one wherever a CJK font is installed.
+# (Measured: `\setCJKmainfont{Apple SD Gothic Neo}` typesets the same profile
+# perfectly, so the font was there all along; only the ordering was wrong.)
+# Japanese resolved to a Chinese face, which is subtler: the shared kanji differ
+# in stroke shape and a Japanese reader sees it immediately.
+_CJK_FONTS_BY_LANG = {
+    "zh": ["Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC",
+           "Hiragino Sans GB", "Microsoft YaHei", "SimSun"],
+    "ja": ["Noto Sans CJK JP", "Source Han Sans JP", "Hiragino Sans",
+           "Yu Gothic", "MS Gothic"],
+    "ko": ["Noto Sans CJK KR", "Source Han Sans KR", "Apple SD Gothic Neo",
+           "Malgun Gothic", "NanumGothic"],
+}
+# Every font, in the historical zh → ja → ko order. Used as the tail after the
+# language's own fonts, so an unset or non-CJK `meta.language` behaves exactly as
+# it did before and a CV that mixes scripts still finds *something*.
+_CJK_FONT_FALLBACKS = [f for lang in ("zh", "ja", "ko")
+                       for f in _CJK_FONTS_BY_LANG[lang]]
+
+
+def _cjk_fonts_for(meta):
+    """The CJK font chain for this profile: its own language's faces first."""
+    lang = str((meta or {}).get("language") or "").lower().replace("_", "-")
+    preferred = _CJK_FONTS_BY_LANG.get(lang.split("-")[0], [])
+    return preferred + [f for f in _CJK_FONT_FALLBACKS if f not in preferred]
 
 
 def _font_chain(fonts, setter):
@@ -1124,7 +1327,7 @@ def _font_chain(fonts, setter):
 
 def _cjk_font_setup(meta):
     fonts = [str(meta["cjk_font"])] if meta.get("cjk_font") else []
-    return _font_chain(fonts + _CJK_FONT_FALLBACKS, "setCJKmainfont")
+    return _font_chain(fonts + _cjk_fonts_for(meta), "setCJKmainfont")
 
 
 def _main_font_setup(meta):
@@ -1178,12 +1381,25 @@ def latex_preamble(engine=None, cjk=False, meta=None, margin="2cm"):
     else:
         lines += [r"\usepackage[utf8]{inputenc}", r"\usepackage[T1]{fontenc}"]
     lines.append(r"\usepackage[margin=%s]{geometry}" % margin)
+    # Line-breaking safety net, and it is a net rather than one setting because
+    # the failure has two halves. TeX does not shrink a line that is too wide: it
+    # sets it past the right edge, warns `Overfull \hbox`, and exits 0.
+    #   * `\sloppy` + `\emergencystretch` let it stretch inter-word space instead,
+    #     which fixes every case where SOME break point exists on the line.
+    #   * Neither can break a single token with no break point in it — a bare DOI,
+    #     a repo URL, a Dutch/German compound. That half is `_allow_breaks` in
+    #     `latex_escape`, which inserts the break opportunities.
+    # `url` is loaded for `\UrlBreaks`-style tolerance and because it is the
+    # package anything later wanting real `\url{}` handling will expect.
+    lines += [r"\usepackage[hyphens]{url}",
+              r"\setlength{\emergencystretch}{3em}",
+              r"\sloppy"]
     return lines
 
 
 # ── LaTeX renderer ────────────────────────────────────────────────────────────
 
-def build_latex(profile, cjk=None, engine=None):
+def build_latex(profile, cjk=None, engine=None, asset_dir=None, asset_stem="cv"):
     """Assemble the LaTeX source.
 
     `engine` is the engine that will compile this file, and it selects the
@@ -1221,7 +1437,8 @@ def build_latex(profile, cjk=None, engine=None):
     # photo-CV; suppressed entirely for Cluster-1 targets by photo_path().
     ph = photo_path(profile)
     if ph:
-        parts.append(r"\includegraphics[height=3cm]{%s}\\[6pt]" % str(ph))
+        parts.append(r"\includegraphics[height=3cm]{%s}\\[6pt]"
+                     % _photo_include_name(ph, asset_dir, asset_stem))
     parts.append(r"{\LARGE \textbf{%s}}\\[2pt]" % e(meta.get("name", "")))
     if meta.get("headline"):
         parts.append(r"{\large %s}\\[2pt]" % e(meta["headline"]))
@@ -1328,8 +1545,9 @@ def build_latex(profile, cjk=None, engine=None):
 # ── PDF renderer ──────────────────────────────────────────────────────────────
 
 # Why a PDF was not produced.
-NO_ENGINE, UNSUPPORTED_SCRIPT, COMPILE_FAILED, MISSING_CHARACTERS = (
-    "NO_ENGINE", "UNSUPPORTED_SCRIPT", "COMPILE_FAILED", "MISSING_CHARACTERS")
+NO_ENGINE, UNSUPPORTED_SCRIPT, COMPILE_FAILED, MISSING_CHARACTERS, TEXT_OFF_PAGE = (
+    "NO_ENGINE", "UNSUPPORTED_SCRIPT", "COMPILE_FAILED", "MISSING_CHARACTERS",
+    "TEXT_OFF_PAGE")
 
 # The first two are limitations of the machine or the template that modes/apply.md
 # documents and expects the run to continue past on .md/.docx, so they keep exit 0.
@@ -1346,6 +1564,42 @@ def _note(reasons, reason):
     if reasons is not None:
         reasons.append(reason)
     return False
+
+
+def _discard_pdf(out_path, tex_path=None):
+    """Remove any PDF left at the output name, on EVERY path that fails to write
+    a correct new one.
+
+    The `Missing character` branch has always done this, and its reasoning —
+    a wrong PDF is worse than no PDF, because neither the recruiter nor the
+    candidate can see that it is wrong — applies unchanged to every other way a
+    render can fail. It was not applied there, and that is a live defect: the
+    tailoring loop in modes/apply.md re-renders every round, so one failed round
+    left the PREVIOUS round's `cv.pdf` sitting under the same filename while
+    `cv.md`, `cv.docx` and `cv.tex` all held the new text. `check_pages` then
+    read that stale file, found `meta.name` and the orgs in it (they had not
+    changed), and wrote a `pass` receipt over its sha — so a claim that had been
+    walked back, or an employer name that had been corrected, shipped inside a
+    fully-gated package.
+
+    Deleting is right rather than leaving-and-warning: a warning on stderr is
+    read by the agent, but the file is read by the employer, and only one of
+    those two is still around at submission time. The `.tex` always stays — it is
+    a deliverable in its own right and it is what the user recompiles.
+    """
+    out_path = pathlib.Path(out_path)
+    candidates = [out_path]
+    if tex_path is not None:
+        candidates.append(pathlib.Path(tex_path).with_suffix(".pdf"))
+    for path in candidates:
+        try:
+            if path.exists():
+                path.unlink()
+        except OSError:
+            # Best-effort: a PDF we cannot remove is reported by the caller's own
+            # failure message, and raising here would replace a specific
+            # diagnosis ("compile failed, here is the log") with an unrelated one.
+            pass
 
 
 def compile_latex(engine, tex_path, out_path, reasons=None):
@@ -1379,8 +1633,13 @@ def compile_latex(engine, tex_path, out_path, reasons=None):
         proc = None
     if proc is None or getattr(proc, "returncode", 1) != 0:
         log = "" if proc is None else _engine_log(proc)
+        # Before anything else: a PDF at this name is now, by definition, from an
+        # earlier run — this one produced nothing.
+        _discard_pdf(out_path, tex_path)
         print(f"WARNING: LaTeX compile failed. PDF could not be produced. "
-              f"LaTeX source is at: {tex_path}", file=sys.stderr)
+              f"Any PDF from a previous run at {out_path} has been removed so it "
+              f"cannot be sent by mistake. LaTeX source is at: {tex_path}",
+              file=sys.stderr)
         for line in log.strip().splitlines()[-15:]:
             print(f"  | {line}", file=sys.stderr)
         return _note(reasons, COMPILE_FAILED)
@@ -1393,9 +1652,7 @@ def compile_latex(engine, tex_path, out_path, reasons=None):
 
     dropped = missing_characters(_engine_log(proc))
     if dropped:
-        for p in (out_path, produced):
-            if p.exists():
-                p.unlink()
+        _discard_pdf(out_path, tex_path)
         print(f"ERROR: {len(dropped)} character(s) could not be typeset and were "
               f"DROPPED from the PDF — the engine reported this and exited 0, so "
               f"the file would have looked fine while a recruiter read a name with "
@@ -1410,6 +1667,30 @@ def compile_latex(engine, tex_path, out_path, reasons=None):
               "in the profile to a font installed on this machine. Markdown and "
               ".docx are unaffected.", file=sys.stderr)
         return _note(reasons, MISSING_CHARACTERS)
+
+    # Same log, same exit-0 silence, same class of loss: text that ran off the
+    # sheet is unreadable for exactly the reason a dropped glyph is.
+    overfull = overfull_boxes(_engine_log(proc))
+    off_page = [pt for pt in overfull if pt >= OFF_PAGE_PT]
+    if off_page:
+        _discard_pdf(out_path, tex_path)
+        print(f"ERROR: {len(off_page)} line(s) ran off the edge of the page — "
+              f"the widest by {off_page[0]:.1f}pt, past a {OFF_PAGE_PT:.0f}pt "
+              f"margin — so the characters beyond the edge are missing from the "
+              f"PDF. The engine reported this and exited 0. No PDF was written; "
+              f"the LaTeX source is at {tex_path}.", file=sys.stderr)
+        print("This is almost always one unbreakable token: a bare DOI, a repo "
+              "URL, a long file path, or a compound word. Shorten it, or add a "
+              "space, or (for a URL) let it wrap.", file=sys.stderr)
+        return _note(reasons, TEXT_OFF_PAGE)
+    if overfull:
+        # On the paper but into the margin. Loud, because nothing downstream
+        # looks at the PDF's geometry — but not fatal, because it is still
+        # readable and refusing here would block a deliverable over kerning.
+        print(f"WARNING: {len(overfull)} line(s) overflow the text block into "
+              f"the margin (widest {overfull[0]:.1f}pt). The PDF is readable and "
+              f"was written, but check {out_path} before sending it.",
+              file=sys.stderr)
     return True
 
 
@@ -1425,13 +1706,21 @@ def render_pdf(profile, out_path, reasons=None):
     `reasons`, if given, collects which of the three it was."""
     out_path = pathlib.Path(out_path)
     tex_path = out_path.with_suffix(".tex")
+    # Any PDF sitting here belongs to an earlier run. Every path out of this
+    # function either writes a new one or must leave none — see `_discard_pdf`.
+    # Doing it up front rather than per-branch means a future early return cannot
+    # reintroduce the stale-PDF defect by forgetting the call.
+    _discard_pdf(out_path, tex_path)
     cjk = profile_has_cjk(profile)
 
     # Resolve the engine BEFORE building the source: the preamble has to match
     # the engine that will compile it, and getting that pairing wrong is what
     # dropped Latin Extended-A out of every PDF this renderer produced.
     engine = find_latex_engine(cjk=cjk)
-    tex = build_latex(profile, cjk=cjk, engine=engine)
+    # The .tex lands next to the PDF, so that is where a photo has to be staged
+    # for the source to stay self-contained and compilable elsewhere.
+    tex = build_latex(profile, cjk=cjk, engine=engine,
+                      asset_dir=tex_path.parent, asset_stem=tex_path.stem)
     tex_path.write_text(tex, encoding="utf-8")
 
     if engine is None:
@@ -1460,8 +1749,55 @@ def render_pdf(profile, out_path, reasons=None):
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
+# What each format's bytes must actually start with. The check is on content, not
+# on the extension, for the same reason `photo_format` is.
+_FORMAT_MAGIC = {"docx": b"PK\x03\x04", "pdf": b"%PDF"}
+_FORMAT_SUFFIX = {"md": ".md", "docx": ".docx", "pdf": ".pdf"}
+
+
+def confirm_written(out, fmt):
+    """True when `out` really is a non-empty file of format `fmt`.
+
+    `main` used to print `Wrote {out}` without stat-ing the path, so a renderer
+    that wrote nothing — or wrote the wrong format, which `render_letter --format
+    md` could do by emitting a PDF into a `.md` — still reported success and
+    exited 0. The agent then recorded the deliverable as produced and the user
+    found out at upload time. Neither renderer's CLI format dispatch had a test,
+    so nothing else was watching this.
+    """
+    out = pathlib.Path(out)
+    if not out.is_file():
+        print(f"ERROR: {fmt} render reported success but {out} does not exist.",
+              file=sys.stderr)
+        return False
+    if out.stat().st_size == 0:
+        print(f"ERROR: {fmt} render wrote {out} but it is empty.", file=sys.stderr)
+        return False
+    magic = _FORMAT_MAGIC.get(fmt)
+    head = out.open("rb").read(8)
+    if magic and not head.startswith(magic):
+        print(f"ERROR: {out} was written for --format {fmt} but does not start "
+              f"with {magic!r}. The file is not a {fmt}.", file=sys.stderr)
+        return False
+    if not magic:  # md: must be readable text, not a binary blob
+        try:
+            out.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            print(f"ERROR: --format md wrote non-text bytes to {out}.",
+                  file=sys.stderr)
+            return False
+    expected = _FORMAT_SUFFIX.get(fmt)
+    if expected and out.suffix.lower() != expected:
+        # Not fatal: the caller may have a reason. But an ATS portal rejects on
+        # extension, so silence here is not free either.
+        print(f"WARNING: --format {fmt} wrote {out.name}; most upload portals "
+              f"expect a {expected} extension.", file=sys.stderr)
+    return True
+
+
 def main(argv=None):
     reset_market_warnings()
+    reset_photo_warnings()
     ap = argparse.ArgumentParser()
     ap.add_argument("profile")
     ap.add_argument("--format", choices=["md", "docx", "pdf"], default="md")
@@ -1487,6 +1823,8 @@ def main(argv=None):
         ok = render_pdf(profile, out, reasons=reasons)
         tex = out.with_suffix(".tex")
         if ok:
+            if not confirm_written(out, "pdf"):
+                return 1
             # The .tex is delivered alongside every PDF, by design.
             print(f"Wrote {out} (LaTeX source alongside it: {tex})")
             return 0
@@ -1498,6 +1836,8 @@ def main(argv=None):
         print(f"PDF could not be built — see the warning above. "
               f"LaTeX source written to: {tex}", file=sys.stderr)
         return 0 if pdf_failure_is_tolerated(reasons) else 1
+    if not confirm_written(out, args.format):
+        return 1
     print(f"Wrote {out}")
     return 0
 

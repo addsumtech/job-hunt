@@ -6,6 +6,17 @@ import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 import render_cv
+# A real 1x1 PNG, not just the signature. The fixtures below used to write the
+# 8-byte magic alone, which every renderer accepted because nothing had ever
+# tried to DECODE it — until render_cv started reporting a photo it could not
+# embed, at which point a stub image produced a genuine "could not embed" warning
+# and this file's own warning-count test caught it. A fixture that is not the
+# thing it stands in for hides exactly the defect the test is watching for.
+PNG_1X1 = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+    b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\xff\xff?"
+    b"\x00\x05\xfe\x02\xfe\r\xefF\xb8\x00\x00\x00\x00IEND\xaeB`\x82"
+)
 
 FIXTURES = pathlib.Path(__file__).parent / "fixtures"
 
@@ -444,7 +455,7 @@ def test_native_achievements_and_board_sections():
 
 
 def test_personal_data_and_photo_included_for_non_cluster1(tmp_path):
-    img = tmp_path / "p.png"; img.write_bytes(b"\x89PNG\r\n\x1a\n")  # path just needs to exist
+    img = tmp_path / "p.png"; img.write_bytes(PNG_1X1)  # path just needs to exist
     profile = {
         "meta": {"name": "Z", "target_market": "cn", "photo": str(img)},
         "contact": {"email": "z@x.com", "personal": {"date_of_birth": "1992", "hometown": "Shanghai"}},
@@ -475,7 +486,7 @@ UNRECOGNIZED_SPELLINGS = ["Brazil", "Dubai, UAE", "Mars", "", "somewhere nice"]
 
 @pytest.mark.parametrize("market", CLUSTER1_SPELLINGS)
 def test_cluster1_spellings_suppress_personal_data(tmp_path, market):
-    img = tmp_path / "p.png"; img.write_bytes(b"\x89PNG\r\n\x1a\n")
+    img = tmp_path / "p.png"; img.write_bytes(PNG_1X1)
     profile = {
         "meta": {"name": "Z", "target_market": market, "photo": str(img)},
         "contact": {"email": "z@x.com", "personal": {"date_of_birth": "1992"}},
@@ -491,7 +502,7 @@ def test_known_non_cluster1_markets_render_quietly(tmp_path, capsys, market):
     """The quiet case, pinned as hard as the firing one: a photo on a Dutch or
     Chinese CV is a convention, not a defect. A warning here would be a warning
     everyone learns to ignore."""
-    img = tmp_path / "p.png"; img.write_bytes(b"\x89PNG\r\n\x1a\n")
+    img = tmp_path / "p.png"; img.write_bytes(PNG_1X1)
     profile = {
         "meta": {"name": "Z", "target_market": market, "photo": str(img)},
         "contact": {"email": "z@x.com", "personal": {"date_of_birth": "1992"}},
@@ -504,7 +515,7 @@ def test_known_non_cluster1_markets_render_quietly(tmp_path, capsys, market):
 
 @pytest.mark.parametrize("market", UNRECOGNIZED_SPELLINGS)
 def test_unrecognized_market_with_personal_data_warns_and_names_the_fields(tmp_path, capsys, market):
-    img = tmp_path / "p.png"; img.write_bytes(b"\x89PNG\r\n\x1a\n")
+    img = tmp_path / "p.png"; img.write_bytes(PNG_1X1)
     profile = {
         "meta": {"name": "Z", "target_market": market, "photo": str(img)},
         "contact": {"email": "z@x.com", "personal": {"date_of_birth": "1992"}},
@@ -532,7 +543,7 @@ def test_the_unknown_market_warning_prints_once_per_profile_not_once_per_format(
     one process — renders from the SAME profile. Three identical warnings is
     how a warning gets trained away, and it is why this does not live in
     personal_items (a generator consumed at three separate sites)."""
-    img = tmp_path / "p.png"; img.write_bytes(b"\x89PNG\r\n\x1a\n")
+    img = tmp_path / "p.png"; img.write_bytes(PNG_1X1)
     profile = {"meta": {"name": "Z", "target_market": "Dubai, UAE", "photo": str(img)},
                "contact": {"email": "z@x.com",
                            "personal": {"date_of_birth": "1992"}}}
