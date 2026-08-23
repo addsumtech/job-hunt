@@ -78,6 +78,40 @@ def _records(workspace):
     return out
 
 
+def corrupt_lines(workspace) -> list:
+    """1-based line numbers of journal lines that are not parseable records.
+
+    Separate from `_records` on purpose. Dropping a bad line is right for
+    READING — a truncated line must not blind a later gate to an earlier one,
+    which test_journal.py pins — but silently dropping it is wrong for
+    COMPOSING. `read_receipts` returns each gate's receipts oldest-first and
+    check_apply trusts `receipts[-1]`, so a truncated NEWEST receipt promotes
+    the previous one: a run whose final act was writing
+    `UNSOURCED: 'Kubernetes' appears in the CV and in no evidence block`, cut
+    short by a killed process or a full disk, was reported as a clean package.
+
+    check_opencli_result already keeps its corruption rather than dropping it.
+    One file, two opposite policies, and the failing-open reader was the one
+    that authorises hand-off.
+    """
+    path = pathlib.Path(workspace) / "journal.jsonl"
+    if not path.exists():
+        return []
+    bad = []
+    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            bad.append(number)
+            continue
+        if not isinstance(rec, dict):
+            bad.append(number)
+    return bad
+
+
 def current_mode(workspace) -> str:
     """The mode of the most recent mode_entry record, or "unknown".
 
@@ -97,7 +131,7 @@ def current_mode(workspace) -> str:
 
 
 def receipt(workspace, gate: str, input_hashes: dict, verdict: str,
-            findings=None) -> dict:
+            findings=None, extra: dict = None) -> dict:
     """Build, journal and return one gate receipt.
 
     `verdict` is one of `VERDICTS` above: "pass" | "fail" | "could_not_run" |
@@ -116,6 +150,13 @@ def receipt(workspace, gate: str, input_hashes: dict, verdict: str,
         "verdict": verdict,
         "findings": list(findings or []),
     }
+    # `extra` carries facts ABOUT the run that are not file hashes — `round` is
+    # the one that matters. It cannot go in `input_hashes`: that map is now
+    # re-verified against disk by check_apply, so a non-path key there would be
+    # looked up as a filename and reported missing.
+    for key, value in (extra or {}).items():
+        if key not in record:
+            record[key] = value
     payload = json.dumps(record, ensure_ascii=False, sort_keys=True,
                          separators=(",", ":"))
     record["receipt_hash"] = hashlib.sha256(payload.encode("utf-8")).hexdigest()

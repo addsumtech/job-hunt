@@ -75,7 +75,13 @@ def _good_workspace(tmp_path, root, skip=()):
     for gate in REQUIRED:
         if gate in skip:
             continue
-        journal.receipt(ws, gate, {}, "pass")
+        # parse_verdicts stamps the round it parsed, so check_apply can tell
+        # whether that receipt is about the round in the workspace. A forgery
+        # that omits it is not a forgery of what the gate writes — it is a
+        # forgery of the older, round-blind receipt, and every test built on it
+        # would be asserting against a shape the skill no longer produces.
+        extra = {"round": 1} if gate == "parse_verdicts" else None
+        journal.receipt(ws, gate, {}, "pass", extra=extra)
     rounds.merge_round(ws, 1, {"round": 1, "combined_verdict": "PASS"})
     (ws / "interview-brief.md").write_text("# Interview brief\n", encoding="utf-8")
     return ws
@@ -301,7 +307,28 @@ def test_the_highest_numbered_round_is_the_one_that_counts(tmp_path, capsys):
     ws = _good_workspace(tmp_path, root)
     rounds.merge_round(ws, 1, {"combined_verdict": "REJECT"})
     rounds.merge_round(ws, 2, {"round": 2, "combined_verdict": "PASS"})
+    # Round 2 was parsed by the gate, which is what makes this the ordinary
+    # second round rather than the substitution the test below pins.
+    journal.receipt(ws, "parse_verdicts", {}, "pass", extra={"round": 2})
     assert check_apply.main(_argv(ws, root)) == 0
+
+
+def test_a_round_the_parser_never_saw_cannot_carry_the_package(tmp_path, capsys):
+    """The bypass the round stamp closes, and the reason the fixture above had to
+    gain a line.
+
+    judge-round-<n>.json is a plain JSON file. From round 2 onward, skipping
+    `parse_verdicts --round 2` and hand-writing `combined_verdict: "PASS"` left
+    round 1's receipt vouching for a round the judges never returned — measured
+    ending exit 0 over a REJECT on disk. Round 1 alone was protected, by
+    MISSING_RECEIPT.
+    """
+    root = _skill_root(tmp_path)
+    ws = _good_workspace(tmp_path, root)          # carries a round-1 receipt
+    rounds.merge_round(ws, 1, {"combined_verdict": "REJECT"})
+    rounds.merge_round(ws, 2, {"round": 2, "combined_verdict": "PASS"})
+    assert check_apply.main(_argv(ws, root)) == 1
+    assert "PARSE_VERDICTS_STALE_ROUND" in capsys.readouterr().out
 
 
 def test_a_failed_mode_entry_leaves_a_trace_in_the_journal(tmp_path):
@@ -570,14 +597,29 @@ def test_an_ordinary_posting_does_not_demand_the_word_limit_gate(tmp_path, capsy
 
 def test_an_unparseable_posting_does_not_turn_into_a_word_limit_finding(
         tmp_path, capsys):
-    """A broken posting.yaml is somebody's finding, but not this branch's: guessing
+    """A broken posting.yaml still must not become a WORD-LIMIT demand: guessing
     "structured" from a file we could not read would fire on a run with no
-    supporting statement anywhere in sight."""
+    supporting statement anywhere in sight. That half is unchanged.
+
+    What changed is the other half. This used to exit 0 in silence, and in the
+    no-letter.yaml configuration — the normal shape of an NHS or Civil Service
+    application — nothing else in apply mode reads posting.yaml, so one malformed
+    character both removed the check_word_limits requirement and swallowed the
+    reason. The file is now reported as unreadable, which is a different finding
+    from the one this test exists to keep out.
+    """
     root = _skill_root(tmp_path)
     ws = _good_workspace(tmp_path, root)
     (ws / "posting.yaml").write_text("role_title: [unclosed\n", encoding="utf-8")
-    assert check_apply.main(_argv(ws, root)) == 0
-    assert capsys.readouterr().out.strip() == ""
+    assert check_apply.main(_argv(ws, root)) == 1
+    out = capsys.readouterr().out
+    assert any(line.startswith("UNREADABLE_POSTING") for line in out.splitlines())
+    # The CODE, not a free substring: "check_word_limits" appears inside
+    # UNREADABLE_POSTING's own explanation, and asserting on the bare word would
+    # be satisfied by prose — the exact test-quality defect this audit found in
+    # NO_PASS_NO_STOP's assertion.
+    assert "MISSING_RECEIPT: check_word_limits" not in out, \
+        "an unreadable posting must still not DEMAND the word-limit gate"
 
 
 def test_the_conditional_gates_the_gate_can_demand_are_the_declared_ones(tmp_path):

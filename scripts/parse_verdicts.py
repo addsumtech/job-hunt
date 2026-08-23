@@ -131,6 +131,21 @@ def combine(judges: dict) -> str:
     return "REJECT"
 
 
+def _relative(path, ws) -> str:
+    """A receipt key check_apply can resolve back to a file.
+
+    Falls back to the absolute path when the file lives outside the workspace —
+    which is loud rather than silent: check_apply will report it missing instead
+    of skipping it, and a judge transcript stored outside the workspace is worth
+    reporting.
+    """
+    path, ws = pathlib.Path(path), pathlib.Path(ws)
+    try:
+        return str(path.resolve().relative_to(ws.resolve()))
+    except ValueError:
+        return str(path)
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--workspace", required=True)
@@ -200,9 +215,23 @@ def main(argv=None) -> int:
     # the wrong fix: combine() also returns AMBIGUOUS when a judge emitted nothing,
     # and a round nobody judged would then exit 0 behind an honest-stop.yaml —
     # one silent failure traded for another.
+    # `round` is recorded because check_apply reads the LATEST parse_verdicts
+    # receipt and, without it, could not tell which round that receipt was for.
+    # From round 2 onward that gap was a bypass: skip `parse_verdicts --round 2`,
+    # hand-write `combined_verdict: "PASS"` into judge-round-2.json, and the
+    # package went out over a round the judges had rejected — round 1's receipt
+    # vouching for it. Round 1 alone was protected, by MISSING_RECEIPT.
+    # Keyed by WORKSPACE-RELATIVE PATH, not by judge name. `input_hashes` is now
+    # re-verified against disk by check_apply, and a key like "ats" names no
+    # file, so the three judge transcripts — the evidence the whole review loop
+    # rests on — would have been the one required gate whose receipt could not be
+    # checked. Nothing reads these keys by name (the path-keyed map
+    # check_render_freshness uses is a different field, `dispatch.input_hashes`).
     journal.receipt(ws, GATE,
-                    {n: journal.sha256_file(p) for n, p in paths.items()},
-                    "fail" if combined == "AMBIGUOUS" else "recorded", findings)
+                    {_relative(p, ws): journal.sha256_file(p)
+                     for p in paths.values()},
+                    "fail" if combined == "AMBIGUOUS" else "recorded", findings,
+                    extra={"round": int(args.round)})
     return 0 if combined == "PASS" else 1
 
 

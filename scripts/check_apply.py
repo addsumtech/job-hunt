@@ -82,20 +82,63 @@ PASSING_VERDICTS = ("pass", "recorded")
 SETUP_VERDICTS = ("baseline_recorded",)
 
 
-def _structured(ws: pathlib.Path) -> bool:
-    """Does posting.yaml declare a criterion-scored application?
+def _stale_inputs(ws: pathlib.Path, gate: str, receipt: dict) -> list:
+    """Re-verify a passing receipt's `input_hashes` against the bytes on disk.
 
-    An unreadable posting.yaml answers "no": it is somebody's finding, but not
-    this branch's, and guessing "structured" from a file nobody could parse would
-    demand a gate on a run with no supporting statement anywhere in sight.
+    journal.py's own docstring says a receipt is a claim about specific bytes.
+    Eleven sites wrote `input_hashes`; nothing ever read one back. So a gate's
+    pass kept vouching for the package after its input changed, and check_apply
+    — the single gate that decides "this may be delivered" — composed purely on
+    the verdict field.
+
+    The reachable path is the ordinary actor-critic loop, not a hand edit.
+    `check_claims` and `check_render_freshness` are protected by explicit
+    re-run instructions in modes/apply.md; `check_personal_data` and `lint_cv`
+    appear only in the one-shot pre-dispatch block, and nothing tells the run to
+    re-run them after a round-2 edit. Measured on a documented round 2: a bullet
+    rewrite introducing five clichés left check_apply at 0 while `lint_cv` on the
+    same bytes exited 1.
+
+    An empty `input_hashes` is not a finding: some gates record none, and a
+    receipt that claims nothing about files cannot be stale.
+    """
+    findings = []
+    for label, recorded in sorted((receipt.get("input_hashes") or {}).items()):
+        path = ws / label
+        if not path.exists():
+            findings.append(
+                f"RECEIPT_INPUT_MISSING: {gate} passed on {label}, which is no "
+                f"longer in the workspace — the gate's pass is about a file that "
+                f"is gone. Re-run {gate}")
+            continue
+        if journal.sha256_file(path) != recorded:
+            findings.append(
+                f"STALE_RECEIPT: {gate} passed on {label}@{str(recorded)[:12]} "
+                f"but disk now holds {journal.sha256_file(path)[:12]} — the file "
+                f"changed after the gate checked it, so that pass says nothing "
+                f"about what would be delivered. Re-run {gate}")
+    return findings
+
+
+def _structured(ws: pathlib.Path):
+    """True | False | None (absent) | "unreadable".
+
+    Tri-state, because the two ways of answering "no" are not the same fact.
+    Guessing "structured" from a file nobody could parse would demand a gate on a
+    run with no supporting statement in sight — that reasoning still holds and is
+    why this does not return True. But returning a plain False ALSO swallowed the
+    finding: in the no-letter.yaml configuration, which is the normal shape of an
+    NHS or Civil Service application, nothing else in apply mode reads
+    posting.yaml, so one malformed character both removed the check_word_limits
+    requirement and suppressed any report of it. The caller now says so out loud.
     """
     p = ws / "posting.yaml"
     if not p.exists():
-        return False
+        return None
     try:
         posting = journal.load_yaml(p)
     except journal.YamlUnreadable:
-        return False
+        return "unreadable"
     return str(posting.get("application_type") or "").strip().lower() == "structured"
 
 
@@ -124,7 +167,7 @@ def conditional_gates(ws: pathlib.Path) -> list:
     # outcome available.
     if (ws / "supporting-statement.md").exists():
         out.append(("check_word_limits", "supporting-statement.md exists"))
-    elif _structured(ws):
+    elif _structured(ws) is True:
         out.append(("check_word_limits",
                     "posting.yaml says application_type: structured, and there is "
                     "no supporting-statement.md"))
@@ -168,7 +211,37 @@ def main(argv=None) -> int:
                         "entered the mode, so what was read is not what is on disk — "
                         "re-enter the mode and re-read it")
 
+    # ── the journal itself is readable ────────────────────────────────────
+    # journal._records drops an unparseable line, which is right for READING (a
+    # truncated line must not blind a later gate to an earlier one) and wrong for
+    # COMPOSING: read_receipts returns each gate oldest-first and this gate trusts
+    # receipts[-1], so a truncated NEWEST receipt silently promotes the previous
+    # one. A run whose final act was writing an UNSOURCED finding, cut short by a
+    # killed process or a full disk, was reported here as a clean package.
+    bad_lines = journal.corrupt_lines(ws)
+    if bad_lines:
+        findings.append(
+            "JOURNAL_CORRUPT: journal.jsonl has unparseable line(s) at "
+            + ", ".join(str(n) for n in bad_lines)
+            + " — a receipt that cannot be read is not a receipt that passed, and "
+              "the gate above it may be the one that failed. Re-run the gates "
+              "rather than trusting what is still readable")
+
     # ── every upstream gate ran, on this workspace, and passed ────────────
+    # An unreadable posting.yaml is reported here rather than nowhere. It is not
+    # a word-limit demand — guessing "structured" from a file nobody could parse
+    # would fire on runs with no supporting statement in sight, and that reasoning
+    # is unchanged. But in the no-letter.yaml configuration nothing else in apply
+    # mode reads posting.yaml, so returning a silent False both removed the
+    # check_word_limits requirement and swallowed the reason.
+    if _structured(ws) == "unreadable":
+        findings.append(
+            "UNREADABLE_POSTING: posting.yaml exists and will not parse, so this "
+            "gate cannot tell whether the application is criterion-scored — and a "
+            "structured posting is the case where check_word_limits is the ONLY "
+            "reader of the document the employer actually marks. Fix the YAML and "
+            "re-run")
+
     conditional = conditional_gates(ws)
     trigger = dict(conditional)
     required = list(REQUIRED_GATES) + [g for g, _ in conditional]
@@ -199,6 +272,8 @@ def main(argv=None) -> int:
             detail = "; ".join(last.get("findings") or []) or "no findings recorded"
             findings.append(f"UPSTREAM_FAILED: {gate} verdict={verdict} "
                             f"({detail})")
+        else:
+            findings.extend(_stale_inputs(ws, gate, last))
 
     # ── any other gate that ran and failed ────────────────────────────────
     # Enumerating gates cannot keep up with the gates: check_pages and
@@ -219,7 +294,8 @@ def main(argv=None) -> int:
         if rec.get("gate"):
             latest[rec["gate"]] = rec
     for gate, last in latest.items():
-        if gate == GATE or gate in required or last.get("verdict") != "fail":
+        verdict = last.get("verdict")
+        if gate == GATE or gate in required or verdict != "fail":
             continue
         if last.get("mode") in other_modes:
             continue
@@ -231,6 +307,26 @@ def main(argv=None) -> int:
 
     # ── the round passed, or the stop is classified ───────────────────────
     n = _latest_round(ws)
+    # The parse_verdicts receipt has to be about THIS round. Without the round
+    # stamp, `judge-round-2.json` could be hand-written with
+    # `combined_verdict: "PASS"` while round 1's receipt vouched for it, and the
+    # package went out over a round the judges had rejected. Round 1 alone was
+    # protected, by MISSING_RECEIPT.
+    if n is not None:
+        pv = journal.read_receipts(ws, "parse_verdicts")
+        recorded = pv[-1].get("round") if pv else None
+        if pv and recorded is None:
+            findings.append(
+                "PARSE_VERDICTS_ROUND_UNKNOWN: the parse_verdicts receipt records "
+                "no round, so nothing ties it to judge-round-"
+                f"{n}.json. Re-run parse_verdicts --round {n}")
+        elif pv and int(recorded) != int(n):
+            findings.append(
+                f"PARSE_VERDICTS_STALE_ROUND: the latest parse_verdicts receipt is "
+                f"for round {recorded}, but the highest round in the workspace is "
+                f"{n}. The verdicts in judge-round-{n}.json were never parsed by "
+                f"the gate — re-run parse_verdicts --round {n}")
+
     combined = rounds.load_round(ws, n).get("combined_verdict") if n else None
     if n is None:
         findings.append("NO_ROUND: no judge-round-<n>.json in the workspace — the "
