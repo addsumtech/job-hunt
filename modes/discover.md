@@ -464,11 +464,12 @@ adapter died, say *that*, not "there are no jobs".
 ## Step 10 — gates, and cite the receipts
 
 ```bash
-python3 scripts/check_no_write.py  --workspace .
-python3 scripts/check_shortlist.py --workspace .
+python3 scripts/check_no_write.py       --workspace .
+python3 scripts/lint_no_prediction.py   --workspace .
+python3 scripts/check_shortlist.py      --workspace .
 ```
 
-Both must exit 0. **This mode may not claim success without a passing receipt for
+All three must exit 0. **This mode may not claim success without a passing receipt for
 each in `journal.jsonl`** — a skipped script produces no output, and that looks
 exactly like a clean one.
 

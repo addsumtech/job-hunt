@@ -510,7 +510,7 @@ a fabrication the candidate then repeats back), and the shortlist's `why_matched
 | Mock interview | `scripts/check_mock.py` | an invented tag or band; a tag with no quote, or a quote that is not in the transcript; a pass emitting the other pass's tags; a scraped question with no id, no date, or the wrong country; an answer-bank entry with no source; a collapsed claim with no walk-back; an unsourced fact neither promoted nor walked back |
 | Evidence blocks | `scripts/evidence_blocks.py` | the posting and CV cut into addressable `JD-nnn` / `CV-nnn`; the only chunker |
 | Evidence refs | `scripts/check_evidence_refs.py` | refs that resolve to no block; block ids left in reader-facing prose |
-| Prediction lint | `scripts/lint_no_prediction.py` | percentages, `n/m` scores, prediction vocabulary (EN + ZH) in anything rendered |
+| Prediction lint | `scripts/lint_no_prediction.py` | percentages (incl. fullwidth `％` and 「百分之七十」), `n/m` scores, and prediction vocabulary EN + ZH (「成功率」「入围率」「七成」…) in the **judgement-facing** artifacts: `fit-assessment.md`, `shortlist.md`, `cheatsheet.md`, `mock/assessment-*.md`. Deliberately NOT the CV or letter — there a number is a measured past achievement, which the Quantification ladder above requires, not a claim about the future |
 | Contradictions | `scripts/consistency.py` | verdict vs effort, loose knockouts, gaps with no action, work-authorization conflicts — reports, never repairs |
 | Coverage counts | `scripts/count_coverage.py` | the only count-producing path; a hand-written second number cannot be reconciled |
 | Market tables | `scripts/check_conventions.py` | digits/percent in prose, source provenance, protected traits, duplicate ids, expired `review_by` (CI-hard) |

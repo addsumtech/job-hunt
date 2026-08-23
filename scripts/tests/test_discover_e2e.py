@@ -32,6 +32,10 @@ def journal_records(workspace):
 
 def test_the_whole_chain_passes_on_a_real_capture(tmp_path):
     workspace = fx.build_workspace(tmp_path)
+    # Strip the pre-seeded gate receipts: this test exists to prove the real
+    # Step 10 scripts write them, and seeding them would make that true by
+    # construction — the failure mode this whole audit kept finding.
+    fx.write_journal(workspace, fx.JOURNAL, gate_receipts=False)
 
     detail = workspace / "raw" / "51job-detail-173199597.json"
     classify = run("check_opencli_result.py",
@@ -48,6 +52,10 @@ def test_the_whole_chain_passes_on_a_real_capture(tmp_path):
     assert no_write.returncode == 0, no_write.stdout + no_write.stderr
     assert no_write.stdout == ""
 
+    lint = run("lint_no_prediction.py", "--workspace", str(workspace))
+    assert lint.returncode == 0, lint.stdout + lint.stderr
+    assert lint.stdout == ""
+
     shortlist = run("check_shortlist.py", "--workspace", str(workspace))
     assert shortlist.returncode == 0, shortlist.stdout + shortlist.stderr
     assert shortlist.stdout == ""
@@ -55,8 +63,25 @@ def test_the_whole_chain_passes_on_a_real_capture(tmp_path):
     records = journal_records(workspace)
     assert sum(1 for r in records if r.get("action") == "adapter_call") == 3
     gates = [r for r in records if r.get("action") == "gate"]
-    assert {g["gate"] for g in gates} == {"check_no_write", "check_shortlist"}
+    assert {g["gate"] for g in gates} == {
+        "check_no_write", "lint_no_prediction", "check_shortlist"}
     assert all(g["verdict"] == "pass" for g in gates)
+
+
+def test_skipping_a_step_10_gate_is_reported_not_silently_clean(tmp_path):
+    """check_shortlist is the last gate in the mode, so it is the only thing that
+    can report a sibling that never ran. Until it did, discover's two
+    load-bearing invariants — read-only, and no predicted numbers — rested on
+    scripts a run could simply not execute, leaving no trace either way."""
+    workspace = fx.build_workspace(tmp_path)
+    fx.write_journal(workspace, fx.JOURNAL, gate_receipts=False)
+
+    shortlist = run("check_shortlist.py", "--workspace", str(workspace))
+    assert shortlist.returncode == 1
+    codes = {line.split(":", 1)[0] for line in shortlist.stdout.splitlines() if line}
+    assert "MISSING_RECEIPT" in codes
+    assert "check_no_write" in shortlist.stdout
+    assert "lint_no_prediction" in shortlist.stdout
 
 
 def test_a_hand_corrupted_source_id_is_caught_through_the_cli(tmp_path):

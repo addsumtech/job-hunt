@@ -584,6 +584,34 @@ def _check_caps(brief):
     return findings
 
 
+# The gates modes/discover.md Step 10 runs before this one. check_shortlist is
+# the last gate in the mode, so it is the only place that can report a sibling
+# that never ran — and until now it reported none of them, which left discover's
+# two load-bearing invariants (read-only, and no predicted numbers) resting on
+# scripts a run could simply not execute. check_assessment.py:181 does exactly
+# this for assess; this is the same mechanism, same reason.
+UPSTREAM_GATES = ("check_no_write", "lint_no_prediction")
+PASSING_VERDICTS = ("pass", "recorded")
+
+
+def _check_upstream_receipts(workspace):
+    findings = []
+    for gate in UPSTREAM_GATES:
+        receipts = journal.read_receipts(workspace, gate)
+        if not receipts:
+            findings.append(
+                f"MISSING_RECEIPT: no journal.jsonl receipt for {gate} — the "
+                "gate was never run, and a skipped gate looks exactly like a "
+                "clean one. Run the Step 10 block in order.")
+            continue
+        last = receipts[-1]
+        if last.get("verdict") not in PASSING_VERDICTS:
+            detail = "; ".join(last.get("findings") or []) or "no findings recorded"
+            findings.append(
+                f"UPSTREAM_FAILED: {gate} verdict={last.get('verdict')} ({detail})")
+    return findings
+
+
 _MD_URL = re.compile(r"https?://[^\s)\]>\"'|]+")
 
 
@@ -763,6 +791,7 @@ def check_run(workspace, shortlist, brief, md_text, calls):
         if not ok_calls:
             findings.extend(_check_disclosure(md_text))
 
+    findings.extend(_check_upstream_receipts(workspace))
     findings.extend(_check_caps_against_the_run(brief, shortlist, rows, calls))
     findings.extend(_check_md_rows(md_text, rows))
     findings.extend(_check_sources(workspace, shortlist, rows, calls))

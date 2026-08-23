@@ -64,13 +64,44 @@ ROADMAP_HORIZON = re.compile(r"(?<![0-9])30\s*/\s*60\s*/\s*90(?![0-9])")
 _MOCK_OPEN = re.compile(r"^\s*MOCK-[A-Z]+-V1\s*$")
 _MOCK_CLOSE = re.compile(r"^\s*END-MOCK-[A-Z]+-V1\s*$")
 _QUOTE_FIELD = re.compile(r"quote=")
-_PERCENT = re.compile(r"%")
-_SCORE = re.compile(r"\b\d+\s*/\s*\d+\b")
+# Fullwidth forms are the same claim in the same language. `％` (U+FF05) and `／`
+# (U+FF0F) are what a Chinese IME produces by default, and `０-９` likewise — so
+# the ASCII-only classes these replace left the ban unenforced in exactly the
+# text it was most needed in.
+#
+# NOT solved by NFKC-normalising the line first, which is the obvious fix and the
+# wrong one: `mask_exempt_spans` blanks URLs and verdict labels by replacing them
+# with runs of spaces OF THE SAME LENGTH so the reported span still lines up with
+# the original text. NFKC changes lengths (`％`→`%` is 1:1, but `㍑`→`リットル`
+# is not), and a normalising pass would silently break that alignment. Widening
+# the character classes keeps every offset exactly where it was.
+_PERCENT = re.compile(r"[%％]")
+_SCORE = re.compile(r"(?<![0-9０-９])[0-9０-９]+\s*[/／]\s*[0-9０-９]+(?![0-9０-９])")
+
+# The Chinese half was four hand-listed words, so 「成功率」「入围率」「七成」 and
+# 「百分之七十」 all shipped clean — and `--lang zh` is the DEFAULT
+# (count_coverage.py:170), which made this the skill's primary output language.
+#
+# A bare `X率` would be wrong in the other direction: 效率, 利率, 增长率 and
+# 采样率 are ordinary words on an engineer's CV. The character class is bounded
+# to the words that describe getting the job, so it cannot reach them.
+#
+# 可能性 is deliberately ABSENT. The mandated disclaimer is
+# 「本 skill 不给出面试或录用的可能性估计」 — banning the word would make the
+# required text fail its own gate, which is the defect layer 1 already had once.
+_ZH_RATE = r"概率|[通过入围命中录取用成功面试中签]{1,3}率"
+# 七成 = 70%. The lookahead keeps 成功/成长/成员/成果/成本/成熟/成为 out; those are
+# the ordinary compounds a Chinese numeral can legitimately sit in front of.
+_ZH_TENTHS = r"[一二三四五六七八九]成(?![功长员果本熟为立就分])"
+_ZH_PERCENT_SPELLED = r"百分之[零一二三四五六七八九十百]+"
+
 _WORDS = re.compile(
-    r"\bchances?\b|\bprobabilit(?:y|ies)\b|\bodds\b"
+    r"\bchances?\b|\bprobabilit(?:y|ies)\b|\bodds\b|\blikelihood\b"
     r"|\blikely to be (?:hired|interviewed|shortlisted|rejected)\b"
     r"|\b(?:strong|weak) candidate\b|\bwould pass\b|\bno-hire\b"
-    r"|概率|通过率|命中率|录取率",
+    r"|\b\d+(?:\.\d+)?\s*(?:percent|per cent)\b"
+    r"|\bout of (?:10|100)\b"
+    r"|" + _ZH_RATE + r"|" + _ZH_TENTHS + r"|" + _ZH_PERCENT_SPELLED,
     re.IGNORECASE)
 _ATTRIBUTION = re.compile(r"^\s*>?\s*(?:—|--|-|Source:|来源[:：])\s+.*https?://\S+")
 

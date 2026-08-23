@@ -15,6 +15,15 @@ REPO = pathlib.Path(__file__).resolve().parents[2]
 MODE_FILE = REPO / "modes" / "discover.md"
 
 
+UPSTREAM_GATE_RECEIPTS = ("check_no_write", "lint_no_prediction")
+
+
+def upstream_receipt(gate, verdict="pass"):
+    """A passing receipt for a gate discover runs before check_shortlist."""
+    return {"ts": "2026-08-09T14:05:00Z", "action": "gate", "gate": gate,
+            "verdict": verdict, "findings": [], "input_hashes": {}}
+
+
 def mode_entry_record():
     """The record scripts/enter_mode.py writes on entering discover.
 
@@ -463,7 +472,7 @@ def write_md(workspace, text):
     (workspace / "shortlist.md").write_text(text, encoding="utf-8")
 
 
-def write_journal(workspace, records, mode_entry=True):
+def write_journal(workspace, records, mode_entry=True, gate_receipts=True):
     """Rewrite journal.jsonl, keeping the workspace valid in every other respect.
 
     The mode_entry record is prepended by default: a test that mutates the
@@ -476,6 +485,18 @@ def write_journal(workspace, records, mode_entry=True):
             isinstance(r, dict) and r.get("action") == "mode_entry"
             for r in records):
         head = [mode_entry_record()]
+    # Same reasoning as the mode entry above, one step further: check_shortlist
+    # now requires a receipt from every gate modes/discover.md Step 10 runs
+    # before it, so a test mutating the adapter history is not also asserting
+    # that those gates were skipped. Without this default, MISSING_RECEIPT would
+    # appear in most of the suite as noise and teach everyone to ignore it.
+    # `gate_receipts=False` is for the end-to-end test, which runs the real
+    # Step 10 scripts and must prove THEY write the receipts — seeding them there
+    # would make the assertion true by construction.
+    if gate_receipts:
+        head += [upstream_receipt(gate) for gate in UPSTREAM_GATE_RECEIPTS
+                 if not any(isinstance(r, dict) and r.get("gate") == gate
+                            for r in records)]
     with (workspace / "journal.jsonl").open("w", encoding="utf-8") as handle:
         for record in head + list(records):
             handle.write(json.dumps(record, ensure_ascii=False) + "\n")
