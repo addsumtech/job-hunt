@@ -288,6 +288,17 @@ round's verification behind, and only the new round's verifying run clears it.
 `fail`** — including gates it does not require by name. A gate that ran, found something
 and was left failing blocks the package; fix the finding and re-run that gate.
 
+**Every round runs the WHOLE pre-dispatch block again, not just the tailoring.** After any
+edit to `tailored-profile.yaml` or to a rendered artifact — which is what a round 2 IS —
+re-run `check_personal_data`, `check_claims`, `lint_cv`, and `check_pages`/`check_letter`/
+`check_word_limits` where they apply, before dispatching the judges again.
+
+This is not a style preference. `check_apply.py` re-hashes each required gate's recorded
+`input_hashes` against the bytes on disk and reports `STALE_RECEIPT` when they differ: a
+gate's pass is a claim about the file it read, and after an edit it is a claim about a file
+that no longer exists. A round-2 package whose gates were only run in round 1 will be
+refused, correctly, at the very end — after the judges have been paid for.
+
 ## `honest-stop.yaml` — required whenever the loop ends without a PASS
 
 The three-judge loop ending un-passed means one of two opposite things, and they emit

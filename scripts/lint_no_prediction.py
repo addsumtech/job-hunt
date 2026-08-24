@@ -89,7 +89,14 @@ _SCORE = re.compile(r"(?<![0-9０-９])[0-9０-９]+\s*[/／]\s*[0-9０-９]+(?!
 # 可能性 is deliberately ABSENT. The mandated disclaimer is
 # 「本 skill 不给出面试或录用的可能性估计」 — banning the word would make the
 # required text fail its own gate, which is the defect layer 1 already had once.
-_ZH_RATE = r"概率|[通过入围命中录取用成功面试中签]{1,3}率"
+# Spelled out, not a character class. `[通过入围命中录取用成功面试中签]{1,3}率`
+# matched any 1-3 of those characters before 率, so it fired inside ordinary
+# business words the skill's own market cards use: 达成率 ("成率"), 交付率,
+# 出勤率. A ban that fires on honest, mandated content is a ban that gets
+# switched off. These are the words that describe GETTING THE JOB, and
+# nothing else.
+_ZH_RATE = ("概率|通过率|命中率|录取率|录用率|成功率|入围率|中签率|面试率|"
+            "机率|機率|錄取率|錄用率|成功機會|勝算")
 # 七成 = 70%. The lookahead keeps 成功/成长/成员/成果/成本/成熟/成为 out; those are
 # the ordinary compounds a Chinese numeral can legitimately sit in front of.
 _ZH_TENTHS = r"[一二三四五六七八九]成(?![功长员果本熟为立就分])"
@@ -101,6 +108,17 @@ _WORDS = re.compile(
     r"|\b(?:strong|weak) candidate\b|\bwould pass\b|\bno-hire\b"
     r"|\b\d+(?:\.\d+)?\s*(?:percent|per cent)\b"
     r"|\bout of (?:10|100)\b"
+    # Forecasts that name no number. The ban is on PREDICTING the outcome, and a
+    # verification pass found the numberless English forms sailing through while
+    # their Chinese analogues fired — the gate enforced in one language only.
+    r"|\bshoo-?in\b|\ba lock\b|\bin the bag\b"
+    r"|(?:\b(?:will|would|should)\b|'ll|’ll)\s*(?:almost certainly\s+|certainly\s+|surely\s+|"
+    r"probably\s+|likely\s+)?(?:get|land|receive|secure)\s+(?:an?\s+|the\s+)?"
+    r"(?:interview|offer|job|role|position)\b"
+    r"|\bexpect\s+(?:an?\s+|the\s+)?(?:interview|offer)\b"
+    r"|\byou'?re? (?:a )?(?:strong|weak|clear|obvious) (?:fit|match|candidate)\b"
+    # 確率 is the Japanese/traditional spelling of 概率.
+    r"|確率"
     r"|" + _ZH_RATE + r"|" + _ZH_TENTHS + r"|" + _ZH_PERCENT_SPELLED,
     re.IGNORECASE)
 _ATTRIBUTION = re.compile(r"^\s*>?\s*(?:—|--|-|Source:|来源[:：])\s+.*https?://\S+")

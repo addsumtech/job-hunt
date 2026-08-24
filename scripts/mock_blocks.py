@@ -242,4 +242,13 @@ def candidate_only(section: str) -> str:
             continue
         end = speakers[i + 1].start() if i + 1 < len(speakers) else len(section)
         out.append(section[m.end():end])
+    if not out:
+        # Markers exist but none of them says "Candidate" — a transcript that
+        # labels its turns by persona name, by role, or in another language.
+        # Returning "" here made EVERY quote in an otherwise honest round fail
+        # at once, with the loudest possible accusation ("does not appear in the
+        # candidate's answer"). That is the cry-wolf this fallback exists to
+        # prevent, and it has to key on "no candidate turn was FOUND", not on
+        # "no markers at all" — the narrower condition was the bug.
+        return section or ""
     return "\n".join(out)

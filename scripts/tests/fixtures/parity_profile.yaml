@@ -7,7 +7,11 @@ meta:
   target_market: "nl"
   language: "en"
   headline: "Zq02headline"
-  photo: "/private/tmp/claude-501/-Users-donghanglyu/de2bef52-f8cc-48b5-b104-15b2ef21b00d/scratchpad/parity/photo.png"
+  # Rewritten by the test to a PNG it writes under tmp_path. An absolute path
+  # here would make `make check` fail on every machine but the one that wrote
+  # it — and fail with "cross-format parity broken", pointing the reader at
+  # the renderers instead of at this line.
+  photo: "PHOTO_PLACEHOLDER"
   headings: {summary: "Zq42headingoverride"}
 contact:
   email: "Zq03email@example.com"

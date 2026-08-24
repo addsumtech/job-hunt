@@ -246,6 +246,15 @@ def main(argv=None) -> int:
             return 2
 
     baseline = {}
+    if args.ci and not BASELINE.exists():
+        # exit 2, not 1. With no baseline every survivor is "new", so --ci would
+        # report the whole pre-existing debt as fresh blindness — a check that
+        # could not run, wearing the face of a check that failed. The file is
+        # committed; if it is absent, something is wrong with the checkout.
+        print(f"cannot run: {BASELINE} is missing, so there is nothing to compare "
+              f"against. Run `make mutants-record` and commit the result.",
+              file=sys.stderr)
+        return 2
     if BASELINE.exists():
         try:
             baseline = json.loads(BASELINE.read_text(encoding="utf-8")).get("known_survivors", {})

@@ -765,7 +765,8 @@ def render_markdown(profile):
                 out += ["", f"## {h['experience']}"]
             header = f"**{e.get('title','')}**, {e.get('org','')}"
             dates = f"{e.get('start','')} – {e.get('end','')}".strip(" –")
-            meta_bits = " · ".join([b for b in [e.get("location", ""), dates] if b])
+            meta_bits = " · ".join(
+                b for b in [scalar_field(e.get("location"), "experience[].location"), dates] if b)
             out.append(header + (f"  \n_{meta_bits}_" if meta_bits else ""))
             out += [f"- {normalize_text(b)}" for b in as_list(e.get("bullets"))]
         return out
@@ -780,7 +781,7 @@ def render_markdown(profile):
             # and until now no renderer read it, so it was a field the docs promised and the
             # product silently discarded.
             meta_bits = " · ".join(b for b in
-                                   [str(ed.get("location") or "").strip(), dates] if b)
+                                   [scalar_field(ed.get("location"), "education[].location"), dates] if b)
             line = f"**{ed.get('degree','')}**, {ed.get('institution','')}"
             if meta_bits:
                 line += f"  \n_{meta_bits}_"
@@ -929,7 +930,8 @@ def render_docx(profile, out_path):
             doc.add_paragraph().add_run(
                 f"{e.get('title','')}, {e.get('org','')}").bold = True
             dates = f"{e.get('start','')} – {e.get('end','')}".strip(" –")
-            meta_bits = " · ".join([b for b in [e.get("location", ""), dates] if b])
+            meta_bits = " · ".join(
+                b for b in [scalar_field(e.get("location"), "experience[].location"), dates] if b)
             if meta_bits:
                 doc.add_paragraph(meta_bits)
             for b in as_list(e.get("bullets")):
@@ -945,7 +947,7 @@ def render_docx(profile, out_path):
                 f"{ed.get('degree','')}, {ed.get('institution','')}").bold = True
             dates = f"{ed.get('start','')} – {ed.get('end','')}".strip(" –")
             meta_bits = " · ".join(b for b in
-                                   [str(ed.get("location") or "").strip(), dates] if b)
+                                   [scalar_field(ed.get("location"), "education[].location"), dates] if b)
             if meta_bits:
                 doc.add_paragraph(meta_bits)
             if ed.get("details"):
@@ -1046,6 +1048,37 @@ _CJK_GAP_RE = re.compile(
     % (_CJK_NO_INTERWORD_SPACE, _CJK_NO_INTERWORD_SPACE))
 
 
+_SHAPE_WARNED = []
+
+
+def reset_shape_warnings():
+    _SHAPE_WARNED.clear()
+
+
+def scalar_field(value, where: str) -> str:
+    """A field that must be one string, or "" plus one loud warning.
+
+    `location` is the field that made this necessary: SKILL.md typed it BOTH as a
+    scalar and as `{city, country, arrangement}` for months, so profiles carrying
+    the mapping exist. Rendering `str(mapping)` put a literal
+    `{'city': 'Leeds', 'country': 'UK'}` on a CV — quietly wrong output in the one
+    artifact an employer reads, which is worse than no output at all. Omit and say
+    so, rather than print a Python repr and hope someone notices.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, (str, int, float)):
+        return str(value).strip()
+    key = f"{where}:{type(value).__name__}"
+    if key not in _SHAPE_WARNED:
+        _SHAPE_WARNED.append(key)
+        print(f"WARNING: {where} is a {type(value).__name__}, not one string — "
+              f"omitted from the rendered CV rather than printed as a Python "
+              f"value. `location` is a scalar string, the posting's own location "
+              f"text (see SKILL.md's extraction field table).", file=sys.stderr)
+    return ""
+
+
 def normalize_text(text):
     """Clean a user-text string before rendering: drop folded-scalar spaces that
     landed between CJK characters. Format-agnostic, so all renderers can use it."""
@@ -1061,7 +1094,12 @@ def normalize_text(text):
 _LONG_TOKEN_CHARS = 24
 # Break AFTER these, which is where a reader expects a URL or path to wrap. `\_`
 # is matched (not a bare `_`) because escaping has already run by this point.
-_BREAK_AFTER_RE = re.compile(r"(/|\\_|-|\.|=|&amp;|\?)")
+# Break AFTER a separator — but never in the middle of a RUN of them. `//` in a
+# URL and the `---`/`--` that `_LATEX_REPLACEMENTS` produces for em/en dashes are
+# single typographic units: breaking inside them shipped `https:/` at a line end
+# and decomposed an em dash into three loose hyphens, both silently, in a PDF no
+# gate inspects. `(?![/\-.=])` is what makes the run atomic.
+_BREAK_AFTER_RE = re.compile(r"(/+|\\_|-+|\.|=|&amp;|\?)(?![/\-.=])")
 
 
 def _allow_breaks(escaped):
@@ -1256,7 +1294,29 @@ _OVERFULL_RE = re.compile(r"Overfull \\hbox \(([0-9]+(?:\.[0-9]+)?)pt too wide\)
 # and on-screen page — the same class of loss as a dropped glyph, arrived at from
 # the other direction, so it gets the same treatment.
 _PT_PER_CM = 28.4527559
-OFF_PAGE_PT = 2.0 * _PT_PER_CM
+_PT_PER_UNIT = {"cm": _PT_PER_CM, "mm": _PT_PER_CM / 10.0, "in": 72.27,
+                "pt": 1.0}
+OFF_PAGE_PT = 2.0 * _PT_PER_CM          # the CV default; letters use 2.5cm
+_MARGIN_RE = re.compile(r"margin=\s*([0-9.]+)\s*(cm|mm|in|pt)\b")
+
+
+def off_page_pt(tex: str = "") -> float:
+    """How far a line must overflow before it is off the SHEET, for this document.
+
+    Read from the document's own geometry rather than assumed, because the two
+    renderers do not share a margin: render_cv sets 2cm and render_letter sets
+    2.5cm. With the threshold hard-coded to 2cm there was a 14.2pt band in which
+    a letter whose text is entirely on the paper was declared "off the edge of
+    the page" and its PDF deleted — a correct artifact destroyed by the gate
+    meant to protect it.
+    """
+    found = _MARGIN_RE.search(tex or "")
+    if not found:
+        return OFF_PAGE_PT
+    try:
+        return float(found.group(1)) * _PT_PER_UNIT[found.group(2)]
+    except (ValueError, KeyError):
+        return OFF_PAGE_PT
 
 
 def overfull_boxes(log):
@@ -1479,7 +1539,7 @@ def build_latex(profile, cjk=None, engine=None, asset_dir=None, asset_stem="cv")
             # were in different cities kept that in the .md the judges read and
             # lost it from the PDF the employer opens — the whole class of defect
             # this file's audit was about.
-            bits = [b for b in (str(ex.get("location") or "").strip(), dates) if b]
+            bits = [b for b in (scalar_field(ex.get("location"), "experience[].location"), dates) if b]
             # `\textbullet{}` is this file's separator, and it has to be joined
             # AFTER escaping: a raw U+00B7 does not typeset on the T1 pdflatex
             # path, which is exactly what test_latex_no_raw_middot pins.
@@ -1499,7 +1559,7 @@ def build_latex(profile, cjk=None, engine=None, asset_dir=None, asset_stem="cv")
         parts.append(r"\section*{%s}" % h["education"])
         for ed in edu:
             dates = f"{ed.get('start','')} -- {ed.get('end','')}".strip(" -")
-            bits = [b for b in (str(ed.get("location") or "").strip(), dates) if b]
+            bits = [b for b in (scalar_field(ed.get("location"), "education[].location"), dates) if b]
             right = r" \textbullet{} ".join(e(b) for b in bits)
             parts.append(r"\textbf{%s}, %s \hfill %s\\" % (
                 e(ed.get("degree", "")), e(ed.get("institution", "")), right))
@@ -1691,11 +1751,13 @@ def compile_latex(engine, tex_path, out_path, reasons=None):
     # Same log, same exit-0 silence, same class of loss: text that ran off the
     # sheet is unreadable for exactly the reason a dropped glyph is.
     overfull = overfull_boxes(_engine_log(proc))
-    off_page = [pt for pt in overfull if pt >= OFF_PAGE_PT]
+    margin_pt = off_page_pt(tex_path.read_text(encoding="utf-8", errors="replace")
+                            if tex_path.exists() else "")
+    off_page = [pt for pt in overfull if pt >= margin_pt]
     if off_page:
         _discard_pdf(out_path, tex_path)
         print(f"ERROR: {len(off_page)} line(s) ran off the edge of the page — "
-              f"the widest by {off_page[0]:.1f}pt, past a {OFF_PAGE_PT:.0f}pt "
+              f"the widest by {off_page[0]:.1f}pt, past a {margin_pt:.0f}pt "
               f"margin — so the characters beyond the edge are missing from the "
               f"PDF. The engine reported this and exited 0. No PDF was written; "
               f"the LaTeX source is at {tex_path}.", file=sys.stderr)
@@ -1818,6 +1880,7 @@ def confirm_written(out, fmt):
 def main(argv=None):
     reset_market_warnings()
     reset_photo_warnings()
+    reset_shape_warnings()
     ap = argparse.ArgumentParser()
     ap.add_argument("profile")
     ap.add_argument("--format", choices=["md", "docx", "pdf"], default="md")

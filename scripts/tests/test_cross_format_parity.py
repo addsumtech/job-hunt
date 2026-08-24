@@ -188,11 +188,34 @@ class Artifacts:
                     or surface in self.tex)
         return check_pages.pdf_contains(self.pdf_readings, surface)
 
+PNG_1X1 = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+    b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\xff\xff?"
+    b"\x00\x05\xfe\x02\xfe\r\xefF\xb8\x00\x00\x00\x00IEND\xaeB`\x82"
+)
+PHOTO_PLACEHOLDER = "PHOTO_PLACEHOLDER"
+
+
+def load_parity_profile(tmp_path=None):
+    """The fixture, with its photo placeholder resolved to a real file.
+
+    The fixture cannot carry an absolute path: it would pass only on the machine
+    that wrote it, and fail everywhere else as "cross-format parity broken" —
+    naming the renderers, so the reader debugs render_cv.py instead of this line.
+    """
+    profile = yaml.safe_load((FIXTURES / "parity_profile.yaml").read_text(encoding="utf-8"))
+    if tmp_path is not None and profile.get("meta", {}).get("photo") == PHOTO_PLACEHOLDER:
+        photo = pathlib.Path(tmp_path) / "parity-photo.png"
+        photo.write_bytes(PNG_1X1)
+        profile["meta"]["photo"] = str(photo)
+    return profile
+
+
+
 
 @pytest.fixture
 def artifacts(tmp_path):
-    profile = render_cv.load_profile(FIXTURES / "parity_profile.yaml")
-    return Artifacts(profile, tmp_path)
+    return Artifacts(load_parity_profile(tmp_path), tmp_path)
 
 
 # ── the tests ────────────────────────────────────────────────────────────────
@@ -221,7 +244,7 @@ def test_the_parity_fixture_exercises_every_field_the_example_profile_declares()
 
 
 def test_every_field_reaches_every_format(artifacts):
-    raw = yaml.safe_load((FIXTURES / "parity_profile.yaml").read_text())
+    raw = artifacts.profile
     failures = []
     for pattern, value in walk(raw):
         key = _pattern_key(pattern)
@@ -272,7 +295,7 @@ def test_every_field_that_reaches_the_tex_also_reaches_the_compiled_pdf(artifact
     if artifacts.pdf_readings is None:
         pytest.skip("the engine is present but produced no PDF")
     assert artifacts.pdf_readings, "no text could be extracted from cv.pdf"
-    raw = yaml.safe_load((FIXTURES / "parity_profile.yaml").read_text())
+    raw = artifacts.profile
     failures = []
     for pattern, value in walk(raw):
         key = _pattern_key(pattern)
