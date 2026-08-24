@@ -204,3 +204,40 @@ def test_a_missing_or_nonsense_cap_is_left_to_the_existing_check(declared):
     calls = [{"command": "search", "exit_code": 0, "site": "x",
               "command_line": "opencli x search q --page 9"}]
     assert cs._check_caps_against_the_run(brief, {}, [{}] * 99, calls) == []
+
+
+# ── close-out: the receipt must be about the current bytes ────────────────────
+
+def test_a_lint_receipt_about_older_bytes_no_longer_certifies_the_document(tmp_path):
+    """The receipt requirement checked that SOME lint run said `pass`, never that
+    it read the CURRENT shortlist.md — so a prediction added after the lint ran
+    shipped behind a green gate. check_apply._stale_inputs already solved this."""
+    import journal
+    ws = fx.build_english_workspace(tmp_path)
+    md = ws / "shortlist.md"
+    journal.receipt(ws, "lint_no_prediction",
+                    {"shortlist.md": journal.sha256_file(md)}, "pass")
+    md.write_text(md.read_text(encoding="utf-8") + "\nYou have an 80% chance here.\n",
+                  encoding="utf-8")
+    rc, codes = run(ws)
+    assert rc == 1 and "STALE_RECEIPT" in codes
+
+
+def test_the_journal_hash_is_not_itself_re_verified(tmp_path):
+    """check_no_write records the journal's OWN hash, and writing that receipt
+    appends to the journal — so the value is stale the instant it is written. An
+    earlier draft of the byte check reported STALE_RECEIPT on every honest round
+    because of it; the e2e chain test caught that immediately."""
+    assert run(fx.build_english_workspace(tmp_path)) == (0, [])
+
+
+def test_found_nothing_while_rendering_postings_is_reported(tmp_path):
+    """`if not rows: return []` made the loudest available contradiction — a round
+    that reports finding nothing while §1 still lists postings — invisible."""
+    ws = fx.build_english_workspace(tmp_path)
+    shortlist = fx.load_shortlist(ws)
+    shortlist["rows"] = []
+    shortlist["shortfall_reason"] = "nothing matched the brief"
+    fx.save_shortlist(ws, shortlist)
+    rc, codes = run(ws)
+    assert rc == 1 and "MD_ROW_COUNT_MISMATCH" in codes

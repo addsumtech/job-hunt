@@ -108,6 +108,13 @@ def _stale_inputs(ws: pathlib.Path, gate: str, receipt: dict) -> list:
         # of the workspace, so a receipt could bind its proof to any file on the
         # machine and this loop would hash it and call the gate fresh. A receipt is
         # a claim about THIS workspace or it is not evidence.
+        # journal.jsonl is excluded and must be: check_no_write records the
+        # journal's OWN hash, and the act of writing that receipt appends to the
+        # journal — so the recorded value is stale the instant it is written, and
+        # every later gate would report STALE_RECEIPT on a perfectly honest run.
+        # A self-referential hash is unverifiable by construction, not by defect.
+        if pathlib.Path(label).name == "journal.jsonl":
+            continue
         candidate = pathlib.Path(label)
         if candidate.is_absolute() or ".." in candidate.parts:
             findings.append(

@@ -629,6 +629,39 @@ def _check_upstream_receipts(workspace):
             detail = "; ".join(last.get("findings") or []) or "no findings recorded"
             findings.append(
                 f"UPSTREAM_FAILED: {gate} verdict={last.get('verdict')} ({detail})")
+            continue
+        # A verdict is a claim about a MOMENT; the receipt records which bytes it
+        # was about. Without re-checking them, "lint_no_prediction passed" could be
+        # true of a shortlist.md that has since been rewritten — or of a decoy run
+        # against different files entirely — and discover's two load-bearing
+        # invariants (read-only, and no predicted numbers) would rest on it.
+        # check_apply._stale_inputs already solved this; same rule here.
+        for label, recorded in sorted((last.get("input_hashes") or {}).items()):
+            # journal.jsonl is excluded and must be: check_no_write records the
+            # journal's OWN hash, and the act of writing that receipt appends to
+            # the journal — so the recorded value is stale the instant it is
+            # written, and every later gate would report STALE_RECEIPT on a
+            # perfectly honest run. A self-referential hash is unverifiable by
+            # construction, not by defect.
+            if pathlib.Path(label).name == "journal.jsonl":
+                continue
+            candidate = pathlib.Path(label)
+            if candidate.is_absolute() or ".." in candidate.parts:
+                findings.append(
+                    f"RECEIPT_INPUT_OUTSIDE_WORKSPACE: {gate} recorded {label!r}, "
+                    f"which is not inside the workspace")
+                continue
+            path = workspace / label
+            if not path.exists():
+                findings.append(
+                    f"RECEIPT_INPUT_MISSING: {gate} passed on {label}, which is no "
+                    f"longer in the workspace — re-run {gate}")
+                continue
+            if journal.sha256_file(path) != recorded:
+                findings.append(
+                    f"STALE_RECEIPT: {gate} passed on {label}@{str(recorded)[:12]} "
+                    f"but disk now holds {journal.sha256_file(path)[:12]} — the file "
+                    f"changed after the gate read it. Re-run {gate}")
     return findings
 
 
@@ -677,9 +710,15 @@ def _check_md_rows(md_text, rows):
     bold titles and carries no URLs at all — so a URL-only check had nothing to
     grip on the very format the mode prescribes.
     """
-    if not rows:
-        return []
     section = _md_candidates_section(md_text)
+    if not rows:
+        # A "found nothing" round that still renders postings in §1 is the loudest
+        # contradiction available, and the old early return made it invisible.
+        rendered = len(_MD_NUMBERED.findall(section)) if section else 0
+        if rendered:
+            return [f"MD_ROW_COUNT_MISMATCH: shortlist.md §1 renders {rendered} "
+                    f"posting(s) but shortlist.yaml carries no rows at all"]
+        return []
     if not section:
         return []
     known_urls = set()
