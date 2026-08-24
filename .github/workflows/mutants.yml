@@ -1,0 +1,33 @@
+# Mutation testing, on a schedule and on demand — never on every push.
+#
+# The suite going green is not evidence it would notice the code being wrong. On
+# 2026-08-23 an audit generated 421 mutants against this repo and 98 survived,
+# concentrated in render_cv.py (32/64), check_claims.py (11/26) and
+# check_shortlist.py (8/46) — the renderer whose output reaches an employer and
+# the two gates that decide whether a package may be delivered.
+#
+# This job fails only on survivors ABSENT from scripts/mutants-baseline.json, so
+# the existing debt does not block anyone and new blindness does. It is separate
+# from checks.yml because it takes minutes to hours: a slow job wired into every
+# push is a job someone eventually deletes.
+name: mutants
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 4 * * 1"   # Mondays, 04:00 UTC
+
+jobs:
+  mutants:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt pytest
+      - name: mutation testing against the recorded baseline
+        run: python3 scripts/mutants.py --ci

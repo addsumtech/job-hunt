@@ -103,7 +103,13 @@ def test_the_self_check_names_every_script():
     # shows up as an unrelated red test in someone else's task.
     skip = {"journal.py", "paths.py", "rounds.py", "vocab.py",
             "opencli_meta.py",                    # Plan 3 — leave it
-            "mock_vocab.py", "mock_blocks.py"}    # imported, never invoked
+            "mock_vocab.py", "mock_blocks.py",    # imported, never invoked
+            # A MAINTAINER tool, not a run-time gate: it mutates the repo in a
+            # temp copy and re-runs the suite. Naming it in the self-check would
+            # tell a run to execute it mid-application, which is both useless to
+            # that run and slow. Same category as check_skill_lossless, which is
+            # CI-only for the same reason.
+            "mutants.py"}
     section = _self_check_items()
     for f in sorted((ROOT / "scripts").glob("*.py")):
         if f.name in skip:

@@ -148,6 +148,8 @@ job-hunt/
     ├── render_rirekisho.py          # Japanese 履歴書 form renderer
     ├── rounds.py                    # judge-round-<n>.json read/merge (library)
     ├── vocab.py                     # every closed vocabulary in the skill (library)
+    ├── mutants.py                   # break the code on purpose; make mutants / --ci
+    ├── mutants-baseline.json        # surviving mutants known at measurement time
     ├── lossless-allowlist.json     # deliberate deletions, each with a written reason
     └── tests/
         ├── fixtures/
