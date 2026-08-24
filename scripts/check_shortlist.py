@@ -281,10 +281,20 @@ def _check_provenance(label, row, site, raw_texts):
         value = str(row.get(field) or "").strip()
         if not value:
             continue
-        if not any(_loose(value) in _loose(text) for text in captures.values()):
+        # Anchored to THIS ROW's card text first, not to the whole file. A search
+        # capture holds up to 25 cards, so "appears somewhere in any <site>-*.json"
+        # made every company name and every salary band in the file a licensed
+        # value for every row from that site — a sibling posting vouching for a
+        # value this posting never carried. raw_text is itself anchored to the
+        # capture by RAW_TEXT_NOT_IN_RAW, so this is strictly narrower, and it
+        # falls back to the capture when the row has no raw_text (NO_RAW_TEXT
+        # reports that separately).
+        row_text = str(row.get("raw_text") or "").strip()
+        haystacks = [row_text] if row_text else list(captures.values())
+        if not any(_loose(value) in _loose(text) for text in haystacks):
             findings.append(
-                f"{code}: {label} {field} {value[:60]!r} does not appear in any "
-                f"of {', '.join(sorted(captures))}. This is the field the reader "
+                f"{code}: {label} {field} {value[:60]!r} does not appear in this "
+                f"row's own card text. This is the field the reader "
                 "acts on, and the capture this row cites does not support it — "
                 "copy what the adapter returned, or leave it empty.")
     return findings

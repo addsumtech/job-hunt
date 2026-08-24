@@ -241,3 +241,17 @@ def test_found_nothing_while_rendering_postings_is_reported(tmp_path):
     fx.save_shortlist(ws, shortlist)
     rc, codes = run(ws)
     assert rc == 1 and "MD_ROW_COUNT_MISMATCH" in codes
+
+
+def test_a_sibling_posting_in_the_same_capture_cannot_license_a_value(tmp_path):
+    """The anchor was "appears somewhere in ANY <site>-*.json". A search capture
+    holds up to 25 cards, so every company name and salary band in the file became
+    a licensed value for every row from that site — a sibling posting vouching for
+    a value this posting never carried."""
+    ws = fx.build_english_workspace(tmp_path)
+    shortlist = fx.load_shortlist(ws)
+    assert len(shortlist["rows"]) > 1, "fixture needs two rows for this to mean anything"
+    shortlist["rows"][0]["company"] = shortlist["rows"][1]["company"]
+    fx.save_shortlist(ws, shortlist)
+    rc, codes = run(ws)
+    assert rc == 1 and "COMPANY_NOT_IN_RAW" in codes
