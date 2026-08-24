@@ -1,0 +1,40 @@
+{
+  "measured": true,
+  "source": "opencli 51job search 算法工程师 --limit 25 --window background -f json, run 2026-08-09: exit 0, empty stderr, every documented column present and non-empty. The same capture Plan 3 Task 1 records as STDOUT_51JOB_OK and scripts/tests/test_check_opencli_result.py carries as a constant; scripts/tests/test_eval_fixtures.py pins this body to it.",
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": [
+    {
+      "rank": 1,
+      "jobId": "173198362",
+      "title": "高级算法工程师（视觉调试智能化、AI方向）",
+      "salary": "3-6万",
+      "salaryMin": 30000,
+      "salaryMax": 60000,
+      "city": "西安",
+      "district": "高新技术产业开发区",
+      "workYear": "3年及以上",
+      "degree": "博士",
+      "company": "比亚迪汽车工业",
+      "issueDate": "2026-08-08 10:23:15",
+      "url": "https://jobs.51job.com/xian-gxjs/173198362.html?s=sou_sou_soulb&t=0_0",
+      "encCoId": "VDMHY1M0BDgAZ1c9AWVWZA"
+    },
+    {
+      "rank": 2,
+      "jobId": "173199597",
+      "title": "高级AI算法工程师(J10032)",
+      "salary": "1.7-3.4万·15薪",
+      "salaryMin": 17000,
+      "salaryMax": 34000,
+      "city": "海宁",
+      "district": "",
+      "workYear": "3年",
+      "degree": "硕士",
+      "company": "拓荆键科（海宁）半导体设备",
+      "issueDate": "2026-08-08 14:34:16",
+      "url": "https://jobs.51job.com/haining/173199597.html?s=sou_sou_soulb&t=0_0",
+      "encCoId": "UjJQPFY2DzYPaVQyVDI"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "measured": false,
+  "source": "NOT MEASURED. A genuine zero-result body has never been captured from this toolset. The shape here — exit 0, empty stderr, stdout [] — is the documented success shape with an empty array, and the assertion resting on it is marked role: regression for that reason. If a real empty result is ever captured, replace this body verbatim and flip the flag.",
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": []
+}

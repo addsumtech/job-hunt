@@ -1,0 +1,28 @@
+{
+  "measured": true,
+  "source": "opencli indeed search mri --limit 2 --window background -f json, run 2026-08-09: exit 0, valid JSON, title/salary/tags empty on every row while id/company/location/url are populated. The same capture Plan 3 Task 1 records as STDOUT_INDEED_EMPTY_TITLES.",
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": [
+    {
+      "rank": 1,
+      "id": "152875498075cf99",
+      "title": "",
+      "company": "UF Health",
+      "location": "Gainesville, FL 32610",
+      "salary": "",
+      "tags": "",
+      "url": "https://www.indeed.com/viewjob?jk=152875498075cf99"
+    },
+    {
+      "rank": 2,
+      "id": "35fc226942cc38c0",
+      "title": "",
+      "company": "Orthoindy",
+      "location": "Lafayette, IN 47909",
+      "salary": "",
+      "tags": "",
+      "url": "https://www.indeed.com/viewjob?jk=35fc226942cc38c0"
+    }
+  ]
+}

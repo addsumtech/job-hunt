@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+"""A hermetic stand-in for `opencli`, for the discover eval scenarios.
+
+Replays the fixture named by $JOBHUNT_EVAL_FIXTURE: its exit code, its stdout and
+its stderr, byte for byte. Nothing here reaches a network.
+
+Why a stub rather than a live call: a live discover eval is not reproducible (the
+site's answer changes hourly), and a flaky eval is one whose failures get
+explained away. The cost is named in evals/README.md — this proves how the skill
+REACTS to a captured body, and nothing about what the site returns today.
+
+Three properties this file exists to hold.
+
+**It refuses to run rather than return nothing.** Every unusable input — no
+fixture named, no such file, a body that does not parse, a body that declares no
+stdout — exits 2 with the reason on stderr and NOTHING on stdout. A stub that
+returned an empty stdout instead would make the round look like an honest
+zero-result search, which is precisely one of the states these evals exist to
+tell apart. Exit 1 with an empty stdout is worse still: that is the measured 403
+shape, so a broken harness would be indistinguishable from a blocked adapter.
+
+**It is read-only, structurally.** Any command opencli publishes as `access:
+write` exits 2 without doing anything. The eval is read-only for the same reason
+the skill is (spec D7), and a stub that would happily 'log in' teaches the run
+that logging in is available.
+
+**It answers `--help -f yaml` from a real metadata table.** check_no_write.py
+resolves each journalled invocation against the tool's OWN access field and fails
+closed when it cannot parse an answer. Replaying a search body there would hand
+it a JSON array — a YAML list, not a mapping — and every discover run would
+report UNKNOWN_ACCESS for a read it did make.
+"""
+import json
+import os
+import pathlib
+import sys
+
+# Every command opencli publishes as access: write across the eight adapters,
+# measured 2026-08-09 and recorded in
+# docs/superpowers/research/2026-08-09/adapters.json. Read that file, not this
+# list, if you want the authority: scripts/tests/test_eval_fixtures.py derives the
+# measured set from it and asserts each member is refused here, so a command that
+# quietly leaves this set fails the suite.
+MEASURED_WRITE_COMMANDS = {
+    "batchgreet", "connect", "exchange", "greet", "invite", "login", "mark",
+    "safe-send", "salesnav-message", "send",
+}
+
+# Not measured on any adapter this skill uses, and refused anyway: the stub fails
+# CLOSED, so a namespace that grows one of these later is refused before anyone
+# notices it shipped. Over-refusing costs an exit 2 with a reason; under-refusing
+# costs an action on a real platform that cannot be recalled.
+PRECAUTIONARY_WRITE_COMMANDS = {
+    "logout", "apply", "submit", "post", "message", "reply", "follow",
+    "bookmark", "delete",
+}
+
+WRITE_COMMANDS = MEASURED_WRITE_COMMANDS | PRECAUTIONARY_WRITE_COMMANDS
+
+HELP_DIR_ENV = "JOBHUNT_EVAL_HELP_DIR"
+FIXTURE_ENV = "JOBHUNT_EVAL_FIXTURE"
+
+
+def refuse(message):
+    """Exit 2 with a reason and nothing on stdout. The only failure this stub
+    has: a could-not-run that cannot be mistaken for a result."""
+    print(f"opencli-stub: {message}", file=sys.stderr)
+    return 2
+
+
+def help_dir():
+    override = os.environ.get(HELP_DIR_ENV)
+    if override:
+        return pathlib.Path(override)
+    return pathlib.Path(__file__).resolve().parent / "opencli-help"
+
+
+def positional(argv):
+    """The tokens before the first flag — `opencli <site> <command> ...`."""
+    out = []
+    for token in argv:
+        if token.startswith("-"):
+            break
+        out.append(token)
+    return out
+
+
+def serve_help(argv):
+    site = (positional(argv) or [""])[0]
+    path = help_dir() / f"{site}.yaml"
+    if not site:
+        return refuse("--help needs a site: `opencli <site> --help -f yaml`")
+    if not path.is_file():
+        return refuse(
+            f"no help metadata fixture for {site!r} at {path}. check_no_write.py "
+            "resolves access: read|write against this table and fails closed "
+            "without it, so the stub will not answer with a guess.")
+    sys.stdout.write(path.read_text(encoding="utf-8"))
+    return 0
+
+
+def main(argv):
+    if any(a in WRITE_COMMANDS for a in argv):
+        return refuse(f"refusing {argv!r}: the eval harness is read-only and "
+                      "this command's published access is write")
+
+    if "--help" in argv or "-h" in argv:
+        return serve_help(argv)
+
+    fixture = os.environ.get(FIXTURE_ENV)
+    if not fixture:
+        return refuse(f"{FIXTURE_ENV} is not set — there is nothing to replay. "
+                      "Returning an empty result here would look like an honest "
+                      "zero-result round.")
+    path = pathlib.Path(fixture)
+    if not path.is_file():
+        return refuse(f"no such fixture: {path}")
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        return refuse(f"fixture {path} is unreadable: {exc}")
+    if not isinstance(doc, dict):
+        return refuse(f"fixture {path} is a {type(doc).__name__}, not a mapping")
+
+    has_rows, has_raw = "stdout" in doc, "stdout_raw" in doc
+    if has_rows == has_raw:
+        return refuse(
+            f"fixture {path} declares {'both' if has_rows else 'neither'} "
+            "'stdout' and 'stdout_raw' — exactly one, so a body nobody wrote "
+            "cannot replay as an empty successful result")
+
+    if has_rows:
+        sys.stdout.write(json.dumps(doc["stdout"], ensure_ascii=False))
+    else:
+        sys.stdout.write(doc["stdout_raw"])
+    sys.stderr.write(doc.get("stderr", ""))
+    return int(doc.get("exit_code", 0))
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

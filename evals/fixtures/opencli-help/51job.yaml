@@ -1,0 +1,23 @@
+# `opencli 51job --help -f yaml`, trimmed to the fields opencli_meta reads.
+#
+# Why this file exists: check_no_write.py resolves every journalled invocation
+# against the TOOL's own `access:` field and fails CLOSED when it cannot parse an
+# answer. Under the hermetic stub, replaying a search body at `--help` would hand
+# it a JSON array — a YAML list, not a mapping — so MetadataUnavailable would make
+# every discover eval run report UNKNOWN_ACCESS for a read it did make.
+#
+# Provenance: the command inventory is measured (2026-08-09, recorded in
+# docs/superpowers/research/2026-08-09/adapters.json: four commands, all read,
+# no write command on this adapter). Byte-identical to the trimmed copy
+# scripts/tests/discover_fixtures.py already carries as HELP_51JOB.
+site: 51job
+command_count: 4
+commands:
+  - name: company
+    access: read
+  - name: detail
+    access: read
+  - name: hot
+    access: read
+  - name: search
+    access: read

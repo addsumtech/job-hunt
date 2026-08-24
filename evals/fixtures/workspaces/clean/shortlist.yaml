@@ -1,0 +1,56 @@
+search_slug: 2026-08-09-suanfa-shanghai
+brief: brief.yaml
+shortfall_reason: null
+detail_fetch_exceptions: []
+sources:
+- site: 51job
+  command: search
+  access: read
+  login_state: no_auth_adapter
+  classification: ok
+  invocations: 1
+  rows_returned: 2
+  identity_field: title
+  identity_field_empty_rows: 0
+  detail_command: opencli 51job detail <jobId>
+  raw_files:
+  - raw/51job-1.json
+  - raw/51job-detail-173199597.json
+rows:
+- id: 51job-173198362
+  title: 高级算法工程师（视觉调试智能化、AI方向）
+  company: 比亚迪汽车工业
+  location: 西安 · 高新技术产业开发区
+  salary: 3-6万
+  url: https://jobs.51job.com/xian-gxjs/173198362.html
+  source_site: 51job
+  source_id: '173198362'
+  extraction_method: adapter_search
+  retrieved_at: '2026-08-09T14:02:11Z'
+  quality: card_only
+  verification: collected_unverified
+  raw_text: 高级算法工程师（视觉调试智能化、AI方向） | 比亚迪汽车工业 | 西安 | 3-6万 | 博士 | 3年及以上 | c++,图像处理,深度学习,opencv
+  why_matched: brief.target_titles 命中「算法工程师」；raw salaryMin 30000 在 brief 薪资区间内；raw
+    city 西安 在 brief.locations 内。raw degree 为「博士」，档案为硕士，已计入分档。仅卡片信息，未取详情。
+  verdict: worth_applying
+  provisional: true
+  effort: evening
+- id: 51job-173199597
+  title: 高级AI算法工程师(J10032)
+  company: 拓荆键科（海宁）半导体设备
+  location: 海宁
+  salary: 1.7-3.4万·15薪
+  url: https://jobs.51job.com/haining/173199597.html
+  source_site: 51job
+  source_id: '173199597'
+  extraction_method: adapter_detail
+  retrieved_at: '2026-08-09T14:03:40Z'
+  quality: complete
+  verification: fresh_verified
+  raw_text: 高级AI算法工程师(J10032) | 拓荆键科（海宁）半导体设备 | 海宁 | 1.7-3.4万·15薪 | 硕士 | 3年 | 负责数字孪生方向的
+    AI 算法研发；熟悉 Python/C++
+  why_matched: brief.target_titles 命中「算法工程师」；详情页 description 点名 Python/C++ 与档案主线一致；raw
+    degree 硕士 与档案一致。
+  verdict: strong_apply
+  provisional: true
+  effort: quick

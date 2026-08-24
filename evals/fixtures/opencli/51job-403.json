@@ -1,0 +1,7 @@
+{
+  "measured": true,
+  "source": "The one failure body ever captured from this toolset (2026-08-09, 1point3acres): exit 1, EMPTY stdout, YAML on stderr even under -f json. Re-pointed at 51job's search URL; the SHAPE is measured and the site plus hostname substitution is the only edit — test_eval_fixtures.py rebuilds this string from the captured stderr_403() template to prove nothing else was touched.",
+  "exit_code": 1,
+  "stdout_raw": "",
+  "stderr": "ok: false\nerror:\n  code: COMMAND_EXEC\n  message: '51job request failed: HTTP 403 Forbidden from https://we.51job.com/pc/search?keyword=%E7%AE%97%E6%B3%95%E5%B7%A5%E7%A8%8B%E5%B8%88'\n  exitCode: 1\n"
+}

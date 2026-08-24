@@ -1,0 +1,19 @@
+# `opencli indeed --help -f yaml`, trimmed to the fields opencli_meta reads.
+# See 51job.yaml for why the harness ships these at all.
+#
+# Provenance: the command inventory is measured (2026-08-09, recorded in
+# docs/superpowers/research/2026-08-09/adapters.json: "Only 2 commands" —
+# `search` and `job <id>` with aliases `detail` and `view`, and an empty
+# write_commands list). The YAML framing is reconstructed to the shape
+# opencli_meta.load_site_metadata reads, matching discover_fixtures.HELP_51JOB;
+# no `access:` value here is a guess, and none of them is `write`.
+site: indeed
+command_count: 2
+commands:
+  - name: search
+    access: read
+  - name: job
+    access: read
+    aliases:
+      - detail
+      - view

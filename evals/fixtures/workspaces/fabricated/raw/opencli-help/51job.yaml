@@ -1,0 +1,11 @@
+site: 51job
+command_count: 4
+commands:
+  - name: company
+    access: read
+  - name: detail
+    access: read
+  - name: hot
+    access: read
+  - name: search
+    access: read

@@ -1,0 +1,33 @@
+slug: 2026-08-09-suanfa-shanghai
+created: '2026-08-09'
+trigger_reason: 用户要求本轮检索：上一份 JD 被 assess 判为 likely_screen_out（缺 C++ 生产经验），因此在同方向上找更稳的岗位。本轮候选必须肉眼可见地比它更稳，而不只是标题相似。
+target_titles:
+- 算法工程师
+- algorithm engineer
+markets:
+- cn
+locations:
+- 上海
+- 西安
+- 海宁
+seniority: mid
+employment_types:
+- full_time
+work_models:
+- onsite
+- hybrid
+languages:
+- Chinese
+- English
+must_have_constraints:
+- 'work authorization: 中国公民，无需担保'
+nice_to_have:
+- 计算机视觉
+- 医疗影像
+avoid:
+- 外包
+- 销售导向岗位
+target_count: 2
+max_rows_per_round: 25
+max_pages_per_site: 2
+max_age_days: 30
