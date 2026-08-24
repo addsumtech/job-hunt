@@ -1,0 +1,53 @@
+# A HARNESS FIXTURE, NOT A SHIPPED TABLE.
+#
+# It exists so that `expired_convention_fails_ci` can prove the CI half of spec
+# §10's expiry rule is wired: check_conventions.py must return EXPIRED_REVIEW_BY
+# for a table whose review date has passed. Nothing renders this file at runtime,
+# `check_conventions.py --ci` never reads it (it lints
+# references/market-conventions/<market>.yaml for the five market keys), and the
+# entry is deliberately stale — `review_by: 2026-02-09`, six months before the
+# harness's fixed today of 2026-08-09.
+#
+# Everything except the date is real: the entry, its quote and its citation are
+# copied from references/market-conventions/nl.yaml, whose `published` URL was
+# fetched and whose quote was grepped against the fetched text on 2026-08-09. A
+# fixture whose content is invented would make the finding it produces a finding
+# about nothing, and the checker would be asserting that a linter can read a file
+# rather than that it can spot an expired one.
+#
+# The entry is otherwise CLEAN on purpose: check_file must return the expiry
+# finding and no other, so a fixture that drifts into a second finding cannot
+# quietly become the reason the checker passes.
+
+market: nl
+
+conventions:
+  - id: "nl-recognised-sponsor-gate-expired"
+    text_en: |-
+      Check whether the employer appears in the IND public register of recognised sponsors
+      before you invest in a tailored application. Under the highly skilled migrant
+      (kennismigrant) scheme the employer files the permit application, so sponsor status is a
+      fact about what the employer is set up to do administratively, not a fact about you. If
+      the company is not listed, ask the recruiter at the earliest contact whether they
+      sponsor, because a posting often says nothing either way.
+    text_zh: |-
+      投递前先在 IND 公开的「认可担保方」名录里查一下这家雇主。在高技能移民
+      (kennismigrant) 路径下，由雇主提交许可申请，所以担保资质说明的是雇主具备什么行政条件，
+      而不是对你本人的判断。名录里查不到，就在最早接触时直接问招聘方是否办理担保，因为招聘
+      广告常常两边都不写。
+    applies_when: >-
+      Applying to a Netherlands-based role that would require a Dutch residence permit for
+      work.
+    added: "2025-02-09"
+    review_by: "2026-02-09"
+    why: >-
+      The deciding factor is often the employer rather than the applicant, so a candidate who
+      never checks the register can spend days tailoring an application to an employer who
+      cannot file the permit at all.
+    source:
+      kind: published
+      publisher: IND (Immigratie- en Naturalisatiedienst)
+      title: Highly skilled migrant
+      url: https://ind.nl/en/residence-permits/work/highly-skilled-migrant
+      retrieved: "2026-08-09"
+      quote: Only an employer recognised by the IND can apply for your permit.

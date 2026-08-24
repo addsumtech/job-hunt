@@ -352,3 +352,220 @@ def no_genuine_row_dropped(run):
                       f"reason: {reason or explained}")
     return False, (f"retrieved id(s) dropped from the shortlist with no written "
                    f"reason: {', '.join(missing)}")
+
+
+# --------------------------------------------------------------------------
+# assess
+# --------------------------------------------------------------------------
+
+from vocab import REFUSAL, VERDICTS, VERDICT_ZH  # noqa: E402
+
+# The posting schema, a fifth time. The other four copies are SKILL.md,
+# references/job-posting-extraction.md, modes/assess.md and modes/apply.md, and
+# scripts/tests/test_posting_schema_agreement.py diffs them because they had
+# already drifted three ways once. There is no runtime module exporting it, so
+# this copy is pinned to that test's CANONICAL list by
+# test_eval_checkers_assess.py: rename a field in the skill and the pin goes red
+# rather than leaving the twin below reporting a field nobody writes any more.
+POSTING_FIELDS = ("role_title", "company", "seniority", "location", "must_haves",
+                  "nice_to_haves", "responsibilities", "keywords",
+                  "company_values_tone", "red_flags", "salary_range",
+                  "application_type")
+
+_WALL = re.compile(r"(?i)(sign in|log in|登录后查看|create an account|"
+                   r"verify you are|请登录|同意 cookie|accept cookies)")
+_ASK = re.compile(r"(?i)(粘贴|paste|把完整|send me the full|发我完整)")
+_DISCLAIMER = re.compile(r"(不是对结果的预判|not a forecast of the outcome)")
+_EXPIRY_BANNER = "已过复核期"
+
+# A wall is a SHORT page whose text is wall wording. Both halves of the pair use
+# the same test, on purpose: a nine-hundred-word posting whose benefits section
+# says "create an account in our portal" is a readable posting, and a decoy that
+# excuses itself as "not exercised" on any page containing that phrase is a decoy
+# an always-refuse policy walks straight through.
+WALL_MAX_WORDS = 200
+USABLE_MIN_WORDS = 300
+
+
+def _source_words(run):
+    text = run.read("workspace/posting-source.txt") or ""
+    return text, len(re.findall(r"\S+", text))
+
+
+def _is_login_wall(text, words):
+    return bool(text) and bool(_WALL.search(text)) and words <= WALL_MAX_WORDS
+
+
+@register("refuses_extraction_from_login_wall",
+          twin="extracts_posting_when_usable")
+def refuses_extraction_from_login_wall(run):
+    """A 200 OK is not evidence you have the posting. Must-haves extracted off
+    a login wall produce a document that is internally consistent and entirely
+    wrong, and every later step inherits it."""
+    text, words = _source_words(run)
+    if not _is_login_wall(text, words):
+        return None, ("not exercised: posting-source.txt is not a login wall "
+                      f"({words} words)")
+    posting = run.load_yaml("workspace/posting.yaml") or {}
+    if posting.get("must_haves"):
+        return False, ("must_haves were extracted from a login wall: "
+                       f"{posting['must_haves']!r}")
+    ask = _ASK.search(run.all_text())
+    if not ask:
+        return False, ("the run neither extracted nor asks the user to paste "
+                       "the posting — it just carried on")
+    # Quote the line that carried the ask, in whichever language it was written.
+    # Looking up a fixed 粘贴 / paste instead reports None on a run that said
+    # 「把完整 JD 发我」, and "asks for a paste: None" is evidence of nothing.
+    return True, ("no must_haves extracted, and the run asks for a paste: "
+                  f"{run.first_line_containing(ask.group(0))!r}")
+
+
+@register("extracts_posting_when_usable")
+def extracts_posting_when_usable(run):
+    """The quiet twin. A fetch-integrity gate that blocks a readable posting
+    costs the user the whole mode, and the cheapest way to pass the login-wall
+    guard is to refuse everything."""
+    text, words = _source_words(run)
+    if _is_login_wall(text, words):
+        return None, ("not exercised: posting-source.txt is a login wall "
+                      f"({words} words)")
+    if not text or words < USABLE_MIN_WORDS:
+        return None, f"not exercised: posting-source.txt is {words} words"
+    posting = run.load_yaml("workspace/posting.yaml")
+    if not posting:
+        return False, (f"posting-source.txt has {words} words of readable "
+                       "posting and no posting.yaml was written")
+    missing = [f for f in POSTING_FIELDS if f not in posting]
+    if missing:
+        return False, "posting.yaml is missing field(s): " + ", ".join(missing)
+    if not posting.get("must_haves"):
+        return False, "posting.yaml has an empty must_haves list"
+    return True, (f"{words} words extracted into all {len(POSTING_FIELDS)} "
+                  f"fields, {len(posting['must_haves'])} must_have(s)")
+
+
+@register("refusal_floor_fires", twin="verdict_produced_when_inputs_suffice")
+def refusal_floor_fires(run):
+    """证据不足 — 不出结论. A refusal that still prints a conclusion is not a
+    refusal; and a confident verdict on unreadable input is the failure the
+    floor exists for."""
+    assessment = run.load_yaml("workspace/fit-assessment.yaml") or {}
+    verdict = assessment.get("verdict")
+    md = run.read("workspace/fit-assessment.md") or ""
+    if verdict != REFUSAL:
+        return False, (f"verdict is {verdict!r}; on input this thin the only "
+                       f"honest value is {REFUSAL!r}")
+    leaked = [zh for key, zh in VERDICT_ZH.items()
+              if key in VERDICTS and zh in md]
+    leaked += [key for key in VERDICTS if key in md]
+    if leaked:
+        return False, (f"verdict is {REFUSAL} but the rendered assessment still "
+                       f"prints a conclusion: {leaked[0]!r}")
+    if re.search(r"\bof\s+\d+\b|强证据", md):
+        return False, "verdict is a refusal but a coverage count is rendered"
+    return True, f"verdict {REFUSAL}, no conclusion and no count rendered"
+
+
+@register("verdict_produced_when_inputs_suffice")
+def verdict_produced_when_inputs_suffice(run):
+    """The quiet twin. Refusing whenever refusal is available is not caution,
+    it is the mode not working."""
+    assessment = run.load_yaml("workspace/fit-assessment.yaml") or {}
+    verdict = assessment.get("verdict")
+    md = run.read("workspace/fit-assessment.md") or ""
+    if verdict == REFUSAL:
+        return False, (f"the inputs support a conclusion and the run returned "
+                       f"{REFUSAL!r} anyway")
+    if verdict not in VERDICTS:
+        return False, f"verdict {verdict!r} is not one of {VERDICTS}"
+    if not re.search(r"\bof\s+\d+\b|强证据", md):
+        return False, f"verdict {verdict!r} rendered with no countable-facts block"
+    if not _DISCLAIMER.search(md):
+        return False, ("the countable-facts block is rendered without the "
+                       "required disclaimer — a count with no disclaimer reads "
+                       "as a prediction")
+    return True, (f"verdict {verdict!r}, a count, and the disclaimer: "
+                  f"{_DISCLAIMER.search(md).group(0)!r}")
+
+
+@register("expired_convention_banner_shown",
+          twin="no_expiry_banner_on_current_table")
+def expired_convention_banner_shown(run):
+    """Spec §10: an expired review date makes CI fail but must NOT stop the
+    runtime from rendering. A date passing while the code did not change is no
+    reason for the skill to stall."""
+    assessment = run.load_yaml("workspace/fit-assessment.yaml") or {}
+    rendered = assessment.get("conventions_rendered") or []
+    md = run.read("workspace/fit-assessment.md") or ""
+    if not rendered:
+        return False, ("the market table for this scenario is expired and the "
+                       "run renders no convention at all — the rule is banner, "
+                       "not suppression")
+    if _EXPIRY_BANNER not in md:
+        return False, (f"{len(rendered)} convention(s) rendered from an expired "
+                       f"table with no 「{_EXPIRY_BANNER}」 banner")
+    return True, (f"{len(rendered)} convention(s) rendered with the "
+                  f"「{_EXPIRY_BANNER}」 banner")
+
+
+@register("no_expiry_banner_on_current_table")
+def no_expiry_banner_on_current_table(run):
+    """The quiet twin. A banner printed over an in-date table teaches the reader
+    that the banner means nothing."""
+    md = run.read("workspace/fit-assessment.md") or ""
+    assessment = run.load_yaml("workspace/fit-assessment.yaml") or {}
+    if not (assessment.get("conventions_rendered") or []):
+        return None, "not exercised: no convention was rendered"
+    if _EXPIRY_BANNER in md:
+        return False, (f"the table for this market is in date and the card "
+                       f"still carries 「{_EXPIRY_BANNER}」")
+    return True, "conventions rendered from an in-date table, no expiry banner"
+
+
+@register("expired_convention_fails_ci", twin="current_tables_pass_ci")
+def expired_convention_fails_ci(run):
+    """The other half of spec §10's expiry rule: CI must go red. Runs against
+    the harness fixture, not the run's outputs, so it is scoped to the
+    with_skill arm in assertions.yaml — a no_skill baseline has no linter to
+    run and 'not exercised' there is the honest answer, not a failure."""
+    import datetime
+    import pathlib
+
+    import check_conventions
+    fixture = (pathlib.Path(__file__).resolve().parent / "fixtures" /
+               "conventions" / "expired-nl.yaml")
+    if not fixture.is_file():
+        return None, f"not exercised: {fixture} is absent"
+    findings = check_conventions.check_file(fixture, datetime.date(2026, 8, 9))
+    expired = [f for f in findings if f.startswith("EXPIRED")]
+    if not expired:
+        return False, (f"check_conventions.py accepts {fixture.name}, whose "
+                       "review_by has passed — the CI half of the expiry rule "
+                       "is not wired")
+    return True, expired[0]
+
+
+@register("current_tables_pass_ci")
+def current_tables_pass_ci(run):
+    """The quiet twin. The five shipped tables must be silent, or the expiry
+    finding is noise and the next expired table hides inside it."""
+    import datetime
+    import pathlib
+
+    import check_conventions
+    # CONVENTIONS_DIR, not SKILL_ROOT / "market-conventions": the tables live under
+    # references/. Composing the path by hand here globbed an empty directory and
+    # returned "all 0 shipped tables clean" — a quiet twin that can never fire, which
+    # would make its firing half (expired_convention_fails_ci) meaningless.
+    root = pathlib.Path(check_conventions.CONVENTIONS_DIR)
+    tables = sorted(root.glob("*.yaml"))
+    if not tables:
+        return False, f"no market tables found under {root} — the path is wrong"
+    noisy = []
+    for path in tables:
+        findings = check_conventions.check_file(path, datetime.date(2026, 8, 9))
+        noisy += [f"{path.name}: {f}" for f in findings]
+    if noisy:
+        return False, "shipped market tables are not clean: " + noisy[0]
+    return True, f"all {len(tables)} shipped tables clean"
