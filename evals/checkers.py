@@ -1311,3 +1311,48 @@ def no_receipt_for_a_gate_not_run(run):
                        f"{bad[0].get('verdict')!r}, outside {journal.VERDICTS}")
     return True, (f"{len(receipts)} receipt(s) in journal.jsonl, every verdict "
                   f"in {journal.VERDICTS}")
+
+
+# ------------------------------------------------------------------------------
+# regression helpers
+# ------------------------------------------------------------------------------
+#
+# The only two checkers outside the twin relation, and they are outside it for a
+# reason a reader can check rather than by omission: neither decides "did a
+# defence fire", so neither has a decoy scenario whose honest answer is the
+# opposite one. `graded_by_reader` defers to a human and returns no verdict at
+# all; `both_docx_and_pdf_produced` asks whether a file exists, and the opposite
+# answer to that is not a behaviour, it is an absent file. Every other registered
+# checker IS twinned, and evals/lint_assertions.py permits an untwinned checker
+# only for role: regression or for a discriminating assertion that names its own
+# `twin_assertion` -- so this set cannot become a hole a guard slips through.
+
+UNTWINNED_BY_DESIGN = frozenset({"graded_by_reader", "both_docx_and_pdf_produced"})
+
+
+@register("graded_by_reader")
+def graded_by_reader(run):
+    """The escape hatch for assertions a program cannot decide — section
+    ordering, whether a reframing reads as honest, whether a summary leads with
+    the pivot.
+
+    It returns AWAITING_READER_GRADE rather than a verdict, and
+    evals/lint_grading.py FAILS on that string. The judgement step is therefore
+    mandatory: an ungraded assertion stops the aggregation instead of quietly
+    becoming a not-exercised row. Untwinned on purpose, which the lint permits
+    only for role: regression.
+    """
+    return None, "AWAITING_READER_GRADE"
+
+
+@register("both_docx_and_pdf_produced")
+def both_docx_and_pdf_produced(run):
+    """Small, but it is the assertion that caught a renderer producing a CV PDF
+    and no letter PDF in the same run with 51/51 tests green."""
+    docx = run.glob_workspace("*.docx")
+    pdfs = [p for p in run.glob_workspace("*.pdf") if p.stat().st_size > 0]
+    if docx and pdfs:
+        return True, (f"{[p.name for p in docx]} and "
+                      f"{[(p.name, p.stat().st_size) for p in pdfs]}")
+    return False, (f"docx={[p.name for p in docx]} "
+                   f"non-empty pdf={[p.name for p in pdfs]}")

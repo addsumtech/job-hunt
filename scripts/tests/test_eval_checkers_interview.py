@@ -402,8 +402,15 @@ def test_every_defect_tag_is_reachable_by_the_finding_regex():
 # ---- the registry, over everything registered so far ------------------------
 
 def test_twins_is_an_involution_over_every_registered_checker():
+    """Every checker is twinned except the two regression helpers that name
+    themselves in UNTWINNED_BY_DESIGN — a reader-graded row and a file-exists
+    row have no opposite-answer scenario to pin. The exemption is a named set,
+    not a hole: evals/lint_assertions.py rejects UNTWINNED_DISCRIMINATING, so an
+    untwinned checker cannot carry a guard."""
     ck.validate_registry()
     for name in ck.CHECKERS:
+        if name in ck.UNTWINNED_BY_DESIGN:
+            continue
         assert name in ck.TWINS, f"{name} is registered with no twin"
         assert ck.TWINS[ck.TWINS[name]] == name
 

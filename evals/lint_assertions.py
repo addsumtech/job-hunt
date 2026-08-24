@@ -34,6 +34,19 @@ def _unknown_keys(record, allowed):
     return sorted(k for k in record if k not in allowed)
 
 
+def _declared_twins(ev):
+    """`quiet_twin` as a list, however it was written.
+
+    One decoy legitimately serves several guards -- eval 12 is the quiet case of
+    the login-wall refusal, the refusal floor AND the expiry banner -- so a
+    scalar cannot express the set. A scalar stays legal and means a list of one.
+    """
+    declared = ev.get("quiet_twin")
+    if declared is None:
+        return []
+    return list(declared) if isinstance(declared, list) else [declared]
+
+
 def lint(doc, *, scenario_root, checkers, twins, extra_assertion_ids=()):
     """Return findings, most structural first. Empty list means clean."""
     findings = []
@@ -71,10 +84,11 @@ def lint(doc, *, scenario_root, checkers, twins, extra_assertion_ids=()):
 
     for ev in evals:
         eid = ev.get("id")
-        twin_id = ev.get("quiet_twin")
-        if twin_id is not None and twin_id not in by_id:
-            findings.append(f"NO_QUIET_TWIN: {eid} names quiet_twin {twin_id}, "
-                            "which is not an eval in this document")
+        for twin_id in _declared_twins(ev):
+            if twin_id not in by_id:
+                findings.append(f"NO_QUIET_TWIN: {eid} names quiet_twin "
+                                f"{twin_id}, which is not an eval in this "
+                                "document")
         for a in ev.get("assertions") or []:
             aid = a.get("id")
             if aid in seen_assertion_ids:
@@ -132,21 +146,50 @@ def lint(doc, *, scenario_root, checkers, twins, extra_assertion_ids=()):
                 checker_use[eid].add(checker)
 
     # The twin rule, last, because it needs every eval's checker set.
-    for ev in evals:
-        eid, twin_id = ev.get("id"), ev.get("quiet_twin")
-        if twin_id not in checker_use:
-            continue
-        for a in ev.get("assertions") or []:
-            checker = a.get("checker")
-            twin = twins.get(checker)
-            if not twin:
-                continue
-            if twin not in checker_use[twin_id]:
-                findings.append(
-                    f"TWIN_MISSING_CHECKER: {a.get('id')} uses {checker!r}, "
-                    f"whose twin {twin!r} is not used by eval {twin_id}. A guard "
-                    "with no quiet twin scores 100% for a policy that always "
-                    "refuses.")
+    #
+    # An EMPTY `twins` map means the checker registry was not available at all
+    # -- the --checkers-optional path, which accepts any checker name because
+    # evals/checkers.py need not exist yet. The twin relation cannot be decided
+    # from nothing, and reporting UNTWINNED_DISCRIMINATING for every guard in the
+    # document would be a finding about the linter's own inputs rather than about
+    # the data. The rules below are therefore skipped, loudly in the sense that
+    # the flag is documented as "for testing the linter itself".
+    if twins:
+        for ev in evals:
+            declared = _declared_twins(ev)
+            available = set()
+            twin_assertion_ids = set()
+            for twin_id in declared:
+                available |= checker_use.get(twin_id, set())
+                twin_assertion_ids |= {
+                    x.get("id") for x in
+                    (by_id.get(twin_id, {}).get("assertions") or [])}
+            for a in ev.get("assertions") or []:
+                checker = a.get("checker")
+                twin = twins.get(checker)
+                if not twin:
+                    if a.get("role") != "discriminating":
+                        continue
+                    named = a.get("twin_assertion")
+                    if not named:
+                        findings.append(
+                            f"UNTWINNED_DISCRIMINATING: {a.get('id')} uses "
+                            f"{checker!r}, which has no twin, and names no "
+                            "twin_assertion. A discriminating assertion with no "
+                            "quiet case cannot tell a working defence from a "
+                            "policy of always firing.")
+                    elif named not in twin_assertion_ids:
+                        findings.append(
+                            f"TWIN_ASSERTION_MISSING: {a.get('id')} names "
+                            f"twin_assertion {named!r}, which is not an assertion "
+                            f"in any of its quiet_twin eval(s) {declared}.")
+                    continue
+                if twin not in available:
+                    findings.append(
+                        f"TWIN_MISSING_CHECKER: {a.get('id')} uses {checker!r}, "
+                        f"whose twin {twin!r} is used by none of the quiet_twin "
+                        f"eval(s) {declared}. A guard with no quiet twin scores "
+                        "100% for a policy that always refuses.")
 
     for r in doc.get("retired") or []:
         rid = r.get("id")
