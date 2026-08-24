@@ -215,3 +215,13 @@ repo should be read as saying otherwise.
 The reason to state that plainly: `check_skill_lossless.py` proves the bytes
 survived the layering, not that they arrive in context when they are needed. Only
 a run proves the second thing, and nothing here runs one.
+
+## Evaluation
+
+`evals/README.md` describes the harness: what it measures, what it cannot, and
+why the iteration-1 numbers are not quoted here. `evals/run.md` is the runbook
+for an iteration. `make eval-lint` checks the assertion file; `make eval-verify`
+grades and aggregates a results tree you already have.
+
+No iteration has been run against this harness. When one has, the record lands
+in `evals/iterations/` and is generated, not typed.

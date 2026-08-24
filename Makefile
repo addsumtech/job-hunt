@@ -38,3 +38,19 @@ mutants:
 # baseline reports success by forgetting.
 mutants-record:
 	$(PY) scripts/mutants.py --record
+
+# ---- evals -------------------------------------------------------------
+# eval-lint needs nothing but the repo. eval-verify needs a results tree, which
+# only LLM runs produce, so it is deliberately NOT in CI: a job that skips when
+# the tree is absent is a green tick that measured nothing.
+RESULTS ?= $(HOME)/code_project/job-hunt-workspace/iteration-2
+
+.PHONY: eval-lint eval-verify
+eval-lint:
+	$(PY) evals/lint_assertions.py
+
+eval-verify: eval-lint
+	$(PY) evals/grade.py --iteration $(RESULTS)
+	$(PY) evals/lint_grading.py --iteration $(RESULTS)
+	$(PY) evals/aggregate.py --iteration $(RESULTS)
+	$(PY) evals/check_discrimination.py --iteration $(RESULTS)

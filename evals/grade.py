@@ -19,9 +19,18 @@ import sys
 
 import yaml
 
-from evals import checkers as ck
-from evals import runlib
-from evals import schema
+# Importable as `from evals import grade` (repo root on sys.path) AND runnable as
+# `python3 evals/grade.py`, where sys.path[0] is evals/ and the package would
+# otherwise not import at all. A ModuleNotFoundError traceback exits 1, which is
+# this file's code for "findings" -- so without this, a broken invocation and a
+# real finding look identical to anything reading the exit code.
+_REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from evals import checkers as ck  # noqa: E402
+from evals import runlib  # noqa: E402
+from evals import schema  # noqa: E402
 
 ASSERTIONS = pathlib.Path(__file__).resolve().parent / "assertions.yaml"
 

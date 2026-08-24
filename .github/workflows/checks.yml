@@ -24,3 +24,5 @@ jobs:
       - run: python3 scripts/check_skill_lossless.py --baseline 864ad7f
       - name: market conventions
         run: python3 scripts/check_conventions.py --ci
+      - name: Lint eval assertions
+        run: python3 evals/lint_assertions.py
