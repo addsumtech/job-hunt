@@ -62,6 +62,10 @@ FAST_TESTS = {
 }
 
 
+class Unattributable(RuntimeError):
+    """The suite failed on the unmutated copy — no verdict can be attributed."""
+
+
 class Mutation:
     __slots__ = ("path", "lineno", "original", "mutated", "operator", "span",
                  "occurrence")
@@ -218,7 +222,23 @@ def survives(work: pathlib.Path, mutation: Mutation) -> bool:
             return False
         # Confirm survival against the whole suite — the targeted modules missing
         # it is not the same as the suite missing it.
-        return _pytest(work, [])
+        if _pytest(work, []):
+            return True
+        # The suite failed while the targeted modules passed. That CAN mean a
+        # distant test caught it — but it is also exactly what a broken
+        # environment looks like, and a broken environment marks every mutant
+        # "killed" and reports a kill rate near 100%. This happened: one census
+        # reported 4 survivors / 99% caught where the true figure was 67 / 79%,
+        # and the optimistic number was believed until a survivor was applied by
+        # hand. So the failure is attributed only after the PRISTINE copy is shown
+        # to be green.
+        target.write_text(source, encoding="utf-8")
+        if _pytest(work, []):
+            return False            # genuinely killed by a distant test
+        raise Unattributable(
+            f"the suite fails on the UNMUTATED copy while checking "
+            f"{mutation.path}:{mutation.lineno}. Every mutant would be scored "
+            f"'killed' from here, which reports blindness as coverage.")
     finally:
         target.write_text(source, encoding="utf-8")
 
@@ -282,7 +302,11 @@ def main(argv=None) -> int:
             for n, mutation in enumerate(mutations, 1):
                 print(f"  [{n}/{len(mutations)}] {mutation.operator} "
                       f"line {mutation.lineno}", end="\r", file=sys.stderr)
-                verdict = survives(work, mutation)
+                try:
+                    verdict = survives(work, mutation)
+                except Unattributable as exc:
+                    print(f"\ncannot run: {exc}", file=sys.stderr)
+                    return 2
                 if verdict is None:
                     invalid += 1          # would not compile: never counted as killed
                     continue

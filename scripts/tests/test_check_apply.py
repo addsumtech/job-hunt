@@ -697,3 +697,65 @@ def test_no_gate_creates_a_workspace_it_was_pointed_at(gate, tmp_path, capsys):
     assert mod.main(["--workspace", str(ws)] + GATE_ARGS[gate]) == 2
     assert "does not exist" in capsys.readouterr().err
     assert not ws.exists()
+
+
+def _rejected_round_with_stop(tmp_path, **stop):
+    """A REJECT round carrying an honest-stop.yaml built from `stop`."""
+    root = _skill_root(tmp_path)
+    ws = _good_workspace(tmp_path, root)
+    rounds.merge_round(ws, 1, {"combined_verdict": "REJECT"})
+    base = {"classification": "honest_stretch", "verdict": "stretch",
+            "reason": "The one unmet must-have is five years of clinical PACS work.",
+            "evidence": ["hiring_manager requirement_match: 3/5 — no clinical PACS work"]}
+    base.update(stop)
+    (ws / "honest-stop.yaml").write_text(
+        yaml.safe_dump(base, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    return ws, root
+
+
+def test_a_complete_honest_stop_is_accepted(tmp_path, capsys):
+    """The quiet twin. An honest stretch that says why and cites the findings is a
+    deliverable outcome, not a failure — check_apply's docstring is explicit that
+    a stretch candidate told 'failed' abandons an application they should have
+    sent."""
+    ws, root = _rejected_round_with_stop(tmp_path)
+    assert check_apply.main(_argv(ws, root)) == 0
+    assert capsys.readouterr().out.strip() == ""
+
+
+@pytest.mark.parametrize("field,value", [("reason", ""), ("reason", "   "),
+                                         ("evidence", []), ("evidence", None)])
+def test_an_honest_stop_missing_its_reason_or_evidence_is_reported(
+        tmp_path, capsys, field, value):
+    """A mutation census found this branch UNPINNED: deleting it took a REJECT
+    round with a reason-less honest-stop from rc=1 to rc=0 with no output — a
+    silent bypass of the gate that authorises delivery, in the one place that
+    distinguishes 'poorly built, go fix it' from 'honest stretch, send it'.
+
+    Three of the four mutants surviving the whole suite were in this branch. That
+    is what a baseline is for: not to record the hole, but to name it so it gets
+    closed."""
+    ws, root = _rejected_round_with_stop(tmp_path, **{field: value})
+    assert check_apply.main(_argv(ws, root)) == 1
+    out = capsys.readouterr().out
+    assert any(line.startswith("INCOMPLETE_STOP") for line in out.splitlines()), out
+    assert field in out
+
+
+def test_an_unreadable_honest_stop_says_so_rather_than_blaming_its_fields(
+        tmp_path, capsys):
+    """Dropping this finding does not change pass/fail — an unparseable file
+    yields an empty dict, so BAD_STOP_CLASSIFICATION and INCOMPLETE_STOP fire
+    anyway — which is why a mutation census found it unpinned. What it changes is
+    the DIAGNOSIS: without it the reader is told the classification is None and
+    goes looking for a field, when the real answer is that nothing could read the
+    file. An unclassified stop is the one thing NO_PASS_NO_STOP exists to
+    prevent, so the reason it could not be classified has to survive."""
+    root = _skill_root(tmp_path)
+    ws = _good_workspace(tmp_path, root)
+    rounds.merge_round(ws, 1, {"combined_verdict": "REJECT"})
+    (ws / "honest-stop.yaml").write_text("classification: [unclosed\n", encoding="utf-8")
+    assert check_apply.main(_argv(ws, root)) == 1
+    out = capsys.readouterr().out
+    assert "honest-stop.yaml" in out
+    assert "could not be read" in out or "cannot be classified" in out, out
