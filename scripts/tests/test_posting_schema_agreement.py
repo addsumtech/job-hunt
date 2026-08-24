@@ -81,15 +81,40 @@ def assess_mode_yaml_keys():
 
 
 def apply_mode_list():
+    """The DECLARATION only — the bullet that lists the names — not the prose
+    around it.
+
+    The first version read a 700-character window and collected every backticked
+    CANONICAL name in it. That window also covers the paragraph explaining WHY
+    the list matters, which names `company` and `application_type` in prose — so
+    deleting either from the declaration left the parser still finding it, and
+    the exact `application_type` regression this file exists to catch passed all
+    nine tests. A parser that cannot tell a declaration from a mention is not a
+    diff.
+
+    The declaration ends at the first line that is not part of the bullet: the
+    names live in one `- Extract …` item, continued by indented lines.
+    """
     text = (REPO / "modes" / "apply.md").read_text(encoding="utf-8")
-    start = text.index("Extract the structured object")
-    chunk = text[start:start + 700]
-    seen, out = set(), []
-    for name in _BACKTICKED.findall(chunk):
-        if name in CANONICAL and name not in seen:
-            seen.add(name)
-            out.append(name)
-    return out
+    lines = text.splitlines()
+    start = next(i for i, l in enumerate(lines) if "Extract the structured object" in l)
+    # Only the lines that ARE the list: nothing but backticked names, commas,
+    # whitespace and a terminating full stop. Prose lines in the same bullet —
+    # including the paragraph that names `company` and `application_type` while
+    # explaining why they matter — are excluded by construction, so deleting a
+    # name from the declaration cannot be masked by a mention beside it.
+    names, seen = [], set()
+    for line in lines[start + 1:]:
+        if line.strip() and not line.startswith("  "):
+            break
+        stripped = _BACKTICKED.sub("", line).strip()
+        if stripped.strip(" ,.") != "":
+            continue                      # a prose line; skip, do not harvest
+        for name in _BACKTICKED.findall(line):
+            if name in CANONICAL and name not in seen:
+                seen.add(name)
+                names.append(name)
+    return names
 
 
 DECLARATIONS = {
@@ -131,6 +156,16 @@ def test_location_is_a_scalar_string_everywhere_it_is_typed():
                    if line.startswith("| `location` |"))
         assert "object" not in row, f"{path} still types location as an object"
         assert "string" in row
+    # modes/assess.md declares the type in a YAML comment, not a table row, and
+    # was therefore invisible to the loop above — so the precise regression this
+    # file exists to prevent could be reintroduced into one of the four
+    # declarations it claims to diff, with the whole gate stack green.
+    assess = (REPO / "modes" / "assess.md").read_text(encoding="utf-8")
+    line = next(l for l in assess.splitlines() if l.strip().startswith("location:"))
+    assert "one string" in line or "verbatim" in line, (
+        f"modes/assess.md no longer says location is one string: {line!r}")
+    assert "{city" not in assess, (
+        "modes/assess.md reintroduces the {city, country, arrangement} mapping")
 
 
 def test_no_json_example_still_shows_a_structured_location():

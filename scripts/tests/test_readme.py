@@ -31,15 +31,20 @@ def test_the_layout_matches_the_repo():
     """
     text = _text()
     assert "cv/template.tex" not in text and "letter/template.tex" not in text
+    # The LAYOUT section, not the whole file. Checking the whole document meant a
+    # name appearing in a usage snippet ("python3 scripts/mutants.py --ci")
+    # satisfied the assertion, so the layout — the thing this test is named for —
+    # could lose an entry and stay green.
+    layout = text.split("## Layout", 1)[1].split("\n## ", 1)[0]
     missing = []
     for path in sorted((ROOT / "scripts").glob("*.py")):
-        if path.name not in text:
+        if path.name not in layout:
             missing.append(f"scripts/{path.name}")
     for folder in ("modes", "agents", "references"):
         for path in sorted((ROOT / folder).iterdir()):
             if path.name.startswith("."):
                 continue
-            if path.name not in text:
+            if path.name not in layout:
                 missing.append(f"{folder}/{path.name}")
     assert not missing, "the README layout does not mention: " + ", ".join(missing)
 

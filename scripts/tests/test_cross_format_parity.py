@@ -342,3 +342,24 @@ def test_every_link_label_survives_into_the_compiled_pdf(artifacts):
     missing = [l for l in _all_link_labels(artifacts.profile)
                if not artifacts.contains(PDF, l)]
     assert not missing, f"link labels missing from cv.pdf: {missing}"
+
+
+def test_a_null_end_date_is_omitted_not_printed_as_None(tmp_path):
+    """Parity is necessary, not sufficient — this file's own premise, applied to
+    itself.
+
+    `end: null` rendered as the literal string "None" in md, docx AND pdf, so the
+    parity assertion read all three artifacts back off disk, found "None" in each,
+    and certified agreement — on a CV saying the candidate worked from 2020 to
+    None. `.get(k, "")` covers a MISSING key; a key present and null still yields
+    None, and profiles are model-authored YAML where `end: null` is the natural
+    way to write "current".
+    """
+    profile = load_parity_profile(tmp_path)
+    profile["experience"][0]["end"] = None
+    profile["education"][0]["end"] = None
+    art = Artifacts(profile, tmp_path)
+    for name, blob in (("md", art.md), ("tex", art.tex),
+                       ("docx", art.docx)):
+        assert "None" not in blob, f"the literal string None reached {name}"
+    assert profile["experience"][0]["start"] in art.md, "the start date must survive"

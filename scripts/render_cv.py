@@ -764,7 +764,7 @@ def render_markdown(profile):
             if not out:
                 out += ["", f"## {h['experience']}"]
             header = f"**{e.get('title','')}**, {e.get('org','')}"
-            dates = f"{e.get('start','')} – {e.get('end','')}".strip(" –")
+            dates = _dates(e)
             meta_bits = " · ".join(
                 b for b in [scalar_field(e.get("location"), "experience[].location"), dates] if b)
             out.append(header + (f"  \n_{meta_bits}_" if meta_bits else ""))
@@ -776,7 +776,7 @@ def render_markdown(profile):
         for ed in (profile.get("education") or []):
             if not out:
                 out += ["", f"## {h['education']}"]
-            dates = f"{ed.get('start','')} – {ed.get('end','')}".strip(" –")
+            dates = _dates(ed)
             # `location` mirrors experience: the schema advertises it (assets/profile.example.yaml)
             # and until now no renderer read it, so it was a field the docs promised and the
             # product silently discarded.
@@ -929,7 +929,7 @@ def render_docx(profile, out_path):
         for e in exp:
             doc.add_paragraph().add_run(
                 f"{e.get('title','')}, {e.get('org','')}").bold = True
-            dates = f"{e.get('start','')} – {e.get('end','')}".strip(" –")
+            dates = _dates(e)
             meta_bits = " · ".join(
                 b for b in [scalar_field(e.get("location"), "experience[].location"), dates] if b)
             if meta_bits:
@@ -945,7 +945,7 @@ def render_docx(profile, out_path):
         for ed in edu:
             doc.add_paragraph().add_run(
                 f"{ed.get('degree','')}, {ed.get('institution','')}").bold = True
-            dates = f"{ed.get('start','')} – {ed.get('end','')}".strip(" –")
+            dates = _dates(ed)
             meta_bits = " · ".join(b for b in
                                    [scalar_field(ed.get("location"), "education[].location"), dates] if b)
             if meta_bits:
@@ -1077,6 +1077,27 @@ def scalar_field(value, where: str) -> str:
               f"value. `location` is a scalar string, the posting's own location "
               f"text (see SKILL.md's extraction field table).", file=sys.stderr)
     return ""
+
+
+def _dates(item) -> str:
+    """`start – end`, with a missing half omitted rather than printed.
+
+    `f"{item.get('start','')} - {item.get('end','')}"` renders an explicit
+    `end: null` as the literal string "None", so a CV said the candidate worked
+    from 2020 to None — in md, docx AND pdf. `.get(k, "")` only covers a MISSING
+    key; a key present and null still yields None, and profiles are
+    model-authored YAML where `end: null` is the natural way to write "current".
+    """
+    start = str(item.get("start") or "").strip()
+    end = str(item.get("end") or "").strip()
+    return " – ".join(b for b in (start, end) if b)
+
+
+def _dates_tex(item) -> str:
+    """The same, with LaTeX's en dash."""
+    start = str(item.get("start") or "").strip()
+    end = str(item.get("end") or "").strip()
+    return " -- ".join(b for b in (start, end) if b)
 
 
 def normalize_text(text):
@@ -1540,7 +1561,7 @@ def build_latex(profile, cjk=None, engine=None, asset_dir=None, asset_stem="cv")
             return
         parts.append(r"\section*{%s}" % h["experience"])
         for ex in exp:
-            dates = f"{ex.get('start','')} -- {ex.get('end','')}".strip(" -")
+            dates = _dates_tex(ex)
             # `location` is on the right with the dates, matching the `location ·
             # dates` line render_markdown and render_docx already emit. It used
             # to be dropped here and only here, so a candidate whose two jobs
@@ -1566,7 +1587,7 @@ def build_latex(profile, cjk=None, engine=None, asset_dir=None, asset_stem="cv")
             return
         parts.append(r"\section*{%s}" % h["education"])
         for ed in edu:
-            dates = f"{ed.get('start','')} -- {ed.get('end','')}".strip(" -")
+            dates = _dates_tex(ed)
             bits = [b for b in (scalar_field(ed.get("location"), "education[].location"), dates) if b]
             right = r" \textbullet{} ".join(e(b) for b in bits)
             parts.append(r"\textbf{%s}, %s \hfill %s\\" % (
