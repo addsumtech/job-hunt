@@ -63,11 +63,20 @@ FAST_TESTS = {
 
 
 class Mutation:
-    __slots__ = ("path", "lineno", "original", "mutated", "operator", "span")
+    __slots__ = ("path", "lineno", "original", "mutated", "operator", "span",
+                 "occurrence")
 
-    def __init__(self, path, lineno, original, mutated, operator, span=1):
+    def __init__(self, path, lineno, original, mutated, operator, span=1,
+                 occurrence=0):
         self.path, self.lineno = path, lineno
         self.original, self.mutated, self.operator = original, mutated, operator
+        # Which occurrence of this identical line within the file. Without it,
+        # every `findings.append(` in a file shares one key — measured: 7 sites in
+        # check_apply.py, 54 mutants across 23 keys in render_cv.py — so ONE
+        # recorded survivor silently pre-waives all the others, including sites
+        # added later. Line-number-independent still: inserting code elsewhere
+        # does not renumber these, only inserting an identical line above one does.
+        self.occurrence = occurrence
         # How many source lines this mutant REPLACES. `findings.append(` is
         # routinely a multi-line call, and replacing only its opening line leaves
         # the continuation lines dangling — a SyntaxError, which fails the suite
@@ -85,7 +94,8 @@ class Mutation:
         """
         payload = "\x00".join([self.path, self.operator,
                                " ".join(self.original.split()),
-                               " ".join(self.mutated.split())])
+                               " ".join(self.mutated.split()),
+                               str(self.occurrence)])
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
     def describe(self) -> str:
@@ -129,6 +139,13 @@ def _statement_span(lines: list, index: int) -> int:
 def generate(path: pathlib.Path, relative: str) -> list:
     """Every mutant for one file, mechanically — never by taste."""
     out = []
+    seen: dict = {}
+
+    def nth(operator, original, mutated) -> int:
+        signature = (operator, " ".join(original.split()), " ".join(mutated.split()))
+        seen[signature] = seen.get(signature, -1) + 1
+        return seen[signature]
+
     lines = path.read_text(encoding="utf-8").splitlines()
     for i, line in enumerate(lines, 1):
         if _skip(line):
@@ -137,21 +154,24 @@ def generate(path: pathlib.Path, relative: str) -> list:
         m = _IF.match(line)
         if m:
             indent, elif_ = m.group(1), m.group(2) or ""
-            out.append(Mutation(relative, i, line,
-                                f"{indent}{elif_}if False:", "guard->False"))
+            mutated = f"{indent}{elif_}if False:"
+            out.append(Mutation(relative, i, line, mutated, "guard->False",
+                                occurrence=nth("guard->False", line, mutated)))
         # 2. drop a finding — the gate still runs and reports nothing.
         #    Spans the WHOLE call: these are usually multi-line.
         if _APPEND.match(line):
             indent = _APPEND.match(line).group(1)
             span = _statement_span(lines, i - 1)
-            out.append(Mutation(relative, i, line, f"{indent}pass  # mutated",
-                                "drop-finding", span=span))
+            mutated = f"{indent}pass  # mutated"
+            out.append(Mutation(relative, i, line, mutated, "drop-finding",
+                                span=span,
+                                occurrence=nth("drop-finding", line, mutated)))
         # 3. invert a comparison
         for pattern, replacement, operator in _COMPARISONS:
             if pattern.search(line):
-                out.append(Mutation(relative, i, line,
-                                    pattern.sub(replacement, line, count=1),
-                                    operator))
+                mutated = pattern.sub(replacement, line, count=1)
+                out.append(Mutation(relative, i, line, mutated, operator,
+                                    occurrence=nth(operator, line, mutated)))
                 break
     return out
 
