@@ -18,6 +18,7 @@ import sys
 import yaml
 
 from evals import runlib
+from evals import schema
 
 ASSERTIONS = pathlib.Path(__file__).resolve().parent / "assertions.yaml"
 
@@ -41,7 +42,7 @@ def _baseline_rows(iteration_dir):
 def _guards(doc):
     return [(e["id"], a) for e in doc["evals"] for a in e["assertions"]
             if a["role"] == "discriminating"
-            and "baseline" in (a.get("arms") or ["baseline", "with_skill"])]
+            and "baseline" in (a.get("arms") or schema.ARMS)]
 
 
 def pilot(iteration_dir, doc):

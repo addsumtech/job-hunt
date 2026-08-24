@@ -21,9 +21,9 @@ import yaml
 
 from evals import checkers as ck
 from evals import runlib
+from evals import schema
 
 ASSERTIONS = pathlib.Path(__file__).resolve().parent / "assertions.yaml"
-ARMS = ("baseline", "with_skill")
 
 
 def _existing(run):
@@ -118,7 +118,7 @@ def main(argv=None):
             unknown += 1
             continue
         scoped = [a for a in record["assertions"]
-                  if arm in (a.get("arms") or ARMS)]
+                  if arm in (a.get("arms") or schema.ARMS)]
         graded = grade_run(run, dict(record, assertions=scoped))
         (run.dir / "grading.json").write_text(
             json.dumps(graded, ensure_ascii=False, indent=2) + "\n",

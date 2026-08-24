@@ -24,9 +24,9 @@ import sys
 import yaml
 
 from evals import runlib
+from evals import schema
 
 ASSERTIONS = pathlib.Path(__file__).resolve().parent / "assertions.yaml"
-ARMS = ("baseline", "with_skill")
 
 
 def _stat(values):
@@ -53,12 +53,12 @@ def summarise(iteration_dir, doc):
     role_of = {a["id"]: a["role"] for e in doc["evals"] for a in e["assertions"]}
 
     run_counts, per_arm, rows = {}, {a: {"pass": 0, "total": 0, "seconds": [],
-                                         "tokens": []} for a in ARMS}, {}
+                                         "tokens": []} for a in schema.ARMS}, {}
     per_eval = {}
     for eval_id, arm, _n, run in runlib.iter_runs(iteration_dir):
         per_eval.setdefault(str(eval_id), {a: {"seconds": [], "tokens": []}
-                                           for a in ARMS})
-        run_counts.setdefault(str(eval_id), {a: 0 for a in ARMS})
+                                           for a in schema.ARMS})
+        run_counts.setdefault(str(eval_id), {a: 0 for a in schema.ARMS})
         run_counts[str(eval_id)][arm] = run_counts[str(eval_id)].get(arm, 0) + 1
         grading = json.loads((run.dir / "grading.json").read_text(
             encoding="utf-8"))
@@ -87,7 +87,7 @@ def summarise(iteration_dir, doc):
             per_arm[arm]["pass"] += 1 if row["passed"] else 0
 
     missing = [f"eval-{eid} {arm}" for eid in sorted(by_id, key=int)
-               for arm in ARMS
+               for arm in schema.ARMS
                if not run_counts.get(str(eid), {}).get(arm)]
     non_discriminating = sorted(
         aid for aid, b in rows.items()
@@ -118,10 +118,10 @@ def summarise(iteration_dir, doc):
         "per_arm": {a: {"passed": per_arm[a]["pass"],
                         "total": per_arm[a]["total"],
                         "seconds": _stat(per_arm[a]["seconds"]),
-                        "tokens": _stat(per_arm[a]["tokens"])} for a in ARMS},
+                        "tokens": _stat(per_arm[a]["tokens"])} for a in schema.ARMS},
         "per_eval_cost": {
             eid: {a: {"seconds": _stat(v[a]["seconds"]),
-                      "tokens": _stat(v[a]["tokens"])} for a in ARMS}
+                      "tokens": _stat(v[a]["tokens"])} for a in schema.ARMS}
             for eid, v in per_eval.items()},
         "assertions": rows,
         "non_discriminating": non_discriminating,
@@ -163,7 +163,7 @@ def render_markdown(summary):
     for eid in sorted(summary["run_counts"], key=int):
         counts = summary["run_counts"][eid]
         out.append(f"- eval-{eid}: " + ", ".join(
-            f"{arm} n={counts.get(arm, 0)}" for arm in ARMS))
+            f"{arm} n={counts.get(arm, 0)}" for arm in schema.ARMS))
     out += ["", "## Discriminating assertions", "",
             _table(summary, "discriminating"), "",
             "## Regression assertions", "", _table(summary, "regression"), "",
@@ -173,14 +173,14 @@ def render_markdown(summary):
             "also hides an eval that ran once.", ""]
     for eid in sorted(summary.get("per_eval_cost") or {}, key=int):
         cost = summary["per_eval_cost"][eid]
-        for arm in ARMS:
+        for arm in schema.ARMS:
             out.append(f"- eval-{eid} **{arm}**: "
                        f"time {_fmt(cost[arm]['seconds'], 's')}; "
                        f"tokens {_fmt(cost[arm]['tokens'])}")
     out += ["", "Pooled across every eval. Run-count weighted, so an eval with "
             "more runs pulls it; the per-eval rows above are the like-for-like "
             "comparison.", ""]
-    for arm in ARMS:
+    for arm in schema.ARMS:
         a = summary["per_arm"][arm]
         out.append(f"- **{arm}**: {a['passed']}/{a['total']} assertions; "
                    f"time {_fmt(a['seconds'], 's')}; "
