@@ -72,6 +72,36 @@ def test_han_and_kana_folded_scalar_spaces_are_still_stripped():
     assert render_cv.normalize_text("Data 工程 师") == "Data 工程师"
 
 
+@needs_engine
+def test_korean_spaces_survive_into_the_compiled_pdf(tmp_path):
+    """The assertion this file SHOULD have made the first time.
+
+    The original version of this test checked the `.tex`, which was intact — and
+    passed while the compiled PDF still read `데이터엔지니어`, because xeCJK
+    defaults to CJKspace=false and discards whitespace next to a CJK glyph at
+    typeset time. A green gate over a wrong artifact, in the file whose entire
+    subject is green gates over wrong artifacts. Read the PDF back.
+    """
+    import subprocess
+    p = profile(meta={"language": "ko", "name": "이동항"},
+                summary="데이터 엔지니어 로서 일했습니다.",
+                experience=[{"title": "데이터 엔지니어", "org": "삼성 전자",
+                             "start": "2020", "end": "present",
+                             "bullets": ["대규모 데이터 파이프라인 구축"]}])
+    out = tmp_path / "cv.pdf"
+    reasons = []
+    if not render_cv.render_pdf(p, out, reasons=reasons):
+        if reasons == [render_cv.MISSING_CHARACTERS] and _korean_font_installed() is False:
+            pytest.skip("no Korean-capable CJK font on this machine")
+        pytest.fail(f"Korean CV did not render: {reasons}")
+    text = subprocess.run(["pdftotext", str(out), "-"],
+                          capture_output=True, text=True)
+    if text.returncode != 0:
+        pytest.skip("pdftotext not available")
+    assert "데이터 엔지니어" in text.stdout, "the word space was eaten in the PDF"
+    assert "데이터엔지니어" not in text.stdout
+
+
 def test_korean_spaces_survive_into_every_rendered_format(tmp_path):
     """Format-level, not just the helper: the three deliverables disagreed about
     the same field, because `normalize_text` was applied to different parts of

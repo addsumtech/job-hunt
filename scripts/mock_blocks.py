@@ -137,7 +137,11 @@ MIN_SEGMENT = 8
 # uses the same shape to collect the ref set; this copy exists because the
 # splitting has to happen where the quote helpers live, and both are pinned
 # against each other by test_mock_blocks.py.
-_Q_HEADING_FULL = re.compile(r"^##\s+(Q\d+)\b", re.M)
+# `Q\d+[A-Za-z]?` so a sub-question heading (`## Q3b — follow-up`) is seen.
+# With `Q\d+\b` the reconciliation stated as fact something the reader can see
+# is false ("has no '## Q3b' heading"), and the Q3b answer became unquotable at
+# the same time — a bypass and a cry-wolf from one regex.
+_Q_HEADING_FULL = re.compile(r"^##\s+(Q\d+[A-Za-z]?)\b", re.M)
 
 
 def collapse_ws(s: str) -> str:

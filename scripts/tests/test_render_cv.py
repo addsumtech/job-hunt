@@ -400,7 +400,11 @@ def test_cjk_latex_uses_xecjk_preamble():
         "experience": [{"title": "엔지니어", "org": "회사", "bullets": ["일을 했다."]}],
     }
     tex = render_cv.build_latex(profile)             # auto-detects CJK
-    assert r"\usepackage{xeCJK}" in tex
+    # `[CJKspace]` is part of the mechanism, not decoration: xeCJK
+    # defaults to CJKspace=false and DISCARDS whitespace next to a CJK
+    # glyph at typeset time, which silently ate every Korean word space
+    # in the compiled PDF while the .tex looked correct.
+    assert r"\usepackage[CJKspace]{xeCJK}" in tex
     assert r"\setCJKmainfont" in tex
     assert "inputenc" not in tex                     # pdfLaTeX-only, must be gone
     # xeCJK is the one part of the preamble that IS content-driven: it exists for
@@ -580,7 +584,11 @@ def test_cjk_pdf_degrades_without_unicode_engine(tmp_path, capsys, monkeypatch):
     result = render_cv.render_pdf(profile, out)
     assert result is False                            # no engine → no PDF
     tex = (tmp_path / "cv.tex").read_text(encoding="utf-8")
-    assert r"\usepackage{xeCJK}" in tex               # but a *correct* CJK .tex is written
+    # `[CJKspace]` is part of the mechanism, not decoration: xeCJK
+    # defaults to CJKspace=false and DISCARDS whitespace next to a CJK
+    # glyph at typeset time, which silently ate every Korean word space
+    # in the compiled PDF while the .tex looked correct.
+    assert r"\usepackage[CJKspace]{xeCJK}" in tex               # but a *correct* CJK .tex is written
     assert "CJK" in capsys.readouterr().err           # and the user is told why
 
 

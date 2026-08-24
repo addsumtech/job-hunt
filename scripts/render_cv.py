@@ -1444,7 +1444,15 @@ def latex_preamble(engine=None, cjk=False, meta=None, margin="2cm"):
         if main != "{}":
             lines.append(main)
         if cjk:
-            lines += [r"\usepackage{xeCJK}", _cjk_font_setup(meta)]
+            # `CJKspace` is not optional here. xeCJK defaults to CJKspace=false,
+            # which DISCARDS whitespace adjacent to a CJK glyph at typeset time —
+            # so removing Hangul from `_CJK_GAP_RE` (which fixed .md and .docx)
+            # left the PDF still reading `데이터엔지니어`. Korean 띄어쓰기 is
+            # mandatory orthography, and the PDF is the artifact the recruiter
+            # opens. Harmless for zh/ja: `normalize_text` has already removed
+            # their folded-scalar spaces before the text reaches LaTeX, so there
+            # is nothing left for CJKspace to preserve.
+            lines += [r"\usepackage[CJKspace]{xeCJK}", _cjk_font_setup(meta)]
     else:
         lines += [r"\usepackage[utf8]{inputenc}", r"\usepackage[T1]{fontenc}"]
     lines.append(r"\usepackage[margin=%s]{geometry}" % margin)

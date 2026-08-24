@@ -182,6 +182,26 @@ def _normalise(text):
     return _WHITESPACE.sub(" ", str(text)).strip().casefold()
 
 
+# Punctuation that carries no meaning for "does this value come from that
+# capture": dash variants, bracket variants, and the fullwidth forms a CJK IME
+# produces. `_normalise` deliberately folds only whitespace and case, because
+# raw_text is a verbatim copy and its wrap points are not the claim. company and
+# salary are different: they are SHORT values re-rendered by hand, so an en dash
+# where the capture had an em dash, or `（）` where it had `()`, is the same
+# value — and hard-failing on it teaches the reader that this gate is wrong.
+_PUNCT_FOLD = str.maketrans({
+    "–": "-", "—": "-", "−": "-", "~": "-", "〜": "-", "－": "-",
+    "（": "(", "）": ")", "［": "[", "］": "]", "，": ",", "、": ",",
+    "：": ":", "；": ";", "％": "%", "／": "/", "　": " ",
+})
+_DROPPABLE = str.maketrans("", "", " .,()[]-·/")
+
+
+def _loose(text):
+    """`_normalise`, plus punctuation folding, for the short re-rendered fields."""
+    return _normalise(str(text).translate(_PUNCT_FOLD)).translate(_DROPPABLE)
+
+
 def _raw_text_coverage(raw_text, captures):
     """(fraction of raw_text the captures account for, the segments they do not).
 
@@ -261,7 +281,7 @@ def _check_provenance(label, row, site, raw_texts):
         value = str(row.get(field) or "").strip()
         if not value:
             continue
-        if not any(_normalise(value) in _normalise(text) for text in captures.values()):
+        if not any(_loose(value) in _loose(text) for text in captures.values()):
             findings.append(
                 f"{code}: {label} {field} {value[:60]!r} does not appear in any "
                 f"of {', '.join(sorted(captures))}. This is the field the reader "
@@ -615,53 +635,93 @@ def _check_upstream_receipts(workspace):
 _MD_URL = re.compile(r"https?://[^\s)\]>\"'|]+")
 
 
+_MD_SECTION = re.compile(r"^##\s*(§\S*)", re.M)
+_MD_NUMBERED = re.compile(r"^\s*\d+\.\s+\*\*(.+?)\*\*", re.M)
+
+
+def _md_candidates_section(md_text: str) -> str:
+    """The §1 candidates block, or "" if the document has no sections.
+
+    Scoped on purpose. Three of shortlist.md's four required sections are ABOUT
+    sources and provenance — §0 names the raw captures, §0.1 the trigger, and the
+    disclosure block names what was and was not obtainable — so a URL there is the
+    honest thing to write. Treating every URL in the document as a claimed posting
+    made the adapter's own documentation, a company careers page, or the raw-capture
+    reference a hard failure, and the remedy the finding suggested was to delete the
+    round's own provenance.
+    """
+    marks = list(_MD_SECTION.finditer(md_text or ""))
+    for i, m in enumerate(marks):
+        if m.group(1).startswith("§1"):
+            end = marks[i + 1].start() if i + 1 < len(marks) else len(md_text)
+            return md_text[m.start():end]
+    return ""
+
+
 def _check_md_rows(md_text, rows):
-    """Every posting URL rendered in shortlist.md must exist in shortlist.yaml.
+    """Every posting rendered in §1 of shortlist.md must exist in shortlist.yaml.
 
     All of commit 55e4f84's provenance anchors run over `shortlist.yaml`.
-    `shortlist.md` — the only artifact a human reads, hand-authored with no
-    renderer — was checked for four narrow things (a §0.1 section, the
-    provisional stamp, an emptiness phrase, a disclosure block) and never
-    reconciled row by row. A wholly invented posting present only in the .md
-    passed both discover gates with a `pass` receipt.
+    `shortlist.md` — hand-authored, no renderer, the only artifact a human reads
+    and acts on — was checked for four narrow things and never reconciled row by
+    row. A wholly invented posting present only in the .md passed both discover
+    gates with a `pass` receipt.
 
-    The sharpest way in was the gate's own remediation. modes/discover.md tells
-    the round to "delete the row" on SOURCE_ID_NOT_IN_RAW / RAW_TEXT_NOT_IN_RAW /
-    URL_NOT_FROM_ADAPTER, and never said to delete it from the .md too — so the
-    documented fix for a provenance failure moved the fabricated row OUT of the
-    checked file and LEFT it in the read one, and the round went green. That
-    sentence is corrected in modes/discover.md alongside this check; the check is
-    what makes the correction enforceable.
+    The sharpest way in was the gate's own remediation: modes/discover.md told the
+    round to "delete the row" on a provenance finding and never said to delete it
+    from the .md too, so the documented fix moved a fabricated row OUT of the
+    checked file and LEFT it in the read one.
 
-    URLs only. They are unambiguous, every rendered row carries one, and matching
-    on prose would fire on an honest summary that mentions a company twice.
+    Matched on the rendered TITLE, not on URLs. The canonical rendering
+    (modes/discover.md §1, and both shipped fixtures) is a numbered list of
+    bold titles and carries no URLs at all — so a URL-only check had nothing to
+    grip on the very format the mode prescribes.
     """
     if not rows:
         return []
-    known = set()
+    section = _md_candidates_section(md_text)
+    if not section:
+        return []
+    known_urls = set()
     for row in rows:
         if not isinstance(row, dict):
             continue
         for field in ("url", "source_id", "id"):
             value = str(row.get(field) or "").strip()
             if value:
-                known.add(value)
-                known.add(value.split("?", 1)[0].split("#", 1)[0])
+                known_urls.add(value)
+                known_urls.add(value.split("?", 1)[0].split("#", 1)[0])
+
     findings = []
-    for url in dict.fromkeys(_MD_URL.findall(md_text or "")):
+    for url in dict.fromkeys(_MD_URL.findall(section)):
         stem = url.split("?", 1)[0].split("#", 1)[0].rstrip("/.,;")
-        if any(stem == k or stem in k or k in stem for k in known if k):
+        if any(stem == k or stem in k or k in stem for k in known_urls if k):
             continue
         findings.append(
-            f"MD_ROW_NOT_IN_SHORTLIST: shortlist.md renders {url!r}, which "
-            "matches no row in shortlist.yaml. The .md is the document the user "
-            "reads and acts on; a posting that exists only there was retrieved "
-            "by nothing. If a row was deleted for a provenance finding, delete "
-            "it from BOTH files.")
+            f"MD_ROW_NOT_IN_SHORTLIST: shortlist.md §1 links {url!r}, which matches "
+            "no row in shortlist.yaml.")
+    # The COUNT is the anchor, not the title. Step 6 legitimately normalises a
+    # row's title (de-duplication compares on a normalised form), which is why
+    # `title` is not an anchored field anywhere else in this file and why
+    # test_a_title_normalised_in_step_6_stays_quiet exists. Matching on it would
+    # hard-fail an honest round that cleaned up a card's title — the cry-wolf this
+    # gate cannot afford. A count mismatch still catches both real shapes: a
+    # fabricated posting appended to the .md, and a row deleted from the .yaml
+    # while left in the .md, which is the remediation trap.
+    rendered = len(_MD_NUMBERED.findall(section))
+    if rendered and rendered != len(rows):
+        findings.append(
+            f"MD_ROW_COUNT_MISMATCH: shortlist.md §1 renders {rendered} postings "
+            f"but shortlist.yaml carries {len(rows)} rows")
     return findings
 
 
-_PAGE_ARG = re.compile(r"--page[= ]\s*(\d+)")
+# Adapters paginate with different flags, and the repo's OWN linkedin fixture
+# uses `--start`, not `--page` — so a `--page`-only reader let 300 result
+# slots be crawled off one site under a declared cap of two, using the flag
+# the honest fixture uses. `--start`/`--offset` are row offsets: each distinct
+# value is a distinct page of results, which is exactly what the cap counts.
+_PAGE_ARG = re.compile(r"--(?:page|start|offset|from)[= ]\s*(\d+)")
 
 
 def _pages_per_site(calls):
@@ -677,7 +737,7 @@ def _pages_per_site(calls):
     for call in calls:
         if call.get("command") != "search" or call.get("exit_code") != 0:
             continue
-        site = str(call.get("site") or "")
+        site = str(call.get("site") or "").strip().casefold()
         found = _PAGE_ARG.search(str(call.get("command_line") or ""))
         # A search with no --page is page 1: that is what the platform returns.
         pages.setdefault(site, set()).add(int(found.group(1)) if found else 1)

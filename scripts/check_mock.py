@@ -58,7 +58,11 @@ class MissingDependency(RuntimeError):
 
 # ----------------------------------------------------------------- transcript helpers
 
-_Q_HEADING = re.compile(r"^##\s+(Q\d+)\b", re.M)
+# `Q\d+[A-Za-z]?` so a sub-question heading (`## Q3b — follow-up`) is seen.
+# With `Q\d+\b` the reconciliation stated as fact something the reader can see
+# is false ("has no '## Q3b' heading"), and the Q3b answer became unquotable at
+# the same time — a bypass and a cry-wolf from one regex.
+_Q_HEADING = re.compile(r"^##\s+(Q\d+[A-Za-z]?)\b", re.M)
 
 
 def transcript_refs(text: str) -> set:
@@ -657,6 +661,27 @@ def _promotion_ref_resolves(row: dict, workspace: pathlib.Path) -> bool:
     return (workspace / candidate).is_file()
 
 
+def _candidate_words(transcript_text: str) -> str:
+    """Only the candidate's own turns, across every section of a transcript."""
+    sections = MB.transcript_sections(transcript_text or "")
+    if not sections:
+        return transcript_text or ""
+    return "\n".join(MB.candidate_only(body) for body in sections.values())
+
+
+def _read_cited(ref: str, workspace: pathlib.Path) -> str:
+    """The text of the transcript a claims row cites, or "" if it resolves to none."""
+    path_part = str(ref).split("#", 1)[0].strip()
+    if not path_part:
+        return ""
+    candidate = pathlib.Path(path_part)
+    target = candidate if candidate.is_absolute() else workspace / candidate
+    try:
+        return target.read_text(encoding="utf-8") if target.is_file() else ""
+    except OSError:
+        return ""
+
+
 def _check_promotions(claims_path: pathlib.Path, transcript_name: str,
                       transcript_text: str, workspace: pathlib.Path):
     """Validate every `session-answer` row citing this transcript.
@@ -676,7 +701,14 @@ def _check_promotions(claims_path: pathlib.Path, transcript_name: str,
         for row in rows:
             if not isinstance(row, dict) or row.get("source_kind") != "session-answer":
                 continue
-            if transcript_name not in str(row.get("source_ref", "")):
+            ref = str(row.get("source_ref", ""))
+            # A row citing ANOTHER round is still a claim that the candidate said
+            # something, and after a second mock that is the NORMAL shape. Skipping
+            # it made the "unconditional" validation conditional on which round
+            # happens to be gated — so a row could cite a transcript that does not
+            # exist and never be looked at by anything.
+            this_round = transcript_name in ref
+            if not this_round and "transcript-" not in ref:
                 continue
             missing = [f for f in _CLAIM_FIELDS if f not in row]
             if missing:
@@ -716,11 +748,21 @@ def _check_promotions(claims_path: pathlib.Path, transcript_name: str,
                     "not a source"
                 )
                 continue
-            if not _phrase_in(term, transcript_text):
+            # Read the transcript the row actually cites, and only the
+            # candidate's own turns in it. Matching the whole file let any skill,
+            # employer or number the INTERVIEWER put in a question — exactly what
+            # a persona does when it probes "did you use X?" — be promoted onto
+            # the tailored CV as something the candidate said.
+            cited_text = transcript_text if this_round else _read_cited(ref, workspace)
+            spoken = _candidate_words(cited_text)
+            if not _phrase_in(term, spoken):
+                where = transcript_name if this_round else ref
+                extra = (" — it appears only in the interviewer's words"
+                         if _phrase_in(term, cited_text) else "")
                 findings.append(
                     f"PROMOTION_NOT_IN_TRANSCRIPT: the promotion row for {term!r} "
-                    f"cites {transcript_name}, but {term!r} does not appear in it — "
-                    "the candidate never said this, so it has no session-answer source"
+                    f"cites {where}, but {term!r} is not in what the candidate "
+                    f"said there{extra}"
                 )
                 continue
             promoted.append(row)
