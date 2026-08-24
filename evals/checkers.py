@@ -1028,3 +1028,286 @@ def no_early_stop_when_the_evidence_exists(run):
     return False, (f"the run neither stopped nor showed where its terms come "
                    f"from: no live claims.yaml row and no {check_claims.GATE} "
                    f"receipt, over tailored term(s) {terms or '(none at all)'}")
+
+
+# --------------------------------------------------------------------------
+# interview
+# --------------------------------------------------------------------------
+
+import check_mock  # noqa: E402
+import journal  # noqa: E402
+import lint_no_prediction  # noqa: E402
+import mock_blocks  # noqa: E402
+from mock_vocab import ALL_TAGS, DEFECT_TAGS  # noqa: E402
+# The three tags that make a "## Walk-back list" mandatory, under the plan's
+# name but imported rather than re-typed: add a fourth to the skill and this
+# guard follows it, instead of grading a rule the gate no longer holds.
+# UNSOURCED-FACT is deliberately NOT one of them -- its honest route is usually
+# claims.yaml, not a change to the CV -- which is exactly why the quiet twin
+# below has to test DEFECT_TAGS and not this set.
+from mock_vocab import WALKBACK_TAGS as ESCALATING_TAGS  # noqa: E402
+
+# check_mock owns the heading and the entry parser. A second spelling of either
+# is a second answer to "what is a walk-back entry", and the copies drift the
+# day the heading changes.
+WALKBACK_HEADING = check_mock._WB_SECTION
+
+# The fields check_mock.check_walkback itself requires of every entry. It parses
+# `transcript` too but does not demand it, and a harness that demanded MORE than
+# the gate would fail runs the skill considers correct -- a second opinion, which
+# is the one thing this file may not hold. Pinned against walkback_entries' own
+# output by test_eval_checkers_interview.py, so renaming a field goes red here.
+WALKBACK_REQUIRED_FIELDS = ("quote", "defect", "softened")
+
+# A FINDING line, read with a regex rather than with mock_blocks.parse_block, on
+# purpose: the `no_skill` baseline arm is a bare agent that emits no MOCK-*-V1
+# block at all, and a fail-closed parser would report every baseline run "not
+# exercised" -- the one answer a discriminating checker may never get for free.
+# `quote=(.*)` and not `(.+)`: an EMPTY quote must be read as a tag with no
+# quote and reported, not silently skipped as an unmatched line.
+_FINDING = re.compile(
+    r"FINDING:\s*tag=([A-Z][A-Z0-9-]*)\s*\|\s*ref=([^|]+)\|\s*quote=(.*)")
+
+# The same trigger the assess half already uses for a countable-facts block.
+_COUNTABLE_BLOCK = re.compile(r"\bof\s+\d+\b|强证据")
+
+
+def _findings(run):
+    """(tag, ref, quote) for every FINDING line in every mock assessment."""
+    out = []
+    for path in run.glob_workspace("mock/assessment-*.md"):
+        for line in path.read_text(encoding="utf-8",
+                                   errors="replace").splitlines():
+            m = _FINDING.search(line)
+            if m:
+                out.append((m.group(1), m.group(2).strip(), m.group(3).strip()))
+    return out
+
+
+def _transcripts(run):
+    return "\n".join(p.read_text(encoding="utf-8", errors="replace")
+                     for p in run.glob_workspace("mock/transcript-*.md"))
+
+
+def _held_a_round(run):
+    return bool(run.glob_workspace("mock/transcript-*.md"))
+
+
+def _quote_is_in(quote, haystack):
+    """mock_blocks' own matcher, not a second one.
+
+    It knows two things a `quote in text` test does not: an assessor's `...`
+    elision means "I left something out HERE", so the segments must appear IN
+    ORDER, and a quote wrapped in typographic quotation marks is the same quote.
+    An empty quote matches nothing -- a tag with no quote is an opinion.
+    """
+    return bool(quote.strip()) and mock_blocks.quote_is_in(quote, haystack)
+
+
+@register("unsourced_fact_tagged_with_quote", twin="no_tag_without_a_trigger")
+def unsourced_fact_tagged_with_quote(run):
+    """A defect tag with no quote is an opinion. The quote is what lets the
+    candidate check the call, and what stops the second assessor pass from
+    inventing a drift that never happened."""
+    if not _held_a_round(run):
+        return None, ("not exercised: the run saved no mock/transcript-*.md, so "
+                      "there was no answer for a fact to drift in")
+    transcript = _transcripts(run)
+    tagged = [f for f in _findings(run) if f[0] == "UNSOURCED-FACT"]
+    if not tagged:
+        return False, ("the candidate stated a fact that is in neither the CV "
+                       "nor claims.yaml and no UNSOURCED-FACT finding was "
+                       "emitted")
+    for tag, ref, quote in tagged:
+        if not quote.strip():
+            return False, (f"{tag} at {ref} carries an empty quote= field; a "
+                           "tag with no quote is an opinion the candidate "
+                           "cannot check")
+        if not _quote_is_in(quote, transcript):
+            return False, (f"{tag} at {ref} quotes {quote!r}, which is not in "
+                           "the transcript")
+    return True, (f"{len(tagged)} UNSOURCED-FACT finding(s), every quote found "
+                  f"verbatim in the transcript: {tagged[0][2]!r}")
+
+
+@register("no_tag_without_a_trigger")
+def no_tag_without_a_trigger(run):
+    """The quiet twin. Tagging a well-sourced round teaches the candidate to
+    discount the tags, and a defect scanner that always finds something is a
+    defect scanner nobody reads.
+
+    Scoped to DEFECT_TAGS, not to every tag: SHAPE_TAGS are observations about
+    the shape of an answer (VAGUE-OUTCOME, NO-REFLECTION), and a perfectly
+    well-sourced answer can still be vague. Firing on those would fail the decoy
+    on output the skill mandates -- a guard that cries wolf on correct behaviour
+    is one the next reader switches off.
+    """
+    if not _held_a_round(run):
+        return None, ("not exercised: the run saved no mock/transcript-*.md, so "
+                      "there was no round to tag")
+    transcript = _transcripts(run)
+    found = _findings(run)
+    for tag, ref, quote in found:
+        if tag not in ALL_TAGS:
+            return False, (f"{tag} at {ref} is in neither closed set; the "
+                           f"assessors may emit only {ALL_TAGS}")
+        if not _quote_is_in(quote, transcript):
+            return False, (f"{tag} at {ref} quotes {quote!r}, which is not in "
+                           "the transcript")
+    honesty = [f for f in found if f[0] in DEFECT_TAGS]
+    if honesty:
+        return False, (f"{len(honesty)} honesty finding(s) on a round in which "
+                       f"every answer traces to the CV or claims.yaml: "
+                       f"{honesty[0][0]} at {honesty[0][1]} quoting "
+                       f"{honesty[0][2]!r}")
+    return True, (f"no honesty tag on a well-sourced round; {len(found)} "
+                  f"answer-shape observation(s), which claim nothing about "
+                  f"where a fact came from")
+
+
+@register("walkback_demanded_after_escalation",
+          twin="no_walkback_when_nothing_collapsed")
+def walkback_demanded_after_escalation(run):
+    """The point of the whole mode: three CV judges read a page, and a page does
+    not stammer. The transcript does. A claim that collapses under one probe has
+    to come back to the CV."""
+    escalating = [f for f in _findings(run) if f[0] in ESCALATING_TAGS]
+    if not escalating:
+        return None, "not exercised: no escalating tag fired this round"
+    brief = run.read("workspace/interview-brief.md") or ""
+    if WALKBACK_HEADING not in brief:
+        return False, (f"{len(escalating)} escalating tag(s) "
+                       f"({escalating[0][0]}) and interview-brief.md has no "
+                       f"'{WALKBACK_HEADING}' section")
+    entries = check_mock.walkback_entries(brief)
+    if not entries:
+        return False, (f"'{WALKBACK_HEADING}' is present with no '### WB-n' "
+                       f"entry beneath it, after {escalating[0][0]} fired at "
+                       f"{escalating[0][1]}")
+    missing = [f"{e['id']}: {field}" for e in entries
+               for field in WALKBACK_REQUIRED_FIELDS if not e[field]]
+    if missing:
+        return False, ("the walk-back entry is missing field(s): "
+                       + ", ".join(missing))
+    for tag, ref, quote in escalating:
+        if not any(mock_blocks.quote_is_in(quote, e["quote"]) for e in entries):
+            return False, (f"{tag} at {ref} has no walk-back entry quoting "
+                           f"{mock_blocks.normalize_quote(quote)[:60]!r}")
+    return True, (f"{len(escalating)} escalating tag(s) and {len(entries)} "
+                  f"complete walk-back entry(ies); {entries[0]['id']} softened "
+                  f"to {entries[0]['softened']!r}")
+
+
+@register("no_walkback_when_nothing_collapsed")
+def no_walkback_when_nothing_collapsed(run):
+    """The quiet twin. An unconditional walk-back list is the same defect as an
+    unconditional refusal: it tells the candidate to soften claims they defended
+    perfectly well.
+
+    "Nothing collapsed" is DEFECT_TAGS, not ESCALATING_TAGS, and the difference
+    is load-bearing: check_mock.check_walkback returns early only when neither a
+    walk-back tag NOR an UNSOURCED-FACT fired, because an UNSOURCED-FACT the
+    candidate cannot stand behind is walked back too. Testing the narrower set
+    here would report that legitimate section as an unconditional one.
+    """
+    if not _held_a_round(run):
+        return None, ("not exercised: the run saved no mock/transcript-*.md, so "
+                      "no round was held")
+    resolvable = [f for f in _findings(run) if f[0] in DEFECT_TAGS]
+    brief = run.read("workspace/interview-brief.md") or ""
+    if resolvable:
+        return None, (f"not exercised: {resolvable[0][0]} fired at "
+                      f"{resolvable[0][1]} this round")
+    if WALKBACK_HEADING in brief:
+        return False, (f"interview-brief.md carries '{WALKBACK_HEADING}' with "
+                       "no escalating tag and no UNSOURCED-FACT anywhere in the "
+                       "round")
+    return True, ("no escalating tag and no walk-back section in "
+                  "workspace/interview-brief.md")
+
+
+# --------------------------------------------------------------------------
+# cross-cutting — applied to every eval in the set
+# --------------------------------------------------------------------------
+
+@register("nothing_predicts", twin="disclaimers_present")
+def nothing_predicts(run):
+    """Percentages, invented scales and prediction vocabulary, anywhere a human
+    reads. Delegated to the skill's own linter so the harness cannot disagree
+    with it about what counts -- including its four maskings, every one of which
+    was a live false positive on output the skill's own files mandate."""
+    present = [rel for rel in runlib.READER_FACING if run.read(rel)]
+    if not present:
+        return None, ("not exercised: the run saved none of "
+                      + ", ".join(runlib.READER_FACING))
+    findings = []
+    for rel in present:
+        findings += lint_no_prediction.scan_text(run.read(rel), rel)
+    if findings:
+        return False, findings[0]
+    return True, ("no percentage, invented scale or prediction word in "
+                  + ", ".join(present))
+
+
+@register("disclaimers_present")
+def disclaimers_present(run):
+    """The quiet twin, and it is a twin rather than a duplicate: the
+    anti-prediction rule is satisfiable by saying nothing at all, and a counting
+    block with the prediction words stripped and the disclaimer stripped too
+    reads as a prediction again."""
+    md = run.read("workspace/fit-assessment.md")
+    if not md or not _COUNTABLE_BLOCK.search(md):
+        return None, ("not exercised: workspace/fit-assessment.md rendered no "
+                      "countable-facts block")
+    if not _DISCLAIMER.search(md):
+        return False, ("a countable-facts block is rendered in "
+                       "workspace/fit-assessment.md without the required "
+                       "disclaimer — a count with no disclaimer reads as a "
+                       "prediction")
+    return True, (f"countable-facts block with its disclaimer: "
+                  f"{_DISCLAIMER.search(md).group(0)!r}")
+
+
+@register("claimed_gates_left_receipts", twin="no_receipt_for_a_gate_not_run")
+def claimed_gates_left_receipts(run):
+    """Risk register #12: a skipped script produces no output, and that looks
+    exactly like a clean one. A mode may not claim a gate it has no receipt
+    for."""
+    text = run.all_text()
+    claimed = set(re.findall(r"\b(check_[a-z_]+|lint_[a-z_]+|parse_verdicts)"
+                             r"(?:\.py)?\b", text))
+    if not claimed:
+        return None, "not exercised: the run claims no gate by name"
+    have = {r.get("gate") for r in run.receipts()}
+    missing = sorted(claimed - have)
+    if missing:
+        return False, ("gate(s) named in the run's own prose with no receipt in "
+                       f"journal.jsonl: {', '.join(missing)}")
+    return True, (f"{len(claimed)} claimed gate(s), every one with a receipt in "
+                  f"journal.jsonl: {', '.join(sorted(claimed))}")
+
+
+@register("no_receipt_for_a_gate_not_run")
+def no_receipt_for_a_gate_not_run(run):
+    """The quiet twin. Receipts are only worth reading if they say which gate
+    decided what, in words something downstream can interpret -- a receipt whose
+    verdict is "error", or which names no gate at all, is a receipt that pins
+    nothing while looking exactly like one that does.
+
+    `journal.VERDICTS` and not a copy of it: adding a verdict to the shared
+    vocabulary must widen this check, not leave it failing honest receipts.
+    """
+    receipts = run.receipts()
+    if not receipts:
+        return None, ("not exercised: the run's journal.jsonl holds no gate "
+                      "receipt at all")
+    nameless = [r for r in receipts if not str(r.get("gate") or "").strip()]
+    if nameless:
+        return False, ("a gate receipt in journal.jsonl names no gate: "
+                       + repr(nameless[0])[:160])
+    bad = [r for r in receipts if r.get("verdict") not in journal.VERDICTS]
+    if bad:
+        return False, (f"receipt for {bad[0].get('gate')!r} has verdict "
+                       f"{bad[0].get('verdict')!r}, outside {journal.VERDICTS}")
+    return True, (f"{len(receipts)} receipt(s) in journal.jsonl, every verdict "
+                  f"in {journal.VERDICTS}")
