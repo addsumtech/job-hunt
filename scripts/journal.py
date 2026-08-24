@@ -59,13 +59,28 @@ def sha256_file(path) -> str:
     return h.hexdigest()
 
 
+def _decode(path) -> str:
+    """Journal text, with an unreadable byte sequence surviving as U+FFFD.
+
+    A killed process cuts the newest line at an arbitrary BYTE, and this file is
+    full of `—` and `…` and non-ASCII company names — so the cut lands
+    mid-character often. `read_text(encoding="utf-8")` then raises
+    UnicodeDecodeError, which took down `corrupt_lines`, `read_receipts`,
+    `_records` and `latest_mode_entry` together: the exact scenario
+    JOURNAL_CORRUPT exists to report, turned into an unhandled crash, leaving the
+    previous `pass` as the newest readable receipt. Replacement characters make
+    the line fail to parse, which is what corruption should look like.
+    """
+    return pathlib.Path(path).read_bytes().decode("utf-8", errors="replace")
+
+
 def _records(workspace):
     """Every parseable JSON record in the journal, oldest first."""
     path = pathlib.Path(workspace) / "journal.jsonl"
     if not path.exists():
         return []
     out = []
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in _decode(path).splitlines():
         line = line.strip()
         if not line:
             continue
@@ -98,7 +113,7 @@ def corrupt_lines(workspace) -> list:
     if not path.exists():
         return []
     bad = []
-    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+    for number, line in enumerate(_decode(path).splitlines(), 1):
         line = line.strip()
         if not line:
             continue

@@ -104,6 +104,17 @@ def _stale_inputs(ws: pathlib.Path, gate: str, receipt: dict) -> list:
     """
     findings = []
     for label, recorded in sorted((receipt.get("input_hashes") or {}).items()):
+        # `ws / "/abs/path"` returns the ABSOLUTE path and `ws / "../x"` walks out
+        # of the workspace, so a receipt could bind its proof to any file on the
+        # machine and this loop would hash it and call the gate fresh. A receipt is
+        # a claim about THIS workspace or it is not evidence.
+        candidate = pathlib.Path(label)
+        if candidate.is_absolute() or ".." in candidate.parts:
+            findings.append(
+                f"RECEIPT_INPUT_OUTSIDE_WORKSPACE: {gate} recorded {label!r}, which "
+                f"is not inside the workspace — a gate's proof has to be about a "
+                f"file in the package being delivered")
+            continue
         path = ws / label
         if not path.exists():
             findings.append(

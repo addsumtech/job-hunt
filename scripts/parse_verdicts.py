@@ -171,6 +171,17 @@ def main(argv=None) -> int:
                   file=sys.stderr)
             return 2
 
+    distinct = {p.resolve() for p in paths.values()}
+    if len(distinct) < len(paths):
+        journal.receipt(ws, GATE, {}, "could_not_run",
+                        ["SAME_TRANSCRIPT: the three judges are not three files"])
+        print(f"cannot run {GATE}: --ats, --recruiter and --hiring-manager resolve "
+              f"to {len(distinct)} distinct file(s), not 3. The review loop's whole "
+              f"claim is that three INDEPENDENT judges agreed; one file read three "
+              f"times is one judge, and the receipt's input_hashes would collapse "
+              f"to a single entry and hide it.", file=sys.stderr)
+        return 2
+
     judges = {n: parse_judge(p.read_text(encoding="utf-8")) for n, p in paths.items()}
     combined = combine(judges)
     redispatch = [n for n in JUDGES if judges[n]["verdict"] == "AMBIGUOUS"]
@@ -197,6 +208,18 @@ def main(argv=None) -> int:
         "combined_verdict": combined,
         "redispatch": redispatch,
     })
+    hashes = {_relative(p, ws): journal.sha256_file(p) for p in paths.values()}
+    previous = [r for r in journal.read_receipts(ws, GATE)
+                if r.get("round") is not None and int(r["round"]) != int(args.round)]
+    if previous and set((previous[-1].get("input_hashes") or {}).values()) == set(hashes.values()):
+        # Stamping the round forced the parser to RUN for round n; it did not force
+        # it to run on round n's JUDGEMENTS. Re-parsing the previous round's
+        # transcripts produced a correctly-stamped receipt for a round nobody judged.
+        findings.append(
+            f"SAME_JUDGEMENTS_AS_ROUND_{previous[-1]['round']}: the three transcripts "
+            f"are byte-identical to the ones parsed for round "
+            f"{previous[-1]['round']}. Re-parsing an earlier round's replies is not a "
+            f"new round — dispatch the judges again against the current package")
     for f in findings:
         print(f)
     # The receipt reports on the PARSE, not on the round. A round that parsed
@@ -227,9 +250,7 @@ def main(argv=None) -> int:
     # rests on — would have been the one required gate whose receipt could not be
     # checked. Nothing reads these keys by name (the path-keyed map
     # check_render_freshness uses is a different field, `dispatch.input_hashes`).
-    journal.receipt(ws, GATE,
-                    {_relative(p, ws): journal.sha256_file(p)
-                     for p in paths.values()},
+    journal.receipt(ws, GATE, hashes,
                     "fail" if combined == "AMBIGUOUS" else "recorded", findings,
                     extra={"round": int(args.round)})
     return 0 if combined == "PASS" else 1

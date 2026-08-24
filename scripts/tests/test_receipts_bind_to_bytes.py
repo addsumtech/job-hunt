@@ -218,3 +218,74 @@ def test_a_markdown_only_run_is_still_deliverable(tmp_path, capsys):
     journal.receipt(ws, "check_pages", {}, "could_not_run",
                     [f"MISSING_INPUT: {ws / 'cv.pdf'}"])
     assert run(ws, root) == (0, [])
+
+
+# ── the close-out batch: what the verification found still open ───────────────
+
+def test_a_receipt_cannot_bind_its_proof_to_a_file_outside_the_workspace(tmp_path):
+    """`ws / "/abs"` returns the absolute path and `ws / "../x"` walks out, so a
+    receipt could bind its proof to any file on the machine and check_apply would
+    hash it and call the gate fresh."""
+    root = T._skill_root(tmp_path)
+    ws = T._good_workspace(tmp_path, root, skip=("lint_cv",))
+    outside = tmp_path / "elsewhere.md"
+    outside.write_text("clean\n", encoding="utf-8")
+    journal.receipt(ws, "lint_cv", {str(outside): journal.sha256_file(outside)}, "pass")
+    rc, codes = run(ws, root)
+    assert rc == 1 and "RECEIPT_INPUT_OUTSIDE_WORKSPACE" in codes
+
+
+def test_a_journal_cut_mid_character_is_corruption_not_a_crash(tmp_path):
+    """The exact scenario JOURNAL_CORRUPT exists for. Findings are full of `—` and
+    `…` and company names are often non-ASCII, so a killed process cuts
+    mid-character often — and `read_text(encoding="utf-8")` then raised
+    UnicodeDecodeError, taking corrupt_lines, read_receipts, _records and
+    latest_mode_entry down together and leaving the previous `pass` as the newest
+    readable receipt."""
+    ws = tmp_path / "ws"
+    journal.receipt(ws, "lint_cv", {}, "pass")
+    journal.receipt(ws, "check_claims", {}, "fail",
+                    ["UNSOURCED: 'Kubernetes' — appears in no evidence block"])
+    raw = (ws / "journal.jsonl").read_bytes()
+    (ws / "journal.jsonl").write_bytes(raw[:-12])      # cut mid multi-byte char
+    assert journal.corrupt_lines(ws) == [2]
+    assert [r["gate"] for r in journal.read_receipts(ws)] == ["lint_cv"]
+
+
+def test_three_judges_must_be_three_files(tmp_path):
+    """`{_relative(p): sha}` collapses identical paths, so one hand-written
+    `VERDICT: PASS` became a unanimous three-judge PASS and the receipt meant to
+    prove otherwise recorded a single entry."""
+    import parse_verdicts
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    one = ws / "judge.txt"
+    one.write_text("VERDICT: PASS\nCOVERAGE: 9/9\n", encoding="utf-8")
+    rc = parse_verdicts.main(["--workspace", str(ws), "--round", "1",
+                              "--ats", str(one), "--recruiter", str(one),
+                              "--hiring-manager", str(one)])
+    assert rc == 2
+    last = journal.read_receipts(ws, "parse_verdicts")[-1]
+    assert last["verdict"] == "could_not_run"
+    assert any(f.startswith("SAME_TRANSCRIPT") for f in last["findings"])
+
+
+def test_re_parsing_the_previous_rounds_replies_is_reported(tmp_path, capsys):
+    """The round stamp forced the parser to RUN for round n; it did not force it
+    to run on round n's JUDGEMENTS. Re-parsing round 1's transcripts produced a
+    correctly-stamped round-2 receipt for a round nobody judged."""
+    import parse_verdicts
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    names = []
+    for name in ("ats", "recruiter", "hm"):
+        p = ws / f"{name}.txt"
+        p.write_text("VERDICT: PASS\nCOVERAGE: 9/9\n", encoding="utf-8")
+        names.append(str(p))
+    argv = ["--workspace", str(ws), "--ats", names[0],
+            "--recruiter", names[1], "--hiring-manager", names[2]]
+    assert parse_verdicts.main(argv + ["--round", "1"]) == 0
+    capsys.readouterr()
+    assert parse_verdicts.main(argv + ["--round", "2"]) == 0   # same files, new round
+    out = capsys.readouterr().out
+    assert "SAME_JUDGEMENTS_AS_ROUND_1" in out
