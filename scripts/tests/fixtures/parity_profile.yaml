@@ -1,0 +1,51 @@
+# Every leaf is a unique sentinel. Uniqueness is load-bearing: with realistic
+# values ("Amsterdam", "Leiden") a substring probe reports a field as present in
+# a format that never rendered it, because some other field happened to contain
+# the same word.
+meta:
+  name: "Zq01name"
+  target_market: "nl"
+  language: "en"
+  headline: "Zq02headline"
+  photo: "/private/tmp/claude-501/-Users-donghanglyu/de2bef52-f8cc-48b5-b104-15b2ef21b00d/scratchpad/parity/photo.png"
+  headings: {summary: "Zq42headingoverride"}
+contact:
+  email: "Zq03email@example.com"
+  phone: "Zq04phone"
+  location: "Zq05loc"
+  personal:
+    zq06_dob_key: "Zq07dobval"
+    zq08_nat_key: "Zq09natval"
+  links:
+    linkedin: "linkedin.com/in/zq10linkedin"
+    portfolio: {label: "Zq13plabel", url: "zq14portfolio.dev"}
+summary: "Zq15summary"
+experience:
+  - title: "Zq16extitle"
+    org: "Zq17exorg"
+    location: "Zq18exloc"
+    start: "Zq19exstart"
+    end: "Zq20exend"
+    bullets: ["Zq21exbullet"]
+education:
+  - degree: "Zq22eddegree"
+    institution: "Zq23edinst"
+    location: "Zq24edloc"
+    start: "Zq25edstart"
+    end: "Zq26edend"
+    details: "Zq27eddetails"
+skills:
+  zq28skgroup: ["Zq29skitem"]
+projects:
+  - name: "Zq32prname"
+    role: "Zq33prrole"
+    description: "Zq34prdesc"
+    links: ["github.com/zq35projlink"]
+publications: ["Zq36pub"]
+awards: ["Zq37award"]
+certifications: ["Zq38cert"]
+achievements: ["Zq39ach"]
+board: ["Zq40board"]
+volunteer: ["Zq41vol"]
+extras:
+  photo: true

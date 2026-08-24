@@ -776,9 +776,14 @@ def render_markdown(profile):
             if not out:
                 out += ["", f"## {h['education']}"]
             dates = f"{ed.get('start','')} – {ed.get('end','')}".strip(" –")
+            # `location` mirrors experience: the schema advertises it (assets/profile.example.yaml)
+            # and until now no renderer read it, so it was a field the docs promised and the
+            # product silently discarded.
+            meta_bits = " · ".join(b for b in
+                                   [str(ed.get("location") or "").strip(), dates] if b)
             line = f"**{ed.get('degree','')}**, {ed.get('institution','')}"
-            if dates:
-                line += f"  \n_{dates}_"
+            if meta_bits:
+                line += f"  \n_{meta_bits}_"
             out.append(line)
             if ed.get("details"):
                 out.append(f"- {ed['details']}")
@@ -939,8 +944,10 @@ def render_docx(profile, out_path):
             doc.add_paragraph().add_run(
                 f"{ed.get('degree','')}, {ed.get('institution','')}").bold = True
             dates = f"{ed.get('start','')} – {ed.get('end','')}".strip(" –")
-            if dates:
-                doc.add_paragraph(dates)
+            meta_bits = " · ".join(b for b in
+                                   [str(ed.get("location") or "").strip(), dates] if b)
+            if meta_bits:
+                doc.add_paragraph(meta_bits)
             if ed.get("details"):
                 doc.add_paragraph(ed["details"])
 
@@ -1466,8 +1473,19 @@ def build_latex(profile, cjk=None, engine=None, asset_dir=None, asset_stem="cv")
         parts.append(r"\section*{%s}" % h["experience"])
         for ex in exp:
             dates = f"{ex.get('start','')} -- {ex.get('end','')}".strip(" -")
+            # `location` is on the right with the dates, matching the `location ·
+            # dates` line render_markdown and render_docx already emit. It used
+            # to be dropped here and only here, so a candidate whose two jobs
+            # were in different cities kept that in the .md the judges read and
+            # lost it from the PDF the employer opens — the whole class of defect
+            # this file's audit was about.
+            bits = [b for b in (str(ex.get("location") or "").strip(), dates) if b]
+            # `\textbullet{}` is this file's separator, and it has to be joined
+            # AFTER escaping: a raw U+00B7 does not typeset on the T1 pdflatex
+            # path, which is exactly what test_latex_no_raw_middot pins.
+            right = r" \textbullet{} ".join(e(b) for b in bits)
             parts.append(r"\textbf{%s}, %s \hfill %s\\" % (
-                e(ex.get("title", "")), e(ex.get("org", "")), e(dates)))
+                e(ex.get("title", "")), e(ex.get("org", "")), right))
             bullets = as_list(ex.get("bullets"))
             if bullets:
                 parts.append(r"\begin{itemize}")
@@ -1481,8 +1499,10 @@ def build_latex(profile, cjk=None, engine=None, asset_dir=None, asset_stem="cv")
         parts.append(r"\section*{%s}" % h["education"])
         for ed in edu:
             dates = f"{ed.get('start','')} -- {ed.get('end','')}".strip(" -")
+            bits = [b for b in (str(ed.get("location") or "").strip(), dates) if b]
+            right = r" \textbullet{} ".join(e(b) for b in bits)
             parts.append(r"\textbf{%s}, %s \hfill %s\\" % (
-                e(ed.get("degree", "")), e(ed.get("institution", "")), e(dates)))
+                e(ed.get("degree", "")), e(ed.get("institution", "")), right))
             if ed.get("details"):
                 parts.append(e(ed["details"]) + r"\\")
 
