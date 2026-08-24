@@ -140,6 +140,24 @@ def test_no_harness_module_carries_a_machine_specific_absolute_path(prefix):
     """A committed absolute path passes on the machine that wrote it and fails
     everywhere else, usually blaming an unrelated module. Paths are computed from
     __file__ or come in as a parameter."""
-    for path in sorted(EVALS_DIR.glob("*.py")):
-        assert prefix not in path.read_text(encoding="utf-8"), \
-            f"{path.name} carries the machine-specific path {prefix!r}"
+    # EVERY committed file under evals/, not only *.py. The scan used to glob
+    # "*.py", and the file that actually burned this project was a test FIXTURE
+    # (.yaml) carrying a scratchpad path: `make check` then failed on every
+    # machine but the one that wrote it, with a message naming an unrelated
+    # module. Scenarios, fixtures, assertions.yaml and the stub are exactly the
+    # files most likely to grow a path someone pasted from their own shell.
+    import subprocess  # local: only this test shells out
+    listed = subprocess.run(["git", "ls-files", "evals"], cwd=str(_REPO_ROOT),
+                            capture_output=True, text=True)
+    assert listed.returncode == 0, "could not list committed evals files"
+    committed = [_REPO_ROOT / rel for rel in listed.stdout.split() if rel.strip()]
+    assert len(committed) > 20, (
+        f"only {len(committed)} committed files found under evals/ — the scan is "
+        f"not reaching the tree it is supposed to guard")
+    for path in committed:
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue                     # a binary fixture cannot carry a path
+        assert prefix not in text, \
+            f"{path.relative_to(_REPO_ROOT)} carries the machine-specific path {prefix!r}"
