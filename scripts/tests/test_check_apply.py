@@ -9,6 +9,7 @@ import pytest
 import yaml
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
+from findings import assert_finding, assert_no_finding, assert_clean
 import check_apply
 import check_claims
 import check_render_freshness as crf
@@ -218,8 +219,15 @@ def test_a_rejected_round_without_an_honest_stop_fails(tmp_path, capsys):
     rounds.merge_round(ws, 1, {"combined_verdict": "REJECT"})
     assert check_apply.main(_argv(ws, root)) == 1
     out = capsys.readouterr().out
-    assert "NO_PASS_NO_STOP" in out
-    assert "poorly_built" in out and "honest_stretch" in out
+    # The CODE at line start, not a free substring. All three of the strings this
+    # used to assert also occur inside a NEIGHBOURING finding's prose, so deleting
+    # the branch that emits NO_PASS_NO_STOP left every test in this file passing —
+    # and that branch is what tells a stretch candidate whether the package was
+    # badly built or simply a reach. See scripts/tests/findings.py.
+    line = assert_finding(out, "NO_PASS_NO_STOP")
+    assert "poorly_built" in line and "honest_stretch" in line, (
+        "the finding itself must offer both classifications, not merely appear "
+        "in output that mentions them somewhere")
 
 
 # The "a complete honest stop passes" case lives at the bottom of this file as
