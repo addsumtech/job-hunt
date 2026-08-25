@@ -178,3 +178,62 @@ def test_a_summary_that_disagrees_with_its_rows_is_rejected():
     doc["summary"]["passed"] = 2
     out = lint_grading.check(doc, "g.json")
     assert any(f.startswith("SUMMARY_MISMATCH") for f in out)
+
+
+def test_re_grading_a_fixed_run_reports_the_fix(tmp_path):
+    """The grader must be idempotent against the ARTIFACTS, not against itself.
+
+    Measured before the guard existed: grade a broken run (journal verdict
+    "error") -> False. Repair the journal to "pass". Re-grade -> still False,
+    with the stale evidence still quoting 'error'. The fix was invisible.
+
+    _existing() preserved any row carrying a verdict, which silently included
+    every PROGRAMMATIC one. The runbook's own loop is grade -> hand-grade ->
+    lint -> re-grade, so re-grading is the normal case: a harness that reports
+    yesterday's failure for a run that now passes is worse than one that never
+    re-grades at all, because the number looks current.
+    """
+    run = make_run(tmp_path, verdict="error")
+    first = grade.grade_run(run, EVAL)
+    assert first["expectations"][0]["passed"] is False
+    (run.dir / "grading.json").write_text(json.dumps(first), encoding="utf-8")
+
+    (run.outputs / "workspace" / "journal.jsonl").write_text(
+        json.dumps({"action": "gate", "gate": "check_shortlist",
+                    "verdict": "pass"}) + "\n", encoding="utf-8")
+    again = grade.grade_run(run, EVAL)
+    assert again["expectations"][0]["passed"] is True, (
+        "the run was repaired and re-graded, and the grader still reports the "
+        "old failure")
+    assert "error" not in again["expectations"][0]["evidence"]
+
+
+def test_a_human_grade_survives_but_a_programmatic_one_does_not(tmp_path):
+    """The two halves of the same rule, in one run.
+
+    A0-9 is graded_by_reader — no program can settle it, so the reader's verdict
+    must survive. A8-4 has a real checker, so its verdict must be recomputed
+    from the artifacts every time. Preserving both was the bug; preserving
+    neither would throw away the reader's work.
+    """
+    run = make_run(tmp_path, verdict="error")
+    (run.dir / "grading.json").write_text(json.dumps({"expectations": [
+        {"text": "The summary reads well.", "passed": True,
+         "evidence": "Summary line 1 names the pivot."},
+        {"text": "Receipt verdicts are in the closed set.", "passed": True,
+         "evidence": "stale: this was true on an earlier version of the run"},
+    ], "summary": {}}), encoding="utf-8")
+    doc = grade.grade_run(run, EVAL)
+    by_text = {r["text"]: r for r in doc["expectations"]}
+    assert by_text["The summary reads well."]["passed"] is True, "reader grade lost"
+    assert "pivot" in by_text["The summary reads well."]["evidence"]
+    assert by_text["Receipt verdicts are in the closed set."]["passed"] is False, (
+        "a programmatic verdict was preserved instead of recomputed")
+
+
+def test_the_awaiting_string_is_the_one_the_checker_actually_returns():
+    """grade.py branches on this string and lint_grading.py fails on it. Three
+    copies of a literal in three files is how they come to disagree."""
+    from evals import lint_grading  # noqa: F401
+    _, evidence = ck.CHECKERS["graded_by_reader"](None)
+    assert evidence == grade.AWAITING_READER_GRADE

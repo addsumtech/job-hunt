@@ -33,6 +33,9 @@ from evals import runlib  # noqa: E402
 from evals import schema  # noqa: E402
 
 ASSERTIONS = pathlib.Path(__file__).resolve().parent / "assertions.yaml"
+# The string evals/checkers.py hands back for a row only a reader can
+# settle, and the string evals/lint_grading.py fails on. Pinned by test.
+AWAITING_READER_GRADE = "AWAITING_READER_GRADE"
 
 
 def _existing(run):
@@ -59,9 +62,6 @@ def grade_run(run, eval_record):
     keep = _existing(run)
     rows = []
     for a in eval_record["assertions"]:
-        if a["text"] in keep:
-            rows.append(dict(keep[a["text"]]))
-            continue
         fn = ck.CHECKERS.get(a["checker"])
         if fn is None:
             # Not a crash: assertions.yaml is linted for this, so reaching here
@@ -76,6 +76,19 @@ def grade_run(run, eval_record):
             passed, evidence = fn(run)
         except Exception as exc:                      # noqa: BLE001
             passed, evidence = False, f"checker {a['checker']} raised {exc!r}"
+        # A human grade wins ONLY where the program cannot decide -- that is,
+        # where the checker itself hands the row to a reader. Preserving a
+        # PROGRAMMATIC verdict would make the grader non-idempotent against the
+        # artifacts: fix a run, re-grade it, and it still reports the old
+        # failure, with the old evidence, and the fix is invisible. Measured
+        # before this guard existed: a run whose journal was repaired from
+        # verdict "error" to "pass" still graded False on the second pass.
+        # The runbook's own loop is grade -> hand-grade -> lint -> re-grade, so
+        # re-grading is the normal case, not the exception.
+        if (passed is None and str(evidence) == AWAITING_READER_GRADE
+                and a["text"] in keep):
+            rows.append(dict(keep[a["text"]]))
+            continue
         rows.append({"text": a["text"], "passed": passed,
                      "evidence": str(evidence), "assertion_id": a["id"],
                      "role": a["role"], "checker": a["checker"]})
