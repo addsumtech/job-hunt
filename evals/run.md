@@ -103,14 +103,67 @@ Two things that cost time here, recorded so they do not cost it again:
   session that dies mid-run otherwise leaves the user without their skills and
   without the command to get them back.
 
+## Telling a run which arm it is in
+
+Installing the right skills is half of it. The run also has to be TOLD, without
+ambiguity, that using the installed skill is correct — or it will infer the arm
+from its surroundings and can infer it wrong.
+
+Measured at iteration-2. Five `old_skill` baselines were dispatched with
+`job-application` installed and a prompt saying "use whatever tools and skills you
+have available", plus "do NOT read anything under `~/code_project/job-hunt`".
+**Three of the five declined to invoke the skill and did the work by hand.** The
+run directory is named `baseline` and the prompt forbade the newer skill's repo;
+together those read as "this is the no-skill arm". From eval-16's notes:
+
+> this run lives under `job-hunt-workspace/.../baseline/` and I was explicitly
+> forbidden from reading `~/code_project/job-hunt`. That reads to me as "this is
+> the no-skill arm". [...] this is genuinely ambiguous and I may have called it
+> wrong.
+
+Nothing in the artifacts would have flagged it. Three no_skill runs would have
+been scored as the old_skill arm, and the apply-mode comparison — five of the
+twenty evals — would have been against the wrong control.
+
+So the old_skill dispatch prompt must say, in as many words:
+
+> There is a skill named `job-application` installed at
+> `~/.claude/skills/job-application`. It is part of this run's intended
+> environment. Invoke it and use it exactly as you normally would. This directory
+> is named `baseline` because it is the control arm for a DIFFERENT, newer skill
+> that is deliberately not installed right now.
+
+and any "do not read X" restriction must say explicitly that it does NOT extend
+to the skill the arm is exercising.
+
+**Verify from the artifacts, not from the prompt.** Whether the skill was used is
+visible in the workspace layout, which is independent of what the run says about
+itself:
+
+| | used `job-application` | hand-rolled |
+|---|---|---|
+| apply-mode workspace holds | `profile.yaml`, `posting.yaml`, `cv.tex`, `tailored-profile.yaml`, `job-profiles/` | `build_cv.py` and similar one-off scripts |
+
+Check every old_skill run against that before grading, and discard the ones that
+did not use it — under `<results>/discarded/`, which `runlib.iter_runs` cannot
+see, with the reason written down. A discarded run with no record is
+indistinguishable from one that never happened.
+
 ## Toolchain the apply evals depend on
 
-`xelatex` was NOT installed on this machine at iteration-2 (`pandoc` and
-`soffice` were). Several apply assertions ask that BOTH docx and pdf were
-produced. Check the renderer's dependencies before the matrix and record what is
-missing: a PDF that failed because a binary is absent is an environment result,
-not a skill result, and grading it as the latter would be the harness lying about
-its own subject.
+Several apply assertions ask that BOTH docx and pdf were produced, so check the
+renderer's dependencies before the matrix and record what is missing. A PDF that
+failed because a binary is absent is an environment result, not a skill result,
+and grading it as the latter would be the harness lying about its own subject.
+
+What was actually present at iteration-2, and a correction worth keeping: a first
+pass checked only `xelatex`, `pdflatex`, `pandoc` and `libreoffice`, found no
+xelatex, and concluded PDF rendering was at risk. **That conclusion was wrong.**
+The runs' own notes reported `tectonic` installed — a LaTeX engine the check had
+not thought to look for — alongside `pandoc`, `soffice`, `pdftoppm` and
+`pdftotext`, and every apply run produced its PDF. Check for the CAPABILITY (can
+this machine turn the renderer's input into a PDF) rather than for one binary's
+name, and confirm it by rendering something rather than by `command -v`.
 
 ## Stage 1 — pilot (baseline only, one run per guard eval)
 
