@@ -123,10 +123,32 @@ discover and interview scenarios have no counterpart there.
 Discover runs need the stub on PATH and a fixture selected:
 
 ~~~bash
-export PATH="$PWD/evals/fixtures:$PATH"
-ln -sf opencli-stub evals/fixtures/opencli
+# A DIRECTORY named `opencli` already exists under evals/fixtures — it holds the
+# JSON fixtures. So putting evals/fixtures itself on PATH provides no `opencli`
+# command at all, and symlinking the stub "onto" that path just drops a link
+# INSIDE the fixture directory. Do neither. Give the stub its own bin dir:
+EVALBIN="$(mktemp -d)/bin"; mkdir -p "$EVALBIN"
+ln -sf "$PWD/evals/fixtures/opencli-stub" "$EVALBIN/opencli"
+export PATH="$EVALBIN:$PATH"
 export JOBHUNT_EVAL_FIXTURE="$PWD/evals/fixtures/opencli/51job-403.json"
+
+# VERIFY BEFORE EVERY DISCOVER RUN. This must print $EVALBIN/opencli.
+which opencli
 ~~~
+
+**Check `which opencli` every time.** A real `opencli` is installed at
+`~/.local/bin/opencli` on this machine. With the wiring above missing or wrong,
+`opencli` resolves to THAT — a live, networked tool — and the discover evals
+silently run against the real site: not reproducible, not the fixture the
+scenario promises, and reaching a network the harness says it never reaches. The
+failure is silent, which is why the check is a step and not a footnote.
+
+| eval | fixture |
+|---|---|
+| 5 `discover-blocked-adapter` | `opencli/51job-403.json` |
+| 6 `discover-blank-identity-rows` | `opencli/indeed-blank-titles.json` |
+| 8 `discover-clean-retrieval` | `opencli/51job-ok.json` |
+| 9 `discover-fabricated-row` | none — starts from the prepared `fabricated` workspace and runs no new search |
 
 The stub refuses any write command outright; **do not attempt a login on any
 site**, in any arm, for any reason, and do not point a discover eval at a live

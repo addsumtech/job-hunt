@@ -3,6 +3,7 @@
 It is tested like code because it is the only place the 120-run procedure
 exists: a step that quietly goes missing costs a matrix.
 """
+import os
 import pathlib
 import re
 import subprocess
@@ -136,3 +137,31 @@ def test_every_eval_module_runs_as_a_script(module):
             f"2 means could-not-run, and 0 or 1 would be a claim about data "
             f"that is not there")
         assert proc.stderr.strip(), f"{module}.py exited 2 silently"
+
+
+def test_the_runbook_does_not_put_the_fixture_dir_on_path():
+    """`evals/fixtures/opencli` is a DIRECTORY of JSON fixtures, so putting
+    evals/fixtures on PATH provides no `opencli` command at all.
+
+    Measured on this machine: with that wiring, `which opencli` resolved to
+    /Users/<user>/.local/bin/opencli — the REAL, networked tool. A discover eval
+    run that way reaches the live site, which is not reproducible, is not the
+    fixture the scenario promises, and contradicts evals/README.md's claim that
+    nothing here reaches a network. It fails silently, which is the dangerous
+    part: the run looks like it worked.
+    """
+    assert (REPO / "evals" / "fixtures" / "opencli").is_dir(), (
+        "this test encodes why the naive PATH wiring fails; if opencli stopped "
+        "being a directory, revisit the runbook rather than deleting this")
+    assert 'export PATH="$PWD/evals/fixtures:$PATH"' not in RUNBOOK
+    assert "ln -sf opencli-stub evals/fixtures/opencli" not in RUNBOOK
+    assert "which opencli" in RUNBOOK, (
+        "the runbook must tell the operator to verify which opencli resolves")
+
+
+def test_the_stub_is_executable_and_the_fixtures_it_names_exist():
+    stub = REPO / "evals" / "fixtures" / "opencli-stub"
+    assert stub.is_file() and os.access(stub, os.X_OK), f"{stub} is not executable"
+    for name in ("51job-403.json", "indeed-blank-titles.json", "51job-ok.json"):
+        assert (REPO / "evals" / "fixtures" / "opencli" / name).is_file(), name
+        assert name in RUNBOOK, f"{name} is not wired to an eval in the runbook"
