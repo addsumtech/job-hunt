@@ -63,6 +63,55 @@ plugin aggregator discovers configurations by listing directories and deltas the
 first two in sorted order — a third name makes the headline compare the two
 baselines against each other.
 
+## Baseline isolation — do this before any baseline run
+
+A subagent dispatched on a machine where `job-hunt` is installed CAN SEE AND
+INVOKE IT. Measured 2026-08-25 with a probe agent, before the iteration-2 pilot:
+
+    job-hunt: PRESENT   job-application: PRESENT   (43 skills visible)
+
+A `no_skill` baseline run in that state is not a bare agent, and an `old_skill`
+run could invoke the NEW skill while being recorded as the old-skill arm. Either
+one voids the comparison this whole harness rests on — *a property both arms
+have is a property of the model, not of the skill* — so the isolation is a
+precondition, not a refinement.
+
+There is no per-agent skill-scoping setting, and subagents run in-process, so
+they cannot be given a different HOME. The only mechanism that works is making
+the skills undiscoverable in `~/.claude/skills` for the duration:
+
+| arm | `job-hunt` | `job-application` |
+|---|---|---|
+| `no_skill` baseline | moved aside | moved aside |
+| `old_skill` baseline | moved aside | present, at tag `job-application-baseline` |
+| `with_skill` | present | moved aside |
+
+**Verify with a probe agent after each change and before dispatching**, asking
+only what its own available-skills listing contains. The states above were each
+confirmed that way for iteration-2; do not assume a move took effect.
+
+Two things that cost time here, recorded so they do not cost it again:
+
+- **A symlink to a git WORKTREE was not discovered as a skill.** `job-hunt`
+  installed as a symlink to a normal repo IS discovered, so symlinks as such are
+  fine; a symlink to a worktree of the tag came back ABSENT from a probe, while
+  a real directory of the same content came back PRESENT. The mechanism was not
+  isolated — caching or timing could explain it — so the safe instruction is to
+  use a real directory, not a worktree symlink, and to probe either way.
+- **Write the restore path down before moving anything.** Anything that leaves
+  the skills directory must have a one-line restore committed to disk first; a
+  session that dies mid-run otherwise leaves the user without their skills and
+  without the command to get them back.
+
+## Toolchain the apply evals depend on
+
+`xelatex` was NOT installed on this machine at iteration-2 (`pandoc` and
+`soffice` were). Several apply assertions ask that BOTH docx and pdf were
+produced. Check the renderer's dependencies before the matrix and record what is
+missing: a PDF that failed because a binary is absent is an environment result,
+not a skill result, and grading it as the latter would be the harness lying about
+its own subject.
+
 ## Stage 1 — pilot (baseline only, one run per guard eval)
 
 1. `mkdir -p ~/code_project/job-hunt-workspace/iteration-2`
