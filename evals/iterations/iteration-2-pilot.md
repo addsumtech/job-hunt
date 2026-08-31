@@ -7,6 +7,12 @@ that exits 0, so the 120-run matrix was NOT dispatched.
 
 Every number here is counted from `grading.json` on disk. Nothing is estimated.
 
+**Status.** Two passes over the same fifteen runs. The first is recorded below
+exactly as it was measured; the second acted on it and is under
+"What was done about it". The gate now exits 0 — with **10 guards, not 26**.
+Read both halves before deciding whether to spend the matrix: the first says
+what was wrong, the second says what is left.
+
 ## The result
 
 | | count | share |
@@ -83,12 +89,97 @@ rather than searching. **The stub's determinism is detectable**, and a run that
 probes will discover it is synthetic — which is a real limit on what any discover
 eval here can show.
 
-## Before stage 2
+## What was done about it, and where it stands
 
-1. Re-role or re-aim the 12 unexercised guards. A checker that reads the skill's
-   private files cannot be a guard; point it at the final message, or make it a
-   regression assertion with the reason written down.
-2. Re-role the 6 the baseline passed to `regression`, each with its reason.
-3. Re-run the pilot. It must exit 0.
+Acting on the findings above, in a second pass over the same fifteen runs — no
+new runs were dispatched, every verdict below is a re-grade of artifacts already
+on disk.
+
+### The harness was blind three ways, and scored blindness as neutral
+
+Each produced "not exercised", which an aggregate treats as neutral, so the
+harness looked clean while it was failing to look.
+
+- **Path blindness.** Checkers read `workspace/<file>`; both skills write to
+  `workspace/job-profiles/<person>/applications/<slug>/`. eval-15 used the skill
+  and produced every artifact its guard needed — its CV carries the
+  `Geburtsdatum` line the guard asks about — and the guard said "not exercised".
+  The same skill on eval-14 happened to write flat and WAS graded, so the
+  difference between a measured guard and a silent one was the directory layout.
+- **A dead twin.** The skill writes `target_market: de`; the harness's tables
+  held only full names, so 20 of 22 ISO codes classified as neither cluster.
+  `us` and `uk` worked by luck. The strip GUARD was live and its retain DECOY
+  dead — and with the decoy dead, "strip the photo and date of birth from every
+  market", which damages a German or Chinese application, scores 100%. The
+  existing agreement test could not see it: it asks whether the skill agrees
+  with the harness's list, never whether the harness knows the skill's.
+- **A cry-wolf, created by fixing the first.** eval-15's scenario promises an
+  attached Bewerbungsfoto; the harness shipped no such file; the run rendered
+  without one because it could not do otherwise; the newly-sighted guard failed
+  it for dropping a conventional field. The photo is now shipped
+  (`evals/fixtures/assets/jonas.jpg`) and the checker separates "you dropped it"
+  from "it was never on disk".
+
+### What the 26 guards actually were
+
+|  | |
+|---|---|
+| 10 | read an artifact only job-hunt writes — its journal, `posting-source.txt`, its `UNSOURCED-FACT … quote=` tags. They ask *did job-hunt run*, not *did job-hunt help*. Now `regression`, `arms: [with_skill]`. |
+| 7 | were passed by the bare baseline. Real capabilities, now regressions carrying the measured evidence. |
+| 1 | awaited a reader. Graded: the baseline renders `## Licenses & Certifications` at cv.md:8, right after Summary and above Experience — which is the assertion. Passed. |
+| 8 | discriminated, and stand. |
+
+### The rule that stops this becoming a habit
+
+Every remedy above shrinks the eval, and the sequence ends at one that exits 0
+because nothing is left to fail. The lint now refuses a **mode** or an **eval**
+that has silently lost its last baseline-comparing guard: a reduction must be
+declared in `coverage` with a checkable reason, and a *stale* declaration is
+equally a finding, so the block cannot rot in either direction.
+
+That rule immediately caught interview mode dropping to zero — which is how the
+best finding of this pass got made instead of waved through.
+
+### The model's honesty discipline breaks in interview mode
+
+The same model that asserted no score in assess mode (evals 11 and 12) handed
+back, as an interviewer:
+
+    eval-18   "Verdict: no-hire at Senior on this evidence."
+    eval-19   "Verdict: would not advance. 8/25."
+
+job-hunt is forbidden both — D2 bans invented scales and SKILL.md says it never
+predicts an interview outcome. A candidate handed "8/25" has been given a number
+nobody can source, about an interview that never happened. Two new guards
+(A18-3, A19-4) with the quiet twin that stops "decline the round" scoring 100%.
+
+### Where it stands
+
+| | |
+|---|---|
+| **Guards** | **10, every one measured failing on the baseline** |
+| by mode | discover 1, assess 3, apply 4, interview 2 |
+| regression assertions | 45, of which 12 are `with_skill`-only audits |
+| `check_discrimination --pilot` | **exit 0** |
+| `lint_grading` / `lint_assertions` | exit 0 |
+
+The nominal guard count fell 26 → 10 because sixteen were never guards. The real
+count rose **8 → 10**, and the two new ones came from a measurement rather than
+a re-roling.
+
+Also removed: `RUN_NOTES.md` is no longer a graded surface. It is the run's
+candid diary, Stage 4 exists to read it, and every dispatch prompt tells the run
+nothing is graded against it — yet eval-12 was failed for a prediction on the
+string "5/5 required" inside its own notes. Grading candour is self-defeating.
+
+## Still open for stage 2
+
+1. Nothing blocks the matrix now; the gate passes. What it will
+   measure is 10 guards, not 26 — decide whether that is worth 120
+   runs before spending them.
+2. The 12 `with_skill`-only audits are graded on one arm, so their
+   runs still cost what a comparison costs and return less.
+3. `evals/fixtures/assets/jonas.jpg` must be staged into eval 15's
+   run directory, or its retain-guard measures the harness again.
 
 Findings as emitted: `<results>/pilot-findings.txt`.

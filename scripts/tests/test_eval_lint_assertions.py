@@ -394,3 +394,57 @@ def test_a_not_exercised_assertion_must_carry_its_reason_in_the_file():
     a["note"] = ("The checker reads job-hunt's own journal, which a bare agent "
                  "never writes; measured not-exercised in the iteration-2 pilot.")
     assert not any(f.startswith("UNEXPLAINED_SCOPING") for f in _lint(d))
+
+
+# ---- the same rule one level down, which mutation testing found untested ----
+#
+# The MODE-level rules above were tested; the EVAL-level ones were not, and the
+# data test only reads the real assertions.yaml — which is currently clean, so
+# it cannot notice the rule being switched off. Deleting EVAL_HAS_NO_GUARD and
+# its stale-declaration counterpart left the whole suite green.
+
+def _guardless(d):
+    for a in d["evals"][0]["assertions"] + d["evals"][1]["assertions"]:
+        a["role"] = "regression"
+        a["expected_baseline"] = "pass"
+    return d
+
+
+def test_an_eval_that_lost_its_last_guard_is_a_finding():
+    out = _lint(_guardless(_mode_doc()))
+    assert any(f.startswith("EVAL_HAS_NO_GUARD") for f in out), out
+
+
+def test_declaring_the_eval_makes_it_a_statement():
+    d = _guardless(_mode_doc(coverage={
+        "modes_without_a_guard": {
+            "discover": "Every discover property the harness can check is one "
+                        "the bare model already satisfies; measured 2026."},
+        "evals_without_a_guard": {
+            5: "Decoy by design: an ordinary successful round, so there is no "
+               "defence here for the baseline to fail.",
+            7: "Its guard reads job-hunt's own journal and can only audit the "
+               "with_skill arm; measured in the iteration-2 pilot."}}))
+    out = _lint(d)
+    assert not any(f.startswith("EVAL_HAS_NO_GUARD") for f in out), out
+
+
+def test_a_stale_eval_declaration_is_a_finding():
+    d = _mode_doc(coverage={"evals_without_a_guard": {
+        5: "Declared guard-free, but eval 5 still hosts a discriminating "
+           "assertion in this fixture."}})
+    out = _lint(d)
+    assert any(f.startswith("STALE_COVERAGE_DECLARATION") and "5" in f
+               for f in out), out
+
+
+def test_a_thin_eval_declaration_is_rejected():
+    d = _guardless(_mode_doc(coverage={"evals_without_a_guard": {5: "decoy"}}))
+    assert any(f.startswith("THIN_COVERAGE_REASON") for f in _lint(d))
+
+
+def test_declaring_an_eval_that_does_not_exist_is_caught():
+    d = _guardless(_mode_doc(coverage={"evals_without_a_guard": {
+        99: "An id nobody will ever look up, exempting nothing at all while "
+            "looking exactly like an exemption that works."}}))
+    assert any(f.startswith("UNKNOWN_EVAL") for f in _lint(d))
