@@ -500,6 +500,40 @@ def test_the_stub_is_executable():
 
 # ---- the photo eval-15's scenario promises ----------------------------------
 
+def _jpeg_size(path):
+    """(width, height) by walking the JPEG segments, or None if it is not one.
+
+    Deliberately dependency-free. The first version of this test imported PIL,
+    which passed on the machine that wrote it and failed in CI with
+    ModuleNotFoundError — PIL appears nowhere else in this repo, and
+    `render_cv.photo_format` reads magic bytes precisely so the skill needs no
+    imaging library. A committed fixture is byte-identical on every machine, so
+    skipping the check where a library is missing would mean the one place it
+    runs automatically never runs it.
+
+    Walks SOI, then each marker segment, to the frame header (SOF0-SOF15, minus
+    DHT/JPG/DAC) whose payload is precision, height, width.
+    """
+    data = pathlib.Path(path).read_bytes()
+    if data[:2] != b"\xff\xd8":
+        return None
+    i = 2
+    while i + 3 < len(data):
+        if data[i] != 0xFF:
+            return None
+        marker = data[i + 1]
+        if marker in (0xD8, 0x01) or 0xD0 <= marker <= 0xD7:
+            i += 2
+            continue
+        length = int.from_bytes(data[i + 2:i + 4], "big")
+        if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):
+            height = int.from_bytes(data[i + 5:i + 7], "big")
+            width = int.from_bytes(data[i + 7:i + 9], "big")
+            return width, height
+        i += 2 + length
+    return None
+
+
 def test_the_bewerbungsfoto_fixture_is_a_real_decodable_jpeg():
     """`apply-de-photo-conventional.md` says "Bewerbungsfoto liegt bei
     (assets/jonas.jpg)". In the iteration-2 pilot the harness shipped no such
@@ -507,24 +541,35 @@ def test_the_bewerbungsfoto_fixture_is_a_real_decodable_jpeg():
     and the retain-guard failed it for dropping one. Shipping the file is what
     turns that assertion back into a measurement of behaviour.
 
-    Checked by DECODING it, not by its extension: `render_cv.photo_format()`
+    Checked by PARSING it, not by its extension: `render_cv.photo_format()`
     reads magic bytes, and a text file named .jpg would fail the eval for a
     reason that has nothing to do with the skill.
     """
-    from PIL import Image
     import render_cv
 
     photo = REPO / "evals" / "fixtures" / "assets" / "jonas.jpg"
     assert photo.is_file(), f"{photo} is missing; the scenario promises it"
     assert render_cv.photo_format(photo) == "jpeg", (
         "the skill's own magic-byte check must accept it")
-    with Image.open(photo) as im:
-        im.load()
-        width, height = im.size
+    size = _jpeg_size(photo)
+    assert size is not None, "the file is not a parsable JPEG"
+    width, height = size
     assert (width, height) > (100, 100), f"{width}x{height} is not a usable photo"
     assert 0.6 < width / height < 0.9, (
         f"aspect {width / height:.2f} — a Bewerbungsfoto is portrait, near 3:4. "
         f"A square or 1x1 placeholder exercises a path no real photo takes.")
+
+
+def test_the_jpeg_parser_rejects_what_is_not_a_jpeg(tmp_path):
+    """Guards the test above: a parser that returned a size for anything would
+    make it vacuously green."""
+    text = tmp_path / "fake.jpg"
+    text.write_text("this is not a JPEG at all\n", encoding="utf-8")
+    assert _jpeg_size(text) is None
+    truncated = tmp_path / "cut.jpg"
+    truncated.write_bytes((REPO / "evals" / "fixtures" / "assets"
+                           / "jonas.jpg").read_bytes()[:8])
+    assert _jpeg_size(truncated) is None
 
 
 def test_the_scenario_that_needs_the_photo_still_names_that_filename():
@@ -533,3 +578,54 @@ def test_the_scenario_that_needs_the_photo_still_names_that_filename():
     scenario = (REPO / "evals" / "scenarios" /
                 "apply-de-photo-conventional.md").read_text(encoding="utf-8")
     assert "assets/jonas.jpg" in scenario
+
+
+def test_nothing_imports_a_package_ci_does_not_install():
+    """CI installs `requirements.txt` plus pytest, and nothing else.
+
+    MEASURED: a test of mine imported PIL. It passed on the machine that wrote
+    it — anaconda ships Pillow — and failed CI with ModuleNotFoundError. PIL
+    appears nowhere else in this repo; `render_cv.photo_format` reads magic
+    bytes precisely so the skill needs no imaging library.
+
+    The generalisation audit before it checked other LANGUAGES and never checked
+    another MACHINE, which is the same class of input: one the code was not
+    tuned on. This makes the next one a red line here instead of a red CI run.
+    """
+    import ast
+    import sys
+
+    requirements = (REPO / "requirements.txt").read_text(encoding="utf-8")
+    declared = {"pytest"}
+    for line in requirements.splitlines():
+        name = re.split(r"[<>=!\[;]", line.strip())[0].strip().lower()
+        if name:
+            declared.add({"pyyaml": "yaml", "python-docx": "docx"}.get(name, name))
+    stdlib = set(sys.stdlib_module_names)
+    local = {p.stem for p in (REPO / "scripts").rglob("*.py")} | {"evals"}
+
+    offenders = []
+    for path in sorted(list((REPO / "evals").rglob("*.py"))
+                       + list((REPO / "scripts").rglob("*.py"))):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            names = []
+            if isinstance(node, ast.Import):
+                names = [a.name.split(".")[0] for a in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                names = [node.module.split(".")[0]]
+            for name in names:
+                if name in stdlib or name in declared or name in local:
+                    continue
+                offenders.append(
+                    f"{path.relative_to(REPO)}:{node.lineno} imports {name!r}")
+    assert not offenders, (
+        "these will fail in CI, which installs only requirements.txt and "
+        "pytest:\n  " + "\n  ".join(offenders) +
+        "\nAdd the package to requirements.txt if the SKILL needs it, or write "
+        "the check without it — do not skip, because a committed file is "
+        "identical on every machine and skipping means CI never checks it.")
+    assert "yaml" in declared, "the requirements parse has broken"
