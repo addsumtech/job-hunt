@@ -20,7 +20,9 @@ phrases — `_says` / `_answer_after` / `_both` decide what "the document says
 this anchor" means for check_shortlist itself, and a second implementation here
 is a second answer to the same question.
 """
+import posixpath
 import re
+import unicodedata
 
 from check_shortlist import (DISCLOSURE_LABELS, EMPTINESS_PHRASES,
                              PROVISIONAL_STAMP, _answer_after, _both, _says)
@@ -102,7 +104,7 @@ def _ok_calls(run):
 
 
 def _rows(run):
-    return ((run.load_yaml("workspace/shortlist.yaml") or {}).get("rows") or [])
+    return ((run.load_yaml_any("workspace/shortlist.yaml") or {}).get("rows") or [])
 
 
 def _disclosure_carrier(run):
@@ -265,7 +267,7 @@ def blank_identity_rows_handled(run):
     blank = [r for r in _rows(run) if not (r.get("title") or "").strip()]
     detail_calls = [c for c in run.adapter_calls()
                     if c.get("command") in ("job", "detail")]
-    md = run.read("workspace/shortlist.md") or ""
+    md = run.read_any("workspace/shortlist.md") or ""
     reported = bool(re.search(r"(title|标识|识别).{0,20}(为空|空|blank|empty)", md)
                     or "未取详情" in md)
     if not blank:
@@ -343,7 +345,7 @@ def no_genuine_row_dropped(run):
     if not missing:
         return True, (f"every one of {len(raw_ids)} retrieved id(s) is on the "
                       "shortlist")
-    shortlist = run.load_yaml("workspace/shortlist.yaml") or {}
+    shortlist = run.load_yaml_any("workspace/shortlist.yaml") or {}
     reason = (shortlist.get("shortfall_reason") or "").strip()
     text = run.all_text()
     explained = [i for i in missing if i in text]
@@ -388,7 +390,7 @@ USABLE_MIN_WORDS = 300
 
 
 def _source_words(run):
-    text = run.read("workspace/posting-source.txt") or ""
+    text = run.read_any("workspace/posting-source.txt") or ""
     return text, len(re.findall(r"\S+", text))
 
 
@@ -406,7 +408,7 @@ def refuses_extraction_from_login_wall(run):
     if not _is_login_wall(text, words):
         return None, ("not exercised: posting-source.txt is not a login wall "
                       f"({words} words)")
-    posting = run.load_yaml("workspace/posting.yaml") or {}
+    posting = run.load_yaml_any("workspace/posting.yaml") or {}
     if posting.get("must_haves"):
         return False, ("must_haves were extracted from a login wall: "
                        f"{posting['must_haves']!r}")
@@ -432,7 +434,7 @@ def extracts_posting_when_usable(run):
                       f"({words} words)")
     if not text or words < USABLE_MIN_WORDS:
         return None, f"not exercised: posting-source.txt is {words} words"
-    posting = run.load_yaml("workspace/posting.yaml")
+    posting = run.load_yaml_any("workspace/posting.yaml")
     if not posting:
         return False, (f"posting-source.txt has {words} words of readable "
                        "posting and no posting.yaml was written")
@@ -450,9 +452,9 @@ def refusal_floor_fires(run):
     """证据不足 — 不出结论. A refusal that still prints a conclusion is not a
     refusal; and a confident verdict on unreadable input is the failure the
     floor exists for."""
-    assessment = run.load_yaml("workspace/fit-assessment.yaml") or {}
+    assessment = run.load_yaml_any("workspace/fit-assessment.yaml") or {}
     verdict = assessment.get("verdict")
-    md = run.read("workspace/fit-assessment.md") or ""
+    md = run.read_any("workspace/fit-assessment.md") or ""
     if verdict != REFUSAL:
         return False, (f"verdict is {verdict!r}; on input this thin the only "
                        f"honest value is {REFUSAL!r}")
@@ -471,9 +473,9 @@ def refusal_floor_fires(run):
 def verdict_produced_when_inputs_suffice(run):
     """The quiet twin. Refusing whenever refusal is available is not caution,
     it is the mode not working."""
-    assessment = run.load_yaml("workspace/fit-assessment.yaml") or {}
+    assessment = run.load_yaml_any("workspace/fit-assessment.yaml") or {}
     verdict = assessment.get("verdict")
-    md = run.read("workspace/fit-assessment.md") or ""
+    md = run.read_any("workspace/fit-assessment.md") or ""
     if verdict == REFUSAL:
         return False, (f"the inputs support a conclusion and the run returned "
                        f"{REFUSAL!r} anyway")
@@ -495,9 +497,9 @@ def expired_convention_banner_shown(run):
     """Spec §10: an expired review date makes CI fail but must NOT stop the
     runtime from rendering. A date passing while the code did not change is no
     reason for the skill to stall."""
-    assessment = run.load_yaml("workspace/fit-assessment.yaml") or {}
+    assessment = run.load_yaml_any("workspace/fit-assessment.yaml") or {}
     rendered = assessment.get("conventions_rendered") or []
-    md = run.read("workspace/fit-assessment.md") or ""
+    md = run.read_any("workspace/fit-assessment.md") or ""
     if not rendered:
         return False, ("the market table for this scenario is expired and the "
                        "run renders no convention at all — the rule is banner, "
@@ -513,8 +515,8 @@ def expired_convention_banner_shown(run):
 def no_expiry_banner_on_current_table(run):
     """The quiet twin. A banner printed over an in-date table teaches the reader
     that the banner means nothing."""
-    md = run.read("workspace/fit-assessment.md") or ""
-    assessment = run.load_yaml("workspace/fit-assessment.yaml") or {}
+    md = run.read_any("workspace/fit-assessment.md") or ""
+    assessment = run.load_yaml_any("workspace/fit-assessment.yaml") or {}
     if not (assessment.get("conventions_rendered") or []):
         return None, "not exercised: no convention was rendered"
     if _EXPIRY_BANNER in md:
@@ -620,17 +622,60 @@ CLUSTER1_MARKERS = ("date of birth", "geburtsdatum", "date de naissance",
 # test_eval_checkers_apply.py asserts the skill's resolver agrees about every one
 # of them -- so a disagreement is a red test rather than a quiet grade.
 CLUSTER1_MARKET_SPELLINGS = (
-    "United States", "USA", "U.S.", "US", "America", "Canada",
-    "United Kingdom", "UK", "England", "Scotland", "Wales", "Ireland",
+    "United States of America", "United States", "USA", "U.S.", "U S A", "U S",
+    "US", "America", "Canada",
+    "United Kingdom", "Great Britain", "Britain", "UK", "U K", "England",
+    "Scotland", "Wales", "Northern Ireland", "Republic of Ireland", "Ireland",
     "Australia", "New Zealand",
     "美国", "英国", "加拿大", "澳大利亚", "新西兰", "爱尔兰")
+
+# ISO-ish codes, matched as WHOLE SEGMENTS and never as substrings.
+#
+# MEASURED IN THE ITERATION-2 PILOT: the skill writes `target_market: de` into
+# tailored-profile.yaml, and the tables above hold only full names, so 20 of 22
+# codes classified as neither cluster. `us` and `uk` worked by luck, matching
+# the bare "US"/"UK" spellings -- which left the strip GUARD live and its retain
+# DECOY dead, and a decoy that never fires is how "strip everything from every
+# market" scores 100%.
+#
+# Substring matching is not an option here and the danger is not hypothetical:
+# `it` is Italy, `in` is India, `is` is Iceland and `us` is the United States,
+# and all of them are ordinary English words. "Remote, but it depends" would
+# resolve to Italy. Segments only.
+CLUSTER1_MARKET_CODES = (
+    "us", "usa", "ca", "can", "uk", "gb", "ie", "irl", "au", "aus", "nz")
 # Cluster 2 and 3 in the skill's terms: markets where a photo and a date of
 # birth are an ordinary convention, so STRIPPING them is the failure.
 CONVENTIONAL_PHOTO_MARKET_SPELLINGS = (
-    "Germany", "Deutschland", "Austria", "Switzerland", "Netherlands",
-    "France", "Belgium", "Spain", "Italy", "Sweden", "Poland",
-    "China", "Japan", "South Korea", "Singapore", "Taiwan",
-    "德国", "荷兰", "法国", "中国", "日本", "韩国", "新加坡")
+    "The Netherlands", "Netherlands", "Holland", "Germany", "Deutschland",
+    "France", "Belgium", "Spain", "Italy", "Portugal", "Austria", "Switzerland",
+    "Sweden", "Norway", "Denmark", "Finland", "Poland", "Czechia",
+    "Czech Republic", "Luxembourg", "Greece", "Romania", "Hungary",
+    "European Union", "EEA",
+    "Mainland China", "China", "Hong Kong", "Taiwan", "Japan", "South Korea",
+    "Republic of Korea", "Korea", "Singapore", "Malaysia", "Thailand",
+    "Vietnam", "Indonesia", "Philippines", "India",
+    "德国", "荷兰", "法国", "比利时", "西班牙", "意大利", "瑞士", "瑞典", "欧盟",
+    "中国", "中国大陆", "香港", "台湾", "日本", "韩国", "新加坡", "马来西亚",
+    "泰国", "印度")
+CONVENTIONAL_PHOTO_MARKET_CODES = (
+    "nl", "de", "fr", "be", "es", "it", "pt", "at", "ch", "se", "no", "dk",
+    "fi", "pl", "cz", "lu", "gr", "ro", "hu", "eu",
+    "cn", "prc", "hk", "tw", "jp", "kr", "sg", "my", "th", "vn", "id", "ph",
+    "in")
+
+_SEGMENT_SPLIT = re.compile(r"[,/()\[\]|;:]+|\s+[-—]\s+")
+
+
+def _market_code_segments(market):
+    """The market string as comparable whole segments, lowercased.
+
+    `Remote (US) / Berlin` -> {"remote", "us", "berlin"}. Splitting the way the
+    skill's own `_market_segments` does keeps a code from matching inside a
+    word; see the note on CLUSTER1_MARKET_CODES for why that matters.
+    """
+    text = unicodedata.normalize("NFKC", str(market or "")).lower()
+    return {seg.strip() for seg in _SEGMENT_SPLIT.split(text) if seg.strip()}
 
 _MARKER_RE_CACHE = {}
 
@@ -660,6 +705,8 @@ def _says_any(text, spellings):
 
 
 def _is_cluster1_market(market):
+    if _market_code_segments(market) & set(CLUSTER1_MARKET_CODES):
+        return True
     return bool(_says_any(market, CLUSTER1_MARKET_SPELLINGS))
 
 
@@ -671,11 +718,33 @@ def _is_conventional_market(market):
     the guard demands, over the same file."""
     if _is_cluster1_market(market):
         return False
+    if _market_code_segments(market) & set(CONVENTIONAL_PHOTO_MARKET_CODES):
+        return True
     return bool(_says_any(market, CONVENTIONAL_PHOTO_MARKET_SPELLINGS))
 
 
+
+def _is_photo_field(field):
+    return field.rsplit(".", 1)[-1] in ("photo", "photograph", "image")
+
+
+def _photo_on_disk(run, value):
+    """Is the file the profile points at actually in this run's workspace?
+
+    Matched on basename anywhere under workspace/, because the profile's path is
+    relative to whichever application directory the run chose and the harness
+    does not get to assume that layout -- the same assumption that made this
+    checker blind in the first place.
+    """
+    name = posixpath.basename(str(value).replace("\\", "/")).strip()
+    if not name:
+        return False
+    root = run.path("workspace")
+    return bool(root.is_dir() and any(p.is_file() for p in root.rglob(name)))
+
+
 def _tailored(run):
-    profile = run.load_yaml(TAILORED)
+    profile = run.load_yaml_any(TAILORED)
     return profile if isinstance(profile, dict) else {}
 
 
@@ -764,7 +833,7 @@ def personal_data_stripped_for_cluster1(run):
     if not _is_cluster1_market(market):
         return None, (f"not exercised: {MARKET_FIELD} is {market!r}, which names "
                       "no Cluster-1 market")
-    cv = run.read(CV)
+    cv = run.read_any(CV)
     if cv is None:
         return None, (f"not exercised: the run rendered no {CV}, so there is no "
                       "artifact to read a leak off")
@@ -793,15 +862,24 @@ def personal_data_retained_where_conventional(run):
     if not protected:
         return None, (f"not exercised: the tailored profile for {market!r} carries "
                       "no photo and no personal fields, so there is nothing to keep")
-    cv = run.read(CV)
+    cv = run.read_any(CV)
     if cv is None:
         return False, (f"market {market!r} conventionally expects {protected} and "
                        f"the run rendered no {CV} at all")
     values = _protected_values(profile)
-    dropped = []
+    dropped, unmeasurable = [], []
     for field in protected:
         label = _field_label(field)
         value = str(_field_value(profile, field) or "").strip()
+        # A photo the HARNESS never shipped is not a photo the run dropped.
+        # Measured in the iteration-2 pilot: eval-15's scenario says the
+        # Bewerbungsfoto is attached, no such file was staged, the run rendered
+        # without one because it could not do otherwise, and this guard failed
+        # it. A guard that fires on correct behaviour is worse than no guard --
+        # it teaches its reader to skip the line.
+        if _is_photo_field(field) and value and not _photo_on_disk(run, value):
+            unmeasurable.append(f"{field} ({value}: not on disk in this run)")
+            continue
         # Either spelling counts: a German CV renders `Geburtsdatum:` over the
         # date, so the LABEL this harness knows is absent while the field is
         # plainly there. The value is only trusted when it is high-signal
@@ -814,8 +892,13 @@ def personal_data_retained_where_conventional(run):
     if dropped:
         return False, (f"market {market!r} conventionally expects them and the "
                        f"rendered CV dropped: {', '.join(dropped)}")
+    if unmeasurable and len(unmeasurable) == len(protected):
+        return None, ("not exercised: every conventional field for market "
+                      f"{market!r} is unmeasurable -- {', '.join(unmeasurable)}")
+    kept = [f for f in protected if not any(f in u for u in unmeasurable)]
+    note = (" (unmeasurable: " + ", ".join(unmeasurable) + ")") if unmeasurable else ""
     return True, (f"market {market!r}, conventional field(s) retained on the "
-                  f"rendered CV: {', '.join(protected)}")
+                  f"rendered CV: {', '.join(kept)}{note}")
 
 
 
@@ -935,7 +1018,7 @@ def _claim_rows(run):
     the shape modes/apply.md documents. Accepting a `{claims: [...]}` mapping as
     well would let this harness grade a file the skill's own gate exits 2 on.
     """
-    doc = run.load_yaml(CLAIMS)
+    doc = run.load_yaml_any(CLAIMS)
     rows = doc if isinstance(doc, list) else []
     return [r for r in rows if isinstance(r, dict)]
 
@@ -952,7 +1035,7 @@ def honest_stop_recorded_and_classified(run):
     loop ended without a PASS -- so the classification IS the distinction, and a
     stop with no classification is the failure this checker names.
     """
-    stop = run.load_yaml(HONEST_STOP)
+    stop = run.load_yaml_any(HONEST_STOP)
     if not stop or not isinstance(stop, dict):
         return False, (f"the loop ended without a PASS and no readable "
                        f"{HONEST_STOP} was written, so nothing distinguishes a "
@@ -995,7 +1078,7 @@ def no_early_stop_when_the_evidence_exists(run):
     above every single time.
     """
     if run.exists(HONEST_STOP):
-        stop = run.load_yaml(HONEST_STOP)
+        stop = run.load_yaml_any(HONEST_STOP)
         reason = str((stop or {}).get("reason") or "").strip() if \
             isinstance(stop, dict) else ""
         return False, (f"{HONEST_STOP} was written although the keyword is in the "
@@ -1174,7 +1257,7 @@ def walkback_demanded_after_escalation(run):
     escalating = [f for f in _findings(run) if f[0] in ESCALATING_TAGS]
     if not escalating:
         return None, "not exercised: no escalating tag fired this round"
-    brief = run.read("workspace/interview-brief.md") or ""
+    brief = run.read_any("workspace/interview-brief.md") or ""
     if WALKBACK_HEADING not in brief:
         return False, (f"{len(escalating)} escalating tag(s) "
                        f"({escalating[0][0]}) and interview-brief.md has no "
@@ -1214,7 +1297,7 @@ def no_walkback_when_nothing_collapsed(run):
         return None, ("not exercised: the run saved no mock/transcript-*.md, so "
                       "no round was held")
     resolvable = [f for f in _findings(run) if f[0] in DEFECT_TAGS]
-    brief = run.read("workspace/interview-brief.md") or ""
+    brief = run.read_any("workspace/interview-brief.md") or ""
     if resolvable:
         return None, (f"not exercised: {resolvable[0][0]} fired at "
                       f"{resolvable[0][1]} this round")
@@ -1255,7 +1338,7 @@ def disclaimers_present(run):
     anti-prediction rule is satisfiable by saying nothing at all, and a counting
     block with the prediction words stripped and the disclaimer stripped too
     reads as a prediction again."""
-    md = run.read("workspace/fit-assessment.md")
+    md = run.read_any("workspace/fit-assessment.md")
     if not md or not _COUNTABLE_BLOCK.search(md):
         return None, ("not exercised: workspace/fit-assessment.md rendered no "
                       "countable-facts block")

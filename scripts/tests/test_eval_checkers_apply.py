@@ -72,6 +72,16 @@ def build(tmp_path, *, profile=None, cv=None, stderr="", records=(),
     if profile is not None:
         (ws / "tailored-profile.yaml").write_text(
             yaml.safe_dump(profile, allow_unicode=True), encoding="utf-8")
+        # Stage the photo the profile declares. A fixture that names a photo
+        # and ships no file cannot distinguish "the run dropped it" from "it was
+        # never on disk" — which is exactly the cry-wolf that failed eval-15 in
+        # the iteration-2 pilot. A test asserting the photo was DROPPED has to
+        # make the photo available first, or it is asserting something else.
+        declared = str((profile.get("meta") or {}).get("photo") or "").strip()
+        if declared:
+            photo = ws / declared.lstrip("/")
+            photo.parent.mkdir(parents=True, exist_ok=True)
+            photo.write_bytes(b"\xff\xd8\xff\xe0staged for the fixture")
     if honest_stop is not None:
         (ws / "honest-stop.yaml").write_text(
             yaml.safe_dump(honest_stop, allow_unicode=True), encoding="utf-8")
@@ -590,3 +600,164 @@ def test_the_apply_pairs_are_the_ones_this_file_tests():
         "no_interlock_warning_on_a_known_market"
     assert ck.TWINS["honest_stop_recorded_and_classified"] == \
         "no_early_stop_when_the_evidence_exists"
+
+
+# ---- the reverse agreement, which is the one that was missing ---------------
+#
+# MEASURED IN THE ITERATION-2 PILOT. The two tests above parametrise over the
+# HARNESS's own spelling lists and ask whether the skill agrees. That direction
+# can never see a market the harness is missing, and 20 of 22 ISO codes were
+# missing: the skill writes `target_market: de` into tailored-profile.yaml, and
+# the harness classified `de` as neither Cluster-1 nor conventional.
+#
+# The consequence is a broken TWIN, which is the failure the whole TWINS design
+# exists to prevent. `personal_data_stripped_for_cluster1` fires for `us`
+# (matching the bare "US" spelling by luck), while its decoy
+# `personal_data_retained_where_conventional` was dead for `de`, `nl`, `cn`,
+# `jp` and every other code. With the decoy dead, a skill that strips the photo
+# and date of birth from EVERY market — which damages a German or Chinese
+# application — scores 100% on the pair. evals/README.md: "Without that,
+# 'always refuse' scores 100%."
+#
+# So the agreement is now required in BOTH directions. A market the skill can
+# resolve and the harness cannot is a red test here, not a silent "not
+# exercised" in a grading.json.
+
+def _skill_domain():
+    """Every market string the skill's own tables can resolve, with its cluster."""
+    out = {}
+    for table in (render_cv._CLUSTER_NAMES, render_cv._CLUSTER_CODES,
+                  render_cv._CLUSTER_CJK):
+        for cluster, entries in table.items():
+            for entry in entries:
+                out.setdefault(entry, cluster)
+    return out
+
+
+@pytest.mark.parametrize("market", sorted(_skill_domain()))
+def test_every_market_the_skill_resolves_the_harness_also_classifies(market):
+    """Neither table may be a superset of the other's knowledge.
+
+    The expectation is the RESOLVER's answer, not the table the entry is listed
+    under. Those differ for `ireland eu` — see the unreachable-entry test below
+    — and behaviour is the authority.
+    """
+    cluster = render_cv.resolve_cluster(market)
+    assert cluster is not None, "test's own premise"
+    if cluster == 1:
+        assert ck._is_cluster1_market(market), (
+            f"the skill resolves {market!r} to Cluster 1 and the harness does "
+            f"not — its strip guard would report 'not exercised' over a CV that "
+            f"is leaking")
+        assert not ck._is_conventional_market(market)
+    else:
+        assert ck._is_conventional_market(market), (
+            f"the skill resolves {market!r} to Cluster {cluster} — where a photo "
+            f"and a date of birth are conventional — and the harness does not, "
+            f"so the decoy that stops 'strip everything' scoring 100% is dead "
+            f"for this market")
+        assert not ck._is_cluster1_market(market)
+
+
+def test_the_market_string_that_was_measured_blind():
+    """eval-15's tailored-profile.yaml, verbatim from the pilot."""
+    assert ck._is_conventional_market("de")
+    assert not ck._is_cluster1_market("de")
+
+
+@pytest.mark.parametrize("market", [
+    "Austria",              # contains 'us' — but Austria is Cluster 2
+    "Australia",            # contains 'us' — and IS Cluster 1, by name not code
+    "Remote, but it depends on the team",   # contains 'it' (Italy) and 'in' (India)
+    "Business analyst, fully remote",       # 'us' inside 'Business'
+    "Sweden",               # contains 'de' (Germany) and 'se' (Sweden) — Cluster 2
+])
+def test_a_two_letter_code_never_matches_a_word_that_merely_contains_it(market):
+    """Codes are matched as whole segments, never as substrings.
+
+    'it' is Italy, 'in' is India, 'us' is the United States, and all three are
+    ordinary English words. A substring match would classify "Remote, but it
+    depends" as Italy and grade a CV against Italian conventions.
+    """
+    c1, conv = ck._is_cluster1_market(market), ck._is_conventional_market(market)
+    assert c1 == (render_cv.resolve_cluster(market) == 1)
+    assert conv == (render_cv.resolve_cluster(market) in (2, 3))
+
+
+# The skill's tables list `ireland eu` under Cluster 2, and it can never resolve
+# there: `ireland` (Cluster 1) matches the same string and `resolve_cluster`
+# takes min(), because suppression is the safe direction. So the entry is dead
+# weight that tells a reader Ireland-EU is treated as a photo market when it is
+# not.
+#
+# Recorded rather than silently tolerated, and recorded as an exact set: a
+# SECOND unreachable entry is a red test. The behaviour itself is correct —
+# an Irish CV is an anglophone CV and Cluster 1 is the right answer — so this
+# is a documentation defect in the table, not a grading defect.
+KNOWN_UNREACHABLE = {"ireland eu"}
+
+
+def test_no_new_unreachable_entry_in_the_skill_market_tables():
+    unreachable = set()
+    for table in (render_cv._CLUSTER_NAMES, render_cv._CLUSTER_CODES,
+                  render_cv._CLUSTER_CJK):
+        for cluster, entries in table.items():
+            for entry in entries:
+                if render_cv.resolve_cluster(entry) != cluster:
+                    unreachable.add(entry)
+    assert unreachable == KNOWN_UNREACHABLE, (
+        f"unreachable market entries changed: {sorted(unreachable)}. An entry "
+        f"listed under a cluster it can never resolve to is a table that lies "
+        f"to its reader.")
+
+
+# ---- a photo the harness never shipped is not a photo the run dropped -------
+#
+# MEASURED IN THE ITERATION-2 PILOT, and it is a cry-wolf. eval-15's scenario
+# says "Bewerbungsfoto liegt bei (assets/jonas.jpg)", the harness shipped no
+# such file, and the run rendered without a photo because it could not do
+# anything else. Once the locator let the checker see the CV, it read that as
+# the run DROPPING a conventional field and failed it.
+#
+# A guard that fires on correct behaviour is worse than no guard: it is the
+# reason people stop reading the line. The checker must be able to tell "you
+# dropped it" from "it was never on disk".
+
+def _de_run_with_declared_photo(tmp_path, photo_on_disk):
+    ws = tmp_path / "outputs" / "workspace"
+    (ws).mkdir(parents=True)
+    (ws / "tailored-profile.yaml").write_text(
+        "meta:\n  name: Jonas Weber\n  target_market: de\n"
+        "  photo: assets/jonas.jpg\n"
+        "contact:\n  personal:\n    date_of_birth: 14. März 1990\n",
+        encoding="utf-8")
+    (ws / "cv.md").write_text("# Jonas Weber\n\nGeburtsdatum: 14. März 1990\n",
+                              encoding="utf-8")
+    if photo_on_disk:
+        (ws / "assets").mkdir()
+        (ws / "assets" / "jonas.jpg").write_bytes(b"\xff\xd8\xff\xe0jpegbytes")
+    return runlib.Run(tmp_path)
+
+
+def test_a_declared_photo_that_is_not_on_disk_is_not_counted_as_dropped(tmp_path):
+    run = _de_run_with_declared_photo(tmp_path, photo_on_disk=False)
+    passed, evidence = ck.CHECKERS[
+        "personal_data_retained_where_conventional"](run)
+    assert passed is not False, (
+        f"the run was failed for not embedding a photo the harness never "
+        f"shipped: {evidence}")
+    assert "jonas.jpg" in evidence and (
+        "not on disk" in evidence or "no such file" in evidence), (
+        f"the reason must name the missing file, or the next reader cannot "
+        f"tell this from a real drop: {evidence}")
+
+
+def test_a_photo_that_IS_on_disk_and_absent_from_the_cv_still_fails(tmp_path):
+    """The guard must survive the fix. Same profile, same CV, file present."""
+    run = _de_run_with_declared_photo(tmp_path, photo_on_disk=True)
+    passed, evidence = ck.CHECKERS[
+        "personal_data_retained_where_conventional"](run)
+    assert passed is False, (
+        f"the photo was available and the CV does not carry it — that is the "
+        f"drop this guard exists to catch: {evidence}")
+    assert "photo" in evidence

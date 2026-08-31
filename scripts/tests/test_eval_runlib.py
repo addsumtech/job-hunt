@@ -382,3 +382,103 @@ def test_a_relative_override_that_lands_in_the_repo_is_still_refused(monkeypatch
     monkeypatch.setenv(runlib.RESULTS_ROOT_ENV, "eval-results")
     with pytest.raises(ValueError):
         runlib.resolve_results_root()
+
+
+# ---- locating an artifact the skill wrote somewhere else --------------------
+#
+# MEASURED IN THE ITERATION-2 PILOT. eval-15 used the job-application skill and
+# produced tailored-profile.yaml, cv.md, cv.tex, posting.yaml — every artifact
+# its guard needed. The guard reported "not exercised", because it read
+# `workspace/tailored-profile.yaml` while the skill writes to
+# `workspace/job-profiles/<person>/applications/<slug>/`. Its rendered CV
+# carries `Geburtsdatum: 14. März 1990`, so the verdict was decidable and simply
+# never taken.
+#
+# That is the harness being blind and scoring the blindness as neutral. The same
+# skill on eval-14 happened to write flat and WAS graded, so the difference was
+# the layout, not the behaviour — which is the worst kind of measurement error:
+# it moves with something the eval is not about.
+
+def _mkrun(tmp_path, files):
+    for rel, body in files.items():
+        p = tmp_path / "outputs" / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(body, encoding="utf-8")
+    return runlib.Run(tmp_path)
+
+
+def test_read_any_finds_the_artifact_at_its_canonical_path(tmp_path):
+    """The flat case still wins, and wins without searching."""
+    run = _mkrun(tmp_path, {"workspace/cv.md": "flat\n"})
+    assert run.read_any("workspace/cv.md") == "flat\n"
+
+
+def test_read_any_finds_the_artifact_the_skill_nested(tmp_path):
+    run = _mkrun(tmp_path, {
+        "workspace/job-profiles/jonas-weber/applications/brainlab-2026/cv.md":
+            "Geburtsdatum: 14. März 1990\n"})
+    assert "Geburtsdatum" in (run.read_any("workspace/cv.md") or "")
+
+
+def test_a_shallower_copy_wins_over_a_deeper_one(tmp_path):
+    """Deterministic, and in the direction that matches how these trees are
+    built: the canonical location is the shallow one."""
+    run = _mkrun(tmp_path, {
+        "workspace/cv.md": "canonical\n",
+        "workspace/job-profiles/x/applications/y/cv.md": "nested\n"})
+    assert run.read_any("workspace/cv.md") == "canonical\n"
+
+
+def test_the_pick_does_not_depend_on_filesystem_order(tmp_path):
+    """Two nested copies at the same depth: lexicographic, every time. A
+    checker whose verdict moves with readdir order is not a measurement."""
+    run = _mkrun(tmp_path, {
+        "workspace/job-profiles/p/applications/bbb/cv.md": "b\n",
+        "workspace/job-profiles/p/applications/aaa/cv.md": "a\n"})
+    assert run.read_any("workspace/cv.md") == "a\n"
+    assert [p.name for p in run.locate("workspace/cv.md")] == ["cv.md", "cv.md"]
+
+
+def test_locate_reports_every_match_so_ambiguity_can_be_seen(tmp_path):
+    run = _mkrun(tmp_path, {
+        "workspace/job-profiles/p/applications/aaa/cv.md": "a\n",
+        "workspace/job-profiles/p/applications/bbb/cv.md": "b\n"})
+    found = run.locate("workspace/cv.md")
+    assert len(found) == 2, "a checker that needs to report ambiguity must see it"
+
+
+def test_locating_never_escapes_workspace_into_the_scenario(tmp_path):
+    """THE DANGEROUS ONE. `scenario.md` is the run's INPUT — it holds the job
+    posting and the candidate's facts. A locator that searched all of outputs/
+    could satisfy "did the run extract the posting" by reading the posting out
+    of the question paper, and every such checker would pass on every run,
+    including one that did nothing at all."""
+    run = _mkrun(tmp_path, {
+        "scenario.md": "=== JOB POSTING ===\nSenior Engineer\n",
+        "posting.yaml": "must_haves: [C++]\n",
+        "workspace/keep.md": "x\n"})
+    assert run.read_any("workspace/posting.yaml") is None
+    assert run.locate("workspace/posting.yaml") == []
+    # Out of scope RAISES rather than returning None. None would mean "absent",
+    # which is the very confusion this whole change exists to remove: a checker
+    # asking for the wrong thing would report "not exercised" and be scored as
+    # neutral. A crash is caught by grade.py and fails the row with the reason.
+    for bad in ("scenario.md", "final-message.md", "."):
+        with pytest.raises(ValueError):
+            run.read_any(bad)
+        with pytest.raises(ValueError):
+            run.locate(bad)
+
+
+def test_read_any_returns_none_when_the_artifact_is_genuinely_absent(tmp_path):
+    run = _mkrun(tmp_path, {"workspace/other.md": "x\n"})
+    assert run.read_any("workspace/cv.md") is None
+    assert run.load_yaml_any("workspace/posting.yaml") is None
+
+
+def test_glob_workspace_still_finds_a_nested_match(tmp_path):
+    """The interview checkers glob `mock/transcript-*.md`. A run that wrote the
+    transcript one directory over was reported as never having held a round."""
+    run = _mkrun(tmp_path, {
+        "workspace/rounds/mock/transcript-1.md": "Q1 ...\n"})
+    assert len(run.glob_workspace("mock/transcript-*.md")) == 1

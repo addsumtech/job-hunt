@@ -263,6 +263,21 @@ before dispatch.
 Eval 13 uses `evals/fixtures/conventions/expired-nl.yaml` as the session's `nl`
 table; say so in the prompt and do not edit the shipped table.
 
+Eval 15 needs its photo staged, or its guard measures the harness rather than
+the run:
+
+~~~bash
+mkdir -p "<run>/outputs/workspace/assets"
+cp evals/fixtures/assets/jonas.jpg "<run>/outputs/workspace/assets/jonas.jpg"
+~~~
+
+`apply-de-photo-conventional.md` says the Bewerbungsfoto is attached. In the
+iteration-2 pilot no such file was staged, so the run rendered without a photo —
+it had no other option — and `personal_data_retained_where_conventional` failed
+it for dropping a conventional field. The checker now reports an absent file as
+unmeasurable rather than as a drop, but that turns the assertion off; staging
+the file is what turns it back into a measurement of behaviour.
+
 ## Stage 3 — grade, aggregate, view
 
 ~~~bash

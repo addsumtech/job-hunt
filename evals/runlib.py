@@ -149,7 +149,7 @@ class Run:
     def journal(self):
         """Every record. Unparsable lines come back rather than disappearing --
         a corrupt journal is a finding, not a shorter list."""
-        text = self.read("workspace/journal.jsonl")
+        text = self.read_any("workspace/journal.jsonl")
         if not text:
             return []
         records = []
@@ -177,7 +177,11 @@ class Run:
         return [r for r in out if gate is None or r.get("gate") == gate]
 
     def all_text(self):
-        parts = [self.read(rel) for rel in READER_FACING]
+        # read_any for the workspace surfaces: a run that nested shortlist.md
+        # under job-profiles/<person>/ still SAID what it said, and a claim the
+        # harness cannot see is scored as a claim never made.
+        parts = [self.read_any(rel) if rel.startswith("workspace/") else self.read(rel)
+                 for rel in READER_FACING]
         return "\n".join(p for p in parts if p)
 
     def first_line_containing(self, needle, rel=None):
@@ -196,9 +200,96 @@ class Run:
                 return line.strip()
         return None
 
-    def glob_workspace(self, pattern):
+    # ---- locating an artifact wherever the run actually wrote it ------------
+    #
+    # MEASURED IN THE ITERATION-2 PILOT, and it cost a guard. eval-15 used the
+    # job-application skill and produced tailored-profile.yaml, cv.md, cv.tex
+    # and posting.yaml -- everything its guard needed, and its CV carries the
+    # `Geburtsdatum` line the guard asks about. The guard reported
+    # "not exercised", because it read `workspace/cv.md` while the skill writes
+    # to `workspace/job-profiles/<person>/applications/<slug>/`.
+    #
+    # The same skill on eval-14 wrote flat and WAS graded. So the difference
+    # between a graded guard and a silent one was the directory layout, which is
+    # not what the eval is about, and "not exercised" is scored as neutral -- the
+    # harness was blind and the blindness looked like a clean result.
+    #
+    # `read` stays exact, because a checker that means one specific artifact must
+    # still be able to say so. These accessors are for the checkers that mean
+    # "the CV this run produced", wherever it put it.
+
+    def _search_root(self, rel):
+        """The workspace-relative tail of `rel`, or ValueError.
+
+        Scoped to workspace/ deliberately, and this is the load-bearing rule.
+        `outputs/scenario.md` is the run's INPUT -- it holds the job posting and
+        the candidate's facts verbatim. A locator that searched all of outputs/
+        could satisfy "did the run extract the posting" by reading the posting
+        out of the question paper, and every such checker would then pass on
+        every run, including one that produced nothing at all.
+
+        Out of scope raises rather than returning None: None means "absent",
+        which is exactly the silent-neutral result this accessor exists to stop.
+        """
+        normalised = _relative(rel)
+        if normalised == "." or not normalised.startswith("workspace/"):
+            raise ValueError(
+                f"{rel!r} is not under workspace/. Only artifacts the run "
+                f"PRODUCED can be located; outputs/scenario.md and "
+                f"outputs/final-message.md are read with .read() by name.")
+        return normalised[len("workspace/"):]
+
+    def locate(self, rel):
+        """Every file under workspace/ with this basename, best match first.
+
+        Ordered canonical-first, then by depth, then lexicographically -- never
+        by filesystem order, so a verdict cannot move with readdir. Returns
+        every match so a caller that needs to REPORT ambiguity can see it.
+        """
+        tail = self._search_root(rel)
         root = self.path("workspace")
-        return sorted(root.glob(pattern)) if root.is_dir() else []
+        if not root.is_dir():
+            return []
+        canonical = root / tail
+        found = [canonical] if canonical.is_file() else []
+        name = posixpath.basename(tail)
+        others = [p for p in root.rglob(name) if p.is_file() and p != canonical]
+        found += sorted(others, key=lambda p: (len(p.relative_to(root).parts),
+                                               str(p)))
+        return found
+
+    def read_any(self, rel):
+        """Text of the best match for `rel`, or None if there is none."""
+        found = self.locate(rel)
+        if not found:
+            return None
+        return found[0].read_text(encoding="utf-8", errors="replace")
+
+    def load_yaml_any(self, rel):
+        text = self.read_any(rel)
+        if text is None:
+            return None
+        try:
+            return yaml.safe_load(text)
+        except yaml.YAMLError:
+            return None
+
+    def glob_workspace(self, pattern):
+        """Matches at the canonical location AND anywhere below it.
+
+        The interview checkers glob `mock/transcript-*.md`. A run that wrote its
+        transcript one directory over was read as never having held a round --
+        the same blindness as above, in glob form.
+        """
+        root = self.path("workspace")
+        if not root.is_dir():
+            return []
+        seen, out = set(), []
+        for p in sorted(root.glob(pattern)) + sorted(root.glob("**/" + pattern)):
+            if p.is_file() and p not in seen:
+                seen.add(p)
+                out.append(p)
+        return out
 
 
 def iter_runs(iteration_dir):

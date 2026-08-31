@@ -496,3 +496,40 @@ def test_no_scenario_or_fixture_carries_a_machine_specific_absolute_path(prefix)
 
 def test_the_stub_is_executable():
     assert os.access(STUB, os.X_OK), "the runbook puts this on PATH as `opencli`"
+
+
+# ---- the photo eval-15's scenario promises ----------------------------------
+
+def test_the_bewerbungsfoto_fixture_is_a_real_decodable_jpeg():
+    """`apply-de-photo-conventional.md` says "Bewerbungsfoto liegt bei
+    (assets/jonas.jpg)". In the iteration-2 pilot the harness shipped no such
+    file, so the run rendered without a photo — correctly, it had no choice —
+    and the retain-guard failed it for dropping one. Shipping the file is what
+    turns that assertion back into a measurement of behaviour.
+
+    Checked by DECODING it, not by its extension: `render_cv.photo_format()`
+    reads magic bytes, and a text file named .jpg would fail the eval for a
+    reason that has nothing to do with the skill.
+    """
+    from PIL import Image
+    import render_cv
+
+    photo = REPO / "evals" / "fixtures" / "assets" / "jonas.jpg"
+    assert photo.is_file(), f"{photo} is missing; the scenario promises it"
+    assert render_cv.photo_format(photo) == "jpeg", (
+        "the skill's own magic-byte check must accept it")
+    with Image.open(photo) as im:
+        im.load()
+        width, height = im.size
+    assert (width, height) > (100, 100), f"{width}x{height} is not a usable photo"
+    assert 0.6 < width / height < 0.9, (
+        f"aspect {width / height:.2f} — a Bewerbungsfoto is portrait, near 3:4. "
+        f"A square or 1x1 placeholder exercises a path no real photo takes.")
+
+
+def test_the_scenario_that_needs_the_photo_still_names_that_filename():
+    """If the scenario is reworded to point at another file, the fixture above
+    stops being the thing it promises and nothing else would say so."""
+    scenario = (REPO / "evals" / "scenarios" /
+                "apply-de-photo-conventional.md").read_text(encoding="utf-8")
+    assert "assets/jonas.jpg" in scenario
