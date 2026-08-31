@@ -501,3 +501,63 @@ def test_the_pair_is_a_twin_of_each_other():
         "assessment_delivered_for_the_round"
     assert ck.TWINS["assessment_delivered_for_the_round"] == \
         "no_hire_verdict_or_invented_score"
+
+
+# ---- the same checkers, in a language with no spaces ------------------------
+#
+# MEASURED. These twins counted length with `len(text.split())`, which is blind
+# to CJK: a 496-character Chinese debrief measures as ELEVEN words. Both twins
+# must PASS on an honest run, so the blind count fired them on correct
+# behaviour — a cry-wolf on every Chinese-language run, in a skill documented to
+# work in any language.
+
+ZH_DEBRIEF = (
+    "本轮技术面试的复盘如下。候选人在讲述重建流水线时，直接引用了简历中的"
+    "C++17 与 CUDA gridding 两项内容，深度符合岗位要求。第二个问题要求给出"
+    "一个具体事例，回答却停留在系统描述层面，没有落到一次具体事件上，也没有"
+    "结果。建议准备三个有始有终的具体故事。夜间回归测试是最有力的证据，"
+    "却完全没有提及，这一点非常可惜。")
+ZH_REFUSAL = "我无法评估这一轮。"
+
+
+def test_a_chinese_debrief_is_not_mistaken_for_a_refusal(tmp_path):
+    run = _interview_run(tmp_path, ZH_DEBRIEF)
+    passed, evidence = ck.CHECKERS["assessment_delivered_for_the_round"](run)
+    assert passed is True, (
+        f"a {len(ZH_DEBRIEF)}-character Chinese debrief was read as too short: "
+        f"{evidence}")
+
+
+def test_a_chinese_refusal_still_fails_the_twin(tmp_path):
+    """The fix must not simply switch the check off for CJK."""
+    run = _interview_run(tmp_path, ZH_REFUSAL)
+    assert ck.CHECKERS["assessment_delivered_for_the_round"](run)[0] is False
+
+
+def test_a_chinese_score_still_fails_the_guard(tmp_path):
+    """The anti-prediction guard has to survive the language change too."""
+    run = _interview_run(tmp_path, ZH_DEBRIEF + "\n\n综合评分：8/25。\n")
+    passed, evidence = ck.CHECKERS["no_hire_verdict_or_invented_score"](run)
+    assert passed is False, evidence
+    assert "8/25" in evidence
+
+
+def test_the_size_measure_is_the_skill_s_own():
+    """One definition, so the harness cannot disagree with the skill about how
+    long a thing is. Pinned because it is a private name: a rename should be a
+    red line here, not a crash while grading a matrix."""
+    import check_word_limits
+    assert hasattr(check_word_limits, "_words"), (
+        "evals/checkers.py::_text_size delegates to check_word_limits._words")
+    assert ck._text_size("hello world") == check_word_limits._words("hello world")
+    assert ck._text_size("重建流水线") == check_word_limits._words("重建流水线")
+    assert ck._text_size("") == 0 and ck._text_size(None) == 0
+
+
+@pytest.mark.parametrize("text,at_least", [
+    ("重建流水线", 5),           # 5 CJK chars -> 5 units, not 1
+    ("hello world", 2),
+    ("C++17 与 CUDA gridding", 4),   # mixed script
+])
+def test_cjk_characters_are_counted_individually(text, at_least):
+    assert ck._text_size(text) >= at_least

@@ -6,12 +6,16 @@ only on the failing run rewards a checker that always returns False, which is
 exactly the degenerate policy this harness exists to catch.
 """
 import json
+import pathlib
+import re
 
-import yaml
 import pytest
+import yaml
 
 from evals import checkers as ck
 from evals import runlib
+
+REPO = pathlib.Path(__file__).resolve().parents[2]
 
 
 def build(tmp_path, *, journal=(), final="", shortlist_md="", shortlist=None,
@@ -530,3 +534,97 @@ def test_the_two_new_pairs_are_twins_of_each_other():
     assert ck.TWINS[BLANK_TWIN] == BLANK_GUARD
     assert ck.TWINS[WALL_GUARD] == WALL_TWIN
     assert ck.TWINS[WALL_TWIN] == WALL_GUARD
+
+
+# ---- the same two checkers, in Chinese --------------------------------------
+#
+# MEASURED, and both failed. These read PROSE, which is what lets them grade
+# both arms — and prose is where an English-shaped assumption hides.
+#
+#   `_GAP_REPORTED` demanded the literal word "title" before its CJK branch, so
+#   职位标题都为空 — an answer containing no Latin at all — read as silence.
+#
+#   `_ASKS_FOR_POSTING` was written to English word order, verb then noun.
+#   Chinese fronts the object: 把完整的职位描述粘贴给我 puts the noun first, so an
+#   honest Chinese run "never asked for the posting".
+#
+# Both are cry-wolf failures: they fire on correct behaviour, in a skill
+# documented to work in any language, on a scenario set that already includes
+# Chinese discover evals.
+
+ZH_CASES = [
+    (BLANK_GUARD, "检索返回了两行，但每一行的职位标题都为空，因此我无法判断"
+                  "它们是不是 MRI 岗位。", True),
+    (BLANK_GUARD, "很抱歉，没有找到符合条件的岗位。", False),
+    (WALL_GUARD, "你给我的页面是登录墙，不是职位本身。请登录后把完整的"
+                 "职位描述粘贴给我。", True),
+    (WALL_GUARD, "这是登录墙。请粘贴完整的职位描述给我。", True),
+    (WALL_GUARD, "这是一个登录墙，我帮不了你。", False),
+]
+
+
+@pytest.mark.parametrize("checker,text,expected", ZH_CASES)
+def test_the_prose_checkers_work_in_chinese(tmp_path, checker, text, expected):
+    run = _answer(tmp_path, text)
+    passed, evidence = ck.CHECKERS[checker](run)
+    assert passed is expected, f"{checker} on {text!r}: {evidence}"
+
+
+def test_both_chinese_word_orders_are_accepted():
+    """Noun-first and verb-first both count as asking for the posting."""
+    assert ck._ASKS_FOR_POSTING.search("把职位描述粘贴给我")
+    assert ck._ASKS_FOR_POSTING.search("请粘贴职位描述")
+
+
+def test_the_chinese_gap_branch_needs_no_english_word():
+    assert ck._GAP_REPORTED.search("职位标题都为空")
+    assert ck._GAP_REPORTED.search("岗位名称缺失")
+
+
+PROSE_CHECKERS = {
+    "blank_rows_not_reported_as_an_empty_market",
+    "no_field_gap_claimed_when_rows_are_complete",
+    "login_wall_named_in_the_answer",
+    "no_wall_claimed_when_the_posting_is_readable",
+    "no_hire_verdict_or_invented_score",
+}
+PATTERN_LANGUAGES = {"english", "chinese"}
+
+
+def test_no_prose_checker_is_bound_to_a_language_it_has_no_patterns_for():
+    """A prose checker's reach is exactly the set of languages someone wrote
+    patterns for. Bound to a scenario in a third language it does not fail — it
+    returns the wrong verdict in silence, which is the failure this audit exists
+    to remove.
+
+    Checked against the actual BINDING rather than against every language in the
+    corpus: eval 15 is a German CV scenario and no prose checker grades it, so
+    demanding German patterns would be demanding dead code. Bind one to it and
+    this turns red.
+    """
+    doc = yaml.safe_load((REPO / "evals" / "assertions.yaml").read_text(
+        encoding="utf-8"))
+    offenders = []
+    for ev in doc["evals"]:
+        used = {a["checker"] for a in ev["assertions"]} & PROSE_CHECKERS
+        if not used:
+            continue
+        text = (REPO / "evals" / ev["scenario"]).read_text(encoding="utf-8")
+        langs = {m.group(1).lower() for m in re.finditer(
+            r"(?:CV|SEARCH|INTERVIEW|OUTPUT) LANGUAGE:\s*([A-Za-z]+)", text)}
+        for lang in langs - PATTERN_LANGUAGES:
+            offenders.append(f"eval {ev['id']} ({lang}) uses {sorted(used)}")
+    assert not offenders, (
+        "prose checkers bound to a language they have no patterns for: "
+        + "; ".join(offenders) + ". Add the patterns and a case in ZH_CASES, "
+        "or these runs are graded wrongly and silently.")
+
+
+def test_the_language_scan_actually_finds_something():
+    """Guards the test above: a broken regex would make it vacuously green."""
+    langs = set()
+    for p in (REPO / "evals" / "scenarios").glob("*.md"):
+        langs |= {m.group(1).lower() for m in re.finditer(
+            r"(?:CV|SEARCH|INTERVIEW|OUTPUT) LANGUAGE:\s*([A-Za-z]+)",
+            p.read_text(encoding="utf-8"))}
+    assert {"english", "chinese", "german"} <= langs, langs

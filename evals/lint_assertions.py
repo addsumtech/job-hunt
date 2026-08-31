@@ -237,6 +237,14 @@ def lint(doc, *, scenario_root, checkers, twins, extra_assertion_ids=()):
             guarded.setdefault(mode, []).append(a.get("id"))
 
     coverage = doc.get("coverage") or {}
+    if not isinstance(coverage, dict):
+        # A gate, not a script: reaching .get on a string exits 1 with a
+        # traceback, and 1 is this file's code for "findings". A malformed
+        # document has to be distinguishable from a failing one.
+        findings.append(f"BAD_COVERAGE: `coverage` is {type(coverage).__name__}, "
+                        f"expected a mapping with modes_without_a_guard and/or "
+                        f"evals_without_a_guard")
+        coverage = {}
     declared = coverage.get("modes_without_a_guard") or {}
     if not isinstance(declared, dict):
         findings.append("BAD_COVERAGE: modes_without_a_guard must be a mapping "

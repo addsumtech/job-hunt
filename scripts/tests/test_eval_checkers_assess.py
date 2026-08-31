@@ -459,3 +459,64 @@ def test_the_shipped_table_twin_fires_when_it_globs_nothing(tmp_path, monkeypatc
     passed, evidence = ck.CHECKERS["current_tables_pass_ci"](build(tmp_path))
     assert passed is False
     assert "the path is wrong" in evidence
+
+
+# ---- a Chinese posting is a posting -----------------------------------------
+#
+# MEASURED. `_source_words` counted with `re.findall(r"\S+")`, which is blind to
+# CJK: a complete 199-character Chinese posting measured as NINE tokens. Two
+# consequences, both silent:
+#
+#   nine < USABLE_MIN_WORDS (300)  -> extracts_posting_when_usable reports
+#                                     "not exercised" over a usable posting
+#   nine <= WALL_MAX_WORDS  (200)  -> and if any wall word appears, a real
+#                                     posting is classified as a login wall
+#
+# The skill is documented to work in any language and the eval set already
+# carries Chinese scenarios, so this switched the assess audits off for a whole
+# market rather than failing anywhere a reader would look.
+
+ZH_POSTING = (
+    "高级算法工程师（计算机视觉方向）｜上海·浦东新区｜3-5 年经验｜硕士及以上\n"
+    "岗位职责：负责工业视觉检测算法的研发与落地，包括表面缺陷检测、视觉定位与"
+    "尺寸测量三大方向；主导算法从原型验证到产线部署的完整流程，输出可维护的"
+    "工程代码；与硬件、光学和产线工程师协作，解决现场光照变化、振动与节拍约束"
+    "下的稳定性问题；参与产线现场调试与试产，跟踪上线后的良率、误检率与节拍"
+    "表现，并持续迭代；沉淀算法组件与标注规范，支持新产线快速复制。\n"
+    "任职要求：计算机、自动化、电子或相关专业硕士及以上学历；三年以上计算机"
+    "视觉算法研发经验，有完整产线落地案例；精通 C++ 与 Python，熟悉 OpenCV、"
+    "PyTorch 与常见检测分割网络；理解相机成像、光源选型与标定的基本原理；"
+    "具备独立完成算法选型、数据标注方案设计与上线验证的能力；有半导体设备、"
+    "锂电或 3C 自动化行业经验者优先；有 GPU 推理优化或模型压缩经验者优先。\n"
+    "我们提供：具有竞争力的薪资与年终奖金、完整的真实产线数据、从算法到产品的"
+    "完整闭环、以及扁平的技术团队与充分的工程自主权。工作地点为上海浦东，"
+    "接受每月一到两次的外地产线出差。")
+
+
+def test_a_chinese_posting_counts_as_readable_words(tmp_path):
+    run = build(tmp_path, posting_source=ZH_POSTING)
+    _, words = ck._source_words(run)
+    # The blind count, shown here so the test says what it is protecting.
+    import re as _re
+    blind = len(_re.findall(r"\S+", ZH_POSTING))
+    assert blind < ck.USABLE_MIN_WORDS, (
+        "this fixture no longer demonstrates the defect")
+    assert words >= ck.USABLE_MIN_WORDS, (
+        f"a {len(ZH_POSTING)}-character Chinese posting measured {words} words, "
+        f"under the {ck.USABLE_MIN_WORDS} that makes a posting usable — the "
+        f"extraction audit then reports 'not exercised' over a real posting")
+
+
+def test_a_chinese_posting_is_not_classified_as_a_login_wall(tmp_path):
+    run = build(tmp_path, posting_source=ZH_POSTING)
+    text, words = ck._source_words(run)
+    assert not ck._is_login_wall(text, words), (
+        "a real Chinese posting was read as a login wall")
+
+
+def test_a_chinese_login_wall_is_still_caught(tmp_path):
+    """The fix must not switch the wall detector off for CJK."""
+    wall = "请登录后查看该职位。登录 或 注册以继续。继续即表示您接受我们的 cookie 政策。"
+    run = build(tmp_path, posting_source=wall)
+    text, words = ck._source_words(run)
+    assert words < ck.USABLE_MIN_WORDS, words

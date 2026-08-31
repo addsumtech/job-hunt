@@ -448,3 +448,22 @@ def test_declaring_an_eval_that_does_not_exist_is_caught():
         99: "An id nobody will ever look up, exempting nothing at all while "
             "looking exactly like an exemption that works."}}))
     assert any(f.startswith("UNKNOWN_EVAL") for f in _lint(d))
+
+
+def test_a_malformed_coverage_block_is_a_finding_not_a_traceback():
+    """`coverage: nope` crashed with AttributeError.
+
+    This module is a gate: exit 0 clean, 1 findings, 2 could-not-run. A
+    traceback exits 1 — the code for "findings" — so a malformed file was
+    indistinguishable from a failing one to make, to CI, and to anything reading
+    an exit code. Every other malformed shape here already reports; this one
+    reached `.get` on a string.
+    """
+    d = _mode_doc(coverage="nope")
+    out = _lint(d)
+    assert any(f.startswith("BAD_COVERAGE") for f in out), out
+
+
+@pytest.mark.parametrize("value", ["nope", 42, ["a"], True])
+def test_no_coverage_shape_raises(value):
+    _lint(_mode_doc(coverage=value))     # must not raise

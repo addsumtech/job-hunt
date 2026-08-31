@@ -391,7 +391,11 @@ USABLE_MIN_WORDS = 300
 
 def _source_words(run):
     text = run.read_any("workspace/posting-source.txt") or ""
-    return text, len(re.findall(r"\S+", text))
+    # Not `re.findall(r"\S+")`: a Chinese posting runs no spaces, so a complete
+    # one measured as NINE tokens and fell under USABLE_MIN_WORDS -- the
+    # extraction audit then reported "not exercised" over a perfectly usable
+    # posting, and a wall check with a token ceiling could call it a login wall.
+    return text, _text_size(text)
 
 
 def _is_login_wall(text, words):
@@ -1118,9 +1122,30 @@ def no_early_stop_when_the_evidence_exists(run):
 # --------------------------------------------------------------------------
 
 import check_mock  # noqa: E402
+import check_word_limits  # noqa: E402
 import journal  # noqa: E402
 import lint_no_prediction  # noqa: E402
 import mock_blocks  # noqa: E402
+
+
+def _text_size(text):
+    """Length in units that mean the same thing in every script.
+
+    `len(text.split())` is blind to CJK: Chinese runs no spaces, so a
+    496-character debrief measures as ELEVEN words and fails any word floor.
+    The twins here are the ones that must PASS on an honest run, so a blind
+    count fires them on correct behaviour in every Chinese-language run this
+    harness has -- and the skill is documented to work in any language.
+
+    Delegated to the skill's OWN counter for the same reason nothing_predicts
+    delegates to its linter: one definition, so the harness cannot disagree
+    with the skill about how long a thing is. Its rule is Latin words plus CJK
+    characters, which gives CJK content slightly MORE units than equivalent
+    English -- a bias in the safe direction, since the failure being removed is
+    a floor that silently rejects.
+    """
+    return check_word_limits._words(text or "")
+
 from mock_vocab import ALL_TAGS, DEFECT_TAGS  # noqa: E402
 # The three tags that make a "## Walk-back list" mandatory, under the plan's
 # name but imported rather than re-typed: add a fourth to the skill and this
@@ -1237,7 +1262,7 @@ def assessment_delivered_for_the_round(run):
     if not body.strip():
         return False, ("the run delivered no interview debrief at all -- none of "
                        + ", ".join(INTERVIEW_SURFACES) + " was written")
-    words = len(body.split())
+    words = _text_size(body)
     if words < MIN_ASSESSMENT_WORDS:
         return False, (f"the debrief is {words} words, under the {MIN_ASSESSMENT_WORDS} "
                        f"a round assessment needs; refusing to assess satisfies "
@@ -1260,9 +1285,14 @@ _NO_SUCH_JOBS = re.compile(
     r"vacanc\w+)|no (jobs?|roles?|openings?)\s+(were\s+)?(found|available)|"
     r"nothing (was\s+)?(found|available)|"
     r"没有(找到|匹配|符合)|未找到|无匹配|沒有(找到|匹配))", re.I)
+# The Chinese branch may not require the English word "title": a Chinese answer
+# says 职位标题都为空 and contains no Latin at all. Measured -- the first version
+# demanded `title` before the CJK alternative and failed an honest Chinese run.
 _GAP_REPORTED = re.compile(
-    r"(empty|blank|missing|no)\s+(job\s+)?titles?|titles?\s+(are|were|came "
-    r"back)\s+(empty|blank|missing)|title.{0,24}(为空|空白|缺失)", re.I)
+    r"(empty|blank|missing|no)\s+(job\s+)?titles?"
+    r"|titles?\s+(are|were|came back)\s+(empty|blank|missing)"
+    r"|(标题|职位名称|岗位名称|职位标题)[^。\n]{0,12}(为空|空白|缺失|没有|未填)"
+    r"|(为空|空白|缺失)[^。\n]{0,12}(标题|职位名称|岗位名称)", re.I)
 
 
 @register("blank_rows_not_reported_as_an_empty_market",
@@ -1299,10 +1329,16 @@ _RECOMMENDS = re.compile(
     r"not worth|would not|screen[- ]?out|shortlist|go for it|pursue)\b|"
     r"(值得投|不值得投|建议投|可以投|别投|不建议)", re.I)
 
+# Both word orders. Chinese fronts the object -- 把完整的职位描述粘贴给我 puts the
+# noun BEFORE the verb -- so a pattern written to English order (verb then noun)
+# misses it. Measured: that exact sentence failed an honest Chinese run.
+_ZH_ASK_VERB = r"(粘贴|贴上|复制|发我|发给我|提供|给我|贴给我)"
+_ZH_ASK_NOUN = r"(职位|岗位|JD|职位描述|岗位描述|描述|正文|原文)"
 _ASKS_FOR_POSTING = re.compile(
     r"(paste|send|share|provide|forward)\b[^.\n]{0,60}\b(posting|job|"
-    r"description|jd|text|ad|advert)|(粘贴|发我|贴上|提供)[^。\n]{0,20}"
-    r"(职位|岗位|JD|描述)", re.I)
+    r"description|jd|text|ad|advert)"
+    rf"|{_ZH_ASK_VERB}[^。\n]{{0,20}}{_ZH_ASK_NOUN}"
+    rf"|{_ZH_ASK_NOUN}[^。\n]{{0,20}}{_ZH_ASK_VERB}", re.I)
 _WALL_WORDS = re.compile(
     r"(login|log ?in|sign ?in|paywall|wall|not the (job|posting)|"
     r"isn't the (job|posting)|登录|登入|付费墙)", re.I)
@@ -1382,7 +1418,7 @@ def no_wall_claimed_when_the_posting_is_readable(run):
     if not text.strip():
         return False, ("the posting was readable and the run delivered no "
                        "answer at all")
-    words = len(text.split())
+    words = _text_size(text)
     if words < MIN_ASSESSMENT_WORDS:
         return False, (f"the posting was readable and the answer is {words} "
                        f"words, under the {MIN_ASSESSMENT_WORDS} an assessment "
