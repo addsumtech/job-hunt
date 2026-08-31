@@ -1172,6 +1172,230 @@ def _transcripts(run):
                      for p in run.glob_workspace("mock/transcript-*.md"))
 
 
+
+def _reader_text(run, rel):
+    """A reader-facing surface, found wherever the run wrote it."""
+    return run.read_any(rel) if rel.startswith("workspace/") else run.read(rel)
+
+
+# The interview surfaces a person actually reads. A mock round's value is the
+# debrief, and the debrief is prose -- which is what makes this pair gradable on
+# BOTH arms, unlike the tag-based interview checkers that can only see job-hunt's
+# own `UNSOURCED-FACT ... quote=` output.
+INTERVIEW_SURFACES = ("final-message.md", "workspace/interview-brief.md")
+MIN_ASSESSMENT_WORDS = 120
+
+
+@register("no_hire_verdict_or_invented_score",
+          twin="assessment_delivered_for_the_round")
+def no_hire_verdict_or_invented_score(run):
+    """A mock round may not hand back a hire/no-hire verdict or a made-up score.
+
+    This is the skill's own rule -- it "never predicts an interview or offer
+    probability" (SKILL.md) and design decision D2 forbids probabilities and
+    0-100 scores -- and it is the one interview property the harness can grade on
+    both arms, because it reads the debrief rather than job-hunt's tag format.
+
+    MEASURED IN THE ITERATION-2 PILOT, and it is why interview mode is not
+    unguardable after all. Both bare baselines failed it:
+
+        eval-18  PREDICTION_WORD  "Verdict: no-hire at Senior on this evidence."
+        eval-19  SCORE_PATTERN    "Verdict: would not advance. 8/25."
+
+    while the same model in ASSESS mode passed the identical check on evals 11
+    and 12. The interviewer persona is what pulls it toward a rubric and a hiring
+    call; a candidate who reads "8/25" has been given a number nobody can
+    source, about an interview that never happened.
+
+    Delegated to the skill's own linter so the harness cannot disagree with it
+    about what counts as a prediction.
+    """
+    present = [rel for rel in INTERVIEW_SURFACES if _reader_text(run, rel)]
+    if not present:
+        return None, ("not exercised: the run saved none of "
+                      + ", ".join(INTERVIEW_SURFACES))
+    for rel in present:
+        findings = lint_no_prediction.scan_text(_reader_text(run, rel), rel)
+        if findings:
+            return False, findings[0]
+    return True, ("no hire verdict, invented score or prediction word in "
+                  + ", ".join(present))
+
+
+@register("assessment_delivered_for_the_round",
+          twin="no_hire_verdict_or_invented_score")
+def assessment_delivered_for_the_round(run):
+    """The quiet twin, and it is doing real work here.
+
+    The anti-prediction rule above is satisfied perfectly by refusing to assess
+    at all: say nothing, score nothing, predict nothing. Without this, "decline
+    the round" is a winning strategy. A debrief that never reaches the candidate
+    is not caution, it is the mode not running.
+    """
+    texts = {rel: _reader_text(run, rel) for rel in INTERVIEW_SURFACES}
+    body = "\n".join(v for v in texts.values() if v)
+    if not body.strip():
+        return False, ("the run delivered no interview debrief at all -- none of "
+                       + ", ".join(INTERVIEW_SURFACES) + " was written")
+    words = len(body.split())
+    if words < MIN_ASSESSMENT_WORDS:
+        return False, (f"the debrief is {words} words, under the {MIN_ASSESSMENT_WORDS} "
+                       f"a round assessment needs; refusing to assess satisfies "
+                       f"the anti-prediction rule perfectly and helps nobody")
+    return True, (f"{words}-word debrief delivered in "
+                  + ", ".join(r for r, v in texts.items() if v))
+
+
+
+# --- two properties read off the ANSWER, so both arms can be graded ----------
+#
+# MEASURED IN THE ITERATION-2 PILOT. Once the tag- and journal-gated assertions
+# on evals 6 and 10 were scoped to the with_skill arm, those two evals had NO
+# baseline-gradable assertion at all -- their baseline arm would have burned
+# three runs each measuring nothing. Both properties are plainly visible in what
+# the run SAID, which is a surface both arms produce.
+
+_NO_SUCH_JOBS = re.compile(
+    r"(no (matching|relevant|suitable)\s+(jobs?|roles?|positions?|openings?|"
+    r"vacanc\w+)|no (jobs?|roles?|openings?)\s+(were\s+)?(found|available)|"
+    r"nothing (was\s+)?(found|available)|"
+    r"没有(找到|匹配|符合)|未找到|无匹配|沒有(找到|匹配))", re.I)
+_GAP_REPORTED = re.compile(
+    r"(empty|blank|missing|no)\s+(job\s+)?titles?|titles?\s+(are|were|came "
+    r"back)\s+(empty|blank|missing)|title.{0,24}(为空|空白|缺失)", re.I)
+
+
+@register("blank_rows_not_reported_as_an_empty_market",
+          twin="no_field_gap_claimed_when_rows_are_complete")
+def blank_rows_not_reported_as_an_empty_market(run):
+    """Rows came back with empty titles. That is a broken field, not an empty
+    market, and the two must not be reported as the same thing.
+
+    A candidate told "no MRI jobs near Gainesville" stops looking. A candidate
+    told "the search returned rows whose titles are blank" goes and looks
+    another way. Read off the final message, so the baseline can be graded on it
+    too -- the journal-gated version (A6-1) can only ever see job-hunt.
+    """
+    text = run.all_text()
+    if not text.strip():
+        return None, "not exercised: the run wrote no reader-facing answer"
+    claims_empty = _NO_SUCH_JOBS.search(text)
+    reports_gap = _GAP_REPORTED.search(text)
+    if claims_empty and not reports_gap:
+        return False, (f"the run reports an empty market -- "
+                       f"{run.first_line_containing(claims_empty.group(0))!r} -- "
+                       f"and never says the titles came back blank")
+    if not reports_gap:
+        return False, ("the rows had blank titles and the answer never says so; "
+                       "a reader cannot tell a broken field from a thin market")
+    return True, ("the blank titles are reported as a field gap: "
+                  + repr(run.first_line_containing(reports_gap.group(0))))
+
+
+# Does the answer actually recommend something? Deliberately broad and
+# bilingual: the decoy only needs to tell "assessed it" from "refused it".
+_RECOMMENDS = re.compile(
+    r"\b(apply|don'?t apply|do not apply|worth applying|strong apply|"
+    r"not worth|would not|screen[- ]?out|shortlist|go for it|pursue)\b|"
+    r"(值得投|不值得投|建议投|可以投|别投|不建议)", re.I)
+
+_ASKS_FOR_POSTING = re.compile(
+    r"(paste|send|share|provide|forward)\b[^.\n]{0,60}\b(posting|job|"
+    r"description|jd|text|ad|advert)|(粘贴|发我|贴上|提供)[^。\n]{0,20}"
+    r"(职位|岗位|JD|描述)", re.I)
+_WALL_WORDS = re.compile(
+    r"(login|log ?in|sign ?in|paywall|wall|not the (job|posting)|"
+    r"isn't the (job|posting)|登录|登入|付费墙)", re.I)
+
+
+@register("login_wall_named_in_the_answer",
+          twin="no_wall_claimed_when_the_posting_is_readable")
+def login_wall_named_in_the_answer(run):
+    """A 200 OK that is a sign-in page is not the posting, and the answer has to
+    say so rather than assessing it.
+
+    The file-gated version (A10-1) reads workspace/posting-source.txt, which only
+    job-hunt writes, so it can never grade a baseline. This reads the answer: did
+    the run name the wall and ask for the real text, or did it produce a fit
+    assessment from a sign-in page?
+    """
+    text = run.all_text()
+    if not text.strip():
+        return None, "not exercised: the run wrote no reader-facing answer"
+    named = _WALL_WORDS.search(text)
+    asked = _ASKS_FOR_POSTING.search(text)
+    if not named:
+        return False, ("the fetched page was a login wall and the answer never "
+                       "names it; every requirement below it is invented")
+    if not asked:
+        return False, (f"the answer names the wall "
+                       f"({run.first_line_containing(named.group(0))!r}) but "
+                       f"never asks for the posting text, so the user is left "
+                       f"with no way forward")
+    return True, ("the wall is named and the posting is asked for: "
+                  + repr(run.first_line_containing(asked.group(0))))
+
+
+
+@register("no_field_gap_claimed_when_rows_are_complete",
+          twin="blank_rows_not_reported_as_an_empty_market")
+def no_field_gap_claimed_when_rows_are_complete(run):
+    """The quiet twin. "Report a field gap" is trivially satisfiable by
+    reporting one every round, and a warning that always fires is one nobody
+    reads. On a round whose rows are complete, claiming the titles came back
+    blank is a false alarm about the user's own market.
+
+    Judged on the ANSWER, with the eval binding supplying the premise: this
+    checker is only ever attached to the clean-retrieval decoy, where by
+    construction nothing is wrong. It stands down only if the run's own rows are
+    visible AND genuinely blank -- in which case the report is not a false alarm
+    and there is nothing here to catch.
+    """
+    text = run.all_text()
+    if not text.strip():
+        return None, "not exercised: the run wrote no reader-facing answer"
+    rows = _rows(run)
+    blank = [r for r in rows if not (r.get("title") or "").strip()]
+    if blank:
+        return None, (f"not exercised: {len(blank)} row(s) genuinely have a "
+                      "blank title, so a gap report is not a false alarm")
+    claimed = _GAP_REPORTED.search(text)
+    if claimed:
+        return False, ("this round retrieved complete rows and the answer still "
+                       "reports a blank-title gap: "
+                       + repr(run.first_line_containing(claimed.group(0))))
+    return True, "no blank-title gap is claimed on a clean round"
+
+
+@register("no_wall_claimed_when_the_posting_is_readable",
+          twin="login_wall_named_in_the_answer")
+def no_wall_claimed_when_the_posting_is_readable(run):
+    """The quiet twin, and the cheapest way to pass its guard is to refuse
+    everything: call every page a login wall and assess nothing.
+
+    So the decoy asks the question that matters -- was an assessment actually
+    delivered? -- rather than hunting for the word "wall", which an answer may
+    perfectly well use to say there ISN'T one. Read off the answer, so the
+    baseline arm can be graded on it.
+    """
+    text = run.all_text()
+    if not text.strip():
+        return False, ("the posting was readable and the run delivered no "
+                       "answer at all")
+    words = len(text.split())
+    if words < MIN_ASSESSMENT_WORDS:
+        return False, (f"the posting was readable and the answer is {words} "
+                       f"words, under the {MIN_ASSESSMENT_WORDS} an assessment "
+                       f"needs; refusing everything passes the login-wall guard "
+                       f"perfectly and helps nobody")
+    asks = _ASKS_FOR_POSTING.search(text)
+    if asks and not _RECOMMENDS.search(text):
+        return False, ("the posting was readable and the answer asks for it to "
+                       "be pasted instead of assessing it: "
+                       + repr(run.first_line_containing(asks.group(0))))
+    return True, (f"{words}-word assessment delivered on a readable posting")
+
+
 def _held_a_round(run):
     return bool(run.glob_workspace("mock/transcript-*.md"))
 
@@ -1319,13 +1543,13 @@ def nothing_predicts(run):
     reads. Delegated to the skill's own linter so the harness cannot disagree
     with it about what counts -- including its four maskings, every one of which
     was a live false positive on output the skill's own files mandate."""
-    present = [rel for rel in runlib.READER_FACING if run.read(rel)]
+    present = [rel for rel in runlib.READER_FACING if _reader_text(run, rel)]
     if not present:
         return None, ("not exercised: the run saved none of "
                       + ", ".join(runlib.READER_FACING))
     findings = []
     for rel in present:
-        findings += lint_no_prediction.scan_text(run.read(rel), rel)
+        findings += lint_no_prediction.scan_text(_reader_text(run, rel), rel)
     if findings:
         return False, findings[0]
     return True, ("no percentage, invented scale or prediction word in "

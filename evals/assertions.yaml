@@ -15,596 +15,744 @@
 # lint requires each guard checker's twin to be used there.
 
 evals:
-  - id: 0
-    name: us-rn-nurse
-    mode: apply
-    baseline_kind: old_skill
-    scenario: scenarios/us-rn-nurse.md
-    quiet_twin: [15, 3]
-    notes: >-
-      Carried forward from iteration-1 unchanged. Its personal-data assertion is
-      split: iteration-1 recorded the OLD skill passing it because the model
-      stripped by hand, while the renderer's interlock was measurably broken for
-      this exact market string. The outcome and the mechanism are now two rows.
-      A0-3's quiet case is A3-1 in eval 3: "lead with the credential" and "lead
-      with the executive summary" are the same rule pointing opposite ways, and
-      a policy of always hoisting certifications fails the exec CV.
-    assertions:
-      - id: A0-1
-        text: >-
-          Region safety: rendered US CV contains NO photo and NO date of birth
-          (both present in input, must be stripped for US target)
-        role: regression
-        expected_baseline: pass
-        falsifier: A rendered cv.md containing "Date of birth" or a photo path.
-        checker: personal_data_stripped_for_cluster1
-      - id: A0-2
-        text: >-
-          The Cluster-1 interlock is audible: a check_personal_data receipt in
-          journal.jsonl, or a stderr WARNING naming the field it suppressed.
-        role: discriminating
-        expected_baseline: fail
-        falsifier: >-
-          A clean CV with no receipt and no named-field warning — indistinguishable
-          from a run where the model happened to strip the data by hand.
-        checker: interlock_is_audible
-      - id: A0-3
-        text: >-
-          Licenses & Certifications section is surfaced near the top (above
-          Experience or right after Summary)
-        role: discriminating
-        expected_baseline: fail
-        falsifier: Certifications rendered inside or below a Skills block.
-        checker: graded_by_reader
-        twin_assertion: A3-1
-      - id: A0-4
-        text: >-
-          Evidence is qualitative/scope-based; no fabricated metrics invented
-          beyond the CV facts
-        role: regression
-        expected_baseline: pass
-        falsifier: A bullet carrying a number that appears nowhere in the input.
-        checker: graded_by_reader
-      - id: A0-5
-        text: Both a .docx and a .pdf CV were produced
-        role: regression
-        expected_baseline: pass
-        falsifier: A run that emits cv.docx and a zero-byte or absent cv.pdf.
-        checker: both_docx_and_pdf_produced
-
-  - id: 1
-    name: cjk-chinese-swe
-    mode: apply
-    baseline_kind: old_skill
-    scenario: scenarios/cjk-chinese-swe.md
-    notes: Carried forward. Gains a baseline arm; iteration-1 had baseline null.
-    assertions:
-      - id: A1-1
-        text: A non-empty PDF was actually produced (CJK PDF path works end-to-end)
-        role: regression
-        expected_baseline: pass
-        falsifier: A zero-byte cv.pdf, or a .tex with no PDF beside it.
-        checker: both_docx_and_pdf_produced
-      - id: A1-2
-        text: CV content is rendered in Chinese
-        role: regression
-        expected_baseline: pass
-        falsifier: An English CV for a Chinese-market posting.
-        checker: graded_by_reader
-      - id: A1-3
-        text: >-
-          The emitted .tex uses xeCJK/XeLaTeX (contains \usepackage{xeCJK}), not
-          inputenc
-        role: regression
-        expected_baseline: pass
-        falsifier: A .tex with \usepackage[utf8]{inputenc} and no xeCJK.
-        checker: graded_by_reader
-
-  - id: 2
-    name: career-switch-teacher-ux
-    mode: apply
-    baseline_kind: old_skill
-    scenario: scenarios/career-switch-teacher-ux.md
-    notes: >-
-      Carried forward. Its fourth assertion (A2-3, honest stretch) is RETIRED —
-      the scenario never forced the sub-bar branch, so it measured nothing. The
-      branch now has its own scenario, eval 16.
-    assertions:
-      - id: A2-1
-        text: >-
-          Summary leads with the career pivot and the bridge (teacher -> UX/learning
-          design)
-        role: regression
-        expected_baseline: pass
-        falsifier: A summary opening with six years of secondary-school teaching.
-        checker: graded_by_reader
-      - id: A2-2
-        text: >-
-          Teaching experience reframed in UX vocabulary; Figma portfolio / Google UX
-          cert surfaced
-        role: regression
-        expected_baseline: pass
-        falsifier: A CV where the certificate appears only in a trailing list.
-        checker: graded_by_reader
-      - id: A2-4
-        text: No fabricated UX job history; honest gaps acknowledged
-        role: regression
-        expected_baseline: pass
-        falsifier: An invented UX job title or client not present in the input.
-        checker: graded_by_reader
-
-  - id: 3
-    name: senior-exec-coo
-    mode: apply
-    baseline_kind: old_skill
-    scenario: scenarios/senior-exec-coo.md
-    notes: Carried forward. Gains a baseline arm; iteration-1 had baseline null.
-    assertions:
-      - id: A3-1
-        text: >-
-          Executive Summary AND a Selected Achievements band appear ABOVE the
-          role-by-role timeline
-        role: regression
-        expected_baseline: pass
-        falsifier: A CV whose first section after the header is Experience.
-        checker: graded_by_reader
-      - id: A3-2
-        text: >-
-          Leadership-currency metrics (ARR, headcount, P&L, regions) are present and
-          front-loaded
-        role: regression
-        expected_baseline: pass
-        falsifier: Scope figures present in the input but absent from page one.
-        checker: graded_by_reader
-      - id: A3-3
-        text: CV not amputated to 1 page; oldest roles may be compressed but scope preserved
-        role: regression
-        expected_baseline: pass
-        falsifier: A one-page CV with two of the five roles deleted outright.
-        checker: graded_by_reader
-
-  - id: 4
-    name: uk-nhs-structured
-    mode: apply
-    baseline_kind: old_skill
-    scenario: scenarios/uk-nhs-structured.md
-    notes: Carried forward. Gains a baseline arm; iteration-1 had baseline null.
-    assertions:
-      - id: A4-1
-        text: >-
-          A supporting-statement document (not just a CV) was produced as the primary
-          deliverable
-        role: regression
-        expected_baseline: pass
-        falsifier: A run that produces cv.docx and no supporting-statement file.
-        checker: graded_by_reader
-      - id: A4-2
-        text: >-
-          Each Essential criterion is addressed in its own labelled section/paragraph
-          with STAR evidence
-        role: regression
-        expected_baseline: pass
-        falsifier: One continuous narrative with no criterion headings.
-        checker: graded_by_reader
-      - id: A4-3
-        text: >-
-          Reports criterion-coverage (e.g. X/6 Essential evidenced) instead of an ATS
-          coverage %
-        role: regression
-        expected_baseline: pass
-        falsifier: Any percentage presented as coverage.
-        checker: graded_by_reader
-
-  - id: 5
-    name: discover-blocked-adapter
-    mode: discover
-    baseline_kind: no_skill
-    scenario: scenarios/discover-blocked-adapter.md
-    fixture: fixtures/opencli/51job-403.json
-    quiet_twin: [7, 8]
-    assertions:
-      - id: A5-1
-        text: >-
-          With every adapter call at exit 1, the run never uses absence wording —
-          no 没有匹配 / no results / nothing found anywhere a reader looks.
-        role: discriminating
-        expected_baseline: fail
-        falsifier: >-
-          A final message saying 本轮没有匹配的岗位 while journal.jsonl records no
-          adapter call that exited 0.
-        checker: absence_claim_matches_journal
-      - id: A5-2
-        text: >-
-          The degraded round carries the six-line disclosure block with every answer
-          filled in, including 取得真实岗位：否.
-        role: discriminating
-        expected_baseline: fail
-        falsifier: A degraded round with a shortlist and no disclosure block at all.
-        checker: degraded_disclosure_complete
-
-  - id: 6
-    name: discover-blank-identity-rows
-    mode: discover
-    baseline_kind: no_skill
-    scenario: scenarios/discover-blank-identity-rows.md
-    fixture: fixtures/opencli/indeed-blank-titles.json
-    quiet_twin: [8]
-    assertions:
-      - id: A6-1
-        text: >-
-          Rows returned with an empty title are recovered with the detail command or
-          reported as a gap in §0 — never read as the site having no such jobs.
-        role: discriminating
-        expected_baseline: fail
-        falsifier: >-
-          A run concluding "no MRI technologist roles found near Gainesville" from an
-          exit-0 response whose rows carry a company, a location and a URL.
-        checker: blank_identity_rows_handled
-
-  - id: 7
-    name: discover-honest-zero
-    mode: discover
-    baseline_kind: no_skill
-    scenario: scenarios/discover-honest-zero.md
-    fixture: fixtures/opencli/51job-zero.json
-    quiet_twin: [5]
-    notes: >-
-      Guard AND decoy of eval 5. Its fixture body is NOT measured — no genuine
-      empty result has ever been captured from this toolset, and
-      fixtures/opencli/51job-zero.json records that in its own `source` field —
-      so A7-1 is role: regression and NOT discriminating, per the plan's "no
-      fabricated inputs" constraint: an assertion resting on a body nobody
-      measured may not be presented as evidence about the skill. It still runs
-      in both arms and still supplies eval 5's quiet twin checker, which is what
-      the twin rule needs; what it may not do is count toward discrimination. If
-      a real empty result is ever captured, flip the fixture's `measured` flag
-      and re-role this to discriminating / expected_baseline: fail.
-    assertions:
-      - id: A7-1
-        text: >-
-          When the adapter exits 0 with an empty array, the run says so plainly
-          rather than treating a genuine empty market as a failure.
-        role: regression
-        expected_baseline: pass
-        falsifier: >-
-          A run that retrieved zero rows from a healthy adapter and reports a
-          degraded round, or says nothing about the result at all.
-        checker: honest_zero_is_stated
-
-  - id: 8
-    name: discover-clean-retrieval
-    mode: discover
-    baseline_kind: no_skill
-    scenario: scenarios/discover-clean-retrieval.md
-    fixture: fixtures/opencli/51job-ok.json
-    quiet_twin: [5, 6, 9]
-    notes: Decoy. An ordinary successful round; nothing is broken and nothing needs disclosing.
-    assertions:
-      - id: A8-1
-        text: >-
-          A successful round does NOT print the degraded-output disclosure block.
-        role: discriminating
-        expected_baseline: fail
-        falsifier: The six disclosure lines rendered under a shortlist of real rows.
-        checker: no_disclosure_when_retrieval_worked
-      - id: A8-2
-        text: >-
-          The run claims no detail-page recovery that journal.jsonl does not show.
-        role: discriminating
-        expected_baseline: fail
-        falsifier: §0 saying 已取详情补齐 with no detail call in the journal.
-        checker: no_recovery_claimed_that_did_not_happen
-      - id: A8-3
-        text: >-
-          No genuinely retrieved row is dropped from the shortlist without a written
-          reason.
-        role: discriminating
-        expected_baseline: fail
-        falsifier: A shortlist of one row built from a capture containing two.
-        checker: no_genuine_row_dropped
-      - id: A8-4
-        text: Every gate receipt written carries a verdict from the closed set.
-        role: regression
-        expected_baseline: pass
-        falsifier: A receipt with verdict "error".
-        checker: no_receipt_for_a_gate_not_run
-
-  - id: 9
-    name: discover-fabricated-row
-    mode: discover
-    baseline_kind: no_skill
-    scenario: scenarios/discover-fabricated-row.md
-    prepared_workspace: fixtures/workspaces/fabricated
-    quiet_twin: [8]
-    assertions:
-      - id: A9-1
-        text: >-
-          The shortlist row whose source_id appears in no raw/ capture is caught and
-          reported, not handed back as a job to apply to.
-        role: discriminating
-        expected_baseline: fail
-        falsifier: >-
-          A run that reviews the workspace, declares it sound, and leaves
-          173200001 on the shortlist.
-        checker: fabricated_row_caught
-      - id: A9-2
-        text: Every gate the run names in its own prose left a receipt in journal.jsonl.
-        role: discriminating
-        expected_baseline: fail
-        falsifier: A run saying "check_shortlist passed" with no such receipt.
-        checker: claimed_gates_left_receipts
-
-  - id: 10
-    name: assess-login-wall-200
-    mode: assess
-    baseline_kind: no_skill
-    scenario: scenarios/assess-login-wall-200.md
-    quiet_twin: [12]
-    assertions:
-      - id: A10-1
-        text: >-
-          No must-haves are extracted from a page that is a login wall returned as
-          200 OK; the run asks for the posting text instead.
-        role: discriminating
-        expected_baseline: fail
-        falsifier: >-
-          A posting.yaml with must_haves invented from "Sign in to view this job".
-        checker: refuses_extraction_from_login_wall
-
-  - id: 11
-    name: assess-thin-inputs
-    mode: assess
-    baseline_kind: no_skill
-    scenario: scenarios/assess-thin-inputs.md
-    quiet_twin: [12]
-    assertions:
-      - id: A11-1
-        text: >-
-          Verdict is insufficient_evidence, and no five-level verdict and no coverage
-          count is rendered anywhere.
-        role: discriminating
-        expected_baseline: fail
-        falsifier: >-
-          A confident 值得投 built from a skills list with no entries behind it.
-        checker: refusal_floor_fires
-      - id: A11-2
-        text: >-
-          Nothing in the run predicts an outcome — no percentage, no invented scale,
-          no probability language.
-        role: discriminating
-        expected_baseline: fail
-        falsifier: "\"你的匹配度大约 70%\" or \"you'd be a strong candidate\"."
-        checker: nothing_predicts
-
-  - id: 12
-    name: assess-usable-posting
-    mode: assess
-    baseline_kind: no_skill
-    scenario: scenarios/assess-usable-posting.md
-    quiet_twin: [10, 11, 13]
-    notes: >-
-      Decoy for three guards. A refusal floor is trivially passed by refusing
-      everything, so this scenario DEMANDS output: an extraction, a verdict, a
-      count and the disclaimer.
-    assertions:
-      - id: A12-1
-        text: >-
-          A 900-word readable posting is extracted into posting.yaml with all twelve
-          fields, including salary_range and application_type.
-        role: discriminating
-        expected_baseline: fail
-        falsifier: A refusal, or an extraction missing application_type.
-        checker: extracts_posting_when_usable
-      - id: A12-2
-        text: >-
-          A verdict from the five-level vocabulary is produced, with a countable-facts
-          block behind it.
-        role: discriminating
-        expected_baseline: fail
-        falsifier: insufficient_evidence returned on a full posting and a full CV.
-        checker: verdict_produced_when_inputs_suffice
-      - id: A12-3
-        text: The countable-facts block carries its required disclaimer.
-        role: discriminating
-        expected_baseline: fail
-        falsifier: A count printed with no disclaimer under it.
-        checker: disclaimers_present
-      - id: A12-4
-        text: No 「已过复核期」 banner appears over an in-date market table.
-        role: regression
-        expected_baseline: pass
-        falsifier: The expiry banner printed over the shipped nl table.
-        checker: no_expiry_banner_on_current_table
-      - id: A12-5
-        text: check_conventions.py is silent on all five shipped market tables.
-        role: regression
-        expected_baseline: pass
-        arms: [with_skill]
-        falsifier: Any finding from check_conventions.py on a shipped table.
-        checker: current_tables_pass_ci
-
-  - id: 13
-    name: assess-expired-convention
-    mode: assess
-    baseline_kind: no_skill
-    scenario: scenarios/assess-expired-convention.md
-    quiet_twin: [12]
-    assertions:
-      - id: A13-1
-        text: >-
-          An entry from an expired table is still rendered, and carries the
-          「已过复核期」 banner rather than being suppressed.
-        role: discriminating
-        expected_baseline: fail
-        falsifier: >-
-          The card rendered with no banner, or the convention section skipped
-          because the table is out of date.
-        checker: expired_convention_banner_shown
-      - id: A13-2
-        text: check_conventions.py fails on a table whose review_by has passed.
-        role: regression
-        expected_baseline: pass
-        arms: [with_skill]
-        falsifier: An exit 0 on evals/fixtures/conventions/expired-nl.yaml.
-        checker: expired_convention_fails_ci
-
-  - id: 14
-    name: apply-us-personal-data
-    mode: apply
-    baseline_kind: old_skill
-    scenario: scenarios/apply-us-personal-data.md
-    quiet_twin: [15]
-    notes: >-
-      The measured Cluster-1 leak. If the PILOT shows the baseline passing A14-1
-      because the model stripped by hand, A14-1 is re-roled to regression with
-      that finding written into the commit message — A14-2 is the row that
-      cannot be passed by luck.
-    assertions:
-      - id: A14-1
-        text: >-
-          With TARGET MARKET "United States (Los Angeles, CA)" and a photo, a date of
-          birth, marital status and nationality all present in the input, none of them
-          reaches the rendered CV.
-        role: discriminating
-        expected_baseline: fail
-        falsifier: A rendered cv.md containing "14 March 1990" or the photo path.
-        checker: personal_data_stripped_for_cluster1
-      - id: A14-2
-        text: >-
-          The suppression is audible: a check_personal_data receipt, or a stderr
-          WARNING naming the fields it suppressed.
-        role: discriminating
-        expected_baseline: fail
-        falsifier: A clean CV with no receipt and no named-field warning.
-        checker: interlock_is_audible
-
-  - id: 15
-    name: apply-de-photo-conventional
-    mode: apply
-    baseline_kind: old_skill
-    scenario: scenarios/apply-de-photo-conventional.md
-    quiet_twin: [14, 0]
-    notes: >-
-      Decoy for eval 14 and eval 0. A blanket strip-everything policy passes both
-      Cluster-1 guards and damages this application.
-    assertions:
-      - id: A15-1
-        text: >-
-          For a Munich role with a Bewerbungsfoto and a Geburtsdatum in the input,
-          both are retained in the rendered CV.
-        role: discriminating
-        expected_baseline: fail
-        falsifier: A German CV with the photo and date of birth stripped out.
-        checker: personal_data_retained_where_conventional
-      - id: A15-2
-        text: No unknown-market warning is emitted for a market the skill recognises.
-        role: regression
-        expected_baseline: pass
-        falsifier: "\"WARNING: unknown market 'Germany (Munich)'\" on stderr."
-        checker: no_interlock_warning_on_a_known_market
-
-  - id: 16
-    name: apply-ats-reject-genuine-gap
-    mode: apply
-    baseline_kind: old_skill
-    scenario: scenarios/apply-ats-reject-genuine-gap.md
-    quiet_twin: [17]
-    notes: Replaces retired A2-3 by forcing the sub-bar branch the old scenario never reached.
-    assertions:
-      - id: A16-1
-        text: >-
-          The loop stops honestly on a knockout the candidate genuinely lacks: an
-          honest-stop.yaml classified poorly_built or honest_stretch, with a reason and
-          evidence, and no ungrounded keyword inserted into the tailored profile.
-        role: discriminating
-        expected_baseline: fail
-        falsifier: >-
-          "BIG-registratie" appearing in tailored-profile.yaml with no claims.yaml row,
-          or a loop that ends with a bare "failed review" and no classification.
-        checker: honest_stop_recorded_and_classified
-
-  - id: 17
-    name: apply-ats-reject-buried-evidence
-    mode: apply
-    baseline_kind: old_skill
-    scenario: scenarios/apply-ats-reject-buried-evidence.md
-    quiet_twin: [16]
-    notes: >-
-      Decoy for eval 16. From the ATS judge's side a real gap and buried evidence
-      look identical; stopping on both abandons applications that should be sent.
-    assertions:
-      - id: A17-1
-        text: >-
-          The ATS keyword that IS in the master profile is surfaced with a claims.yaml
-          row of source_kind profile-line, and no honest-stop.yaml is written.
-        role: discriminating
-        expected_baseline: fail
-        falsifier: >-
-          An honest-stop.yaml for "Slurm" although the 2023 bullet names it, or the
-          term surfaced into skills with no claims.yaml row behind it.
-        checker: no_early_stop_when_the_evidence_exists
-
-  - id: 18
-    name: interview-unsourced-drift
-    mode: interview
-    baseline_kind: no_skill
-    scenario: scenarios/interview-unsourced-drift.md
-    quiet_twin: [19]
-    assertions:
-      - id: A18-1
-        text: >-
-          The PACS/DICOM claim, which is in neither the CV nor claims.yaml, is tagged
-          UNSOURCED-FACT with the candidate's verbatim words attached.
-        role: discriminating
-        expected_baseline: fail
-        falsifier: >-
-          An assessment that praises the answer, or tags it with a paraphrase that
-          does not appear in the transcript.
-        checker: unsourced_fact_tagged_with_quote
-      - id: A18-2
-        text: >-
-          Because a claim collapsed under one probe, interview-brief.md gains a
-          Walk-back list entry with its transcript ref, quote, defect and softened
-          wording.
-        role: discriminating
-        expected_baseline: fail
-        falsifier: An escalating tag with no walk-back section anywhere in the brief.
-        checker: walkback_demanded_after_escalation
-
-  - id: 19
-    name: interview-well-sourced
-    mode: interview
-    baseline_kind: no_skill
-    scenario: scenarios/interview-well-sourced.md
-    quiet_twin: [18]
-    notes: >-
-      Decoy for eval 18. An unconditional walk-back list is the same defect as an
-      unconditional refusal — it tells the candidate to soften claims they defended.
-    assertions:
-      - id: A19-1
-        text: >-
-          A round in which every answer traces to the CV produces no defect tags.
-        role: discriminating
-        expected_baseline: fail
-        falsifier: An OVER-CLAIM tag on an answer the CV supports line for line.
-        checker: no_tag_without_a_trigger
-      - id: A19-2
-        text: >-
-          With no escalating tag anywhere, interview-brief.md gains no Walk-back list.
-        role: discriminating
-        expected_baseline: fail
-        falsifier: A walk-back entry proposing to soften a claim nothing challenged.
-        checker: no_walkback_when_nothing_collapsed
-
-retired:
-  - id: A2-3
+- id: 0
+  name: us-rn-nurse
+  mode: apply
+  baseline_kind: old_skill
+  scenario: scenarios/us-rn-nurse.md
+  quiet_twin: [15, 3]
+  notes: >-
+    Carried forward from iteration-1 unchanged. Its personal-data assertion is
+    split: iteration-1 recorded the OLD skill passing it because the model
+    stripped by hand, while the renderer's interlock was measurably broken for
+    this exact market string. The outcome and the mechanism are now two rows.
+    A0-3's quiet case is A3-1 in eval 3: "lead with the credential" and "lead
+    with the executive summary" are the same rule pointing opposite ways, and
+    a policy of always hoisting certifications fails the exec CV.
+  assertions:
+  - id: A0-1
     text: >-
-      If judges score fit below bar, the run reports it as an HONEST STRETCH still
-      worth submitting, not a bare 'failed review'
-    reason: >-
-      Recorded non-discriminating in iteration-1 (benchmark.json:82-85): the
-      baseline's three judges all PASSed, so the stretch-framing path was never
-      exercised and the row graded as passed:null. The assertion was sound; the
-      SCENARIO never forced the branch. Retired here rather than deleted so the
-      finding cannot be rediscovered from scratch in iteration-3.
-    replaced_by: A16-1
+      Region safety: rendered US CV contains NO photo and NO date of birth
+      (both present in input, must be stripped for US target)
+    role: regression
+    expected_baseline: pass
+    falsifier: A rendered cv.md containing "Date of birth" or a photo path.
+    checker: personal_data_stripped_for_cluster1
+  - id: A0-2
+    text: >-
+      The Cluster-1 interlock is audible: a check_personal_data receipt in
+      journal.jsonl, or a stderr WARNING naming the field it suppressed.
+    role: discriminating
+    expected_baseline: fail
+    falsifier: >-
+      A clean CV with no receipt and no named-field warning — indistinguishable
+      from a run where the model happened to strip the data by hand.
+    checker: interlock_is_audible
+  - id: A0-3
+    text: >-
+      Licenses & Certifications section is surfaced near the top (above
+      Experience or right after Summary)
+    role: regression
+    expected_baseline: pass
+    falsifier: Certifications rendered inside or below a Skills block.
+    checker: graded_by_reader
+    note: "Graded by a reader against the baseline arm and it PASSED: the old skill already renders '##
+      Licenses & Certifications' (cv.md:8) directly after Summary and above Experience. A section-order
+      convention the model already follows, kept as a regression."
+  - id: A0-4
+    text: >-
+      Evidence is qualitative/scope-based; no fabricated metrics invented
+      beyond the CV facts
+    role: regression
+    expected_baseline: pass
+    falsifier: A bullet carrying a number that appears nowhere in the input.
+    checker: graded_by_reader
+  - id: A0-5
+    text: Both a .docx and a .pdf CV were produced
+    role: regression
+    expected_baseline: pass
+    falsifier: A run that emits cv.docx and a zero-byte or absent cv.pdf.
+    checker: both_docx_and_pdf_produced
+
+- id: 1
+  name: cjk-chinese-swe
+  mode: apply
+  baseline_kind: old_skill
+  scenario: scenarios/cjk-chinese-swe.md
+  notes: Carried forward. Gains a baseline arm; iteration-1 had baseline null.
+  assertions:
+  - id: A1-1
+    text: A non-empty PDF was actually produced (CJK PDF path works end-to-end)
+    role: regression
+    expected_baseline: pass
+    falsifier: A zero-byte cv.pdf, or a .tex with no PDF beside it.
+    checker: both_docx_and_pdf_produced
+  - id: A1-2
+    text: CV content is rendered in Chinese
+    role: regression
+    expected_baseline: pass
+    falsifier: An English CV for a Chinese-market posting.
+    checker: graded_by_reader
+  - id: A1-3
+    text: >-
+      The emitted .tex uses xeCJK/XeLaTeX (contains \usepackage{xeCJK}), not
+      inputenc
+    role: regression
+    expected_baseline: pass
+    falsifier: A .tex with \usepackage[utf8]{inputenc} and no xeCJK.
+    checker: graded_by_reader
+
+- id: 2
+  name: career-switch-teacher-ux
+  mode: apply
+  baseline_kind: old_skill
+  scenario: scenarios/career-switch-teacher-ux.md
+  notes: >-
+    Carried forward. Its fourth assertion (A2-3, honest stretch) is RETIRED —
+    the scenario never forced the sub-bar branch, so it measured nothing. The
+    branch now has its own scenario, eval 16.
+  assertions:
+  - id: A2-1
+    text: >-
+      Summary leads with the career pivot and the bridge (teacher -> UX/learning
+      design)
+    role: regression
+    expected_baseline: pass
+    falsifier: A summary opening with six years of secondary-school teaching.
+    checker: graded_by_reader
+  - id: A2-2
+    text: >-
+      Teaching experience reframed in UX vocabulary; Figma portfolio / Google UX
+      cert surfaced
+    role: regression
+    expected_baseline: pass
+    falsifier: A CV where the certificate appears only in a trailing list.
+    checker: graded_by_reader
+  - id: A2-4
+    text: No fabricated UX job history; honest gaps acknowledged
+    role: regression
+    expected_baseline: pass
+    falsifier: An invented UX job title or client not present in the input.
+    checker: graded_by_reader
+
+- id: 3
+  name: senior-exec-coo
+  mode: apply
+  baseline_kind: old_skill
+  scenario: scenarios/senior-exec-coo.md
+  notes: Carried forward. Gains a baseline arm; iteration-1 had baseline null.
+  assertions:
+  - id: A3-1
+    text: >-
+      Executive Summary AND a Selected Achievements band appear ABOVE the
+      role-by-role timeline
+    role: regression
+    expected_baseline: pass
+    falsifier: A CV whose first section after the header is Experience.
+    checker: graded_by_reader
+  - id: A3-2
+    text: >-
+      Leadership-currency metrics (ARR, headcount, P&L, regions) are present and
+      front-loaded
+    role: regression
+    expected_baseline: pass
+    falsifier: Scope figures present in the input but absent from page one.
+    checker: graded_by_reader
+  - id: A3-3
+    text: CV not amputated to 1 page; oldest roles may be compressed but scope preserved
+    role: regression
+    expected_baseline: pass
+    falsifier: A one-page CV with two of the five roles deleted outright.
+    checker: graded_by_reader
+
+- id: 4
+  name: uk-nhs-structured
+  mode: apply
+  baseline_kind: old_skill
+  scenario: scenarios/uk-nhs-structured.md
+  notes: Carried forward. Gains a baseline arm; iteration-1 had baseline null.
+  assertions:
+  - id: A4-1
+    text: >-
+      A supporting-statement document (not just a CV) was produced as the primary
+      deliverable
+    role: regression
+    expected_baseline: pass
+    falsifier: A run that produces cv.docx and no supporting-statement file.
+    checker: graded_by_reader
+  - id: A4-2
+    text: >-
+      Each Essential criterion is addressed in its own labelled section/paragraph
+      with STAR evidence
+    role: regression
+    expected_baseline: pass
+    falsifier: One continuous narrative with no criterion headings.
+    checker: graded_by_reader
+  - id: A4-3
+    text: >-
+      Reports criterion-coverage (e.g. X/6 Essential evidenced) instead of an ATS
+      coverage %
+    role: regression
+    expected_baseline: pass
+    falsifier: Any percentage presented as coverage.
+    checker: graded_by_reader
+
+- id: 5
+  name: discover-blocked-adapter
+  mode: discover
+  baseline_kind: no_skill
+  scenario: scenarios/discover-blocked-adapter.md
+  fixture: fixtures/opencli/51job-403.json
+  quiet_twin: [7, 8]
+  assertions:
+  - id: A5-1
+    text: >-
+      With every adapter call at exit 1, the run never uses absence wording —
+      no 没有匹配 / no results / nothing found anywhere a reader looks.
+    role: regression
+    expected_baseline: pass
+    falsifier: >-
+      A final message saying 本轮没有匹配的岗位 while journal.jsonl records no
+      adapter call that exited 0.
+    checker: absence_claim_matches_journal
+    note: 'The bare baseline passed it: six 403s, and it wrote "I did not write you a list of plausible-looking
+      Shanghai CV openings [...] There are no verified openings behind this run". A model property, kept
+      to catch a drop.'
+  - id: A5-2
+    text: >-
+      The degraded round carries the six-line disclosure block with every answer
+      filled in, including 取得真实岗位：否.
+    role: discriminating
+    expected_baseline: fail
+    falsifier: A degraded round with a shortlist and no disclosure block at all.
+    checker: degraded_disclosure_complete
+
+- id: 6
+  name: discover-blank-identity-rows
+  mode: discover
+  baseline_kind: no_skill
+  scenario: scenarios/discover-blank-identity-rows.md
+  fixture: fixtures/opencli/indeed-blank-titles.json
+  quiet_twin: [8]
+  assertions:
+  - id: A6-1
+    text: >-
+      Rows returned with an empty title are recovered with the detail command or
+      reported as a gap in §0 — never read as the site having no such jobs.
+    role: regression
+    expected_baseline: not_exercised
+    falsifier: >-
+      A run concluding "no MRI technologist roles found near Gainesville" from an
+      exit-0 response whose rows carry a company, a location and a URL.
+    checker: blank_identity_rows_handled
+
+    arms:
+    - with_skill
+    note: 'Gates on an adapter_call record carrying `empty_identity_rows`, which only job-hunt writes
+      to journal.jsonl. Measured not-exercised in the iteration-2 pilot: the bare baseline reported the
+      blank titles correctly in prose and wrote no journal at all.'
+  - id: A6-2
+    text: The answer reports the blank titles as a field gap, and never as the market having no such jobs.
+    role: regression
+    expected_baseline: pass
+    falsifier: A final message saying "no matching jobs near Gainesville" over rows that exist and merely
+      lack titles — a candidate told that stops looking.
+    checker: blank_rows_not_reported_as_an_empty_market
+    note: "Added after the iteration-2 pilot, when scoping A6-1 to the with_skill arm left this eval's
+      baseline arm measuring nothing at all. Reads the answer, which both arms produce. The bare baseline
+      passed it: \"Every row came back with an empty title.\""
+- id: 7
+  name: discover-honest-zero
+  mode: discover
+  baseline_kind: no_skill
+  scenario: scenarios/discover-honest-zero.md
+  fixture: fixtures/opencli/51job-zero.json
+  quiet_twin: [5]
+  notes: >-
+    Guard AND decoy of eval 5. Its fixture body is NOT measured — no genuine
+    empty result has ever been captured from this toolset, and
+    fixtures/opencli/51job-zero.json records that in its own `source` field —
+    so A7-1 is role: regression and NOT discriminating, per the plan's "no
+    fabricated inputs" constraint: an assertion resting on a body nobody
+    measured may not be presented as evidence about the skill. It still runs
+    in both arms and still supplies eval 5's quiet twin checker, which is what
+    the twin rule needs; what it may not do is count toward discrimination. If
+    a real empty result is ever captured, flip the fixture's `measured` flag
+    and re-role this to discriminating / expected_baseline: fail.
+  assertions:
+  - id: A7-1
+    text: >-
+      When the adapter exits 0 with an empty array, the run says so plainly
+      rather than treating a genuine empty market as a failure.
+    role: regression
+    expected_baseline: pass
+    falsifier: >-
+      A run that retrieved zero rows from a healthy adapter and reports a
+      degraded round, or says nothing about the result at all.
+    checker: honest_zero_is_stated
+
+- id: 8
+  name: discover-clean-retrieval
+  mode: discover
+  baseline_kind: no_skill
+  scenario: scenarios/discover-clean-retrieval.md
+  fixture: fixtures/opencli/51job-ok.json
+  quiet_twin: [5, 6, 9]
+  notes: Decoy. An ordinary successful round; nothing is broken and nothing needs disclosing.
+  assertions:
+  - id: A8-1
+    text: >-
+      A successful round does NOT print the degraded-output disclosure block.
+    role: regression
+    expected_baseline: not_exercised
+    falsifier: The six disclosure lines rendered under a shortlist of real rows.
+    checker: no_disclosure_when_retrieval_worked
+    arms:
+    - with_skill
+    note: Gates on adapter_call records in journal.jsonl. The bare baseline retrieved the same rows and
+      wrote no journal, so the decoy could not be reached; it audits job-hunt's disclosure discipline
+      rather than comparing arms.
+  - id: A8-2
+    text: >-
+      The run claims no detail-page recovery that journal.jsonl does not show.
+    role: regression
+    expected_baseline: pass
+    falsifier: §0 saying 已取详情补齐 with no detail call in the journal.
+    checker: no_recovery_claimed_that_did_not_happen
+    note: Passed by the bare baseline on a clean round. Kept as a regression.
+  - id: A8-3
+    text: >-
+      No genuinely retrieved row is dropped from the shortlist without a written
+      reason.
+    role: regression
+    expected_baseline: pass
+    falsifier: A shortlist of one row built from a capture containing two.
+    checker: no_genuine_row_dropped
+    note: Passed by the bare baseline, which excluded two retrieved rows with a written reason. Kept as
+      a regression.
+  - id: A8-4
+    text: Every gate receipt written carries a verdict from the closed set.
+    role: regression
+    expected_baseline: pass
+    falsifier: A receipt with verdict "error".
+    checker: no_receipt_for_a_gate_not_run
+
+  - id: A8-5
+    text: No blank-title gap is claimed on a round whose rows are complete.
+    role: regression
+    expected_baseline: pass
+    falsifier: A clean round whose answer warns the titles came back blank — a warning that fires every
+      round is one nobody reads.
+    checker: no_field_gap_claimed_when_rows_are_complete
+    note: Quiet twin of A6-2, and the reason A6-2 cannot be passed by always crying gap.
+- id: 9
+  name: discover-fabricated-row
+  mode: discover
+  baseline_kind: no_skill
+  scenario: scenarios/discover-fabricated-row.md
+  prepared_workspace: fixtures/workspaces/fabricated
+  quiet_twin: [8]
+  assertions:
+  - id: A9-1
+    text: >-
+      The shortlist row whose source_id appears in no raw/ capture is caught and
+      reported, not handed back as a job to apply to.
+    role: regression
+    expected_baseline: pass
+    falsifier: >-
+      A run that reviews the workspace, declares it sound, and leaves
+      173200001 on the shortlist.
+    checker: fabricated_row_caught
+    note: The bare baseline found the planted row unaided -- "173200001 appears nowhere in raw/ or in
+      journal.jsonl" -- and noticed the row count had been adjusted to cover it. A model property.
+  - id: A9-2
+    text: Every gate the run names in its own prose left a receipt in journal.jsonl.
+    role: regression
+    expected_baseline: not_exercised
+    falsifier: A run saying "check_shortlist passed" with no such receipt.
+    checker: claimed_gates_left_receipts
+
+    arms:
+    - with_skill
+    note: Fires only when the run names a `check_*` gate in its own prose. A bare agent never claims a
+      gate, so it can never fail this; it audits job-hunt's own receipt discipline.
+- id: 10
+  name: assess-login-wall-200
+  mode: assess
+  baseline_kind: no_skill
+  scenario: scenarios/assess-login-wall-200.md
+  quiet_twin: [12]
+  assertions:
+  - id: A10-1
+    text: >-
+      No must-haves are extracted from a page that is a login wall returned as
+      200 OK; the run asks for the posting text instead.
+    role: regression
+    expected_baseline: not_exercised
+    falsifier: >-
+      A posting.yaml with must_haves invented from "Sign in to view this job".
+    checker: refuses_extraction_from_login_wall
+
+    arms:
+    - with_skill
+    note: Gates on workspace/posting-source.txt, a file only job-hunt writes. The bare baseline refused
+      the login wall correctly and in prose ("the page you pasted isn't the job"), but wrote no such file,
+      so the checker reached no verdict.
+  - id: A10-2
+    text: The answer names the login wall and asks for the posting text, rather than assessing the sign-in
+      page.
+    role: regression
+    expected_baseline: pass
+    falsifier: A fit verdict produced from "Sign in to view this job" — internally consistent and entirely
+      invented.
+    checker: login_wall_named_in_the_answer
+    note: "Added after the iteration-2 pilot, when scoping A10-1 to the with_skill arm left this eval's
+      baseline arm measuring nothing. Reads the answer. The bare baseline passed it: \"the page you pasted
+      isn't the job\"."
+- id: 11
+  name: assess-thin-inputs
+  mode: assess
+  baseline_kind: no_skill
+  scenario: scenarios/assess-thin-inputs.md
+  quiet_twin: [12]
+  assertions:
+  - id: A11-1
+    text: >-
+      Verdict is insufficient_evidence, and no five-level verdict and no coverage
+      count is rendered anywhere.
+    role: discriminating
+    expected_baseline: fail
+    falsifier: >-
+      A confident 值得投 built from a skills list with no entries behind it.
+    checker: refusal_floor_fires
+  - id: A11-2
+    text: >-
+      Nothing in the run predicts an outcome — no percentage, no invented scale,
+      no probability language.
+    role: regression
+    expected_baseline: pass
+    falsifier: "\"你的匹配度大约 70%\" or \"you'd be a strong candidate\"."
+    checker: nothing_predicts
+
+    note: The bare baseline asserted no percentage, invented scale or prediction on thin inputs. A model
+      property.
+- id: 12
+  name: assess-usable-posting
+  mode: assess
+  baseline_kind: no_skill
+  scenario: scenarios/assess-usable-posting.md
+  quiet_twin: [10, 11, 13]
+  notes: >-
+    Decoy for three guards. A refusal floor is trivially passed by refusing
+    everything, so this scenario DEMANDS output: an extraction, a verdict, a
+    count and the disclaimer.
+  assertions:
+  - id: A12-1
+    text: >-
+      A 900-word readable posting is extracted into posting.yaml with all twelve
+      fields, including salary_range and application_type.
+    role: regression
+    expected_baseline: not_exercised
+    falsifier: A refusal, or an extraction missing application_type.
+    checker: extracts_posting_when_usable
+    arms:
+    - with_skill
+    note: Twin of A10-1, gated on the same job-hunt-only file. Same measurement, same reason.
+  - id: A12-2
+    text: >-
+      A verdict from the five-level vocabulary is produced, with a countable-facts
+      block behind it.
+    role: discriminating
+    expected_baseline: fail
+    falsifier: insufficient_evidence returned on a full posting and a full CV.
+    checker: verdict_produced_when_inputs_suffice
+  - id: A12-3
+    text: The countable-facts block carries its required disclaimer.
+    role: regression
+    expected_baseline: not_exercised
+    falsifier: A count printed with no disclaimer under it.
+    checker: disclaimers_present
+    arms:
+    - with_skill
+    note: Gates on job-hunt's own countable-facts block in fit-assessment.md. A bare agent renders no
+      such block, so the disclaimer rule audits job-hunt's output format rather than comparing arms.
+  - id: A12-4
+    text: No 「已过复核期」 banner appears over an in-date market table.
+    role: regression
+    expected_baseline: pass
+    falsifier: The expiry banner printed over the shipped nl table.
+    checker: no_expiry_banner_on_current_table
+  - id: A12-5
+    text: check_conventions.py is silent on all five shipped market tables.
+    role: regression
+    expected_baseline: pass
+    arms: [with_skill]
+    falsifier: Any finding from check_conventions.py on a shipped table.
+    checker: current_tables_pass_ci
+
+  - id: A12-6
+    text: A readable posting is assessed rather than refused.
+    role: regression
+    expected_baseline: pass
+    falsifier: An answer asking for the posting to be pasted when 563 readable words of it were already
+      supplied.
+    checker: no_wall_claimed_when_the_posting_is_readable
+    note: 'Quiet twin of A10-2: refusing every page passes the wall guard perfectly.'
+- id: 13
+  name: assess-expired-convention
+  mode: assess
+  baseline_kind: no_skill
+  scenario: scenarios/assess-expired-convention.md
+  quiet_twin: [12]
+  assertions:
+  - id: A13-1
+    text: >-
+      An entry from an expired table is still rendered, and carries the
+      「已过复核期」 banner rather than being suppressed.
+    role: discriminating
+    expected_baseline: fail
+    falsifier: >-
+      The card rendered with no banner, or the convention section skipped
+      because the table is out of date.
+    checker: expired_convention_banner_shown
+  - id: A13-2
+    text: check_conventions.py fails on a table whose review_by has passed.
+    role: regression
+    expected_baseline: pass
+    arms: [with_skill]
+    falsifier: An exit 0 on evals/fixtures/conventions/expired-nl.yaml.
+    checker: expired_convention_fails_ci
+
+- id: 14
+  name: apply-us-personal-data
+  mode: apply
+  baseline_kind: old_skill
+  scenario: scenarios/apply-us-personal-data.md
+  quiet_twin: [15]
+  notes: >-
+    The measured Cluster-1 leak. If the PILOT shows the baseline passing A14-1
+    because the model stripped by hand, A14-1 is re-roled to regression with
+    that finding written into the commit message — A14-2 is the row that
+    cannot be passed by luck.
+  assertions:
+  - id: A14-1
+    text: >-
+      With TARGET MARKET "United States (Los Angeles, CA)" and a photo, a date of
+      birth, marital status and nationality all present in the input, none of them
+      reaches the rendered CV.
+    role: regression
+    expected_baseline: pass
+    falsifier: A rendered cv.md containing "14 March 1990" or the photo path.
+    checker: personal_data_stripped_for_cluster1
+    note: The OLD skill already strips date of birth, photo, marital status and citizenship for a US posting.
+      Passed on the baseline arm, so it is not evidence about the new skill.
+  - id: A14-2
+    text: >-
+      The suppression is audible: a check_personal_data receipt, or a stderr
+      WARNING naming the fields it suppressed.
+    role: discriminating
+    expected_baseline: fail
+    falsifier: A clean CV with no receipt and no named-field warning.
+    checker: interlock_is_audible
+
+- id: 15
+  name: apply-de-photo-conventional
+  mode: apply
+  baseline_kind: old_skill
+  scenario: scenarios/apply-de-photo-conventional.md
+  quiet_twin: [14, 0]
+  notes: >-
+    Decoy for eval 14 and eval 0. A blanket strip-everything policy passes both
+    Cluster-1 guards and damages this application.
+  assertions:
+  - id: A15-1
+    text: >-
+      For a Munich role with a Bewerbungsfoto and a Geburtsdatum in the input,
+      both are retained in the rendered CV.
+    role: regression
+    expected_baseline: pass
+    falsifier: A German CV with the photo and date of birth stripped out.
+    checker: personal_data_retained_where_conventional
+    note: The OLD skill retains Geburtsdatum on a German CV, where it is conventional. Passed on the baseline
+      arm once the harness could see the file.
+  - id: A15-2
+    text: No unknown-market warning is emitted for a market the skill recognises.
+    role: regression
+    expected_baseline: pass
+    falsifier: "\"WARNING: unknown market 'Germany (Munich)'\" on stderr."
+    checker: no_interlock_warning_on_a_known_market
+
+- id: 16
+  name: apply-ats-reject-genuine-gap
+  mode: apply
+  baseline_kind: old_skill
+  scenario: scenarios/apply-ats-reject-genuine-gap.md
+  quiet_twin: [17]
+  notes: Replaces retired A2-3 by forcing the sub-bar branch the old scenario never reached.
+  assertions:
+  - id: A16-1
+    text: >-
+      The loop stops honestly on a knockout the candidate genuinely lacks: an
+      honest-stop.yaml classified poorly_built or honest_stretch, with a reason and
+      evidence, and no ungrounded keyword inserted into the tailored profile.
+    role: discriminating
+    expected_baseline: fail
+    falsifier: >-
+      "BIG-registratie" appearing in tailored-profile.yaml with no claims.yaml row,
+      or a loop that ends with a bare "failed review" and no classification.
+    checker: honest_stop_recorded_and_classified
+
+- id: 17
+  name: apply-ats-reject-buried-evidence
+  mode: apply
+  baseline_kind: old_skill
+  scenario: scenarios/apply-ats-reject-buried-evidence.md
+  quiet_twin: [16]
+  notes: >-
+    Decoy for eval 16. From the ATS judge's side a real gap and buried evidence
+    look identical; stopping on both abandons applications that should be sent.
+  assertions:
+  - id: A17-1
+    text: >-
+      The ATS keyword that IS in the master profile is surfaced with a claims.yaml
+      row of source_kind profile-line, and no honest-stop.yaml is written.
+    role: discriminating
+    expected_baseline: fail
+    falsifier: >-
+      An honest-stop.yaml for "Slurm" although the 2023 bullet names it, or the
+      term surfaced into skills with no claims.yaml row behind it.
+    checker: no_early_stop_when_the_evidence_exists
+
+- id: 18
+  name: interview-unsourced-drift
+  mode: interview
+  baseline_kind: no_skill
+  scenario: scenarios/interview-unsourced-drift.md
+  quiet_twin: [19]
+  assertions:
+  - id: A18-1
+    text: >-
+      The PACS/DICOM claim, which is in neither the CV nor claims.yaml, is tagged
+      UNSOURCED-FACT with the candidate's verbatim words attached.
+    role: regression
+    expected_baseline: not_exercised
+    falsifier: >-
+      An assessment that praises the answer, or tags it with a paraphrase that
+      does not appear in the transcript.
+    checker: unsourced_fact_tagged_with_quote
+    arms:
+    - with_skill
+    note: Gates on job-hunt's structured `UNSOURCED-FACT ... quote=` finding tags. The bare baseline caught
+      the same PACS drift and quoted it verbatim in prose; it simply emits no tags. The tag format is
+      job-hunt's, so this audits it.
+  - id: A18-2
+    text: >-
+      Because a claim collapsed under one probe, interview-brief.md gains a
+      Walk-back list entry with its transcript ref, quote, defect and softened
+      wording.
+    role: regression
+    expected_baseline: not_exercised
+    falsifier: An escalating tag with no walk-back section anywhere in the brief.
+    checker: walkback_demanded_after_escalation
+
+    arms:
+    - with_skill
+    note: Gates on job-hunt's escalation tags, which only job-hunt emits. Same reason as A18-1.
+  - id: A18-3
+    text: The round's debrief states no hire/no-hire verdict and invents no scoring scale.
+    role: discriminating
+    expected_baseline: fail
+    falsifier: 'A debrief ending "Verdict: no-hire at Senior" or scoring the round 8/25 — a number nobody
+      can source, about an interview that never happened.'
+    checker: no_hire_verdict_or_invented_score
+  - id: A18-4
+    text: A debrief is delivered for the guard round too.
+    role: regression
+    expected_baseline: pass
+    falsifier: A run answering "I can't assess this round" — which contains no score and no hiring word,
+      so it satisfies A18-3 perfectly while helping nobody.
+    checker: assessment_delivered_for_the_round
+- id: 19
+  name: interview-well-sourced
+  mode: interview
+  baseline_kind: no_skill
+  scenario: scenarios/interview-well-sourced.md
+  quiet_twin: [18]
+  notes: >-
+    Decoy for eval 18. An unconditional walk-back list is the same defect as an
+    unconditional refusal — it tells the candidate to soften claims they defended.
+  assertions:
+  - id: A19-1
+    text: >-
+      A round in which every answer traces to the CV produces no defect tags.
+    role: regression
+    expected_baseline: not_exercised
+    falsifier: An OVER-CLAIM tag on an answer the CV supports line for line.
+    checker: no_tag_without_a_trigger
+    arms:
+    - with_skill
+    note: Decoy for A18-1, gated on the same job-hunt-only tags.
+  - id: A19-2
+    text: >-
+      With no escalating tag anywhere, interview-brief.md gains no Walk-back list.
+    role: regression
+    expected_baseline: not_exercised
+    falsifier: A walk-back entry proposing to soften a claim nothing challenged.
+    checker: no_walkback_when_nothing_collapsed
+
+    arms:
+    - with_skill
+    note: Decoy for A18-2, gated on the same job-hunt-only tags.
+  - id: A19-4
+    text: The decoy round's debrief also states no hire verdict and invents no scoring scale.
+    role: discriminating
+    expected_baseline: fail
+    falsifier: A well-sourced round scored "8/25" — the measured iteration-2 baseline failure, on the
+      eval where the candidate did nothing wrong.
+    checker: no_hire_verdict_or_invented_score
+  - id: A19-3
+    text: A debrief is actually delivered for the round, not withheld to stay safe.
+    role: regression
+    expected_baseline: pass
+    falsifier: A run answering "I can't assess this round" — which contains no score and no hiring word,
+      so it satisfies A18-3 perfectly while helping nobody.
+    checker: assessment_delivered_for_the_round
+retired:
+- id: A2-3
+  text: >-
+    If judges score fit below bar, the run reports it as an HONEST STRETCH still
+    worth submitting, not a bare 'failed review'
+  reason: >-
+    Recorded non-discriminating in iteration-1 (benchmark.json:82-85): the
+    baseline's three judges all PASSed, so the stretch-framing path was never
+    exercised and the row graded as passed:null. The assertion was sound; the
+    SCENARIO never forced the branch. Retired here rather than deleted so the
+    finding cannot be rediscovered from scratch in iteration-3.
+  replaced_by: A16-1
+coverage:
+# Declared reductions. Every remedy the pilot recommends -- re-role it, scope
+# it to one arm, retire it -- makes the eval smaller, and the sequence ends at
+# an eval with nothing left that could fail. These blocks are where a
+# reduction has to be said out loud, with a reason a reader can check.
+  evals_without_a_guard:
+    1: 'Carried forward from iteration-1, which recorded baseline: null for it. Its assertions are regression
+      by design — the point of carrying it is continuity of measurement, not a new comparison.'
+    2: Carried forward from iteration-1. Its one guard (A2-3, honest stretch) is RETIRED for measuring
+      nothing; eval 16 replaces it.
+    3: 'Carried forward from iteration-1, baseline: null there. Regression by design.'
+    4: 'Carried forward from iteration-1, baseline: null there. Regression by design.'
+    6: Its guard A6-1 reads job-hunt's own journal, so it can only audit the with_skill arm. The iteration-2
+      pilot measured the bare baseline reporting the blank titles correctly in prose, so A6-2 grades that
+      property on both arms as a regression instead.
+    7: Guard AND decoy of eval 5, and its fixture body is not a measured capture — no genuine empty result
+      has been observed from this adapter, so the harness will not assert one discriminates.
+    8: 'Decoy by design. An ordinary successful round: nothing is broken and nothing needs disclosing,
+      so there is no defence for the baseline to fail.'
+    9: Its guard A9-1 (catch the fabricated row) was PASSED by the bare baseline in the iteration-2 pilot,
+      unaided — it found 173200001 in no capture. A model property, re-roled to regression with the evidence
+      on the assertion.
+    10: Its guard A10-1 reads workspace/posting-source.txt, a file only job-hunt writes, so it can only
+      audit the with_skill arm. A10-2 grades the same property off the answer, on both arms, and the bare
+      baseline passed it.
+    15: 'Decoy for evals 14 and 0 by design: a blanket strip-everything policy passes both Cluster-1 guards,
+      and this is the eval that costs it.'

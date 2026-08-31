@@ -28,13 +28,18 @@ EXPECTED_BASELINE = ("fail", "not_exercised", "pass")
 
 MODES = ("discover", "assess", "apply", "interview")
 
+# The document's own keys. `coverage` is load-bearing -- it is how a mode
+# declares it has no discriminating assertion left -- so a typo in it must be a
+# finding rather than a declaration that silently exempts nothing.
+DOC_KEYS = ("evals", "retired", "coverage")
+
 EVAL_KEYS = ("id", "name", "mode", "baseline_kind", "scenario", "quiet_twin",
              "assertions", "fixture", "prepared_workspace", "notes")
 REQUIRED_EVAL_KEYS = ("id", "name", "mode", "baseline_kind", "scenario",
                       "assertions")
 
 ASSERTION_KEYS = ("id", "text", "role", "expected_baseline", "falsifier",
-                  "checker", "arms", "twin_assertion")
+                  "checker", "arms", "twin_assertion", "note")
 REQUIRED_ASSERTION_KEYS = ("id", "text", "role", "expected_baseline",
                            "falsifier", "checker")
 

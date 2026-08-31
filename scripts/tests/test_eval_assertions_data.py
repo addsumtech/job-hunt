@@ -54,15 +54,33 @@ def test_every_scenario_file_on_disk_is_used_by_an_eval():
 
 
 def test_every_eval_has_at_least_one_assertion_and_the_guards_discriminate():
-    guards = [e for e in DOC["evals"] if e["id"] >= 5 and "decoy" not in
-              (e.get("notes") or "")]
+    """An eval hosting no guard must be DECLARED, not inferred.
+
+    This used to guess: id >= 5 and "decoy" not in notes. Two problems the
+    iteration-2 pilot exposed. The substring test is case-sensitive, so evals 8
+    and 15 — whose notes open "Decoy." — were counted as guard evals all along
+    and passed only by accident. And the id threshold encodes a belief about
+    which scenarios force a branch, which is exactly the belief a pilot exists
+    to check: eval 6's guard turned out to read job-hunt's own journal, and
+    eval 9's was passed by the bare baseline unaided.
+
+    So the authority is now coverage.evals_without_a_guard, where each one
+    carries a reason, and the lint keeps that block honest in both directions.
+    """
     for ev in DOC["evals"]:
         assert ev["assertions"], f"eval {ev['id']} has no assertions"
-    for ev in guards:
-        roles = {a["role"] for a in ev["assertions"]}
-        assert "discriminating" in roles, (
-            f"guard eval {ev['id']} has no discriminating assertion, so a "
-            "passing run says nothing about the skill")
+    declared = set((DOC.get("coverage") or {}).get("evals_without_a_guard") or {})
+    for ev in DOC["evals"]:
+        has_guard = any(
+            a["role"] == "discriminating"
+            and "baseline" in (a.get("arms") or ["baseline", "with_skill"])
+            for a in ev["assertions"])
+        assert has_guard or ev["id"] in declared, (
+            f"eval {ev['id']} hosts no discriminating assertion comparing the "
+            f"arms and is not declared in coverage.evals_without_a_guard, so a "
+            f"passing run says nothing about the skill and nobody said why")
+        assert not (has_guard and ev["id"] in declared), (
+            f"eval {ev['id']} is declared guard-free and hosts a guard")
 
 
 def test_every_eval_declares_a_baseline_arm():
@@ -223,11 +241,18 @@ def test_a_decoy_is_named_by_every_guard_it_decoys():
     here and nowhere else.
     """
     declared = {e["id"]: set(la._declared_twins(e)) for e in DOC["evals"]}
+    guard_free = set((DOC.get("coverage") or {}).get("evals_without_a_guard") or {})
     for eid, twins in declared.items():
         ev = next(e for e in DOC["evals"] if e["id"] == eid)
         hosted = {int(a["twin_assertion"].split("-")[0].lstrip("A"))
                   for a in ev["assertions"] if a.get("twin_assertion")}
         for twin_id in twins:
+            # A0-3 was re-roled to regression after a reader graded it PASSED
+            # on the baseline arm, and a regression row needs no twin_assertion,
+            # so eval 0's one-way reference to eval 3 no longer has a host. The
+            # declaration is what keeps that visible.
+            if twin_id in guard_free:
+                continue
             assert eid in declared[twin_id] or twin_id in hosted, (
                 f"eval {eid} names {twin_id} as its quiet twin, {twin_id} does "
                 f"not name {eid} back, and no assertion in {eid} names a "

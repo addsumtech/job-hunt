@@ -266,3 +266,131 @@ def test_the_script_exits_2_on_a_file_that_is_not_valid_yaml(tmp_path):
     assert proc.returncode == 2
     assert proc.stdout == ""
     assert "cannot run" in proc.stderr
+
+
+# ---- what the iteration-2 pilot forced into the lint ------------------------
+
+def test_discriminating_plus_not_exercised_is_rejected_like_pass():
+    """`expected_baseline: not_exercised` on a guard is as non-discriminating as
+    `pass`, and the lint only rejected `pass`.
+
+    "Not exercised" is not "fail". An author who writes it is saying the
+    baseline never even reaches the branch — so passing it says nothing about
+    the skill, which is the exact sentence the `pass` rule already carries.
+    Twelve of the iteration-2 pilot's 26 guards came back not-exercised; the
+    lint had no way to say that was declared in advance.
+    """
+    d = doc()
+    d["evals"][0]["assertions"][0]["expected_baseline"] = "not_exercised"
+    out = la.lint(d, scenario_root=pathlib.Path("evals"), checkers=CHECKERS,
+                  twins=TWINS)
+    assert any(f.startswith("NON_DISCRIMINATING_BY_CONSTRUCTION") for f in out), out
+    assert any("not_exercised" in f for f in out), (
+        "the finding must name the value, or the author cannot see which rule "
+        "they tripped")
+
+
+# ---- the eval may not quietly re-role itself into measuring nothing ---------
+#
+# Every fix the iteration-2 pilot pointed at is a REDUCTION: re-role the guard,
+# scope it to one arm, retire it. Each is honest on its own and the sequence has
+# an obvious terminus — an eval with no discriminating assertions at all, which
+# exits 0 because there is nothing left that could fail. Somebody has to notice
+# a mode losing its last guard, and "somebody" cannot be a person reading a
+# diff.
+
+def _mode_doc(**overrides):
+    d = doc()
+    d["evals"][0]["mode"] = "discover"
+    d["evals"][1]["mode"] = "discover"
+    d.update(overrides)
+    return d
+
+
+def _lint(d):
+    return la.lint(d, scenario_root=pathlib.Path("evals"), checkers=CHECKERS,
+                   twins=TWINS)
+
+
+def test_a_mode_that_lost_its_last_guard_is_a_finding():
+    d = _mode_doc()
+    for a in d["evals"][0]["assertions"] + d["evals"][1]["assertions"]:
+        a["role"] = "regression"
+        a["expected_baseline"] = "pass"
+    out = _lint(d)
+    assert any(f.startswith("MODE_HAS_NO_GUARD") for f in out), out
+    assert any("discover" in f for f in out)
+
+
+def test_declaring_the_mode_makes_it_a_statement_rather_than_an_accident():
+    d = _mode_doc(coverage={"modes_without_a_guard": {
+        "discover": "Every discover property the harness can check is one the "
+                    "bare model already satisfies; measured, iteration-2."}})
+    for a in d["evals"][0]["assertions"] + d["evals"][1]["assertions"]:
+        a["role"] = "regression"
+        a["expected_baseline"] = "pass"
+    assert not any(f.startswith("MODE_HAS_NO_GUARD") for f in _lint(d))
+
+
+def test_a_declaration_too_thin_to_check_is_rejected():
+    d = _mode_doc(coverage={"modes_without_a_guard": {"discover": "n/a"}})
+    for a in d["evals"][0]["assertions"] + d["evals"][1]["assertions"]:
+        a["role"] = "regression"
+        a["expected_baseline"] = "pass"
+    assert any(f.startswith("THIN_COVERAGE_REASON") for f in _lint(d))
+
+
+def test_a_stale_declaration_is_also_a_finding():
+    """Symmetric on purpose. A mode listed as having no guard, which then gets
+    one, leaves a note claiming the eval is weaker than it is — and the next
+    person re-roles the new guard away without ever seeing a red line."""
+    d = _mode_doc(coverage={"modes_without_a_guard": {
+        "discover": "Every discover property the harness can check is one the "
+                    "bare model already satisfies; measured, iteration-2."}})
+    out = _lint(d)   # the fixture's discover guards are still discriminating
+    assert any(f.startswith("STALE_COVERAGE_DECLARATION") for f in out), out
+
+
+def test_an_unknown_mode_in_the_declaration_is_caught():
+    d = _mode_doc(coverage={"modes_without_a_guard": {
+        "discovery": "a typo that would silently exempt nothing at all, while "
+                     "looking exactly like an exemption that works."}})
+    assert any(f.startswith("UNKNOWN_MODE") for f in _lint(d))
+
+
+def test_an_assertion_scoped_to_one_arm_does_not_count_as_a_guard():
+    """arms: [with_skill] means the baseline is never graded on it. It is an
+    audit of the skill, not a comparison, and counting it would let a mode look
+    guarded while nothing compares the arms."""
+    d = _mode_doc()
+    for a in d["evals"][0]["assertions"] + d["evals"][1]["assertions"]:
+        a["arms"] = ["with_skill"]
+    out = _lint(d)
+    assert any(f.startswith("MODE_HAS_NO_GUARD") for f in out), out
+
+
+def test_an_unknown_top_level_key_is_caught():
+    """`coverage:` is load-bearing — it is how a mode declares it has no guard.
+    A typo'd `coverages:` would parse fine, exempt nothing, and look exactly
+    like a working declaration. Eval and assertion keys were already checked;
+    the document's own were not."""
+    d = _mode_doc(coverages={"modes_without_a_guard": {}})
+    out = _lint(d)
+    assert any(f.startswith("UNKNOWN_KEY") and "coverages" in f for f in out), out
+
+
+def test_a_not_exercised_assertion_must_carry_its_reason_in_the_file():
+    """`expected_baseline: not_exercised` says the baseline cannot even reach
+    this assertion. That is the surprising declaration in the whole schema —
+    it removes a comparison — so the reason belongs next to it, where the next
+    reader of assertions.yaml will see it. A commit message does not survive
+    into the file."""
+    d = _mode_doc()
+    a = d["evals"][0]["assertions"][0]
+    a.update(role="regression", expected_baseline="not_exercised",
+             arms=["with_skill"])
+    out = _lint(d)
+    assert any(f.startswith("UNEXPLAINED_SCOPING") for f in out), out
+    a["note"] = ("The checker reads job-hunt's own journal, which a bare agent "
+                 "never writes; measured not-exercised in the iteration-2 pilot.")
+    assert not any(f.startswith("UNEXPLAINED_SCOPING") for f in _lint(d))

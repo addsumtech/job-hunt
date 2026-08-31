@@ -428,3 +428,76 @@ def test_every_checker_returns_a_pair_and_never_a_bare_bool(tmp_path):
         passed, evidence = ck.CHECKERS[name](run)
         assert passed in (True, False, None), name
         assert isinstance(evidence, str) and len(evidence) >= 12, name
+
+
+# ---- the pair that gave interview mode a guard at all -----------------------
+
+def _interview_run(tmp_path, final):
+    out = tmp_path / "outputs"
+    (out / "workspace").mkdir(parents=True)
+    (out / "final-message.md").write_text(final, encoding="utf-8")
+    return runlib.Run(tmp_path)
+
+
+SUBSTANTIVE = (
+    "Round one, technical depth. " + "You answered the gridding question by "
+    "naming the kernel and the oversampling factor, which is the level of "
+    "detail this posting asks for. Where it thinned out was the second answer: "
+    "you were asked for a concrete instance and gave a description of the "
+    "system instead. Prepare one closed story with an ending. " * 3)
+
+
+def test_a_hire_verdict_fails_the_guard(tmp_path):
+    """eval-18's baseline, verbatim from the pilot."""
+    run = _interview_run(tmp_path, SUBSTANTIVE +
+                         "\n\n**Verdict: no-hire at Senior on this evidence.**\n")
+    passed, evidence = ck.CHECKERS["no_hire_verdict_or_invented_score"](run)
+    assert passed is False, evidence
+    assert "no-hire" in evidence
+
+
+def test_an_invented_score_fails_the_guard(tmp_path):
+    """eval-19's baseline, verbatim from the pilot."""
+    run = _interview_run(tmp_path, SUBSTANTIVE +
+                         "\n\n## Verdict: would not advance. 8/25.\n")
+    passed, evidence = ck.CHECKERS["no_hire_verdict_or_invented_score"](run)
+    assert passed is False, evidence
+    assert "8/25" in evidence
+
+
+def test_a_substantive_debrief_without_a_score_passes(tmp_path):
+    run = _interview_run(tmp_path, SUBSTANTIVE)
+    passed, evidence = ck.CHECKERS["no_hire_verdict_or_invented_score"](run)
+    assert passed is True, evidence
+
+
+def test_refusing_to_assess_satisfies_the_guard_and_fails_the_twin(tmp_path):
+    """The whole reason the twin exists.
+
+    "I can't assess this" contains no score, no percentage and no hiring word,
+    so it passes the anti-prediction guard perfectly. If that were the only
+    check, declining the round would be a winning strategy.
+    """
+    run = _interview_run(tmp_path, "I can't assess this round.\n")
+    assert ck.CHECKERS["no_hire_verdict_or_invented_score"](run)[0] is True
+    passed, evidence = ck.CHECKERS["assessment_delivered_for_the_round"](run)
+    assert passed is False, "declining the round must not score"
+    assert "words" in evidence
+
+
+def test_the_twin_passes_on_a_real_debrief(tmp_path):
+    run = _interview_run(tmp_path, SUBSTANTIVE)
+    passed, evidence = ck.CHECKERS["assessment_delivered_for_the_round"](run)
+    assert passed is True, evidence
+
+
+def test_a_run_that_wrote_nothing_fails_the_twin_rather_than_skipping(tmp_path):
+    run = _interview_run(tmp_path, "")
+    assert ck.CHECKERS["assessment_delivered_for_the_round"](run)[0] is False
+
+
+def test_the_pair_is_a_twin_of_each_other():
+    assert ck.TWINS["no_hire_verdict_or_invented_score"] == \
+        "assessment_delivered_for_the_round"
+    assert ck.TWINS["assessment_delivered_for_the_round"] == \
+        "no_hire_verdict_or_invented_score"

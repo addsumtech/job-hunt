@@ -482,3 +482,36 @@ def test_glob_workspace_still_finds_a_nested_match(tmp_path):
     run = _mkrun(tmp_path, {
         "workspace/rounds/mock/transcript-1.md": "Q1 ...\n"})
     assert len(run.glob_workspace("mock/transcript-*.md")) == 1
+
+
+def test_run_notes_are_not_a_graded_surface():
+    """RUN_NOTES.md is the run's candid engineering diary, not its answer.
+
+    The runbook calls it "free-form: what broke, what was skipped, what was odd"
+    and Stage 4 exists to READ it — it is where iteration-1's renderer bugs were
+    recorded, none of which any assertion covers. Every dispatch prompt in the
+    iteration-2 pilot told the run, in as many words, that nothing is graded
+    against it.
+
+    It was nonetheless in READER_FACING, so every checker using all_text()
+    graded it. Measured: eval-12's baseline was failed for a prediction, and the
+    match was `5/5 required` inside its own notes about how obvious the fit was.
+
+    Grading candour is self-defeating. A run penalised for what it writes here
+    writes less here, and the diagnostic surface the runbook depends on quietly
+    empties out.
+    """
+    assert "RUN_NOTES.md" in runlib.OUTPUT_CONTRACT, "still required to be saved"
+    assert "RUN_NOTES.md" not in runlib.READER_FACING, (
+        "RUN_NOTES.md is diagnostic, not an answer to the user; grading it "
+        "penalises the candour it exists to collect")
+    assert "final-message.md" in runlib.READER_FACING
+
+
+def test_all_text_reads_the_answer_and_not_the_diary(tmp_path):
+    run = _mkrun(tmp_path, {
+        "final-message.md": "the answer\n",
+        "RUN_NOTES.md": "candidly, I guessed here and it was 5/5 obvious\n"})
+    text = run.all_text()
+    assert "the answer" in text
+    assert "candidly" not in text

@@ -26,14 +26,19 @@ _REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from evals import runlib  # noqa: E402
+from evals import runlib
+from evals.grade import AWAITING_READER_GRADE  # noqa: E402
 from evals import schema  # noqa: E402
 
 ASSERTIONS = pathlib.Path(__file__).resolve().parent / "assertions.yaml"
 
 
 def _baseline_rows(iteration_dir):
-    """eval_id -> assertion_id -> list of passed values, baseline arm only."""
+    """eval_id -> assertion_id -> [(passed, evidence)], baseline arm only.
+
+    The evidence rides along because THREE different causes produce
+    ``passed: None`` and they need three different remedies -- see pilot().
+    """
     out = {}
     for eval_id, arm, _n, run in runlib.iter_runs(iteration_dir):
         if arm != "baseline":
@@ -44,7 +49,8 @@ def _baseline_rows(iteration_dir):
         doc = json.loads(path.read_text(encoding="utf-8"))
         for row in doc.get("expectations", []):
             out.setdefault(eval_id, {}).setdefault(
-                row.get("assertion_id"), []).append(row.get("passed"))
+                row.get("assertion_id"), []).append(
+                    (row.get("passed"), str(row.get("evidence") or "")))
     return out
 
 
@@ -64,10 +70,24 @@ def pilot(iteration_dir, doc):
                 "pilot exists so a useless assertion costs one run instead of "
                 "the whole matrix — do not dispatch with_skill yet.")
             continue
-        results = rows[eval_id].get(a["id"], [])
+        graded = rows[eval_id].get(a["id"], [])
+        results = [passed for passed, _ in graded]
         if not results:
             findings.append(f"NO_PILOT_RUN: eval-{eval_id} baseline run does not "
                             f"grade {a['id']}")
+        elif all(r is None for r in results) and any(
+                AWAITING_READER_GRADE in ev for _, ev in graded):
+            # A row a program cannot settle is not a scenario that failed to
+            # reach a branch. Telling its author to rewrite the scenario sends
+            # them to fix something that works, and leaves the row ungraded
+            # afterwards. Measured on A0-3 in the iteration-2 pilot, where the
+            # message below got every clause of its diagnosis wrong.
+            findings.append(
+                f"NEEDS_READER_GRADE: {a['id']} is decided by a reader, not by "
+                f"a checker, and no verdict has been written yet. Open the run's "
+                f"grading.json, set `passed`, and write the quote or file:line "
+                f"it rests on into `evidence`. Whether this guard discriminates "
+                f"cannot be known until someone does.")
         elif all(r is None for r in results):
             findings.append(
                 f"GUARD_NOT_EXERCISED: {a['id']} was not exercised in the "
@@ -89,8 +109,8 @@ def posthoc(iteration_dir, doc):
     rows = _baseline_rows(iteration_dir)
     findings = []
     for eval_id, a in _guards(doc):
-        results = [r for r in rows.get(eval_id, {}).get(a["id"], [])
-                   if r is not None]
+        results = [passed for passed, _ in rows.get(eval_id, {}).get(a["id"], [])
+                   if passed is not None]
         if results and all(results):
             findings.append(
                 f"NON_DISCRIMINATING: {a['id']} passed in all {len(results)} "

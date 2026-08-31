@@ -46,7 +46,18 @@ OUTPUT_CONTRACT = ("final-message.md", "RUN_NOTES.md", "workspace/", "stderr.log
 
 # The surfaces a human actually reads. Checkers that ask "did the run claim X"
 # scan these and nothing else -- a string buried in a raw capture is not a claim.
-READER_FACING = ("final-message.md", "RUN_NOTES.md", "workspace/shortlist.md",
+# RUN_NOTES.md is deliberately ABSENT. It is the run's candid engineering diary
+# -- "what broke, what was skipped, what was odd" -- and Stage 4 of the runbook
+# exists to read it, because it is where the defects nobody thought to assert get
+# recorded. Every dispatch prompt tells the run nothing is graded against it.
+#
+# It used to be in this tuple, so every checker calling all_text() graded it.
+# Measured in the iteration-2 pilot: eval-12's baseline was failed for a
+# prediction, and the match was "5/5 required" inside its own notes about how
+# obvious the fit was. Grading candour is self-defeating -- a run penalised for
+# what it writes there writes less there, and the diagnostic surface the whole
+# runbook depends on quietly empties out.
+READER_FACING = ("final-message.md", "workspace/shortlist.md",
                  "workspace/fit-assessment.md", "workspace/interview-brief.md")
 
 _RUN_DIR = re.compile(r"^run-(\d+)$")

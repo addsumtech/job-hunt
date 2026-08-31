@@ -54,6 +54,9 @@ def lint(doc, *, scenario_root, checkers, twins, extra_assertion_ids=()):
     evals = doc.get("evals") or []
     if not evals:
         return ["NO_EVALS: the document declares no evals"]
+    for key in _unknown_keys(doc, schema.DOC_KEYS):
+        findings.append(f"UNKNOWN_KEY: the document has unknown key {key!r}, "
+                        f"not in {schema.DOC_KEYS}")
 
     by_id = {}
     seen_assertion_ids = set(extra_assertion_ids)
@@ -112,13 +115,25 @@ def lint(doc, *, scenario_root, checkers, twins, extra_assertion_ids=()):
                 if arm not in schema.ARMS:
                     findings.append(f"BAD_ARM: {aid} names arm {arm!r}")
 
-            if role == "discriminating" and expected == "pass":
+            # `not_exercised` is rejected alongside `pass`, and for the same
+            # reason: "not exercised" is not "fail". An author declaring that
+            # the baseline never reaches the branch has declared the assertion
+            # cannot compare the arms. Twelve of the iteration-2 pilot's 26
+            # guards came back not-exercised and the lint had no way to say so
+            # in advance.
+            if role == "discriminating" and expected != "fail":
+                cure = ("make the scenario force the branch, or re-role it as "
+                        "regression with a written reason")
+                if expected == "not_exercised":
+                    cure = ("point the checker at a surface BOTH arms produce, "
+                            "or set role: regression with arms: [with_skill] — "
+                            "an assertion only one arm can reach is an audit of "
+                            "that arm, not a comparison")
                 findings.append(
                     f"NON_DISCRIMINATING_BY_CONSTRUCTION: {aid} is marked "
-                    "discriminating but its author expects the baseline to pass "
-                    "it. Then passing it says nothing about the skill. Either "
-                    "make the scenario force the branch, or re-role it as "
-                    "regression with a written reason in the commit message.")
+                    f"discriminating but its author expects the baseline to "
+                    f"{expected!r} it. Then passing it says nothing about the "
+                    f"skill. Either {cure}.")
             if (role == "regression" and expected != "pass"
                     and arms != ["with_skill"]):
                 findings.append(
@@ -127,6 +142,17 @@ def lint(doc, *, scenario_root, checkers, twins, extra_assertion_ids=()):
                     "regression assertion both arms cannot pass belongs to the "
                     "with_skill arm only — set arms: [with_skill] — or it is a "
                     "discriminating assertion wearing the wrong label.")
+
+            # `not_exercised` removes a comparison. The reason belongs beside
+            # the assertion, not in a commit message that never reaches the
+            # reader of this file.
+            if expected == "not_exercised" and \
+                    len(str(a.get("note") or "").strip()) < schema.MIN_FALSIFIER_CHARS:
+                findings.append(
+                    f"UNEXPLAINED_SCOPING: {aid} expects the baseline not to "
+                    f"reach it, which removes a comparison, and carries no "
+                    f"`note` saying why. Write what the baseline would have to "
+                    f"produce for this to be gradable.")
 
             falsifier = (a.get("falsifier") or "").strip()
             if len(falsifier) < schema.MIN_FALSIFIER_CHARS:
@@ -190,6 +216,97 @@ def lint(doc, *, scenario_root, checkers, twins, extra_assertion_ids=()):
                         f"whose twin {twin!r} is used by none of the quiet_twin "
                         f"eval(s) {declared}. A guard with no quiet twin scores "
                         "100% for a policy that always refuses.")
+
+    # ---- coverage: a mode may not quietly lose its last guard ---------------
+    #
+    # Every remedy the pilot recommends is a REDUCTION -- re-role it, scope it
+    # to one arm, retire it. Each is honest alone, and the sequence ends at an
+    # eval with nothing left that could fail, which exits 0 for that reason.
+    # A mode losing its last comparison has to be a statement someone made.
+    #
+    # An assertion scoped to arms: [with_skill] is NOT a guard: the baseline is
+    # never graded on it, so it audits the skill rather than comparing the arms.
+    guarded = {}
+    for ev in evals:
+        mode = ev.get("mode")
+        for a in ev.get("assertions") or []:
+            if a.get("role") != "discriminating":
+                continue
+            if "baseline" not in (a.get("arms") or list(schema.ARMS)):
+                continue
+            guarded.setdefault(mode, []).append(a.get("id"))
+
+    coverage = doc.get("coverage") or {}
+    declared = coverage.get("modes_without_a_guard") or {}
+    if not isinstance(declared, dict):
+        findings.append("BAD_COVERAGE: modes_without_a_guard must be a mapping "
+                        "of mode -> reason")
+        declared = {}
+    for mode in sorted(declared):
+        if mode not in schema.MODES:
+            findings.append(
+                f"UNKNOWN_MODE: coverage.modes_without_a_guard names {mode!r}, "
+                f"not in {schema.MODES}. A typo here exempts nothing while "
+                f"looking exactly like an exemption that works.")
+            continue
+        reason = str(declared.get(mode) or "").strip()
+        if len(reason) < schema.MIN_FALSIFIER_CHARS:
+            findings.append(
+                f"THIN_COVERAGE_REASON: coverage.modes_without_a_guard[{mode!r}] "
+                f"says {reason!r}. A mode measuring nothing about the skill "
+                f"needs a reason a reader can check, not a shrug.")
+        if guarded.get(mode):
+            findings.append(
+                f"STALE_COVERAGE_DECLARATION: {mode!r} is listed as having no "
+                f"guard, but {', '.join(sorted(guarded[mode]))} discriminate(s) "
+                f"on it. The note claims the eval is weaker than it is, and the "
+                f"next reader re-roles the real guard away without a red line.")
+
+    # Same rule one level down: an eval that hosts no guard is not a defect --
+    # decoys exist on purpose -- but it must be a statement someone made, or a
+    # guard eval quietly becomes a regression eval and nobody sees it happen.
+    guard_evals = {ev["id"] for ev in evals
+                   for a in (ev.get("assertions") or [])
+                   if a.get("role") == "discriminating"
+                   and "baseline" in (a.get("arms") or list(schema.ARMS))}
+    declared_evals = coverage.get("evals_without_a_guard") or {}
+    if not isinstance(declared_evals, dict):
+        findings.append("BAD_COVERAGE: evals_without_a_guard must be a mapping "
+                        "of eval id -> reason")
+        declared_evals = {}
+    known = {ev["id"] for ev in evals}
+    for eid in sorted(declared_evals, key=str):
+        if eid not in known:
+            findings.append(f"UNKNOWN_EVAL: coverage.evals_without_a_guard "
+                            f"names {eid!r}, which is not an eval in this file")
+            continue
+        reason = str(declared_evals.get(eid) or "").strip()
+        if len(reason) < schema.MIN_FALSIFIER_CHARS:
+            findings.append(
+                f"THIN_COVERAGE_REASON: coverage.evals_without_a_guard[{eid!r}] "
+                f"says {reason!r}, which a reader cannot check.")
+        if eid in guard_evals:
+            findings.append(
+                f"STALE_COVERAGE_DECLARATION: eval {eid} is listed as hosting no "
+                f"guard and it hosts one. Remove the declaration, or the next "
+                f"reader re-roles the real guard away without a red line.")
+    for ev in evals:
+        if ev["id"] in guard_evals or ev["id"] in declared_evals:
+            continue
+        findings.append(
+            f"EVAL_HAS_NO_GUARD: eval {ev['id']} ({ev.get('name')!r}) hosts no "
+            f"discriminating assertion that compares the arms. Decoys are "
+            f"supposed to look like this -- declare it in "
+            f"coverage.evals_without_a_guard with the reason.")
+
+    for mode in sorted({ev.get("mode") for ev in evals} & set(schema.MODES)):
+        if not guarded.get(mode) and mode not in declared:
+            findings.append(
+                f"MODE_HAS_NO_GUARD: no discriminating assertion compares the "
+                f"arms in {mode!r} mode, so this iteration measures nothing "
+                f"about the skill there. Point a checker at a surface both arms "
+                f"produce, or declare it in coverage.modes_without_a_guard with "
+                f"the reason.")
 
     for r in doc.get("retired") or []:
         rid = r.get("id")

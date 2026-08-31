@@ -141,3 +141,53 @@ def test_a_with_skill_only_tree_yields_no_baseline_evidence_for_any_guard(tmp_pa
         "a with_skill result was read as a baseline verdict")
     assert cd.posthoc(tmp_path, DOC) == [], (
         "posthoc has no baseline evidence here and must say nothing")
+
+
+# ---- three causes wearing one finding's name --------------------------------
+#
+# MEASURED IN THE ITERATION-2 PILOT. A0-3 uses `graded_by_reader`, which returns
+# AWAITING_READER_GRADE because no program can settle whether a summary leads
+# with the pivot. The pilot reported:
+#
+#   GUARD_NOT_EXERCISED: A0-3 ... The scenario does not reach the branch — fix
+#   the scenario, not the assertion.
+#
+# Every clause of which is wrong. The scenario reached the branch fine; what is
+# missing is a human. Following that remedy means rewriting a scenario that was
+# never broken, and the row still will not be graded afterwards.
+
+def write_reader_row(root, arm, n, aid="A14-1"):
+    d = root / "eval-14" / arm / f"run-{n}"
+    (d / "outputs").mkdir(parents=True, exist_ok=True)
+    (d / "grading.json").write_text(json.dumps({"expectations": [
+        {"assertion_id": aid, "text": aid, "role": "discriminating",
+         "passed": None, "evidence": "AWAITING_READER_GRADE"}]}),
+        encoding="utf-8")
+
+
+def test_an_ungraded_reader_row_asks_for_a_reader_not_a_scenario_rewrite(tmp_path):
+    write_reader_row(tmp_path, "baseline", 1)
+    out = cd.pilot(tmp_path, DOC)
+    assert any(f.startswith("NEEDS_READER_GRADE: A14-1") for f in out), out
+    assert not any(f.startswith("GUARD_NOT_EXERCISED") for f in out), (
+        "a row awaiting a human is not a scenario that failed to reach a branch")
+    finding = [f for f in out if f.startswith("NEEDS_READER_GRADE")][0]
+    assert "grading.json" in finding, (
+        "the remedy must say where to write the verdict")
+    assert "scenario" not in finding.lower(), (
+        f"this remedy sends the reader to rewrite a working scenario: {finding}")
+
+
+def test_a_genuinely_unexercised_guard_still_says_fix_the_scenario(tmp_path):
+    """The other cause keeps its own diagnosis — the point is telling them
+    apart, not replacing one wrong message with another."""
+    d = tmp_path / "eval-14" / "baseline" / "run-1"
+    (d / "outputs").mkdir(parents=True)
+    (d / "grading.json").write_text(json.dumps({"expectations": [
+        {"assertion_id": "A14-1", "text": "x", "role": "discriminating",
+         "passed": None,
+         "evidence": "not exercised: posting-source.txt is not a login wall"}]}),
+        encoding="utf-8")
+    out = cd.pilot(tmp_path, DOC)
+    assert any(f.startswith("GUARD_NOT_EXERCISED: A14-1") for f in out), out
+    assert not any(f.startswith("NEEDS_READER_GRADE") for f in out)

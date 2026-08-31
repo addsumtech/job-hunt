@@ -7,6 +7,7 @@ exactly the degenerate policy this harness exists to catch.
 """
 import json
 
+import yaml
 import pytest
 
 from evals import checkers as ck
@@ -425,3 +426,107 @@ def test_source_ids_that_yaml_parsed_as_integers_still_trace(tmp_path):
                      "title": "高级AI算法工程师"}]})
     assert ck.CHECKERS["fabricated_row_caught"](run)[0] is True
     assert ck.CHECKERS["no_genuine_row_dropped"](run)[0] is True
+
+
+# ---- read off the ANSWER, so the baseline arm can be graded at all ----------
+#
+# Once A6-1 and A10-1 were scoped to the with_skill arm — their checkers read
+# job-hunt's journal and posting-source.txt, which a bare agent never writes —
+# evals 6 and 10 had NO baseline-gradable assertion left. Their baseline arm
+# would have burned three runs each measuring nothing. Both properties are
+# plainly visible in what the run SAID.
+
+def _answer(tmp_path, final, shortlist=None):
+    out = tmp_path / "outputs"
+    (out / "workspace").mkdir(parents=True)
+    (out / "final-message.md").write_text(final, encoding="utf-8")
+    if shortlist is not None:
+        (out / "workspace" / "shortlist.yaml").write_text(
+            yaml.safe_dump(shortlist, allow_unicode=True), encoding="utf-8")
+    return runlib.Run(tmp_path)
+
+
+BLANK_GUARD = "blank_rows_not_reported_as_an_empty_market"
+BLANK_TWIN = "no_field_gap_claimed_when_rows_are_complete"
+
+
+def test_calling_a_broken_title_field_an_empty_market_fails(tmp_path):
+    """The defect that matters: a candidate told "no MRI jobs near you" stops
+    looking; one told "the titles came back blank" looks another way."""
+    run = _answer(tmp_path, "I found no matching jobs near Gainesville.\n")
+    passed, evidence = ck.CHECKERS[BLANK_GUARD](run)
+    assert passed is False, evidence
+    assert "empty market" in evidence
+
+
+def test_silence_about_the_blank_titles_also_fails(tmp_path):
+    run = _answer(tmp_path, "Here are two roles I found. Both look relevant.\n")
+    assert ck.CHECKERS[BLANK_GUARD](run)[0] is False
+
+
+def test_reporting_the_gap_passes(tmp_path):
+    """eval-6's baseline, in substance."""
+    run = _answer(tmp_path, "Every row came back with an empty title, so I "
+                            "cannot tell you whether either is an MRI role.\n")
+    assert ck.CHECKERS[BLANK_GUARD](run)[0] is True
+
+
+def test_the_twin_fails_a_false_alarm_on_a_clean_round(tmp_path):
+    """"Report a gap" is satisfiable by reporting one every round, and a warning
+    that always fires is one nobody reads."""
+    run = _answer(tmp_path, "Note: the titles came back blank.\n",
+                  shortlist={"rows": [{"title": "算法工程师", "company": "X"}]})
+    passed, evidence = ck.CHECKERS[BLANK_TWIN](run)
+    assert passed is False, evidence
+
+
+def test_the_twin_stands_down_when_the_rows_really_are_blank(tmp_path):
+    run = _answer(tmp_path, "The titles came back blank.\n",
+                  shortlist={"rows": [{"title": "", "company": "X"}]})
+    assert ck.CHECKERS[BLANK_TWIN](run)[0] is None
+
+
+WALL_GUARD = "login_wall_named_in_the_answer"
+WALL_TWIN = "no_wall_claimed_when_the_posting_is_readable"
+
+
+def test_assessing_a_sign_in_page_as_if_it_were_the_posting_fails(tmp_path):
+    run = _answer(tmp_path, "Strong apply — you meet all five requirements for "
+                            "this Senior Reconstruction Engineer role.\n" * 4)
+    passed, evidence = ck.CHECKERS[WALL_GUARD](run)
+    assert passed is False, evidence
+
+
+def test_naming_the_wall_without_asking_for_the_text_fails(tmp_path):
+    run = _answer(tmp_path, "That page is a login wall, so I can't help.\n")
+    passed, evidence = ck.CHECKERS[WALL_GUARD](run)
+    assert passed is False, evidence
+    assert "no way forward" in evidence
+
+
+def test_naming_the_wall_and_asking_for_the_posting_passes(tmp_path):
+    """eval-10's baseline, in substance."""
+    run = _answer(tmp_path, "What came back was a login wall, not a posting. "
+                            "Sign in yourself and paste me the description "
+                            "text and I'll give you a real answer.\n")
+    assert ck.CHECKERS[WALL_GUARD](run)[0] is True
+
+
+def test_the_wall_twin_fails_a_run_that_refuses_a_readable_posting(tmp_path):
+    """The cheapest way to pass the wall guard is to refuse everything."""
+    run = _answer(tmp_path, "Please paste the job description text.\n")
+    passed, evidence = ck.CHECKERS[WALL_TWIN](run)
+    assert passed is False, evidence
+
+
+def test_the_wall_twin_passes_a_real_assessment(tmp_path):
+    run = _answer(tmp_path, "You meet four of five requirements, so I would "
+                            "apply. The gap is the Dutch language line. " * 12)
+    assert ck.CHECKERS[WALL_TWIN](run)[0] is True
+
+
+def test_the_two_new_pairs_are_twins_of_each_other():
+    assert ck.TWINS[BLANK_GUARD] == BLANK_TWIN
+    assert ck.TWINS[BLANK_TWIN] == BLANK_GUARD
+    assert ck.TWINS[WALL_GUARD] == WALL_TWIN
+    assert ck.TWINS[WALL_TWIN] == WALL_GUARD
