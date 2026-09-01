@@ -76,6 +76,49 @@ The renderer auto-picks only two defaults: a **current** PhD/researcher role, or
 
 ---
 
+
+### Deciding between the templates
+
+The three above overlap, and the overlap is the common case rather than the edge
+one: a PhD candidate is *still in education* AND may be applying to industry, so
+the early-career template and the mid-senior template both fire. Pick with these
+two questions, in this order — **not** by whether the employer is academic or
+industrial, which is the wrong axis and the one that gets reached for first.
+
+**1. Is the degree in the target role's own domain?**
+
+A doctorate in the field the job is about is a **credential the reader is
+looking for**, and it belongs where they will look — near the top, whoever the
+employer is. An MRI-reconstruction PhD applying to medical-imaging AI is not
+"academic background"; it is the strongest single line on the page. The same
+doctorate applied to an unrelated role — insurance-process automation, say — is
+background, and Experience should lead instead.
+
+Check it against the posting, not against the employer's sector: if the degree
+or its field appears in `must_haves`, it is relevant by the posting's own words.
+
+**2. How much formal post-degree experience is there?**
+
+At **3+ years** of formal industry experience, Education moves below Experience
+and condenses to degree / school / year regardless of relevance — by then the
+track record is the stronger evidence and the degree is corroboration. Below
+that, or while still in education, relevance decides.
+
+| | degree IS in the role's domain | degree is NOT in the role's domain |
+|---|---|---|
+| still studying, or <3 yrs formal experience | **Education near the top** | Experience leads; Education after it, still on page one if the posting names a degree requirement |
+| 3+ yrs formal experience | Experience leads; Education below it, condensed | Experience leads; Education last, condensed |
+
+**Watch the must-have you are burying.** If the posting's first requirement is a
+degree and Education sits on page two, the one hard credential the screener is
+checking for is where a ten-second skim will not reach it. Naming it in the
+summary mitigates that; it does not replace it.
+
+This is a judgement the candidate is entitled to make. State which template you
+applied and why, and offer the alternative — a late-stage PhD generally has a
+clearer view of how their doctorate reads to their own field than a rule table
+does.
+
 ## 2. Regional Conventions & Language
 
 Target markets fall into three clusters that share CV conventions. The user picks a cluster; you then pin down the **specific country** (it refines the details below) and the **CV language**. Set `meta.target_market` (country/market) and `meta.language` accordingly. The conventions that vary across clusters: length, photo, personal data, "CV" vs "Resume" terminology, references, and language.
