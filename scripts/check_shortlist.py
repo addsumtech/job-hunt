@@ -840,10 +840,68 @@ def _check_detail_cap(shortlist, rows):
                 f"DETAIL_FETCH_OUT_OF_BAND: row {index} (id={row.get('id')!r}) "
                 f"carries a detail fetch but verdict {row.get('verdict')!r} is "
                 f"outside the top three ({', '.join(TOP_THREE)}). Detail "
-                "fan-out is the yellow-layer cap. If the user named this row, "
-                "record it in shortlist.yaml `detail_fetch_exceptions` with a "
-                "reason.")
+                "fan-out is the yellow-layer cap. TWO causes, both recorded the "
+                "same way in shortlist.yaml `detail_fetch_exceptions` with a "
+                "reason: the user named this row, OR the fetch itself demoted "
+                "it — a row fetched while it was still worth_applying, whose "
+                "description then revealed a disqualifier, was in band at the "
+                "moment it was fetched, and this check reads only the final "
+                "verdict so it cannot see that ordering.")
     return findings
+
+
+
+def _normalise_query(text) -> str:
+    """Casefolded, whitespace-collapsed, for comparing a declared query against
+    the command line that ran it.
+
+    Byte equality would be the wrong test. The brief and the command line are
+    written by the same model at different moments, so "Machine Learning
+    Engineer" in one and "machine learning engineer" in the other is the SAME
+    query — and a gate that reported that as a skipped track would be crying
+    wolf on a round that did exactly what it declared.
+    """
+    return " ".join(str(text or "").casefold().split())
+
+
+def _declared_queries_never_run(brief, shortlist, calls):
+    """Declared in brief.target_titles, absent from every adapter command line,
+    and not named in shortfall_reason.
+
+    MEASURED: a round declared ten query strings and ran one. The first English
+    query reached the per-site row cap on its own, so the Dutch-language and
+    medical-imaging queries were never issued — two of the three tracks the user
+    asked for. `target_titles` is documented as what makes a round reproducible
+    and nothing read it, so the gap surfaced only because the operator wrote it
+    into shortfall_reason by hand.
+
+    The rule is not "run everything". A round may hit a cap, lose a source, or
+    stop early. It is: if you declared it and did not run it, SAY SO — the same
+    bar SHORTFALL_NO_REASON already sets for row counts, applied to coverage.
+    """
+    # A brief that declares nothing falls out below rather than being guarded
+    # here: with no declared queries there is nothing to be missing, so an early
+    # return would be a branch no input can distinguish — dead code that reads
+    # as a safeguard. (Mutation testing found exactly that: `if False` here
+    # changed no result.)
+    declared = [q for q in (brief.get("target_titles") or [])
+                if _normalise_query(q)]
+    ran = " \u0000 ".join(_normalise_query(c.get("command_line")) for c in calls)
+    excused = _normalise_query(shortlist.get("shortfall_reason"))
+    missing = [q for q in declared
+               if _normalise_query(q) not in ran
+               and _normalise_query(q) not in excused]
+    if not missing:
+        return []
+    # ONE finding listing them, not one per query: a round that ran nothing
+    # would otherwise bury its real problem under a line per declared title.
+    return ["QUERIES_DECLARED_NOT_RUN: brief.target_titles declares "
+            f"{len(declared)} quer(ies) and {len(missing)} of them appear in no "
+            "adapter call and in no shortfall_reason: "
+            + "; ".join(repr(q) for q in missing)
+            + ". A declared query that was never issued is a coverage gap the "
+              "reader cannot see: the shortlist looks like an answer to the whole "
+              "brief. Run them, or name them in shortfall_reason and say why."]
 
 
 def check_run(workspace, shortlist, brief, md_text, calls):
@@ -875,6 +933,8 @@ def check_run(workspace, shortlist, brief, md_text, calls):
             f"SHORTFALL_NO_REASON: brief.target_count is {target} but the "
             f"shortlist has {len(rows)} rows and shortfall_reason is empty. "
             "Write the reason — never pad the count.")
+
+    findings.extend(_declared_queries_never_run(brief, shortlist, calls))
 
     findings.extend(_check_caps(brief))
 

@@ -155,6 +155,13 @@ max_pages_per_site: 2                  # yellow-layer cap
 max_age_days: 30                       # older than this ⇒ verification: stale_possible
 ```
 
+**`target_count` is asked, not chosen for the user.** It is the one brief field
+that is purely their preference — how many rows they want to look at — and it sits
+outside `search-preferences.yaml`, whose eight fields carry the "asked, never
+inferred" rule. That rule applies here for the same reason: a number picked on
+their behalf silently sets how much of the market they get shown. Ask it with the
+brief, in the same pass as the trigger reason.
+
 `target_count` and `max_rows_per_round` are different things: the first is the goal,
 the second is the politeness cap from `references/source-policy.md`. Falling short of
 `target_count` requires a written `shortfall_reason` in `shortlist.yaml`
@@ -217,6 +224,26 @@ or a Chinese one posting "图像重建算法工程师" is invisible to an Englis
 and the resulting empty result looks exactly like "there are no such jobs".
 
 Record every query string in `brief.yaml.target_titles` so the round is reproducible.
+
+**Split the row budget across the query set BEFORE the first call — the cap is per
+site per round, not per query.** `max_rows_per_round` is 25 and a single
+`--limit 25` spends all of it, so a round that runs its first query at full limit
+has no budget left for the other nine and for the second language. That is not
+hypothetical: a measured round declared ten queries, ran one English query at
+`--limit 25`, and never issued the Dutch-language or medical-imaging queries at
+all — two of the three tracks the user asked for, missing from a shortlist that
+read like an answer to the whole brief.
+
+Divide first: with N queries and a cap of R rows, run each at roughly `R // N`,
+rounding up for the tracks the user named first and down for the speculative
+ones. Two or three well-aimed queries at 8-12 rows each beat one at 25. If the
+brief genuinely needs more coverage than one round's cap allows, that is a second
+round with its own slug — never a raised cap.
+
+`check_shortlist.py` reports a declared query that appears in no adapter call as
+`QUERIES_DECLARED_NOT_RUN`, so under-searching is now visible rather than
+silent — but it fires at the END, after the calls are spent. The arithmetic above
+is what stops the round from getting there.
 
 ## Step 4 — run the search, read the exit code first
 
@@ -371,6 +398,16 @@ fetch anyway, which is recorded in
 this as `DETAIL_FETCH_OUT_OF_BAND`. This cap is where detail fan-out stops being a
 crawl, and it is the mechanism that keeps this mode inside the yellow tier of
 `references/source-policy.md`.
+
+**A fetch that DEMOTES its own row is the normal case, and the gate cannot see
+it.** `DETAIL_FETCH_OUT_OF_BAND` compares the fetch against the row's FINAL
+verdict, while the decision to fetch was made on the verdict before it. Measured:
+a row was fetched as `worth_applying`, its description read "Fluent in English and
+Dutch", and it became `blocked` — the fetch was in band when it was made, and it
+is the only reason that row's language requirement is known rather than guessed.
+Record it in `detail_fetch_exceptions` with that as the reason. The gate's remedy
+text says "if the user named this row", which is the other cause; this one is
+yours to write down.
 
 Each detail call goes through `scripts/check_opencli_result.py` too, and its stdout
 lands in `raw/<site>-detail-<id>.json`.

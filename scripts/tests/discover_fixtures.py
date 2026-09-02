@@ -95,7 +95,13 @@ BRIEF = {
     "trigger_reason": (
         "用户要求本轮检索：上一份 JD 被 assess 判为 likely_screen_out（缺 C++ 生产经验），"
         "因此在同方向上找更稳的岗位。本轮候选必须肉眼可见地比它更稳，而不只是标题相似。"),
-    "target_titles": ["算法工程师", "algorithm engineer"],
+    # One declared query, because this fixture makes exactly one search call
+    # (`invocations: 1` below). It used to declare two and run one, which is
+    # the under-searching `QUERIES_DECLARED_NOT_RUN` now reports — a clean
+    # fixture must not model the defect other tests assert is absent. A round
+    # that really does declare more than it runs names the rest in
+    # `shortfall_reason`; see modes/discover.md, "Split the row budget".
+    "target_titles": ["算法工程师"],
     "markets": ["cn"],
     "locations": ["上海", "西安", "海宁"],
     "seniority": "mid",
@@ -283,8 +289,13 @@ BRIEF_EN = {
         "The user asked for a first round in the Dutch market: the previous posting "
         "was assessed likely_screen_out for missing production C++, so this round "
         "has to surface roles that are visibly steadier, not merely similarly titled."),
-    "target_titles": ["MRI reconstruction", "beeldreconstructie onderzoeker",
-                      "image reconstruction engineer"],
+    # One declared query, because this fixture makes exactly one search call
+    # (`invocations: 1` below). It used to declare two and run one, which is
+    # the under-searching `QUERIES_DECLARED_NOT_RUN` now reports — a clean
+    # fixture must not model the defect other tests assert is absent. A round
+    # that really does declare more than it runs names the rest in
+    # `shortfall_reason`; see modes/discover.md, "Split the row budget".
+    "target_titles": ["MRI reconstruction"],
     "markets": ["nl"],
     "locations": ["Amsterdam", "Eindhoven", "Utrecht"],
     "seniority": "mid",
