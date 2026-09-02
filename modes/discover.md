@@ -240,6 +240,23 @@ ones. Two or three well-aimed queries at 8-12 rows each beat one at 25. If the
 brief genuinely needs more coverage than one round's cap allows, that is a second
 round with its own slug — never a raised cap.
 
+**Then order them: most specific first, broadest last.** Dividing the budget is
+not enough on its own, because a broad query fills whatever budget it is given
+and a narrow one usually does not. Run `MRI reconstruction` before
+`medical imaging AI` before `machine learning engineer`, and hand the leftover
+rows back to the broad query at the end.
+
+The reason is what each query is worth to THIS candidate, not how many rows it
+returns. A specialist term is where their credential is a hard qualification and
+where few applicants compete; the generic term returns what every ML engineer in
+the market already sees. Measured: a round ran `machine learning engineer` first,
+at the full cap, and never reached `MRI reconstruction` at position six — the
+most expensive rows in the round were spent on its least informative query, and
+the candidate's own specialism went unsearched.
+
+So `brief.target_titles` is written in run order, specific to broad, and the
+order is part of the plan rather than the sequence they were thought of in.
+
 `check_shortlist.py` reports a declared query that appears in no adapter call as
 `QUERIES_DECLARED_NOT_RUN`, so under-searching is now visible rather than
 silent — but it fires at the END, after the calls are spent. The arithmetic above

@@ -173,3 +173,26 @@ def test_discover_says_target_count_is_asked():
         "target_count is a user preference that sits outside the eight fields "
         "carrying the asked-never-inferred rule; it needs the rule stated where "
         "it is written")
+
+
+def test_discover_says_to_run_the_most_specific_query_first():
+    """Splitting the budget is not enough on its own: a broad query fills
+    whatever budget it gets, so running it first strands the specific ones
+    regardless of the arithmetic.
+
+    MEASURED: a round divided nothing, ran `machine learning engineer` first at
+    the full cap, and never reached `MRI reconstruction` at position six — the
+    candidate's own specialism, and the one query where their PhD is a hard
+    qualification rather than a background note. The first fix added the
+    arithmetic and NOT this, and the omission was reported as fixed.
+    """
+    doc = _flat((REPO / "modes" / "discover.md").read_text(encoding="utf-8"))
+    assert "most specific first" in doc, (
+        "discover.md gives the budget arithmetic but never says what order to "
+        "run the queries in")
+    block = doc.split("most specific first")[1][:900]
+    assert "broadest last" in doc.split("most specific first")[0][-80:] or \
+           "broadest last" in block, "the rule must name both ends"
+    assert "run order" in block, (
+        "and must say that brief.target_titles is written in that order — "
+        "otherwise the plan lives only in the model's head")
