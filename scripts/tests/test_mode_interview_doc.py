@@ -114,3 +114,42 @@ def test_the_twelve_month_rule_is_stated_with_its_reason():
 def test_the_country_rule_names_the_measured_case():
     text = MODE.read_text(encoding="utf-8")
     assert "ASML" in text and "宣讲会" in text
+
+
+def _flat(text):
+    """Doc assertions normalise whitespace: a line wrap is not a content change."""
+    return " ".join(text.split())
+
+
+def test_the_mode_forbids_writing_the_answer_in_the_candidates_voice():
+    """The clause the whole answer-guide step hangs on.
+
+    Without it the step reads as "write good answers", which is what produces an
+    invented instance on the rows the candidate has no evidence for.
+    """
+    doc = _flat(MODE.read_text(encoding="utf-8"))
+    assert "Never write the candidate's answer in their voice" in doc
+    where = doc.index("Never write the candidate's answer in their voice")
+    assert "skeleton" in doc[where:where + 400]
+
+
+def test_the_mode_states_the_three_lines_the_gate_reads():
+    doc = _flat(MODE.read_text(encoding="utf-8"))
+    for line in ("- row:", "- basis:", "- source:"):
+        assert line in doc, line
+    assert "evidenced" in doc and "honest_gap" in doc
+    # Pinned to the TABLE CELL, not to the document. Asserting "no default" anywhere
+    # let a mutant rewrite the cell to "defaults to `evidenced`" and stay green off
+    # the prose sentence below it -- two copies disagreeing, which is the shape of
+    # defect this repo keeps finding.
+    cell = doc[doc.index("| `- basis:` |"):]
+    cell = cell[:cell.index("|", cell.index("honest_gap"))]
+    assert "no third value and no default" in cell, cell
+    assert "default" not in cell.replace("no third value and no default", "")
+
+
+def test_the_mode_says_a_gapped_row_may_not_be_written_up_as_evidenced():
+    doc = _flat(MODE.read_text(encoding="utf-8"))
+    assert "GUIDE_GAP_AS_EVIDENCED" in doc
+    where = doc.index("GUIDE_GAP_AS_EVIDENCED")
+    assert "gap" in doc[where:where + 200] and "no_evidence" in doc[where:where + 200]

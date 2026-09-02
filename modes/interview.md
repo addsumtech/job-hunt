@@ -286,6 +286,48 @@ buckets**, because they have three completely different actions:
 
 Merging them into one "weak areas" list destroys the artifact.
 
+**`mock/answer-guide.md`** — per-question guidance, and the one artifact in this mode
+where being useful pulls directly against the load-bearing rule. A question list with
+nothing about what a good answer contains is half a deliverable. But the questions that
+most need a model answer are exactly the ones the candidate has no evidence for, and a
+satisfying answer to those can only be written by inventing the experience — so the
+distinction is made mechanical rather than left to tone.
+
+**Never write the candidate's answer in their voice.** What ships is a skeleton they
+fill: the STARR slots carrying only facts already in the profile, what the interviewer
+is listening for, and which defect tag the answer fails on. A first-person paragraph is
+a script, it gets recited, and a recited answer collapses on the first Dutch follow-up —
+which is `PROBE-COLLAPSE`, arriving in the real room instead of this one.
+
+`## ` is reserved for entries. A section divider written as a heading is read as an
+entry with no fields and fails — which is the right way round: letting some `## `
+headings be exempt would make "call it a divider" a way to ship guidance with no
+source. Use bold prose or `### ` for structure.
+
+Every entry carries three lines `check_mock.py` reads:
+
+| Line | Meaning |
+|---|---|
+| `- row:` | the requirement id(s) in `fit-assessment.yaml` this answer serves; several are comma-separated |
+| `- basis:` | `evidenced` \| `honest_gap` — there is no third value and no default |
+| `- source:` | where the load-bearing fact comes from: a `profile.yaml` path, or a session answer with its date |
+
+The gate reads `fit-assessment.yaml` and fails `GUIDE_GAP_AS_EVIDENCED` when an entry
+serves a row scored `gap` or `no_evidence` and declares itself `evidenced`. There is no
+default for `basis` on purpose: defaulting picks a side of the honesty distinction on
+the author's behalf, and the safe-looking default is the unsafe one. An entry naming an
+evidenced row alongside a gapped one does not launder the second through the first.
+
+For a `honest_gap` entry the content is the framing from `references/interview-prep.md`
+§2 — the nearest real thing the candidate HAS done, then how they would come at the
+requirement — and never a narrated instance of work they have not done. That is not
+rehearsing a gap into a non-gap; it is the only honest answer to the question, and
+withholding it leaves the candidate to improvise on exactly the questions that will
+decide the round.
+
+When the workspace has no `fit-assessment.yaml` the cross-check cannot run and says so
+on stderr (`NO_ASSESSMENT_TO_CHECK_AGAINST`); the shape checks still run.
+
 **`mock/cheatsheet.md`** — one page. The stories, one line each; the 2–4 honest gaps with
 their exact framing; the questions still unanswered; the candidate's questions for them;
 the loop shape with round names in the local vocabulary. If it exceeds one page it has
@@ -382,6 +424,7 @@ as a verdict is fabrication. Everywhere else, no score, no percentage, no probab
 - [ ] `mock/transcript-<n>.md` was appended to after **every** answer, and never edited
 - [ ] both assessors were dispatched, each with exactly its own pack (`agents/mock-assessor-transcript.md`, `agents/mock-assessor-provenance.md`)
 - [ ] `mock/assessment-<n>.md` contains both blocks verbatim
-- [ ] `mock/question-log.yaml`, `mock/open-loops.md`, `mock/cheatsheet.md` and the profile-level `answer-bank.md` are written
+- [ ] `mock/question-log.yaml`, `mock/open-loops.md`, `mock/answer-guide.md`, `mock/cheatsheet.md` and the profile-level `answer-bank.md` are written
+- [ ] every `answer-guide.md` entry carries `- row:`, `- basis:` and `- source:`, no entry is a first-person script, and no entry serving a gapped row claims `evidenced`
 - [ ] every walk-back and every promoted claim from §6 is on disk
 - [ ] `scripts/check_mock.py` exited 0 and its receipt is in `journal.jsonl`

@@ -120,6 +120,13 @@ CHEATSHEET = """# Cheatsheet — ASML, MR Reconstruction Engineer
 - Loop: technisch gesprek met de vakinhoudelijke manager, then gesprek met het team.
 """
 
+ASSESSMENT_YAML = """requirements:
+  - id: R1
+    match: strong
+  - id: R2
+    match: no_evidence
+"""
+
 ANSWER_BANK = """# Answer bank
 
 ## Batched GPU reconstruction on the 3T study
@@ -131,6 +138,28 @@ ANSWER_BANK = """# Answer bank
 - A: replaced the per-slice loop with a batched GPU implementation
 - R: open loop — the measured change was not stated in the room; see open-loops.md
 - R2 (reflectie): profile before optimising, and write the baseline down first
+"""
+
+ANSWER_GUIDE = """# Answer guide — round 2
+
+## Q2 — What did you change about it, and what happened as a result?
+- row: R1
+- basis: evidenced
+- source: profile.yaml:experience[0].bullets[2] — "rewrote the recon loop for GPU batching"
+- listening for: your own action separated from the team's, and a measured before/after
+- S: offline recon for a 3T scanner study
+- T: the per-slice loop was the nightly bottleneck
+- A: YOUR words — what you personally changed
+- R: the measured change; if you no longer hold the number, say so rather than reach
+- R2 (reflectie): what you would measure first next time
+- fails if: "we" throughout (NO-ACTOR), or an outcome with no object (VAGUE-OUTCOME)
+
+## Q4 — How do you work inside a regulated quality management system?
+- row: R2
+- basis: honest_gap
+- source: fit-assessment.yaml:R2 match=no_evidence — nothing in the profile speaks to this
+- honest framing: name the nearest real thing you have done, then how you would come at
+  the regulated version. Do not narrate a QMS you have not worked in.
 """
 
 BRIEF = """# Interview-readiness brief
@@ -172,7 +201,7 @@ def skill_root(workspace):
 
 def build(tmp_path, *, round_no=2, transcript=None, assessment=None, question_log=None,
           answer_bank=None, brief=None, claims=None, posting=None, open_loops=None,
-          cheatsheet=None, enter=True):
+          cheatsheet=None, answer_guide=None, assessment_yaml=None, enter=True):
     """Write the quiet-case workspace under tmp_path and return the workspace path.
 
     `enter=False` skips the mode-entry record, for the tests that pin NO_MODE_ENTRY.
@@ -200,6 +229,12 @@ def build(tmp_path, *, round_no=2, transcript=None, assessment=None, question_lo
       OPEN_LOOPS if open_loops is None else open_loops)
     w(workspace / "mock" / "cheatsheet.md",
       CHEATSHEET if cheatsheet is None else cheatsheet)
+    w(workspace / "mock" / "answer-guide.md",
+      ANSWER_GUIDE if answer_guide is None else answer_guide)
+    # The assessment the guide is checked against. Rows deliberately disagree: R1 is
+    # evidenced and R2 is not, so a fixture that swapped the two bases would fail.
+    w(workspace / "fit-assessment.yaml",
+      ASSESSMENT_YAML if assessment_yaml is None else assessment_yaml)
     w(profile / "answer-bank.md", ANSWER_BANK if answer_bank is None else answer_bank)
     if enter:
         # enter_mode.main prints its "now read the file" reminder on stdout. Swallow it

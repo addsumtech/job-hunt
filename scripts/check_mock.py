@@ -524,6 +524,100 @@ def check_answer_bank(path: pathlib.Path) -> list:
     return findings
 
 
+# ---------------------------------------------------------------- answer-guide.md
+
+# Same `[ \t]` discipline as the answer bank above, and for the same measured
+# reason: `\s` matches a newline, so an EMPTY "- source:" line passes by borrowing
+# the hyphen from the next bullet.
+_AG_HEADING = re.compile(r"^##[ \t]+(.+?)[ \t]*$", re.M)
+_AG_SOURCE = re.compile(r"^[ \t]*-[ \t]*source:[ \t]*\S+", re.M)
+# `(\S.*?)` not `(\S+)`: an entry may serve several rows ("row: R1, R2"), and
+# stopping at the first space would leave every row after the first unchecked --
+# which is exactly the "launder the gap through the evidenced row" path.
+_AG_ROW = re.compile(r"^[ \t]*-[ \t]*row:[ \t]*(\S.*?)[ \t]*$", re.M)
+_AG_BASIS = re.compile(r"^[ \t]*-[ \t]*basis:[ \t]*(\S+)", re.M)
+_AG_BASES = ("evidenced", "honest_gap")
+# The two match values that mean the candidate has NOT done the thing. Kept as a
+# tuple rather than inlined so the assessment schema and this gate name the same
+# set in one place.
+_UNEVIDENCED = ("gap", "no_evidence")
+
+
+def _assessment_matches(workspace: pathlib.Path) -> dict:
+    """{requirement id: match} from fit-assessment.yaml, or {} when there is none.
+
+    Returns a plain dict rather than raising: interview mode can legitimately be
+    entered on a posting plus a CV with no assessment in the workspace, and the
+    cross-check below reports that it could not run instead of inventing a verdict.
+    """
+    try:
+        data = journal.load_yaml(workspace / "fit-assessment.yaml")
+    except Exception:
+        return {}
+    rows = (data or {}).get("requirements") or []
+    return {str(r.get("id")): str(r.get("match")) for r in rows if isinstance(r, dict)}
+
+
+def check_answer_guide(path: pathlib.Path, workspace: pathlib.Path) -> tuple:
+    """Findings, plus notices for what could not be cross-checked.
+
+    The load-bearing check is the last one. Answer guidance is the step where the
+    pressure to be USEFUL runs straight into the load-bearing rule: the questions
+    that most need a good answer are exactly the ones the candidate has no evidence
+    for, and a satisfying answer to those can only be written by inventing the
+    experience. So an entry that serves a requirement the assessment scored `gap`
+    or `no_evidence` may only be an honest-gap framing, and saying so is mechanical
+    rather than a matter of tone.
+    """
+    findings: list = []
+    notices: list = []
+    if not path.exists():
+        return findings, notices          # NO_ANSWER_GUIDE already covers absence
+    text = path.read_text(encoding="utf-8")
+    marks = list(_AG_HEADING.finditer(text))
+    if not marks:
+        return ([f"NO_ANSWER_GUIDE_ENTRIES: {path} has no '## ' entries"], notices)
+    matches = _assessment_matches(workspace)
+    if not matches:
+        notices.append(
+            "NO_ASSESSMENT_TO_CHECK_AGAINST: fit-assessment.yaml is absent or has no "
+            "requirement rows, so answer-guide.md entries could not be checked for a "
+            "gap written up as evidenced experience. The shape checks still ran.")
+    for index, mark in enumerate(marks):
+        end = marks[index + 1].start() if index + 1 < len(marks) else len(text)
+        body, title = text[mark.end():end], mark.group(1)
+        if not _AG_SOURCE.search(body):
+            findings.append(
+                f"GUIDE_NO_SOURCE: answer-guide.md entry {title!r} has no "
+                "'- source:' line — guidance the candidate cannot trace is guidance "
+                "they will repeat in the real room believing it was vetted")
+        row = _AG_ROW.search(body)
+        if not row:
+            findings.append(
+                f"GUIDE_NO_ROW: answer-guide.md entry {title!r} has no '- row:' line "
+                "naming the requirement it serves, so nothing can check it against "
+                "what the assessment found")
+        basis = _AG_BASIS.search(body)
+        if not basis or basis.group(1) not in _AG_BASES:
+            findings.append(
+                f"GUIDE_BAD_BASIS: answer-guide.md entry {title!r} must carry "
+                f"'- basis:' with one of {list(_AG_BASES)} — the whole honesty "
+                "distinction in this artifact rides on that token")
+            continue
+        if not row or not matches:
+            continue
+        for rid in [part.strip() for part in row.group(1).split(",") if part.strip()]:
+            if matches.get(rid) in _UNEVIDENCED and basis.group(1) == "evidenced":
+                findings.append(
+                    f"GUIDE_GAP_AS_EVIDENCED: answer-guide.md entry {title!r} serves "
+                    f"{rid}, which fit-assessment.yaml scored {matches[rid]!r}, but is "
+                    "written as 'evidenced'. An answer that satisfies an interviewer on "
+                    "a requirement the candidate has no evidence for can only be "
+                    "invented experience; the honest form of this entry is basis: "
+                    "honest_gap")
+    return findings, notices
+
+
 # ----------------------------------------------------------------- banned vocabulary
 
 def _default_scanner():
@@ -567,6 +661,10 @@ SESSION_ARTIFACTS = (
      "modes/interview.md §5 requires the three buckets — a fact not recalled, a "
      "genuine gap, and a tailoring error — because they have three completely "
      "different actions and merging them destroys the artifact"),
+    ("NO_ANSWER_GUIDE", "answer-guide.md",
+     "modes/interview.md §5 requires the per-question answer guidance: a question "
+     "list with no account of what a good answer contains is half a deliverable, "
+     "and the guidance is what the honesty rules have to bind on"),
     ("NO_CHEATSHEET", "cheatsheet.md",
      "modes/interview.md §5 requires the one page the candidate carries into the "
      "real room: the stories, the honest gaps with their framing, what is still "
@@ -938,6 +1036,11 @@ def run(workspace, round_no: int, answer_bank=None, today=None, vocab_scanner=_A
                                   refs=transcript_refs(transcript_text))
     findings += check_answer_bank(answer_bank)
     findings += check_session_artifacts(workspace / "mock")
+    guide_findings, guide_notices = check_answer_guide(
+        workspace / "mock" / "answer-guide.md", workspace)
+    findings += guide_findings
+    for notice in guide_notices:
+        print(notice, file=sys.stderr)
     findings += check_vocabulary(
         [
             assessment_path,

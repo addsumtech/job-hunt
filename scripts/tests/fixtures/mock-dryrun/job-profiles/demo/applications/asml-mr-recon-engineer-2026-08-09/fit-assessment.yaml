@@ -1,0 +1,8 @@
+# Only the field check_mock's answer-guide cross-check reads. The two rows disagree
+# on purpose: R1 is evidenced and R2 is not, so a guide that wrote the gap up as
+# experience fails here rather than in review.
+requirements:
+  - id: R1
+    match: strong
+  - id: R2
+    match: no_evidence
