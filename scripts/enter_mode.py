@@ -60,11 +60,43 @@ def latest_mode_entry(workspace, mode: str):
     return found
 
 
+def _assessment_present(ws) -> bool:
+    """Did an assessment happen in this workspace?
+
+    Either artifact counts: the file assess mode writes, or a receipt from the
+    gate that composes it. A run that assessed and a run that did not are
+    otherwise indistinguishable at the end.
+    """
+    ws = pathlib.Path(ws)
+    if (ws / "fit-assessment.yaml").is_file() or (ws / "fit-assessment.md").is_file():
+        return True
+    path = ws / "journal.jsonl"
+    if not path.exists():
+        return False
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(rec, dict) and rec.get("gate") == "check_assessment":
+            return True
+    return False
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--workspace", required=True)
     ap.add_argument("--mode", required=True, choices=MODES)
     ap.add_argument("--skill-root", default=None)
+    # Optional, and recorded either way. SKILL.md tells the model to decide the
+    # mode from what the user asked and to SAY which one it picked -- but the
+    # record only ever held the choice, never the inference behind it, so a wrong
+    # mode produced a perfectly valid entry and nothing could see it. Not made
+    # required: four mode docs and ten test files call this script, and breaking
+    # them to force a field would cost more than the field is worth. Absence is
+    # recorded as null so the gate can report it.
+    ap.add_argument("--because", default=None,
+                    help="one line: why this mode, from what the user asked")
     args = ap.parse_args(argv)
     root = pathlib.Path(args.skill_root) if args.skill_root else paths.SKILL_ROOT
     path = paths.mode_file(args.mode, root)
@@ -93,6 +125,13 @@ def main(argv=None) -> int:
         "mode": args.mode,
         "mode_file": f"modes/{args.mode}.md",
         "mode_file_sha256": journal.sha256_file(path),
+        "because": (args.because.strip() or None) if args.because else None,
+        # modes/apply.md, Entry conditions: an assessment SHOULD exist, and its
+        # verdict decides how apply opens -- but running without one is allowed
+        # provided the run "say[s] plainly that no fit assessment was made".
+        # Recorded here rather than left to the model's memory, so check_apply
+        # can state it at the end.
+        "assessment_present": _assessment_present(ws),
     })
     print(f"entered mode {args.mode}; read {path} in full before doing anything else")
     return 0

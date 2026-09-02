@@ -206,6 +206,22 @@ Tell the user **all three verdicts and the ATS coverage %** (report it verbatim 
 - **Consistency reminder:** the tailored CV now states specific things about the candidate's roles, scope, and dates. Remind them to make sure their **LinkedIn and any portal profile don't contradict it** — recruiters cross-check, and a mismatch reads as dishonesty. (A reminder only — do not scrape or fetch their profile.)
 - Remind them the reusable **master profile** is saved at `~/.claude/job-profiles/<name>/profile.yaml` and can be retargeted for the next application.
 
+### Step 7.6 — Offer what comes next
+
+Apply ends here, and the user is now at the point the other three modes exist
+for. **Ask which they want, in one `AskUserQuestion` with selectable options —
+and run none of them unasked** (`SKILL.md`, "Hand-off"):
+
+- **`interview`** — rehearse this package and debrief it. The natural next step:
+  the CV now makes specific claims, and the mock round is where the candidate
+  finds out whether they can defend them under one follow-up.
+- **`assess`** — judge another posting before building for it.
+- **`discover`** — find more roles worth looking at.
+
+Offer only modes whose inputs exist, and say plainly if the loop ended
+un-passed: a `blocked` or `honest_stretch` package makes `interview` more useful,
+not less, because the gaps are known going in.
+
 ### Step 7.5 — Interview-readiness brief
 
 Produce the brief in `references/interview-prep.md` (write it to `<workspace>/interview-brief.md`). It is **near-free** — you already hold everything it needs: the claim-provenance map (every reframed claim → its real source), the judges' `SUPPLEMENTARY_QUESTIONS_FOR_CANDIDATE`, and the HONEST-GAPS. For each REFRAMED/AMPLIFIED claim, give the source fact and a "be ready to explain…" prompt; for each honest gap, the truthful framing if asked; and carry over the recruiter/manager questions. Honest only — if a claim can't be truthfully defended, that's a tailoring error: walk it back on the CV.

@@ -392,6 +392,42 @@ def main(argv=None) -> int:
                         "honesty checkpoint and the only one that can still walk a "
                         "claim back after every gate has already fired")
 
+    # ── notices: true statements about this run that are not findings ────
+    #
+    # On STDERR, deliberately. stdout is this gate's findings channel — one
+    # finding per line, each with a stable CODE prefix — and a clean run says
+    # nothing on it. Printing an always-on notice there breaks that contract and
+    # trains a reader to skip the line that matters, which is the cry-wolf this
+    # skill treats as a first-class defect.
+    #
+    # NO_ASSESSMENT cannot be a finding either: modes/apply.md says "No
+    # assessment at all is not a blocker either: run apply, and say plainly that
+    # no fit assessment was made." Failing the run would contradict the sentence
+    # that permits it. The gate states the fact; the completion message carries
+    # it. That is the most a gate can do about prose it cannot read.
+    if entry is not None:
+        # A record written before this field existed cannot answer, so ask the
+        # workspace instead of defaulting. Defaulting to "present" made the
+        # notice silently absent on exactly the runs most likely to need it —
+        # the ones that started before the check did.
+        present = entry.get("assessment_present")
+        if present is None:
+            present = enter_mode._assessment_present(ws)
+        if not present:
+            print("NO_ASSESSMENT: this workspace has no fit-assessment and no "
+                  "check_assessment receipt, so the package was built without "
+                  "one. modes/apply.md requires the completion message to say "
+                  "plainly that no fit assessment was made — the apply-mode FIT "
+                  "SNAPSHOT is not one; it is this mode's own before/after "
+                  "count.", file=sys.stderr)
+        if not entry.get("because"):
+            print("MODE_UNEXPLAINED: the apply mode_entry records no reason. "
+                  "SKILL.md picks the mode by inference from what the user "
+                  "asked, and a wrong inference writes a perfectly valid entry "
+                  "— pass --because '<why, from what they said>' to "
+                  "enter_mode.py so the choice can be audited afterwards.",
+                  file=sys.stderr)
+
     for f in findings:
         print(f)
     journal.receipt(ws, GATE, {}, "fail" if findings else "pass", findings)

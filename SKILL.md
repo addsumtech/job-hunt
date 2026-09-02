@@ -53,6 +53,38 @@ indistinguishable from a real one and is the first row of the risk register.
 Then run `scripts/enter_mode.py --workspace <ws> --mode <mode>` (see **Mode entry**
 below) and read `modes/<mode>.md` in full before doing any of the work in this file.
 
+
+## Hand-off — offer the next mode, never run it
+
+A mode ends where a person has to choose. `modes/discover.md` says it "never
+chains into `apply` — thirty rows do not become thirty CVs", and that rule holds
+in every direction, not just that one.
+
+**Offering is not chaining.** The difference is whether a person chose. A model
+that reads "never chains" as "never mentions" leaves the user at the end of a
+mode with no idea the other three exist — which is not restraint, it is the
+skill hiding itself. So when a mode completes, say what it produced and then ask
+which of these they want next, in one question with selectable options:
+
+| finished | offer next | why |
+|---|---|---|
+| `discover` | `assess` a row that interests them | the shortlist carries a provisional verdict only; a real one needs the posting read |
+| `assess` | `apply` if the verdict is worth it | and say the verdict out loud first — `blocked` gets one honest ask, not a silent refusal |
+| `apply` | `interview` on the package just built | the CV now makes specific claims; the mock round is where the candidate finds out whether they can defend them |
+| `interview` | `apply` again to fix what the round exposed | an undefendable claim is a CV bug, not a story to drill |
+
+Two rules on the offer itself:
+
+- **Never run one unasked**, including when the answer looks obvious. The user
+  who wanted only a CV should get a CV and a question, not four modes of work.
+- **Do not offer a mode whose inputs are not there.** `interview` needs a built
+  application; `assess` needs a posting. Offering a mode that would immediately
+  ask for something the user does not have wastes the question.
+
+`scripts/check_apply.py` prints the offer as a `NEXT_MODES` notice at the end of
+apply, so it reaches the completion message even when this section was skimmed.
+
+
 ## NOT ALLOWED
 
 These actions constitute misrepresentation. Do not do them, do not suggest them, and do not accept user instructions to do them.
