@@ -216,3 +216,131 @@ def test_a_workspace_that_does_not_exist_writes_no_journal(tmp_path, capsys):
     assert lint.main(["--workspace", str(missing)]) == 2
     assert not missing.exists()
     assert "does not exist" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# The fifth masking: numbers this round CAPTURED.
+#
+# Found in use, not in review. A real LinkedIn card in the 2026-09-02 medical
+# imaging round is titled "AI AI/ML Engineer (100 % remote) (m/f/d)". discover
+# renders row titles exactly as captured, and this lint bans "%" from
+# shortlist.md, so the two rules contradicted each other and the artifact that
+# failed was the honest one. There is no wording that fixes it: the "%" is the
+# employer's.
+#
+# The masking is a lookup against the captures, so the tests that matter are the
+# ones that show it DISCRIMINATING -- exempting the quotation while still firing
+# on a number the model made up, and on a number reused away from its neighbours.
+# ---------------------------------------------------------------------------
+import json as _json
+
+import lint_no_prediction as lnp
+from findings import codes
+
+
+def _out(found: list) -> str:
+    """scan_text returns lines; the code assertions take the joined output."""
+    return "\n".join(found)
+
+
+def _round(tmp_path, card_title="AI AI/ML Engineer (100 % remote) (m/f/d)"):
+    ws = tmp_path / "job-profiles" / "tester" / "searches" / "r"
+    (ws / "raw").mkdir(parents=True)
+    (ws / "raw" / "linkedin-1.json").write_text(
+        _json.dumps([{"title": card_title, "company": "EWOR",
+                      "url": "https://example.invalid/1"}]),
+        encoding="utf-8")
+    return ws
+
+
+def test_a_percentage_inside_a_captured_job_title_is_not_a_finding(tmp_path):
+    ws = _round(tmp_path)
+    corpus = lnp.capture_corpus(ws)
+    line = "### 3. AI AI/ML Engineer (100 % remote) (m/f/d) — EWOR"
+    assert lnp.scan_text(line, "shortlist.md", corpus) == []
+
+
+def test_the_same_line_is_a_finding_without_the_capture_behind_it(tmp_path):
+    """The exemption must come from the capture, not from the shape of the line.
+
+    Without this pair the masking could be blanking every '%' it sees and both
+    the fix and its test would still look right.
+    """
+    line = "### 3. AI AI/ML Engineer (100 % remote) (m/f/d) — EWOR"
+    assert codes(_out(lnp.scan_text(line, "shortlist.md", ""))) == {"PERCENT"}
+
+
+def test_a_number_reused_away_from_its_captured_neighbours_still_fires(tmp_path):
+    """The narrowing that keeps this from being an off switch.
+
+    The card contains "100 %". Quoting it is reporting; writing "100 % chance of
+    an interview" is the invented number this whole lint exists to stop, and the
+    digits being present somewhere in the capture must not launder it.
+    """
+    ws = _round(tmp_path)
+    corpus = lnp.capture_corpus(ws)
+    line = "- 这一行有 100 % 的把握过筛"
+    assert "PERCENT" in codes(_out(lnp.scan_text(line, "shortlist.md", corpus)))
+
+
+def test_an_invented_number_absent_from_the_capture_still_fires(tmp_path):
+    ws = _round(tmp_path)
+    corpus = lnp.capture_corpus(ws)
+    line = "- 匹配度 87 % ，建议投递"
+    assert "PERCENT" in codes(_out(lnp.scan_text(line, "shortlist.md", corpus)))
+
+
+def test_the_corpus_is_built_from_captures_and_not_from_authored_files(tmp_path):
+    """The property that stops the masking becoming self-authorising.
+
+    shortlist.yaml and shortlist.md are written by the model. If either fed the
+    corpus, writing the number into one would exempt it from the other, and this
+    gate would check that the model agrees with itself.
+    """
+    ws = _round(tmp_path)
+    (ws / "shortlist.yaml").write_text(
+        "rows:\n  - raw_text: 'match 93 % likely'\n", encoding="utf-8")
+    (ws / "shortlist.md").write_text("match 93 % likely\n", encoding="utf-8")
+    corpus = lnp.capture_corpus(ws)
+    assert "93" not in corpus
+    assert "PERCENT" in codes(_out(lnp.scan_text("match 93 % likely", "x", corpus)))
+
+
+def test_a_posting_source_capture_also_exempts_its_own_wording(tmp_path):
+    """assess/apply have the same conflict: a posting that says "20% travel"
+    cannot be quoted in fit-assessment.md without this masking."""
+    ws = tmp_path / "job-profiles" / "tester" / "applications" / "a"
+    ws.mkdir(parents=True)
+    (ws / "posting-source.txt").write_text(
+        "The role involves 20% travel to客户现场.", encoding="utf-8")
+    corpus = lnp.capture_corpus(ws)
+    assert lnp.scan_text("The role involves 20% travel to客户现场.",
+                         "fit-assessment.md", corpus) == []
+
+
+def test_an_unreadable_capture_fails_closed(tmp_path):
+    """A corpus that cannot be built must remove nothing, never everything."""
+    ws = _round(tmp_path)
+    (ws / "raw" / "broken.json").write_text("{not json", encoding="utf-8")
+    corpus = lnp.capture_corpus(ws)
+    assert "PERCENT" in codes(_out(lnp.scan_text("匹配 55 %", "x", corpus)))
+
+
+def test_a_prediction_word_in_the_capture_is_not_exempted_by_it(tmp_path):
+    """The narrowing that keeps this masking about NUMBERS.
+
+    Mutation-found: deleting the `_NUMERIC_TOKEN` filter left every test green
+    while widening the exemption to any token the capture contains -- so a
+    posting that happens to use the word "chances" would authorise the model to
+    write it about the candidate. A number in the capture is the employer's fact
+    and quoting it is reporting; the judgement vocabulary is never the
+    employer's to lend.
+    """
+    ws = tmp_path / "job-profiles" / "tester" / "applications" / "a"
+    ws.mkdir(parents=True)
+    (ws / "posting-source.txt").write_text(
+        "Boost your chances of success in this role.", encoding="utf-8")
+    corpus = lnp.capture_corpus(ws)
+    found = lnp.scan_text("Boost your chances of success in this role.",
+                          "fit-assessment.md", corpus)
+    assert "PREDICTION_WORD" in codes(_out(found))

@@ -7,7 +7,7 @@ score needs a weight for a partial match, and any weight would be invented too. 
 conclusion is a word, the counts are printed with the evidence behind each row, and
 this lint keeps the made-up numbers out.
 
-Four things are masked before any scan, and every one of them was a live false
+Five things are masked before any scan, and every one of them was a live false
 positive on output this skill's own files mandate:
 
 * The verdict labels. 大概率被筛掉 -- the human-facing label for likely_screen_out --
@@ -29,6 +29,14 @@ positive on output this skill's own files mandate:
   deletes the finding and keeps the file. The assessor's own prose on the same line,
   and every line outside the block, is scanned as usual.
 
+* Numbers this round CAPTURED, quoted with their neighbouring words. An employer's
+  own job title can contain a percentage -- `AI/ML Engineer (100 % remote)` is a real
+  LinkedIn card -- and discover renders titles exactly as captured. With no exemption
+  the two rules contradict each other and the artifact that fails is the honest one.
+  This masking differs from the four above in kind: it is not a list somebody
+  maintains, it is a lookup against what the adapters and the fetcher actually
+  returned, so it cannot go stale and cannot be widened by editing this file.
+
 The one allowlist: where an employer publishes its own rubric, the skill may walk the
 candidate through THAT scale, in the employer's wording, with the source named. Quoting
 an employer's scale is reporting. Treating it as a conclusion is inventing.
@@ -39,6 +47,7 @@ itself is absent -- there is nothing to append to.
 from __future__ import annotations
 
 import argparse
+import json
 import pathlib
 import re
 import sys
@@ -126,6 +135,79 @@ _ATTRIBUTION = re.compile(r"^\s*>?\s*(?:—|--|-|Source:|来源[:：])\s+.*https
 CHECKS = (("PERCENT", _PERCENT), ("SCORE_PATTERN", _SCORE), ("PREDICTION_WORD", _WORDS))
 
 
+_WS = re.compile(r"\s+")
+# Only tokens that could carry an invented NUMBER are eligible for the capture
+# masking. A prediction WORD that happens to sit in the posting is still the
+# model's to justify -- verbatim quotation has the blockquote allowlist for that.
+_NUMERIC_TOKEN = re.compile(r"[0-9\uff10-\uff19%\uff05]")
+
+
+def _normalise(text: str) -> str:
+    return _WS.sub(" ", str(text)).casefold()
+
+
+def _json_strings(node, out: list) -> None:
+    if isinstance(node, str):
+        out.append(node)
+    elif isinstance(node, dict):
+        for value in node.values():
+            _json_strings(value, out)
+    elif isinstance(node, list):
+        for value in node:
+            _json_strings(value, out)
+
+
+def capture_corpus(workspace: pathlib.Path) -> str:
+    """Everything this round actually CAPTURED, normalised for membership tests.
+
+    Only true captures go in: `raw/*.json` as written by the adapter wrapper, and
+    the fetched `posting-source.txt`. Artifacts the model authors -- shortlist.yaml,
+    the rendered markdown -- are deliberately excluded. A corpus the model can write
+    is a corpus the model can use to authorise its own invented number, which would
+    turn this masking into an off switch.
+
+    An unreadable capture is skipped rather than fatal: this function only ever
+    REMOVES findings, so a corpus that comes back short fails closed.
+    """
+    pieces: list[str] = []
+    source = workspace / "posting-source.txt"
+    if source.is_file():
+        try:
+            pieces.append(source.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            pass
+    for path in sorted((workspace / "raw").glob("*.json")):
+        try:
+            node = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+        except (OSError, ValueError):
+            continue
+        _json_strings(node, pieces)
+    # NUL joins the documents so a window cannot match across two of them.
+    return _normalise(" \x00 ".join(pieces))
+
+
+def mask_copied_numbers(line: str, corpus: str) -> str:
+    """Blank numeric tokens this round captured verbatim, preserving length.
+
+    The exemption is deliberately narrow: the token carrying the number, plus one
+    neighbouring token on each side, must occur CONTIGUOUSLY in the capture. So
+    quoting `(100 % remote)` off the card is exempt, while writing `100 % chance`
+    around a number the card happened to contain is not -- the neighbours are what
+    make it a quotation rather than a reuse of the digits.
+    """
+    if not corpus:  # fast path only: `x in ""` is already False for every window
+        return line
+    tokens = [(m.start(), m.end(), m.group(0)) for m in re.finditer(r"\S+", line)]
+    out = list(line)
+    for index, (start, end, token) in enumerate(tokens):
+        if not _NUMERIC_TOKEN.search(token):
+            continue
+        window = [t[2] for t in tokens[max(0, index - 1):index + 2]]
+        if _normalise(" ".join(window)) in corpus:
+            out[start:end] = " " * (end - start)
+    return "".join(out)
+
+
 def mask_exempt_spans(line: str) -> str:
     """Blank out URLs, verdict labels and the roadmap horizon, preserving length so
     the reported span still lines up with the original text."""
@@ -186,7 +268,7 @@ def blockquote_allowlist(lines: list[str]) -> set[int]:
     return exempt
 
 
-def scan_text(text: str, label: str) -> list[str]:
+def scan_text(text: str, label: str, corpus: str = "") -> list[str]:
     lines = text.splitlines()
     exempt = blockquote_allowlist(lines)
     in_mock = mock_block_lines(lines)
@@ -194,8 +276,8 @@ def scan_text(text: str, label: str) -> list[str]:
     for number, line in enumerate(lines):
         if number in exempt:
             continue
-        masked = mask_exempt_spans(
-            mask_mock_quote(line) if number in in_mock else line)
+        quoted = mask_mock_quote(line) if number in in_mock else line
+        masked = mask_exempt_spans(mask_copied_numbers(quoted, corpus))
         for code, pattern in CHECKS:
             for match in pattern.finditer(masked):
                 original = line[match.start():match.end()]
@@ -237,6 +319,7 @@ def main(argv: list[str] | None = None) -> int:
         return cannot_run(workspace,
                           f"no rendered file to scan under {workspace}")
 
+    corpus = capture_corpus(workspace)
     findings: list[str] = []
     hashes: dict[str, str] = {}
     for path in files:
@@ -245,7 +328,7 @@ def main(argv: list[str] | None = None) -> int:
         except ValueError:
             relative = path.name
         hashes[relative] = journal.sha256_file(path)
-        findings += scan_text(path.read_text(encoding="utf-8"), relative)
+        findings += scan_text(path.read_text(encoding="utf-8"), relative, corpus)
 
     for finding in findings:
         print(finding)
