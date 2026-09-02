@@ -767,8 +767,16 @@ def render_markdown(profile):
             dates = _dates(e)
             meta_bits = " · ".join(
                 b for b in [scalar_field(e.get("location"), "experience[].location"), dates] if b)
-            out.append(header + (f"  \n_{meta_bits}_" if meta_bits else ""))
-            out += [f"- {normalize_text(b)}" for b in as_list(e.get("bullets"))]
+            # The leading "" is load-bearing, not cosmetic: without it this
+            # header lazily continues the previous entry's last bullet, and a
+            # CommonMark parser folds the two into one list item.
+            out += ["", header + (f"  \n_{meta_bits}_" if meta_bits else "")]
+            bullets = as_list(e.get("bullets"))
+            if bullets:
+                # Blank line again: a `- item` straight after the metadata line
+                # continues that paragraph instead of opening a list, so the
+                # whole role reads as one run-on sentence to a parser.
+                out += [""] + [f"- {normalize_text(b)}" for b in bullets]
         return out
 
     def education():
@@ -785,9 +793,9 @@ def render_markdown(profile):
             line = f"**{ed.get('degree','')}**, {ed.get('institution','')}"
             if meta_bits:
                 line += f"  \n_{meta_bits}_"
-            out.append(line)
+            out += ["", line]          # see the note in experience()
             if ed.get("details"):
-                out.append(f"- {ed['details']}")
+                out += ["", f"- {ed['details']}"]
         return out
 
     def skills():
@@ -818,7 +826,7 @@ def render_markdown(profile):
                          if url]
             if link_strs:
                 proj_line += " — " + ", ".join(link_strs)
-            out.append(proj_line)
+            out += ["", proj_line]     # see the note in experience()
         return out
 
     def simple_list(key):
@@ -1495,6 +1503,48 @@ def latex_preamble(engine=None, cjk=False, meta=None, margin="2cm"):
 
 # ── LaTeX renderer ────────────────────────────────────────────────────────────
 
+
+# A two-column entry heading, and the reason it is neither a bare `\hfill` nor a
+# pair of fixed fractions.
+#
+# `\textbf{title}, org \hfill meta\\` reaches the right margin only while the whole
+# thing fits on one line. Let the title grow and the line wraps; `\hfill` then
+# collapses at the break, so the organisation and the location collide and the
+# dates orphan onto a line of their own. Measured on a real CV:
+#     "... - Cum Laude, Leiden University  Leiden, NL"
+#     "2021-09 - 2023-02"
+#
+# Fixed fractions fix that and cost more than they save. At 0.60/0.38 the dates
+# stayed put and headings that had fitted on one line began wrapping three ways
+# ("PhD Researcher - Deep Learning for Cardiac MRI / Reconstruction, Leiden
+# University Medical Center / (LUMC)"), because the right column was reserved at
+# its worst case on every row.
+#
+# So the right column takes its NATURAL width and the left takes whatever is
+# left. `\setbox` measures the metadata, `\dimexpr` subtracts it, and the title
+# gets the largest column it can have on that particular row. The metadata is a
+# single box, so it cannot wrap or be split from its heading. `\smallskip` is
+# what separates one entry from the next: entries used to be joined by a bare
+# `\\`, which is a line break, not a gap, so four jobs read as one block.
+_ENTRY_GAP = "1em"          # minimum space between the two columns
+_ENTRY_MIN_LEFT = "0.45"    # floor, so a freak-width right column cannot starve the title
+
+
+def _tex_entry_heading(left, right):
+    """One entry heading: `left` wraps into the room that is actually left over,
+    `right` keeps its natural width at the margin and never breaks."""
+    if not right:
+        return r"\smallskip\noindent %s\par" % left
+    return (
+        r"\smallskip\noindent"
+        r"\setbox0=\hbox{%(right)s}"
+        r"\dimen0=\dimexpr\linewidth-\wd0-%(gap)s\relax"
+        r"\ifdim\dimen0<%(min)s\linewidth \dimen0=%(min)s\linewidth \fi"
+        r"\parbox[t]{\dimen0}{\raggedright %(left)s}"
+        r"\hfill\box0\par"
+        % {"left": left, "right": right, "gap": _ENTRY_GAP, "min": _ENTRY_MIN_LEFT})
+
+
 def build_latex(profile, cjk=None, engine=None, asset_dir=None, asset_stem="cv"):
     """Assemble the LaTeX source.
 
@@ -1573,8 +1623,9 @@ def build_latex(profile, cjk=None, engine=None, asset_dir=None, asset_stem="cv")
             # AFTER escaping: a raw U+00B7 does not typeset on the T1 pdflatex
             # path, which is exactly what test_latex_no_raw_middot pins.
             right = r" \textbullet{} ".join(e(b) for b in bits)
-            parts.append(r"\textbf{%s}, %s \hfill %s\\" % (
-                e(ex.get("title", "")), e(ex.get("org", "")), right))
+            parts.append(_tex_entry_heading(
+                r"\textbf{%s}, %s" % (e(ex.get("title", "")), e(ex.get("org", ""))),
+                right))
             bullets = as_list(ex.get("bullets"))
             if bullets:
                 parts.append(r"\begin{itemize}")
@@ -1590,8 +1641,9 @@ def build_latex(profile, cjk=None, engine=None, asset_dir=None, asset_stem="cv")
             dates = _dates_tex(ed)
             bits = [b for b in (scalar_field(ed.get("location"), "education[].location"), dates) if b]
             right = r" \textbullet{} ".join(e(b) for b in bits)
-            parts.append(r"\textbf{%s}, %s \hfill %s\\" % (
-                e(ed.get("degree", "")), e(ed.get("institution", "")), right))
+            parts.append(_tex_entry_heading(
+                r"\textbf{%s}, %s" % (e(ed.get("degree", "")), e(ed.get("institution", ""))),
+                right))
             if ed.get("details"):
                 parts.append(e(ed["details"]) + r"\\")
 
