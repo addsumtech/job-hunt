@@ -81,7 +81,7 @@ def findings_for(letter: dict, posting: dict) -> list:
                    f"(motivation-letter.md: never mix languages in one letter)")
 
     joined = " ".join(str(p) for p in body)
-    if not cjk_dominant(joined):
+    if not cjk_dominant(joined, _letter_language(letter)):
         words = sum(len(str(p).split()) for p in body)
         if not (WORD_MIN <= words <= WORD_MAX):
             out.append(f"WORD_COUNT: the body is {words} words; the target is "
@@ -140,13 +140,32 @@ _CJK_RANGE = (
 )
 
 
+def _letter_language(letter) -> str:
+    meta = letter.get("meta") if isinstance(letter.get("meta"), dict) else {}
+    return str(meta.get("language") or "").strip().lower()[:2]
+
+
 def _cjk_count(text: str) -> int:
     return sum(1 for ch in text
                if any(lo <= ch <= hi for lo, hi in _CJK_RANGE))
 
 
-def cjk_dominant(text: str) -> bool:
-    """More CJK characters than Latin letters — a ratio, not a magic threshold."""
+# The languages whose letters this band cannot measure at all.
+_CJK_LANGUAGES = ("zh", "ja", "ko")
+
+
+def cjk_dominant(text: str, language=None) -> bool:
+    """Whether the English word band can measure this letter.
+
+    `meta.language` wins when it names one of these, and the ratio is only the
+    fallback. A Chinese letter to a multinational keeps team names, levels and
+    tool names in English — the ordinary, honest register — and enough of them
+    flips a character ratio, at which point a 105-word Chinese letter was
+    scored against a 250-word English band it can never meet. The candidate
+    declared the language; that is better evidence than counting glyphs.
+    """
+    if str(language or "").strip().lower()[:2] in _CJK_LANGUAGES:
+        return True
     latin = sum(1 for ch in text if "a" <= ch.lower() <= "z")
     return _cjk_count(text) > latin
 
@@ -156,7 +175,7 @@ def notices_for(letter: dict) -> list:
     body = letter.get("body") or []
     body = [body] if isinstance(body, str) else body
     joined = " ".join(str(p) for p in body)
-    if not joined.strip() or not cjk_dominant(joined):
+    if not joined.strip() or not cjk_dominant(joined, _letter_language(letter)):
         return []
     return [
         f"NOTICE_CJK_LENGTH_UNSCORED: the body is {_cjk_count(joined)} CJK "

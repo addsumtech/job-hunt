@@ -240,3 +240,31 @@ def test_writing_the_lines_silences_it():
         _lang_letter("zh", salutation="尊敬的招聘团队：", closing="此致敬礼"),
         {"company": "Acme", "role_title": "r"})
     assert not [f for f in out if f.startswith("NO_")], out
+
+
+def test_a_declared_cjk_language_beats_the_character_ratio():
+    """An independent pass found the ratio flipping on an honest letter: a
+    Chinese letter to a multinational keeps team names, levels and tool names in
+    English — the ordinary register — and enough of them made a 105-word Chinese
+    letter get scored against a 250-word English band it can never meet.
+
+    The candidate declared the language; that is better evidence than counting
+    glyphs, so `meta.language` wins and the ratio is only the fallback."""
+    body = ["I would like to introduce my background: "
+            "在Google Cloud Platform的Distributed Systems and Storage "
+            "Infrastructure团队负责存储基础设施的设计与实现。"] * 3
+    letter = {"meta": {"language": "zh"}, "body": body,
+              "recipient": {"company": "A"},
+              "salutation": "尊敬的招聘团队：", "closing": "此致敬礼"}
+    assert check_letter.cjk_dominant(" ".join(body), "zh")
+    out = check_letter.findings_for(letter, {"company": "A", "role_title": "r"})
+    assert not any(f.startswith("WORD_COUNT") for f in out), out
+    assert check_letter.notices_for(letter)
+
+
+def test_an_english_letter_is_still_measured_in_words():
+    """The twin: `meta.language` must not become a way to switch the band off."""
+    letter = {"meta": {"language": "en"}, "body": ["Too short."] * 3,
+              "recipient": {"company": "A"}}
+    out = check_letter.findings_for(letter, {"company": "A", "role_title": "r"})
+    assert any(f.startswith("WORD_COUNT") for f in out), out
