@@ -293,7 +293,22 @@ _ACADEMIC_TITLE_SIGNALS = (
 # Word-boundary match so an end date that is genuinely ongoing ("present",
 # "2027 (est.)", "expected 2027") reads as current, while substrings inside
 # ordinary words ("greatest", "invested", "West") do not.
-_ONGOING_RE = re.compile(r"\b(present|current|ongoing|now|expected|anticipated|est)\b")
+# "still there", in the languages this skill renders CVs in. English-only, the
+# consequence was silent and ran two ways: `is_academic_profile` decides where
+# Education sits, and render_rirekisho printed a 履歴書 row reading 退社 — "left
+# the company" — for a candidate whose end date said 現在 ("present").
+#
+# The ASCII half keeps `\b`; the CJK half must not use it, because there is no
+# word boundary between 現在 and the character beside it (see
+# check_evidence_refs.REF_RE for the same rule and the same bug).
+_ONGOING_RE = re.compile(
+    r"\b(present|current|ongoing|now|expected|anticipated|est|"
+    r"heden|nu|heute|derzeit|laufend|aktuell|"
+    r"actuel|actuellement|aujourd'hui|"
+    r"actualidad|actualmente|presente|attuale|oggi)\b"
+    r"|至今|迄今|现在|現在|在职|在職|在读|在讀|至现在|"
+    r"在職中|現在に至る|現職|"
+    r"재직|재직중|현재")
 
 
 def _is_current(entry):

@@ -925,3 +925,23 @@ def test_the_rtl_refusal_keeps_exit_zero_so_md_and_docx_still_ship():
     """UNSUPPORTED_SCRIPT is a TOLERATED failure: Markdown and .docx carry RTL
     text correctly, and failing the whole run would take those away too."""
     assert render_cv.pdf_failure_is_tolerated([render_cv.UNSUPPORTED_SCRIPT])
+
+
+# ---------------------------------------------------------------------------
+# "still there", in the languages this skill renders CVs in. English-only, the
+# consequence ran two ways and neither was visible: is_academic_profile decides
+# where Education sits, and render_rirekisho printed a 履歴書 row reading 退社
+# — "left the company" — for a candidate whose end date said 現在.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("end", ["present", "至今", "现在", "現在", "在職中",
+                                 "現在に至る", "heden", "heute", "재직중",
+                                 "actualidad", "aujourd'hui", ""])
+def test_an_ongoing_role_is_recognised_in_any_language(end):
+    assert render_cv._is_current({"end": end}), end
+
+
+@pytest.mark.parametrize("end", ["2024-06", "2019年3月", "May 2021",
+                                 "left in 2020", "2020"])
+def test_a_finished_role_is_not(end):
+    assert not render_cv._is_current({"end": end}), end
