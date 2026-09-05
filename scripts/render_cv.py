@@ -1910,6 +1910,44 @@ def _engine_log(proc):
     return "".join(str(getattr(proc, s, "") or "") for s in ("stdout", "stderr"))
 
 
+# Right-to-left scripts. The preamble loads neither `bidi` nor `polyglossia` and
+# sets no script direction, so once a font covers Arabic the compile SUCCEEDS and
+# produces a page that is reversed and unshaped: `أحمد الفارسي` came back out of
+# pdftotext as `‫ﺍﻝﻑﺍﺭﺱﻱ ﺃﺡﻡﺩ‬` — isolated presentation forms, left to right.
+# Exit 0, "Wrote cv.pdf", and a document no reader of the language can use.
+#
+# Worse, the documented remedy led straight into it: without a font the renderer
+# refuses loudly and says "set meta.main_font", and doing that turned a loud
+# refusal into a silent wrong artifact.
+#
+# So the PDF is refused as UNSUPPORTED_SCRIPT, which is a TOLERATED failure —
+# .md and .docx carry RTL text correctly and still ship, exit code unchanged.
+# Supporting it properly means a bidi-aware preamble, which is a real change to
+# the template rather than a regex.
+_RTL_RANGES = (
+    ("\u0590", "\u05ff"),   # Hebrew
+    ("\u0600", "\u06ff"),   # Arabic
+    ("\u0700", "\u074f"),   # Syriac
+    ("\u0750", "\u077f"),   # Arabic Supplement
+    ("\u0780", "\u07bf"),   # Thaana
+    ("\u07c0", "\u07ff"),   # N'Ko
+    ("\u0800", "\u083f"),   # Samaritan
+    ("\u08a0", "\u08ff"),   # Arabic Extended-A
+    ("\ufb1d", "\ufb4f"),   # Hebrew presentation forms
+    ("\ufb50", "\ufdff"),   # Arabic presentation forms A
+    ("\ufe70", "\ufeff"),   # Arabic presentation forms B
+)
+
+
+def has_rtl(text) -> bool:
+    return any(any(lo <= ch <= hi for lo, hi in _RTL_RANGES) for ch in str(text))
+
+
+def profile_has_rtl(profile) -> bool:
+    """Whether any rendered text in the profile is written right-to-left."""
+    return has_rtl(str(profile))
+
+
 def render_pdf(profile, out_path, reasons=None):
     """Build PDF via LaTeX. Always writes the `.tex` next to out_path (it is a
     deliverable in its own right, not just a failure breadcrumb). Returns True
@@ -1922,6 +1960,17 @@ def render_pdf(profile, out_path, reasons=None):
     # Doing it up front rather than per-branch means a future early return cannot
     # reintroduce the stale-PDF defect by forgetting the call.
     _discard_pdf(out_path, tex_path)
+
+    if profile_has_rtl(profile):
+        print("WARNING: this profile contains right-to-left text (Arabic, Hebrew "
+              "or similar). The LaTeX template has no bidi support, so a PDF "
+              "built from it would come out reversed and unshaped — a document "
+              "the reader cannot use, produced with no error. No PDF was "
+              "written; Markdown and .docx carry the text correctly.",
+              file=sys.stderr)
+        _note(reasons, UNSUPPORTED_SCRIPT)
+        return False
+
     cjk = profile_has_cjk(profile)
 
     # Resolve the engine BEFORE building the source: the preamble has to match
@@ -2045,8 +2094,14 @@ def main(argv=None):
         # line used to assert "no LaTeX engine found" for all three, which told
         # a user whose glyphs had just been dropped to install an engine they
         # already had.
-        print(f"PDF could not be built — see the warning above. "
-              f"LaTeX source written to: {tex}", file=sys.stderr)
+        # And it does not claim a .tex that is not there. The RTL refusal
+        # returns before the source is built, on purpose: a LaTeX source for
+        # right-to-left text is exactly the artifact that compiles to a reversed
+        # page, so handing it over is handing over the same defect one step back.
+        where = (f"LaTeX source written to: {tex}" if tex.exists()
+                 else "No LaTeX source was written.")
+        print(f"PDF could not be built — see the warning above. {where}",
+              file=sys.stderr)
         return 0 if pdf_failure_is_tolerated(reasons) else 1
     if not confirm_written(out, args.format):
         return 1

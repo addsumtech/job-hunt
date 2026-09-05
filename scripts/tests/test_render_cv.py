@@ -885,3 +885,43 @@ def test_the_preamble_carries_the_chosen_paper():
     nl = "\n".join(render_cv.latex_preamble(meta={"target_market": "nl"}))
     assert "letterpaper" in us and "a4paper" not in us
     assert "a4paper" in nl and "letterpaper" not in nl
+
+
+# ---------------------------------------------------------------------------
+# Right-to-left text. The preamble loads neither `bidi` nor `polyglossia`, so
+# once a font covers Arabic the compile SUCCEEDS and produces a reversed,
+# unshaped page: `أحمد الفارسي` read back out of pdftotext as isolated
+# presentation forms, left to right, at exit 0. Worse, the documented remedy for
+# the no-font refusal — "set meta.main_font" — led straight into it.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("text", ["أحمد الفارسي", "שקל אלביט", "ܐܪܡܝܐ", "ދިވެހި"])
+def test_right_to_left_text_is_detected(text):
+    assert render_cv.has_rtl(text)
+
+
+@pytest.mark.parametrize("text", ["Ahmed Al-Farsi", "阿里巴巴", "김민준",
+                                  "Łukasz Wójcik", "Ștefan", "ภาษาไทย"])
+def test_left_to_right_text_is_not(text):
+    """The cry-wolf half. Thai is here on purpose: it is complex-shaping but
+    left-to-right, and the LaTeX path handles it."""
+    assert not render_cv.has_rtl(text)
+
+
+def test_an_rtl_profile_refuses_the_pdf_and_leaves_the_tex(tmp_path):
+    profile = {"meta": {"name": "أحمد الفارسي", "main_font": "Arial"},
+               "contact": {"email": "a@example.com"}, "experience": []}
+    reasons = []
+    out = tmp_path / "cv.pdf"
+    assert render_cv.render_pdf(profile, out, reasons=reasons) is False
+    assert reasons == [render_cv.UNSUPPORTED_SCRIPT]
+    assert not out.exists(), "a reversed PDF is a wrong artifact, not a degraded one"
+    assert not out.with_suffix(".tex").exists(), (
+        "nor is the .tex: it is exactly the source that compiles to the reversed "
+        "page, so shipping it hands over the same defect one step back")
+
+
+def test_the_rtl_refusal_keeps_exit_zero_so_md_and_docx_still_ship():
+    """UNSUPPORTED_SCRIPT is a TOLERATED failure: Markdown and .docx carry RTL
+    text correctly, and failing the whole run would take those away too."""
+    assert render_cv.pdf_failure_is_tolerated([render_cv.UNSUPPORTED_SCRIPT])
