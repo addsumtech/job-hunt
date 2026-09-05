@@ -2216,6 +2216,20 @@ def main(argv=None):
         # whole of the report — which is why it must not be a traceback.
         print(f"cannot render: {exc}", file=sys.stderr)
         return 2
+
+    # `meta.paper` is validated HERE, for every format, and not left to the one
+    # that happens to read it. `paper_for` runs only on the LaTeX path, so a
+    # typo'd override rendered .md and .docx happily and then failed the PDF with
+    # a raw traceback — the same profile behaving three ways, and the one report
+    # the user gets being a stack trace. It stays FATAL rather than falling back
+    # to the market default: silently ignoring an override is how a US CV goes
+    # out on A4, which is the defect the override exists to prevent.
+    try:
+        paper_for((profile or {}).get("meta"))
+    except ValueError as exc:
+        print(f"cannot render: {exc}", file=sys.stderr)
+        return 2
+
     out = pathlib.Path(args.out)
 
     if args.format == "md":

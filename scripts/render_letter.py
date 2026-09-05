@@ -215,6 +215,15 @@ def main(argv=None):
         return 2
     render_cv.reset_photo_warnings()
     out = pathlib.Path(args.out)
+
+    # Same early validation as render_cv.main: the letter shares `paper_for`, so
+    # an override it cannot read must fail the same way for every format rather
+    # than only on the LaTeX path.
+    try:
+        render_cv.paper_for((d or {}).get("meta"))
+    except ValueError as exc:
+        print(f"cannot render: {exc}", file=sys.stderr)
+        return 2
     if args.format == "md":
         out.write_text(render_markdown(d), encoding="utf-8")
     elif args.format == "docx":

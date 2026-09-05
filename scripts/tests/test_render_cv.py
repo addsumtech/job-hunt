@@ -1054,3 +1054,40 @@ def test_the_header_actually_uses_the_localized_label():
     labels = [label for label, _ in render_cv.personal_items(profile)]
     assert labels == ["出生日期", "婚姻状况"], labels
     assert not any(c.isascii() and c.isalpha() for label in labels for c in label)
+
+
+# ---------------------------------------------------------------------------
+# An override the renderer cannot read must fail the SAME WAY for every format.
+# Found re-reading my own change, 2026-09-05: `paper_for` runs only on the LaTeX
+# path, so `meta.paper: foolscap` rendered .md and .docx happily and then failed
+# --format pdf with a raw Python traceback. One profile, three behaviours, and
+# the only report the user got was a stack trace.
+#
+# It stays FATAL rather than falling back to the market default: silently
+# ignoring the override is how a US CV goes out on A4, which is the defect the
+# override exists to prevent.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("fmt", ["md", "docx", "pdf"])
+def test_an_unreadable_paper_override_fails_cleanly_in_every_format(fmt, tmp_path, capsys):
+    profile = tmp_path / "p.yaml"
+    profile.write_text(
+        "meta:\n  name: X\n  target_market: nl\n  paper: foolscap\n"
+        "contact:\n  email: x@example.com\n", encoding="utf-8")
+    code = render_cv.main([str(profile), "--format", fmt,
+                           "--out", str(tmp_path / f"cv.{fmt}")])
+    assert code == 2, fmt
+    err = capsys.readouterr().err
+    assert "cannot render" in err and "meta.paper" in err
+    assert "Traceback" not in err
+
+
+def test_a_valid_paper_override_is_not_refused(tmp_path, capsys):
+    """The twin: the escape hatch has to still work, or the validation has just
+    removed the feature."""
+    profile = tmp_path / "p.yaml"
+    profile.write_text(
+        "meta:\n  name: X\n  target_market: nl\n  paper: letter\n"
+        "contact:\n  email: x@example.com\n", encoding="utf-8")
+    assert render_cv.main([str(profile), "--format", "md",
+                           "--out", str(tmp_path / "cv.md")]) == 0
