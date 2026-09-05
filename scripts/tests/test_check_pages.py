@@ -5,6 +5,8 @@ import zlib
 import yaml
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
+import pytest
+
 import check_pages
 import journal
 
@@ -252,3 +254,63 @@ def test_a_name_that_is_genuinely_absent_is_still_reported(tmp_path, monkeypatch
     profile = {"meta": {"name": "홍길동아무개"}}
     found = check_pages.text_findings(str(pdf), profile)
     assert any(f.startswith("TEXT_MISSING_FROM_PDF") for f in found), found
+
+
+# ---------------------------------------------------------------------------
+# A start date this module cannot read is UNKNOWN, not zero. `_YEAR` matches
+# 19xx/20xx only, so `平成31年4月` yielded nothing and years_of_experience
+# returned 0 — the strictest possible answer, a one-page budget, and a
+# guaranteed false CV_TOO_LONG for a seven-year candidate.
+#
+# Deliberately not an era-conversion table: the Republic of China calendar, the
+# Thai Buddhist era and Hijri dates are all real inputs too, and a hard-coded
+# table covers only the calendars someone thought of.
+# ---------------------------------------------------------------------------
+
+def test_a_gregorian_date_inside_a_japanese_string_still_reads():
+    assert check_pages.years_of_experience({"experience": [{"start": "2019年4月"}]},
+                                           2026) == 7
+
+
+@pytest.mark.parametrize("start", ["平成31年4月", "令和元年4月", "民國108年", "๒๕๖๒"])
+def test_a_date_in_another_calendar_is_unknown_not_zero(start):
+    profile = {"experience": [{"start": start}]}
+    assert check_pages.years_of_experience(profile, 2026) is None
+    assert check_pages.max_pages(profile, 2026) == 2, "the permissive budget"
+    assert check_pages.unreadable_start_dates(profile) == [start]
+
+
+def test_no_start_date_at_all_is_a_genuine_zero_and_keeps_one_page():
+    """The distinction that matters: a new graduate with no dated roles really
+    has zero years, and the length table gives them one page. Only a date that
+    IS there and cannot be read is unknown."""
+    for profile in ({"experience": []}, {"experience": [{"org": "x"}]}, {}):
+        assert check_pages.years_of_experience(profile, 2026) == 0
+        assert check_pages.max_pages(profile, 2026) == 1
+        assert check_pages.unreadable_start_dates(profile) == []
+
+
+def test_one_readable_date_among_unreadable_ones_is_enough_to_score():
+    profile = {"experience": [{"start": "平成31年4月"}, {"start": "2022-01"}]}
+    assert check_pages.years_of_experience(profile, 2026) == 4
+    assert check_pages.unreadable_start_dates(profile) == ["平成31年4月"], (
+        "the unread one is still named — the reader must see why the budget moved")
+
+
+def test_an_unreadable_start_date_is_named_in_the_findings(tmp_path):
+    """The budget moved because the date could not be read, and a reader who
+    cannot see that will not know why a one-page CV got two."""
+    pdf = tmp_path / "cv.pdf"
+    pdf.write_bytes(b"%PDF-1.7\n")
+    profile = {"meta": {"name": "x"}, "experience": [{"start": "平成31年4月"}]}
+    found = check_pages.findings_for(str(pdf), profile, 2026)
+    assert any(f.startswith("START_DATE_UNREAD") for f in found), found
+    assert any("平成31年4月" in f for f in found)
+
+
+def test_a_readable_start_date_does_not_fire_it(tmp_path):
+    pdf = tmp_path / "cv.pdf"
+    pdf.write_bytes(b"%PDF-1.7\n")
+    profile = {"meta": {"name": "x"}, "experience": [{"start": "2019-04"}]}
+    found = check_pages.findings_for(str(pdf), profile, 2026)
+    assert not any(f.startswith("START_DATE_UNREAD") for f in found), found

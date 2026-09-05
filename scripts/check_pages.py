@@ -288,15 +288,53 @@ def text_findings(cv_pdf, profile) -> list:
     return out
 
 
-def years_of_experience(profile, today_year: int) -> int:
-    years = []
+def unreadable_start_dates(profile) -> list:
+    """Start dates that carry a date but no Gregorian year this module can read.
+
+    `_YEAR` matches 19xx/20xx only, so `平成31年4月` and `令和元年4月` yielded
+    nothing — and `years_of_experience` turned "cannot read" into 0, which is the
+    strictest possible answer: a one-page budget, and a false CV_TOO_LONG for a
+    seven-year candidate. Measured 2026-09-05.
+
+    Deliberately NOT an era-conversion table. Japanese eras, the Republic of
+    China calendar, the Thai Buddhist era and Hijri dates are all real inputs,
+    and a hard-coded table would be a list of factual claims that goes stale and
+    covers only the calendars someone thought of. Reporting what could not be
+    read, and refusing to score it as zero, generalises to all of them.
+    """
+    out = []
     for ex in profile.get("experience") or []:
         if not isinstance(ex, dict):
             continue
-        m = _YEAR.search(str(ex.get("start") or ""))
+        raw = str(ex.get("start") or "").strip()
+        if raw and not _YEAR.search(raw):
+            out.append(raw)
+    return out
+
+
+def years_of_experience(profile, today_year: int):
+    """Years since the earliest readable start date, or None if none is readable.
+
+    None means "nobody could work this out", not "zero". They were the same value
+    before, and the caller had no way to tell them apart.
+    """
+    years, dated = [], 0
+    for ex in profile.get("experience") or []:
+        if not isinstance(ex, dict):
+            continue
+        raw = str(ex.get("start") or "").strip()
+        if raw:
+            dated += 1
+        m = _YEAR.search(raw)
         if m:
             years.append(int(m.group(1)))
-    return max(0, today_year - min(years)) if years else 0
+    if years:
+        return max(0, today_year - min(years))
+    # No entry carries a start date at all — a genuine new graduate. That is
+    # zero years, not an unreadable one, and it keeps the strict one-page budget
+    # the length table gives them. Only a date that IS there and cannot be read
+    # is unknown.
+    return None if dated else 0
 
 
 def max_pages(profile, today_year: int):
@@ -313,11 +351,28 @@ def max_pages(profile, today_year: int):
     override = meta.get("max_pages")
     if isinstance(override, int) and not isinstance(override, bool) and override > 0:
         return override
-    return 1 if years_of_experience(profile, today_year) < 3 else 2
+    years = years_of_experience(profile, today_year)
+    if years is None:
+        # No readable start date. The permissive budget, because the strict one
+        # was being applied to a candidate whose experience this module simply
+        # could not parse — a guaranteed false CV_TOO_LONG on every non-Gregorian
+        # CV. `unreadable_start_dates` says so out loud alongside it.
+        return 2
+    return 1 if years < 3 else 2
 
 
 def findings_for(cv_pdf, profile, today_year: int, letter_pdf=None) -> list:
     out = []
+    # Reported before anything is read off the PDF, because it is a fact about
+    # the PROFILE: the page budget below was chosen without these dates, and a
+    # reader who cannot see that will not know why a one-page CV got two. It
+    # does not belong behind "is the PDF readable" — the two are unrelated.
+    unread = unreadable_start_dates(profile)
+    if unread:
+        out.append(f"START_DATE_UNREAD: {', '.join(repr(d) for d in unread)} "
+                   f"carries no 19xx/20xx year, so years of experience could not "
+                   f"be computed and the permissive page budget was used. Write "
+                   f"the Gregorian year, or set meta.max_pages")
     pages = page_count(cv_pdf)
     if pages is None:
         out.append(f"UNREADABLE_PDF: {pathlib.Path(cv_pdf).name} has no readable page "
@@ -326,10 +381,12 @@ def findings_for(cv_pdf, profile, today_year: int, letter_pdf=None) -> list:
     else:
         budget = max_pages(profile, today_year)
         if budget is not None and pages > budget:
+            years = years_of_experience(profile, today_year)
+            basis = (f"{years} years of experience" if years is not None
+                     else "an unread start date, so the permissive budget")
             out.append(f"CV_TOO_LONG: {pathlib.Path(cv_pdf).name} is {pages} pages; "
                        f"the length table in references/cv-craft.md allows {budget} "
-                       f"for {years_of_experience(profile, today_year)} years of "
-                       f"experience. Cut, or set meta.max_pages with a reason")
+                       f"for {basis}. Cut, or set meta.max_pages with a reason")
         # Only worth asking once the file is readable at all: an unreadable PDF
         # has already been reported and would produce a second, derivative finding.
         out += text_findings(cv_pdf, profile)
