@@ -86,7 +86,9 @@ _QUOTE_FIELD = re.compile(r"quote=")
 # the original text. NFKC changes lengths (`％`→`%` is 1:1, but `㍑`→`リットル`
 # is not), and a normalising pass would silently break that alignment. Widening
 # the character classes keeps every offset exactly where it was.
-_PERCENT = re.compile(r"[%％]")
+# `‰` and the abbreviation `pct` are the same claim in different clothes;
+# both exited 0.
+_PERCENT = re.compile(r"[%％‰]|(?<![A-Za-z])pct(?![A-Za-z])", re.I)
 _SCORE = re.compile(r"(?<![0-9０-９])[0-9０-９]+\s*[/／]\s*[0-9０-９]+(?![0-9０-９])")
 
 # The Chinese half was four hand-listed words, so 「成功率」「入围率」「七成」 and
@@ -113,6 +115,26 @@ _ZH_RATE = ("概率|通过率|命中率|录取率|录用率|成功率|入围率|
 _ZH_TENTHS = r"[一二三四五六七八九]成(?![功长员果本熟为立就分])"
 _ZH_PERCENT_SPELLED = r"百分之[零一二三四五六七八九十百]+"
 
+# Outcome forecasts in the other languages this skill writes in. The English and
+# Chinese vocabularies were enforced and the rest were not, so
+# `Sie werden das Vorstellungsgespräch sicher bekommen.`,
+# `Je hebt een grote kans op een gesprek.`, `面接に呼ばれる可能性が高いです。` and
+# `합격 확률은 높습니다.` all shipped while their English twin fired.
+#
+# Kept to the NOUN of chance and to a modal aimed at an interview or an offer,
+# for the same reason the English set is: this must not fire on an honest
+# sentence about the job itself.
+_FORECAST_DE = (r"\b(?:chance|chancen|wahrscheinlichkeit|aussichten)\b"
+                r"|\bwerden\b[^.!?]{0,40}\b(?:einladung|vorstellungsgespräch|"
+                r"zusage|angebot)\b[^.!?]{0,20}\b(?:bekommen|erhalten)\b")
+_FORECAST_NL = (r"\b(?:kans|kansen|waarschijnlijkheid)\b"
+                r"|\bkrijgt\b[^.!?]{0,40}\b(?:gesprek|uitnodiging|aanbod)\b")
+_FORECAST_FR = (r"\b(?:probabilité|probabilités|chances? d[eu']"
+                r"(?:\s|’)?(?:être|obtenir|décrocher))\b")
+_FORECAST_ES_IT = (r"\b(?:probabilidad|probabilidades|probabilità)\b")
+_FORECAST_JA = r"可能性が高い|見込みが高い|確率|受かる見込み|通る見込み"
+_FORECAST_KO = r"확률|가능성이 (?:높|큽)|합격할 것"
+
 _WORDS = re.compile(
     r"\bchances?\b|\bprobabilit(?:y|ies)\b|\bodds\b|\blikelihood\b"
     r"|\blikely to be (?:hired|interviewed|shortlisted|rejected)\b"
@@ -130,7 +152,9 @@ _WORDS = re.compile(
     r"|\byou'?re? (?:a )?(?:strong|weak|clear|obvious) (?:fit|match|candidate)\b"
     # 確率 is the Japanese/traditional spelling of 概率.
     r"|確率"
-    r"|" + _ZH_RATE + r"|" + _ZH_TENTHS + r"|" + _ZH_PERCENT_SPELLED,
+    r"|" + _ZH_RATE + r"|" + _ZH_TENTHS + r"|" + _ZH_PERCENT_SPELLED
+    + r"|" + _FORECAST_DE + r"|" + _FORECAST_NL + r"|" + _FORECAST_FR
+    + r"|" + _FORECAST_ES_IT + r"|" + _FORECAST_JA + r"|" + _FORECAST_KO,
     re.IGNORECASE)
 _ATTRIBUTION = re.compile(r"^\s*>?\s*(?:—|--|-|Source:|来源[:：])\s+.*https?://\S+")
 

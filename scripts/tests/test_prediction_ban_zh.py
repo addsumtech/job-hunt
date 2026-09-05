@@ -166,3 +166,52 @@ def test_the_mode_files_carrying_the_disclaimer_are_lint_clean(mode_file):
     cannot itself pass, the run cannot pass either."""
     text = (REPO / "modes" / mode_file).read_text(encoding="utf-8")
     assert L.scan_text(text, mode_file) == []
+
+
+# ---------------------------------------------------------------------------
+# The no-forecast rule, in the languages this skill actually writes in.
+# Audited 2026-09-05: English and Chinese were enforced and nothing else was, so
+# the same sentence shipped or failed depending on the candidate's language.
+# ---------------------------------------------------------------------------
+
+_FORECASTS = [
+    "Sie werden das Vorstellungsgespräch sicher bekommen.",
+    "Die Chancen stehen gut.",
+    "Je hebt een grote kans op een gesprek.",
+    "La probabilité est élevée.",
+    "La probabilidad es alta.",
+    "面接に呼ばれる可能性が高いです。",
+    "합격 확률은 높습니다.",
+    "You will certainly get the interview.",
+]
+_ORDINARY = [
+    "Die Stelle ist in Amsterdam.",
+    "Werden Sie Teil des Teams.",
+    "Het salaris is marktconform.",
+    "We werken met Python en PyTorch.",
+    "この職務は東京にあります。",
+    "이 직무는 서울에 있습니다.",
+    "Le poste est basé à Paris.",
+    "El puesto está en Madrid.",
+]
+
+
+@pytest.mark.parametrize("text", _FORECASTS, ids=range(len(_FORECASTS)))
+def test_an_outcome_forecast_is_banned_in_every_language(text):
+    assert L.scan_text(text, "fit-assessment.md"), text
+
+
+@pytest.mark.parametrize("text", _ORDINARY, ids=range(len(_ORDINARY)))
+def test_an_ordinary_sentence_about_the_job_is_not(text):
+    """The longer list on purpose: `werden` and `kans` are common words, and a
+    lint that fires on "Werden Sie Teil des Teams" is one that gets switched
+    off."""
+    assert L.scan_text(text, "fit-assessment.md") == [], text
+
+
+@pytest.mark.parametrize("text,fires", [
+    ("通过的比例约为 5‰", True), ("a 5 pct uplift", True), ("5% uplift", True),
+    ("the expected uplift", False), ("Octet and pctl are field names", False),
+])
+def test_the_remaining_percent_spellings(text, fires):
+    assert bool(L.scan_text(text, "fit-assessment.md")) is fires, text
