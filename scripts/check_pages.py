@@ -220,10 +220,19 @@ def extract_text(path) -> list:
             text = "".join(_decode(run, table, two_byte) for run in runs)
             if text.strip():
                 readings.append(text)
-    if not readings:
-        rescue = _pdftotext(path)
-        if rescue.strip():
-            readings.append(rescue)
+    # The pdftotext rescue runs ALWAYS, not only when the built-in reader came
+    # back empty. `if not readings` was the wrong condition: a CJK font embedded
+    # as Identity-H carries no ToUnicode CMap, but the Latin Modern subset in the
+    # same document does — so a Korean CV produced four garbage readings from the
+    # Latin CMaps, the rescue never ran, and text that pdftotext reads perfectly
+    # was reported TEXT_MISSING_FROM_PDF. Measured on macOS with AppleSDGothicNeo:
+    # correct PDF, correct page, blocked by its own gate. Every Korean CV.
+    #
+    # This can only ever REMOVE a false finding: a reading is evidence the text is
+    # in the PDF, and pdftotext reads what the PDF actually says.
+    rescue = _pdftotext(path)
+    if rescue.strip():
+        readings.append(rescue)
     return readings
 
 

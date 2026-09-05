@@ -205,3 +205,50 @@ def test_each_run_leaves_exactly_one_receipt_including_the_exit_2_path(tmp_path)
     check_pages.main(["--workspace", str(ws), "--today", "2026-08-09"])
     assert [r["verdict"] for r in journal.read_receipts(ws, "check_pages")] == \
         ["pass", "could_not_run"]
+
+
+# ---------------------------------------------------------------------------
+# The pdftotext rescue must run ALWAYS, not only when the built-in reader came
+# back empty. Audited 2026-09-05: a CJK font embedded as Identity-H carries no
+# ToUnicode CMap, but the Latin Modern subset in the same document does — so a
+# Korean CV produced four garbage readings from the Latin CMaps, `if not
+# readings` never fired, and text pdftotext reads perfectly was reported
+# TEXT_MISSING_FROM_PDF. Correct PDF, correct page, blocked by its own gate.
+# ---------------------------------------------------------------------------
+
+def test_the_rescue_runs_even_when_another_font_produced_a_garbage_reading(
+        tmp_path, monkeypatch):
+    """The condition, tested as behaviour rather than as source text.
+
+    A document with two fonts is simulated directly: the built-in reader yields
+    a non-empty but wrong reading (the Latin CMap decoding Hangul bytes), and
+    pdftotext yields the real text. Under `if not readings` the real text never
+    entered the list.
+    """
+    pdf = tmp_path / "cv.pdf"
+    pdf.write_bytes(b"%PDF-1.7\n% not a real pdf, every reader here is stubbed\n")
+    monkeypatch.setattr(check_pages, "_streams", lambda data: [b""])
+    monkeypatch.setattr(check_pages, "_text_runs", lambda blobs: [b"\x00\x01"])
+    monkeypatch.setattr(check_pages, "_tounicode_maps", lambda blobs: [{0: "?"}])
+    monkeypatch.setattr(check_pages, "_decode", lambda run, table, two: "garbage")
+    monkeypatch.setattr(check_pages, "_pdftotext", lambda p: "김민준 삼성전자")
+
+    readings = check_pages.extract_text(pdf)
+    assert any("김민준" in r for r in readings), readings
+    assert any("garbage" in r for r in readings), "the built-in readings still count"
+
+
+def test_a_name_that_is_genuinely_absent_is_still_reported(tmp_path, monkeypatch):
+    """The twin. Always adding the rescue can only remove findings, so the guard
+    that matters is that a real absence still fires."""
+    pdf = tmp_path / "cv.pdf"
+    pdf.write_bytes(b"%PDF-1.7\n")
+    monkeypatch.setattr(check_pages, "_streams", lambda data: [b""])
+    monkeypatch.setattr(check_pages, "_text_runs", lambda blobs: [b"\x00"])
+    monkeypatch.setattr(check_pages, "_tounicode_maps", lambda blobs: [{0: "?"}])
+    monkeypatch.setattr(check_pages, "_decode", lambda run, table, two: "garbage")
+    monkeypatch.setattr(check_pages, "_pdftotext", lambda p: "김민준 삼성전자")
+
+    profile = {"meta": {"name": "홍길동아무개"}}
+    found = check_pages.text_findings(str(pdf), profile)
+    assert any(f.startswith("TEXT_MISSING_FROM_PDF") for f in found), found
