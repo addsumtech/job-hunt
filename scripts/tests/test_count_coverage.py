@@ -231,3 +231,19 @@ def test_a_workspace_that_does_not_exist_writes_no_journal(tmp_path, capsys):
     assert cc.main(["--workspace", str(missing)]) == 2
     assert not missing.exists()
     assert "does not exist" in capsys.readouterr().err
+
+
+def test_a_requirement_row_that_is_not_a_mapping_is_reported_not_raised():
+    """`- R1` instead of `- {id: R1, ...}` — one missing key in hand-written YAML
+    — raised AttributeError, so the gate exited 1 with no finding and NO RECEIPT.
+    That is indistinguishable from a gate nobody ran."""
+    counts = cc.coverage(["R1", {"id": "R2", "kind": "must_have",
+                                             "match": "strong", "recency": "current"}])
+    assert any(f.startswith("INVALID_ROW:") for f in counts["invalid"]), counts["invalid"]
+    assert counts["must_total"] == 1, "the well-formed row is still counted"
+
+
+def test_a_well_formed_row_does_not_fire_invalid_row():
+    counts = cc.coverage([{"id": "R1", "kind": "must_have",
+                                       "match": "strong", "recency": "current"}])
+    assert not any(f.startswith("INVALID_ROW:") for f in counts["invalid"])

@@ -96,7 +96,8 @@ def loose_knockouts(rows: list[dict] | None) -> int:
 
     Not reclassified: code can count them but cannot tell which one is genuine.
     """
-    count = sum(1 for item in (rows or []) if (item or {}).get("screening") == "knockout")
+    count = sum(1 for item in (rows or [])
+                if isinstance(item, dict) and item.get("screening") == "knockout")
     return count if count > 2 else 0
 
 
@@ -112,9 +113,9 @@ def uncovered_gap_actions(rows: list[dict] | None,
     the rule that can be checked without guessing.
     """
     closable = sum(1 for item in (rows or [])
-                   if (item or {}).get("match") in ("gap", "partial")
-                   and (item or {}).get("effort") in ("quick", "evening", "multi_day")
-                   and str((item or {}).get("how_to_close") or "").strip())
+                   if journal.as_mapping(item).get("match") in ("gap", "partial")
+                   and journal.as_mapping(item).get("effort") in ("quick", "evening", "multi_day")
+                   and str(journal.as_mapping(item).get("how_to_close") or "").strip())
     total = len(actions or [])
     return {"gaps": closable, "actions": total} if closable > total else None
 

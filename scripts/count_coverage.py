@@ -84,6 +84,16 @@ def coverage(rows: list[dict] | None) -> dict:
               "invalid": []}
     for index, item in enumerate(rows or []):
         item = item or {}
+        if not isinstance(item, dict):
+            # `item or {}` guards None and falsy, not a non-empty STRING. A row
+            # written `- R1` instead of `- {id: R1, ...}` — one missing `id:` in
+            # hand-written YAML — raised AttributeError here, so the gate exited
+            # 1 with no finding and NO RECEIPT: indistinguishable from a gate
+            # nobody ran.
+            counts["invalid"].append(
+                f"INVALID_ROW: requirement #{index + 1} is a {type(item).__name__}, "
+                f"not a mapping ({item!r:.60}); a row needs at least id and match")
+            continue
         identifier = item.get("id", f"#{index + 1}")
         match = item.get("match")
         recency = item.get("recency")
