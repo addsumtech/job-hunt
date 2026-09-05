@@ -62,10 +62,12 @@ def findings_for(letter: dict, posting: dict) -> list:
                        f"body strings verbatim, so this renders literally "
                        f"(**bold** prints four asterisks)")
 
-    words = sum(len(str(p).split()) for p in body)
-    if not (WORD_MIN <= words <= WORD_MAX):
-        out.append(f"WORD_COUNT: the body is {words} words; the target is "
-                   f"{WORD_MIN}–350 with {WORD_MAX} as the hard ceiling")
+    joined = " ".join(str(p) for p in body)
+    if not cjk_dominant(joined):
+        words = sum(len(str(p).split()) for p in body)
+        if not (WORD_MIN <= words <= WORD_MAX):
+            out.append(f"WORD_COUNT: the body is {words} words; the target is "
+                       f"{WORD_MIN}–350 with {WORD_MAX} as the hard ceiling")
     if not (PARA_MIN <= len(body) <= PARA_MAX):
         out.append(f"PARA_COUNT: the body has {len(body)} paragraphs; "
                    f"{PARA_MIN}–{PARA_MAX} is the range (motivation-letter.md: "
@@ -99,6 +101,54 @@ def findings_for(letter: dict, posting: dict) -> list:
     return out
 
 
+# `250-350 words` comes from motivation-letter.md:120, which is a rule about
+# ENGLISH words, and `len(str(p).split())` is a rule about spaces. Chinese and
+# Japanese have neither: a 306-character Chinese letter counted as "3 words" and
+# failed WORD_COUNT, and a 702-character Japanese one as "3". The gate could
+# never pass for those languages, and a gate that cannot be satisfied is one
+# people route around.
+#
+# The band is NOT rescaled here, because this skill has no sourced length
+# convention for a CJK letter and inventing one would be the fabrication it bans
+# everywhere else. What the word count is really protecting — "stays comfortably
+# on one page when rendered", motivation-letter.md:120 — is measured directly by
+# check_pages on the rendered letter PDF. So the honest report is the real count
+# and no verdict.
+_CJK_RANGE = (
+    ("\u3040", "\u30ff"),   # kana
+    ("\u3400", "\u4dbf"),   # CJK ext A
+    ("\u4e00", "\u9fff"),   # CJK unified
+    ("\uac00", "\ud7af"),   # hangul
+)
+
+
+def _cjk_count(text: str) -> int:
+    return sum(1 for ch in text
+               if any(lo <= ch <= hi for lo, hi in _CJK_RANGE))
+
+
+def cjk_dominant(text: str) -> bool:
+    """More CJK characters than Latin letters — a ratio, not a magic threshold."""
+    latin = sum(1 for ch in text if "a" <= ch.lower() <= "z")
+    return _cjk_count(text) > latin
+
+
+def notices_for(letter: dict) -> list:
+    """Reports that are not verdicts. Printed to stderr; never a finding."""
+    body = letter.get("body") or []
+    body = [body] if isinstance(body, str) else body
+    joined = " ".join(str(p) for p in body)
+    if not joined.strip() or not cjk_dominant(joined):
+        return []
+    return [
+        f"NOTICE_CJK_LENGTH_UNSCORED: the body is {_cjk_count(joined)} CJK "
+        f"characters in {len(body)} paragraphs. The {WORD_MIN}-350 band is an "
+        f"English word count and this skill has no sourced length convention for "
+        f"a CJK letter, so it is not applied. The one-page constraint behind it "
+        f"is checked by check_pages on the rendered PDF."
+    ]
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--workspace", required=True)
@@ -128,6 +178,8 @@ def main(argv=None) -> int:
     findings = findings_for(letter, posting)
     for f in findings:
         print(f)
+    for notice in notices_for(letter):
+        print(notice, file=sys.stderr)
     journal.receipt(ws, GATE,
                     {lp.name: journal.sha256_file(lp), pp.name: journal.sha256_file(pp)},
                     "fail" if findings else "pass", findings)

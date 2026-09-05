@@ -157,3 +157,47 @@ def test_each_run_leaves_exactly_one_receipt_including_the_exit_2_path(tmp_path)
     assert check_letter.main(["--workspace", str(ws)]) == 2
     assert [r["verdict"] for r in journal.read_receipts(ws, "check_letter")] == \
         ["pass", "could_not_run"]
+
+
+# ---------------------------------------------------------------------------
+# `250-350 words` is a rule about ENGLISH words and `len(split())` is a rule
+# about spaces. Chinese and Japanese have neither, so a 306-character Chinese
+# letter counted as "3 words" and failed WORD_COUNT — a gate that could never
+# be satisfied in those languages, which is a gate people route around.
+#
+# The band is NOT rescaled: this skill has no sourced length convention for a
+# CJK letter, and inventing one is the fabrication it bans everywhere else.
+# ---------------------------------------------------------------------------
+
+_ZH_PARA = "我在莱顿大学医学中心从事心脏磁共振重建的博士研究，专注于从高度欠采样的数据中恢复高质量图像。"
+_ZH_LETTER = {"body": [_ZH_PARA, _ZH_PARA + "另外我熟悉容器化部署。",
+                       _ZH_PARA + "期待与贵司交流。"],
+              "recipient": {"company": "阿里巴巴"}}
+_ZH_POSTING = {"company": "阿里巴巴", "role_title": "算法工程师"}
+
+
+def test_a_chinese_letter_does_not_fail_an_english_word_count():
+    out = check_letter.findings_for(_ZH_LETTER, _ZH_POSTING)
+    assert not any(f.startswith("WORD_COUNT:") for f in out), out
+
+
+def test_a_chinese_letter_reports_its_real_length_as_a_notice():
+    notices = check_letter.notices_for(_ZH_LETTER)
+    assert len(notices) == 1
+    assert notices[0].startswith("NOTICE_CJK_LENGTH_UNSCORED")
+    assert "characters" in notices[0]
+
+
+def test_an_english_letter_is_still_scored_and_notices_nothing():
+    """The twin. The whole band still applies where the unit is a word."""
+    short = {"body": ["Too short."] * 3, "recipient": {"company": "Acme"}}
+    out = check_letter.findings_for(short, {"company": "Acme", "role_title": "x"})
+    assert any(f.startswith("WORD_COUNT:") for f in out), out
+    assert check_letter.notices_for(short) == []
+
+
+def test_dominance_is_a_ratio_not_a_trigger_on_any_cjk_character():
+    """An English letter naming one Chinese employer is an English letter."""
+    body = ["word " * 100, "word " * 100, "word " * 100 + "at 阿里巴巴."]
+    assert not check_letter.cjk_dominant(" ".join(body))
+    assert check_letter.cjk_dominant("我在莱顿大学医学中心从事研究 with Python")
