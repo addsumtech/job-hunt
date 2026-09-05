@@ -782,3 +782,67 @@ def test_an_unparseable_master_is_reported_and_nothing_is_declared_sourced(
     assert "MASTER_UNREADABLE" in out
     # not a flood of UNSOURCED derived from a master nobody could read
     assert "UNSOURCED" not in out
+
+
+# ---------------------------------------------------------------------------
+# Dropped qualifiers, in every language this skill renders a CV in.
+#
+# Audited 2026-09-05: the vocabulary was English plus Simplified Chinese, so
+# `MSc Informatik (in Bearbeitung, voraussichtlich 2027)` -> `MSc Informatik`
+# came back `sourced`. That is the load-bearing rule of the whole skill — never
+# present a credential you do not hold — failing on the candidate's language
+# rather than on the substance of the claim.
+#
+# The quiet list is the longer one on purpose. `dropped_status` requires the
+# WHOLE dropped span to be status-or-connective, and widening the connective set
+# to five more languages is exactly the change that could start firing on
+# ordinary reframings like `ML Engineer` off `Senior ML Engineer`.
+# ---------------------------------------------------------------------------
+
+_DROPS_A_QUALIFIER = [
+    ("MSc Informatik", "MSc Informatik (in Bearbeitung, voraussichtlich 2027)"),
+    ("MSc Informatica", "MSc Informatica (verwacht 2027, nog niet afgerond)"),
+    ("Master Informatique", "Master Informatique (en cours, prévu 2027)"),
+    ("Máster en Informática", "Máster en Informática (en curso, previsto 2027)"),
+    ("Laurea Informatica", "Laurea Informatica (in corso, previsto 2027)"),
+    ("修士（情報工学）", "修士（情報工学）（2027年修了見込み）"),
+    ("석사 컴퓨터공학", "석사 컴퓨터공학 (재학중, 2027 졸업예정)"),
+    ("计算机硕士", "计算机硕士（在读）"),
+    ("Deutsch", "Deutsch (Grundkenntnisse)"),
+    ("Nederlands", "Nederlands (basiskennis)"),
+    ("日本語", "日本語（日常会話）"),
+    ("한국어", "한국어 (초급)"),
+    ("English", "English (basic)"),
+    ("MSc CS", "MSc CS (in progress, expected 2027)"),
+]
+
+_DROPS_NOTHING_THAT_MATTERS = [
+    ("AWS Certified", "AWS Certified (2024)"),
+    ("Nederlands", "Nederlands (moedertaal)"),
+    ("Python", "Python (deep learning)"),
+    ("Engineer", "Engineer (maternity cover)"),
+    ("ASML", "ASML BV"),
+    ("PyTorch", "PyTorch (Meta)"),
+    ("Manager", "Manager (Amsterdam)"),
+    # a FINISHED degree, in the two languages whose "finished" word now sits in
+    # the ignorable set — dropping it claims nothing the leaf denies
+    ("MSc Informatica", "MSc Informatica (afgerond 2024)"),
+    ("MSc Informatik", "MSc Informatik (abgeschlossen 2024)"),
+    ("ML Engineer", "Senior ML Engineer"),
+    ("Engineer", "Engineer, Basic Materials Group"),
+    ("Volksbank", "de Volksbank"),
+    ("Ingegneria", "Ingegneria della Informazione"),
+    ("修士", "修士（情報工学）"),
+]
+
+
+@pytest.mark.parametrize("term,leaf", _DROPS_A_QUALIFIER,
+                         ids=[t[1][:28] for t in _DROPS_A_QUALIFIER])
+def test_an_unfinished_or_limited_claim_is_reported_in_any_language(term, leaf):
+    assert check_claims.relation(term, leaf) == check_claims.QUALIFIER
+
+
+@pytest.mark.parametrize("term,leaf", _DROPS_NOTHING_THAT_MATTERS,
+                         ids=[t[1][:28] for t in _DROPS_NOTHING_THAT_MATTERS])
+def test_an_honest_reframing_is_still_silent(term, leaf):
+    assert check_claims.relation(term, leaf) == check_claims.SOURCED

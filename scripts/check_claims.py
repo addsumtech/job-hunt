@@ -155,22 +155,63 @@ LINK_KEYS = ("links",)
 # they would fire on the master idiom `PyTorch (deep learning)` → `PyTorch`, and a
 # rule that misfires on an ordinary ML CV is worse than a rule that misses
 # "(learning)", which `in progress` / `in training` / `coursework` already cover.
+#
+# The list covers the languages this skill renders CVs in. Measured 2026-09-05:
+# with English and Simplified Chinese only, an unfinished degree written
+# `MSc Informatik (in Bearbeitung, voraussichtlich 2027)` -> `MSc Informatik`
+# came back `sourced`, i.e. the honesty gate let a German, Dutch, Japanese or
+# Korean candidate present a degree they do not hold. That is the load-bearing
+# rule of the whole skill failing on language rather than on substance.
 _STATUS_TOKENS = frozenset("""
     progress training ongoing expected anticipated planned pending prospective
     partial incomplete unfinished discontinued withdrawn paused deferred
     expired lapsed revoked suspended provisional candidate coursework audited
     self-taught taught beginner basic elementary intermediate conversational
     a1 a2 b1 b2 c1 c2 n1 n2 n3 n4 n5
+    bearbeitung voraussichtlich laufend geplant angestrebt abgebrochen
+    grundkenntnisse anfaenger anfänger fortgeschritten unvollstaendig
+    unvollständig ausstehend abgelaufen
+    verwacht lopend onafgerond gepland beginner basiskennis
+    gevorderd verlopen bezig
+    cours prevu prévu attendu inacheve inachevé debutant débutant notions
+    intermediaire intermédiaire
+    curso previsto esperado inacabado principiante nociones basico básico
+    corso previsto incompleto principiante
 """.split())
 # Matched by containment, not equality: CJK writes without delimiters, so
-# "预计2027" is one token and set membership would miss it.
-_STATUS_CJK = ("在读", "在学", "预计", "已过期", "已失效", "待考", "初级", "入门")
+# "预计2027" is one token and set membership would miss it. The Japanese and
+# Korean entries are here for the same reason -- `修了見込み` and `졸업예정`
+# never appear as separate whitespace tokens.
+_STATUS_CJK = (
+    "在读", "在讀", "在学", "在學", "预计", "預計", "已过期", "已失效", "待考",
+    "初级", "初級", "入门", "入門", "肄业", "肄業", "未完成", "修读中", "修讀中",
+    # Japanese
+    "見込", "見込み", "在学中", "履修中", "取得予定", "予定", "中退", "失効",
+    "初級", "日常会話",
+    # Korean
+    "재학", "재학중", "예정", "졸업예정", "수료", "중퇴", "이수중", "만료",
+    "초급", "기초",
+)
 # Tokens that carry no claim either way, so their presence in the dropped material
 # neither triggers the finding nor blocks it. Anything with a digit is here (a year,
 # a date) — checked AFTER the status test, so the CEFR levels above still win.
+# The connectives of the other languages this skill writes CVs in are here for
+# exactly the reason the English ones are: `dropped_status` requires the WHOLE
+# dropped span to be status-or-nothing, so one unlisted preposition silences the
+# finding. Measured: `Master Informatique (en cours, prévu 2027)` came back
+# `sourced` because of the word `en`, and the Dutch case because of `nog niet`.
 _IGNORABLE_TOKENS = frozenset(
-    "in of the to as at by on for and or level status since until from est "
-    "approx approximately self grade".split())
+    ("in of the to as at by on for and or level status since until from est "
+     "approx approximately self grade "
+     # de / nl
+     "im am und oder bis seit ab noch nicht nog niet en van het op voor tot "
+     "afgerond abgeschlossen "
+     # fr
+     "du la le les et ou a pour depuis dans "
+     # es / it
+     "el los las y para desde con di da del della nel su "
+     # zh / ja / ko connectives that survive tokenisation
+     "年 月 版").split())
 
 # Scripts written without word delimiters. See `phrase_in`.
 _UNSEGMENTED_RE = re.compile(r"[฀-๿　-鿿가-힯豈-﫿]")
