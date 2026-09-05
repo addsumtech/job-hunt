@@ -384,3 +384,23 @@ def test_a_non_mapping_row_becomes_an_empty_mapping_rather_than_an_exception():
     assert journal.as_mapping(None) == {}
     assert journal.as_mapping(["R1"]) == {}
     assert journal.as_mapping({"id": "R1"}) == {"id": "R1"}
+
+
+def test_append_does_not_merge_onto_an_unterminated_line(tmp_path):
+    """A killed process writes the newline LAST, so the realistic shape of a
+    crash is a final line with no terminator. Appending straight onto it merged
+    the next receipt into the corrupt line and destroyed BOTH — measured on all
+    four composers, and check_shortlist then exited 0 with empty stdout and no
+    receipt of its own: a silent pass on the first read after a crash, which is
+    exactly when the receipt matters."""
+    journal.receipt(tmp_path, "check_claims", {}, "fail", ["X: a real finding"])
+    path = tmp_path / "journal.jsonl"
+    path.write_bytes(path.read_bytes()[:-12])          # cut mid-line, no newline
+    assert journal.corrupt_lines(tmp_path) == [1]
+
+    journal.receipt(tmp_path, "lint_cv", {}, "pass")
+    mine = [r for r in journal.read_receipts(tmp_path) if r.get("gate") == "lint_cv"]
+    assert len(mine) == 1, "the new receipt was swallowed by the corrupt line"
+    assert journal.receipt_intact(mine[0])
+    assert journal.corrupt_lines(tmp_path) == [1], (
+        "the corrupt line must stay corrupt and stay reported")

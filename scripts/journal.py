@@ -47,7 +47,22 @@ def append(workspace, record: dict) -> None:
     workspace = pathlib.Path(workspace)
     workspace.mkdir(parents=True, exist_ok=True)
     line = json.dumps(record, ensure_ascii=False, sort_keys=True)
-    with open(workspace / "journal.jsonl", "a", encoding="utf-8") as fh:
+    # A killed process writes the newline LAST, so the realistic shape of a
+    # crash is a final line with no terminator. Appending straight onto it
+    # merged the next receipt into the corrupt line and destroyed BOTH: measured
+    # on all four composers, and check_shortlist then exited 0 with empty stdout
+    # and no receipt of its own — a silent pass on the first read after a crash,
+    # which is exactly when the receipt matters. The corrupt line stays corrupt
+    # and JOURNAL_CORRUPT still reports it; the new record is simply not fed
+    # into it.
+    path = workspace / "journal.jsonl"
+    if path.exists() and path.stat().st_size:
+        with open(path, "rb") as fh:
+            fh.seek(-1, 2)
+            if fh.read(1) != b"\n":
+                with open(path, "a", encoding="utf-8") as fix:
+                    fix.write("\n")
+    with open(path, "a", encoding="utf-8") as fh:
         fh.write(line + "\n")
 
 
