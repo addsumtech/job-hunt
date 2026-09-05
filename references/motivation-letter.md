@@ -211,6 +211,8 @@ closing: "Sincerely,"
 
 **`closing`** — Choose from: `"Sincerely,"` (universal, formal), `"Kind regards,"` (warm professional), `"Best regards,"` (slightly more casual). Match the register. The sender's name is appended automatically by render_letter.py.
 
+**Localized closings (non-English letters):** the standard formal sign-off in that language, matching the salutation above and never an English one appended to a non-English letter. German `Mit freundlichen Grüßen`; Dutch `Met vriendelijke groet,`; French `Cordialement,`; Spanish `Atentamente,`; Italian `Cordiali saluti,`. This table exists because the renderer needs one: leaving it out meant a Dutch letter with a correctly localized opener still had to be given an English sign-off or none at all. For a language not listed — Chinese, Japanese, Korean and every other — the skill has no sign-off to offer and `check_letter` says so (`NO_CLOSING`) rather than inventing one; write it yourself in the letter's own language.
+
 ---
 
 ## 5. Honest-Only Rule

@@ -220,10 +220,18 @@ def _lang_letter(lang, **kw):
 
 
 @pytest.mark.parametrize("lang,codes", [
+    # No sourced opener AND no sourced sign-off: the skill has nothing to offer
+    # and says so rather than inventing either.
     ("zh", {"NO_SALUTATION", "NO_CLOSING"}),
     ("ja", {"NO_SALUTATION", "NO_CLOSING"}),
-    ("de", {"NO_CLOSING"}),
-    ("nl", {"NO_CLOSING"}),
+    ("pl", {"NO_SALUTATION", "NO_CLOSING"}),
+    # Both halves sourced. `de` and `nl` used to report NO_CLOSING here, which
+    # an independent pass called out as an asymmetry: five languages had a
+    # localized opener and were then given an English sign-off or none at all.
+    # references/motivation-letter.md now carries the closings too.
+    ("de", set()),
+    ("nl", set()),
+    ("fr", set()),
     ("en", set()),
 ])
 def test_a_missing_line_the_skill_cannot_source_is_reported(lang, codes):

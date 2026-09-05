@@ -82,12 +82,23 @@ _SALUTATION = {
     "it": "Gentile Responsabile delle Assunzioni,",
     "nl": "Geachte heer/mevrouw,",
 }
-# motivation-letter.md:212 gives the three English closings and no localized set,
-# so there is nothing to quote for the other languages. Rather than invent one,
-# the renderer leaves the sign-off out entirely when it does not have a sourced
-# one — and check_letter reports the gap. A missing line the writer fills beats
-# an English line in a German letter that nobody notices.
-_CLOSING = {"en": "Sincerely,"}
+# Quoted from references/motivation-letter.md, the same file and the same status
+# as the salutations above. An independent pass caught the asymmetry: five
+# languages had a sourced opener and no sourced sign-off, so an honest Dutch or
+# German letter that left `closing` unset — exactly as leaving `salutation`
+# unset correctly works — hard-failed NO_CLOSING with nothing to fill it in.
+#
+# Languages still absent here (zh, ja, ko and the rest) keep the honest
+# behaviour: no sign-off is emitted and check_letter reports the gap, because
+# inventing one is what this skill bans.
+_CLOSING = {
+    "en": "Sincerely,",
+    "de": "Mit freundlichen Grüßen",
+    "nl": "Met vriendelijke groet,",
+    "fr": "Cordialement,",
+    "es": "Atentamente,",
+    "it": "Cordiali saluti,",
+}
 
 
 def _language(d) -> str:
