@@ -230,3 +230,44 @@ def test_an_ordinary_sentence_about_the_job_is_not(text):
 ])
 def test_the_remaining_percent_spellings(text, fires):
     assert bool(L.scan_text(text, "fit-assessment.md")) is fires, text
+
+
+# ---------------------------------------------------------------------------
+# `chances?` was bare, and this pattern is case-insensitive — so once the skill
+# started writing GERMAN assessments it fired on `Chance`, which is spelled
+# identically and is that language's ordinary word for opportunity. An
+# independent pass found six honest recruiting sentences failing the gate, and
+# the cause was the English rule, not the German one.
+# ---------------------------------------------------------------------------
+
+_OPPORTUNITY = [
+    "a chance to work with a great team",
+    "I would welcome the chance to discuss this",
+    "Wir bieten dir die Chance, in diesem Job viel zu lernen.",
+    "Nutze die Chance und bewirb dich noch heute auf die Stelle.",
+    "Das Gespräch war eine gute Chance, das Team kennenzulernen.",
+    "Deze baan biedt de kans om veel te leren.",
+    "Grijp de kans en solliciteer op deze baan.",
+    "Wij bieden de kans op een vaste baan na een succesvol proefjaar.",
+    "Dit is een unieke kans om ervaring op te doen.",
+]
+_ODDS = [
+    "Your chances here are good.",
+    "Boost your chances of success in this role.",
+    "chances of an interview",
+    "your chances of being shortlisted",
+    "Die Chancen stehen gut.",
+    "Die Chancen auf eine Einladung sind hoch.",
+    "Je hebt een grote kans op een gesprek.",
+    "De kans op een aanbod is klein.",
+]
+
+
+@pytest.mark.parametrize("text", _OPPORTUNITY, ids=range(len(_OPPORTUNITY)))
+def test_the_word_for_opportunity_is_not_a_forecast(text):
+    assert L.scan_text(text, "fit-assessment.md") == [], text
+
+
+@pytest.mark.parametrize("text", _ODDS, ids=range(len(_ODDS)))
+def test_a_claim_about_this_candidates_odds_still_is(text):
+    assert L.scan_text(text, "fit-assessment.md"), text

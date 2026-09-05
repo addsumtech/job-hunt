@@ -139,18 +139,26 @@ _JA_TENTHS = r"[0-9０-９一二三四五六七八九][\s]*割(?![引り])"
 # So they fire only next to an OUTCOME, or in the idiom that is a forecast on
 # its own. `Wahrscheinlichkeit` and `waarschijnlijkheid` stay bare: those mean
 # probability and nothing else.
-_DE_OUTCOME = (r"einladung|vorstellungsgespr\u00e4ch|gespr\u00e4ch|zusage|angebot|"
-               r"stelle|job|einstellung|absage")
-_NL_OUTCOME = (r"gesprek|uitnodiging|aanbod|baan|sollicitatie|aangenomen|afwijzing")
+# Proximity to a JOB NOUN was the wrong test and an independent pass proved it:
+# `die Chance, in diesem Job viel zu lernen`, `de kans om veel te leren in deze
+# baan` — job nouns are exactly what makes OPPORTUNITY language job-related, so
+# that rule fired on 6 of 6 honest recruiting sentences.
+#
+# A LIKELIHOOD predicate is the real separator. `Die Chancen stehen gut` and
+# `een grote kans op een gesprek` say how probable; `wir bieten die Chance` and
+# `grijp de kans` say what is on offer. `gut`/`goed` are deliberately NOT in the
+# list — `eine gute Chance, das Team kennenzulernen` is an offer, and including
+# them puts the false positive straight back.
+_DE_LIKELIHOOD = r"hoch|gering|gro\u00df|klein|niedrig|steh(?:en|t)|liegt bei|betr\u00e4gt"
+_NL_LIKELIHOOD = r"groot|grote|klein|kleine|hoog|hoge|laag|lage|gering"
 _FORECAST_DE = (r"\bwahrscheinlichkeit\b"
-                r"|\bchancen\s+stehen\b"
-                r"|\b(?:chance|chancen|aussichten)\b[^.!?]{0,40}\b(?:" + _DE_OUTCOME + r")\b"
-                r"|\b(?:" + _DE_OUTCOME + r")\b[^.!?]{0,40}\b(?:chance|chancen|aussichten)\b"
+                r"|\b(?:chance|chancen|aussichten)\b[^.!?]{0,40}\b(?:" + _DE_LIKELIHOOD + r")\b"
+                r"|\b(?:" + _DE_LIKELIHOOD + r")\b[^.!?]{0,25}\b(?:chance|chancen|aussichten)\b"
                 r"|\bwerden\b[^.!?]{0,40}\b(?:einladung|vorstellungsgespr\u00e4ch|"
                 r"zusage|angebot)\b[^.!?]{0,20}\b(?:bekommen|erhalten)\b")
 _FORECAST_NL = (r"\bwaarschijnlijkheid\b"
-                r"|\b(?:kans|kansen)\b[^.!?]{0,40}\b(?:" + _NL_OUTCOME + r")\b"
-                r"|\b(?:" + _NL_OUTCOME + r")\b[^.!?]{0,40}\b(?:kans|kansen)\b"
+                r"|\b(?:kans|kansen)\b[^.!?]{0,40}\b(?:" + _NL_LIKELIHOOD + r")\b"
+                r"|\b(?:" + _NL_LIKELIHOOD + r")\b[^.!?]{0,25}\b(?:kans|kansen)\b"
                 r"|\bkrijgt\b[^.!?]{0,40}\b(?:gesprek|uitnodiging|aanbod)\b")
 _FORECAST_FR = (r"\b(?:probabilité|probabilités|chances? d[eu']"
                 r"(?:\s|’)?(?:être|obtenir|décrocher))\b")
@@ -159,7 +167,21 @@ _FORECAST_JA = r"可能性が高い|見込みが高い|確率|受かる見込み
 _FORECAST_KO = r"확률|가능성이 (?:높|큽)|합격할 것"
 
 _WORDS = re.compile(
-    r"\bchances?\b|\bprobabilit(?:y|ies)\b|\bodds\b|\blikelihood\b"
+    # `chances?` used to be bare. That was tolerable while this file only ever
+    # read English — and it stopped being tolerable when the skill started
+    # writing German assessments, because `Chance` is spelled identically and
+    # this pattern is case-insensitive. `Wir bieten dir die Chance, in diesem
+    # Job viel zu lernen` fired as an English prediction word. So did every
+    # honest English `a chance to work with…`.
+    #
+    # It now needs a possessive or an outcome, which is what makes it a claim
+    # about THIS candidate rather than a word for opportunity in either language.
+    r"\b(?:your|their|his|her|our|my|the candidate'?s?)\s+chances?\b"
+    r"|\bchances?\s+(?:of|at|for)\s+(?:an?\s+|the\s+)?"
+    r"(?:interview|offer|job|role|position|success|being|getting|landing|"
+    r"a\s+callback|progressing)"
+    r"|\bchances?\s+(?:are|is|were|seem|look|looked)\b"
+    r"|\bprobabilit(?:y|ies)\b|\bodds\b|\blikelihood\b"
     r"|\blikely to be (?:hired|interviewed|shortlisted|rejected)\b"
     r"|\b(?:strong|weak) candidate\b|\bwould pass\b|\bno-hire\b"
     r"|\b\d+(?:\.\d+)?\s*(?:percent|per cent)\b"
