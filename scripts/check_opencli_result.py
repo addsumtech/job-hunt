@@ -68,7 +68,15 @@ LOGIN_WALL_PATTERNS = (
     re.compile(r"\bUnauthorized\b", re.I),
     re.compile(r"\blogin required\b", re.I),
     re.compile(r"\bnot logged in\b", re.I),
-    re.compile(r"\b(?:please |you must )?(?:sign|log)\s?in\b", re.I),
+    # The prefix is REQUIRED. Bare `sign in` matched "500 Internal Server Error
+    # while loading your sign in preferences page" and "Connection reset while
+    # rendering the 'Log In' navbar link" — genuine transport faults routed to
+    # "run opencli <site> login", which is the wrong-remedy failure this list
+    # exists to prevent, just pointing the other way.
+    re.compile(r"\b(?:please|you must|you need to|must|to continue,?)\s+"
+               r"(?:sign|log)\s?in\b", re.I),
+    re.compile(r"\b(?:sign|log)\s?in\s+(?:is\s+)?(?:required|to view|to continue|"
+               r"to access)\b", re.I),
     re.compile(r"\bauthentication (?:required|failed)\b", re.I),
     re.compile(r"\bsession (?:expired|invalid)\b", re.I),
     re.compile(r"登录|登入|登錄|登陆|未登录|請先登入"),

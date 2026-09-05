@@ -300,3 +300,27 @@ def test_an_ordinary_failure_is_not_mistaken_for_one(text):
     """Misreading a real transport fault as a login wall sends the user to log
     in to a site they are already logged in to."""
     assert not any(p.search(text) for p in coc.LOGIN_WALL_PATTERNS), text
+
+
+_TRANSPORT_NOT_WALLS = [
+    "500 Internal Server Error while loading your sign in preferences page",
+    "Connection reset while rendering the 'Log In' navbar link",
+    "Timeout fetching https://example.com/signin-help",
+    "recruiter@example.com invites you to sign in and view their profile",
+]
+_REAL_WALLS = ["Please log in", "You must sign in to continue", "Sign in to view",
+               "login required", "not logged in", "需要登录", "ログインが必要です"]
+
+
+@pytest.mark.parametrize("text", _TRANSPORT_NOT_WALLS,
+                         ids=range(len(_TRANSPORT_NOT_WALLS)))
+def test_a_bare_mention_of_signing_in_is_not_a_login_wall(text):
+    """A bare `sign in` matched a 500 page and a navbar label, routing a genuine
+    transport fault to "run opencli <site> login" — the wrong-remedy failure this
+    list exists to prevent, pointing the other way."""
+    assert not any(p.search(text) for p in coc.LOGIN_WALL_PATTERNS), text
+
+
+@pytest.mark.parametrize("text", _REAL_WALLS, ids=range(len(_REAL_WALLS)))
+def test_an_instruction_to_sign_in_still_is(text):
+    assert any(p.search(text) for p in coc.LOGIN_WALL_PATTERNS), text
