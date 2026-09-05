@@ -83,20 +83,25 @@ def check_mode_entry(workspace: pathlib.Path, skill_root: pathlib.Path) -> list:
             f"modes/{MODE}.md is loaded unconditionally on entering the mode; run "
             f"scripts/enter_mode.py --mode {MODE} and read it"
         ]
+    findings = [
+        f"RECEIPT_UNVERIFIED: the {gate_name!r} receipt at gate-record {line_no} "
+        f"does not match its own receipt_hash — it was hand-written or edited "
+        f"after the gate ran, so it is not evidence that the gate ran"
+        for gate_name, line_no in journal.unverified_receipts(workspace)]
     if not mode_path.exists():
-        return [
+        return findings + [
             f"MODE_FILE_MISSING: {mode_path} is not on disk, so the hash recorded "
             f"at mode entry could not be checked against it. `mode_path.exists()` "
             f"was a silent skip: a wrong --skill-root disabled the layer-1.5 "
             f"backstop entirely and the gate reported nothing"
         ]
     if entry.get("mode_file_sha256") != journal.sha256_file(mode_path):
-        return [
+        return findings + [
             f"MODE_FILE_CHANGED: modes/{MODE}.md changed after this run entered the "
             "mode, so what was read is not what is on disk — re-enter the mode and "
             "re-read it"
         ]
-    return []
+    return findings
 
 
 # ----------------------------------------------------------------- assessment checks

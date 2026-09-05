@@ -583,3 +583,19 @@ def test_a_skill_root_without_the_mode_file_is_reported_not_skipped(tmp_path):
     code = check_mock.main(["--workspace", str(ws), "--round", "2",
                             "--skill-root", str(empty), "--today", "2026-08-09"])
     assert code == 1
+
+
+def test_this_composer_reports_a_hand_written_receipt_too(tmp_path):
+    """SKILL.md says RECEIPT_UNVERIFIED is checked by EVERY composer. It was not
+    wired here, so that sentence — which I wrote — was false for interview mode
+    until an independent pass grepped it."""
+    ws = F.build(tmp_path)
+    journal.append(ws, {"action": "gate", "gate": "lint_no_prediction",
+                        "verdict": "pass", "input_hashes": {}, "findings": []})
+    found = check_mock.check_mode_entry(ws, F.skill_root(ws))
+    assert any(f.startswith("RECEIPT_UNVERIFIED") for f in found), found
+
+
+def test_a_clean_workspace_reports_nothing_from_that_check(tmp_path):
+    ws = F.build(tmp_path)
+    assert check_mock.check_mode_entry(ws, F.skill_root(ws)) == []
