@@ -54,13 +54,32 @@ DETAIL_COMMAND = {
 # A refusal that means "you are not signed in". Checked BEFORE the risk-control
 # signals so that the measured 403 resolves against `opencli auth status`
 # rather than being swallowed as a generic platform limit.
+# One Chinese phrase and three English ones meant `请先登录后查看`,
+# `ログインが必要です`, `로그인이 필요합니다` and `Bitte melden Sie sich an` all fell
+# through to `classification: transport`, whose remedy is "run opencli doctor" —
+# when the correct remedy is to hand the user `opencli <site> login`. A wrong
+# remedy costs more than no remedy: it sends them to debug a working adapter.
+#
+# The CJK entries carry no `\b`: there is no word boundary between 登录 and the
+# character beside it.
 LOGIN_WALL_PATTERNS = (
     re.compile(r"HTTP 40[13]\b"),
     re.compile(r"\bForbidden\b", re.I),
     re.compile(r"\bUnauthorized\b", re.I),
-    re.compile(r"需要登录"),
     re.compile(r"\blogin required\b", re.I),
     re.compile(r"\bnot logged in\b", re.I),
+    re.compile(r"\b(?:please |you must )?(?:sign|log)\s?in\b", re.I),
+    re.compile(r"\bauthentication (?:required|failed)\b", re.I),
+    re.compile(r"\bsession (?:expired|invalid)\b", re.I),
+    re.compile(r"登录|登入|登錄|登陆|未登录|請先登入"),
+    re.compile(r"ログイン|サインイン|認証が必要"),
+    re.compile(r"로그인|인증이 필요"),
+    # German separable verb: "anmelden" appears as "melden Sie sich an", so the
+    # dictionary form alone matches nothing a site actually prints.
+    re.compile(r"\banmeld(?:en|ung)\b|\bnicht angemeldet\b"
+               r"|\bmelden Sie sich\b.{0,12}\ban\b", re.I),
+    re.compile(r"\binloggen\b|\bniet ingelogd\b", re.I),
+    re.compile(r"\bconnexion requise\b|\bveuillez vous connecter\b", re.I),
 )
 
 DEFAULT_SIGNALS_FILE = paths.SKILL_ROOT / "references" / "risk-control-signals.yaml"

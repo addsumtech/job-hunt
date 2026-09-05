@@ -8,6 +8,8 @@ because the reader learns to skip that line.
 import json
 import pathlib
 
+import pytest
+
 import check_opencli_result as coc
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
@@ -266,3 +268,35 @@ def test_read_adapter_calls_skips_receipts_and_surfaces_bad_lines(tmp_path):
     assert len(records) == 3
     assert records[2]["_unparsable"] == "{not json at all}"
     assert records[2]["_lineno"] == 3
+
+
+# ---------------------------------------------------------------------------
+# A login wall the classifier does not recognise becomes `transport`, whose
+# remedy is "run opencli doctor" — when the correct remedy is to hand the user
+# `opencli <site> login`. A wrong remedy costs more than none: it sends them to
+# debug a working adapter. One Chinese phrase and three English ones covered it.
+# ---------------------------------------------------------------------------
+
+_WALLS = [
+    "需要登录", "请先登录后查看", "登录后查看完整信息",
+    "ログインが必要です", "로그인이 필요합니다",
+    "Bitte melden Sie sich an", "U bent niet ingelogd",
+    "Veuillez vous connecter", "Sign in to view", "Please log in",
+    "session expired", "authentication required",
+]
+_NOT_WALLS = [
+    "HTTP 500 server error", "connection reset by peer",
+    "no results found for this query", "rate limit exceeded",
+]
+
+
+@pytest.mark.parametrize("text", _WALLS, ids=range(len(_WALLS)))
+def test_a_login_wall_is_recognised_in_the_language_the_site_answered_in(text):
+    assert any(p.search(text) for p in coc.LOGIN_WALL_PATTERNS), text
+
+
+@pytest.mark.parametrize("text", _NOT_WALLS, ids=range(len(_NOT_WALLS)))
+def test_an_ordinary_failure_is_not_mistaken_for_one(text):
+    """Misreading a real transport fault as a login wall sends the user to log
+    in to a site they are already logged in to."""
+    assert not any(p.search(text) for p in coc.LOGIN_WALL_PATTERNS), text
