@@ -124,10 +124,27 @@ _ZH_PERCENT_SPELLED = r"百分之[零一二三四五六七八九十百]+"
 # Kept to the NOUN of chance and to a modal aimed at an interview or an offer,
 # for the same reason the English set is: this must not fire on an honest
 # sentence about the job itself.
-_FORECAST_DE = (r"\b(?:chance|chancen|wahrscheinlichkeit|aussichten)\b"
-                r"|\bwerden\b[^.!?]{0,40}\b(?:einladung|vorstellungsgespräch|"
+# `Chance` and `kans` are the ORDINARY words for "opportunity" in German and
+# Dutch — `Chancen zur Weiterbildung`, `kansen voor groei` are what postings
+# actually say — so banning them bare cried wolf on honest text. English keeps
+# its bare `chances?` because "chance" rarely carries that sense there; the
+# collision rate is a fact about the language, not an inconsistency.
+#
+# So they fire only next to an OUTCOME, or in the idiom that is a forecast on
+# its own. `Wahrscheinlichkeit` and `waarschijnlijkheid` stay bare: those mean
+# probability and nothing else.
+_DE_OUTCOME = (r"einladung|vorstellungsgespr\u00e4ch|gespr\u00e4ch|zusage|angebot|"
+               r"stelle|job|einstellung|absage")
+_NL_OUTCOME = (r"gesprek|uitnodiging|aanbod|baan|sollicitatie|aangenomen|afwijzing")
+_FORECAST_DE = (r"\bwahrscheinlichkeit\b"
+                r"|\bchancen\s+stehen\b"
+                r"|\b(?:chance|chancen|aussichten)\b[^.!?]{0,40}\b(?:" + _DE_OUTCOME + r")\b"
+                r"|\b(?:" + _DE_OUTCOME + r")\b[^.!?]{0,40}\b(?:chance|chancen|aussichten)\b"
+                r"|\bwerden\b[^.!?]{0,40}\b(?:einladung|vorstellungsgespr\u00e4ch|"
                 r"zusage|angebot)\b[^.!?]{0,20}\b(?:bekommen|erhalten)\b")
-_FORECAST_NL = (r"\b(?:kans|kansen|waarschijnlijkheid)\b"
+_FORECAST_NL = (r"\bwaarschijnlijkheid\b"
+                r"|\b(?:kans|kansen)\b[^.!?]{0,40}\b(?:" + _NL_OUTCOME + r")\b"
+                r"|\b(?:" + _NL_OUTCOME + r")\b[^.!?]{0,40}\b(?:kans|kansen)\b"
                 r"|\bkrijgt\b[^.!?]{0,40}\b(?:gesprek|uitnodiging|aanbod)\b")
 _FORECAST_FR = (r"\b(?:probabilité|probabilités|chances? d[eu']"
                 r"(?:\s|’)?(?:être|obtenir|décrocher))\b")

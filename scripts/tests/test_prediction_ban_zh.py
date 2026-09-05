@@ -177,6 +177,11 @@ def test_the_mode_files_carrying_the_disclaimer_are_lint_clean(mode_file):
 _FORECASTS = [
     "Sie werden das Vorstellungsgespräch sicher bekommen.",
     "Die Chancen stehen gut.",
+    "Die Chancen auf eine Einladung sind hoch.",
+    "Die Wahrscheinlichkeit ist hoch.",
+    "De waarschijnlijkheid is groot.",
+    "De kans op een aanbod is klein.",
+    "Je krijgt zeker een uitnodiging voor een gesprek.",
     "Je hebt een grote kans op een gesprek.",
     "La probabilité est élevée.",
     "La probabilidad es alta.",
@@ -185,6 +190,16 @@ _FORECASTS = [
     "You will certainly get the interview.",
 ]
 _ORDINARY = [
+    # Found by an adversarial re-read of my own widening, 2026-09-05. `Chance`
+    # and `kans` are the ORDINARY words for "opportunity" in German and Dutch —
+    # this is what postings actually say — and banning them bare fired on both.
+    # English keeps its bare `chances?`: "chance" rarely carries that sense
+    # there, so the collision rate is a fact about the language.
+    "Wir bieten Chancen zur Weiterbildung.",
+    "Wir bieten gute Aussichten auf Weiterbildung.",
+    "Chancengleichheit ist uns wichtig.",
+    "Er zijn goede kansen voor groei binnen het team.",
+    "Gelijke kansen voor iedereen.",
     "Die Stelle ist in Amsterdam.",
     "Werden Sie Teil des Teams.",
     "Het salaris is marktconform.",
