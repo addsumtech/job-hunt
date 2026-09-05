@@ -1091,3 +1091,20 @@ def test_a_valid_paper_override_is_not_refused(tmp_path, capsys):
         "contact:\n  email: x@example.com\n", encoding="utf-8")
     assert render_cv.main([str(profile), "--format", "md",
                            "--out", str(tmp_path / "cv.md")]) == 0
+
+
+@pytest.mark.parametrize("market,cluster", [
+    # The regression an independent pass caught: making a plain hyphen a
+    # non-separator (so `États-Unis` would resolve) broke the OTHER thing a
+    # hyphen does — join a code to a qualifier. `DE-based` resolved to nothing,
+    # and an unresolved market WITHHOLDS personal data, so a German candidate
+    # writing the natural short form of their own market silently lost the photo
+    # and date of birth their market expects.
+    ("DE-based", 2), ("NL-based", 2), ("US-based", 1), ("NL-remote", 2),
+    # …and the case that motivated the hyphen change in the first place.
+    ("États-Unis", 1), ("Pays-Bas", 2), ("Nouvelle-Zélande", 1),
+    # Diacritics are folded rather than listed, so the REAL spellings resolve.
+    ("Groot-Brittannië", 1), ("Éire", 1), ("Österreich", 2), ("España", 2),
+])
+def test_both_things_a_hyphen_does_are_handled(market, cluster):
+    assert render_cv.resolve_cluster(market) == cluster, market

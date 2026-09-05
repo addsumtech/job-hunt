@@ -548,12 +548,50 @@ _MARKET_PUNCT = re.compile(r"[^\w\s]", re.UNICODE)
 _PHOTO_FIELD = "meta.photo"
 
 
+_MARKET_SEP_HYPHEN = re.compile(r"[,()\[\]/|;·–—-]+")
+
+
+def _fold_market(text: str) -> str:
+    """Lowercase, and strip diacritics from LATIN letters only.
+
+    `Groot-Brittannië` and `Éire` are how a Dutch or Irish candidate really
+    spells those, and listing only the ASCII-folded forms meant the accented
+    ones — the real ones — resolved to nothing. Folding rather than listing
+    covers every accented spelling at once, including ones nobody thought of.
+    Non-Latin scripts are left alone: a Thai vowel sign is a letter, not an
+    accent (see paths._fold_latin for the same rule and the same reason).
+    """
+    text = unicodedata.normalize("NFKC", str(text or "")).lower()
+    out = []
+    for ch in text:
+        if unicodedata.name(ch, "").startswith("LATIN"):
+            out.append("".join(c for c in unicodedata.normalize("NFKD", ch)
+                               if not unicodedata.combining(c)))
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
 def _market_segments(market):
-    text = unicodedata.normalize("NFKC", str(market or "")).lower()
-    for seg in _MARKET_SEP.split(text):
-        seg = " ".join(_MARKET_PUNCT.sub(" ", seg).split())
-        if seg:
-            yield seg
+    """Segments, under BOTH hyphen conventions.
+
+    A plain hyphen joins a country name (`États-Unis`, `Pays-Bas`) and also
+    joins a code to a qualifier (`DE-based`, `NL-remote`), so neither treatment
+    alone is right. Splitting on it broke the first; not splitting broke the
+    second — measured, and the second is worse, because an unresolved market
+    now WITHHOLDS personal data and a German candidate writing `DE-based`
+    silently lost the photo and date of birth their market expects.
+
+    Both segmentations are yielded and `resolve_cluster` unions the matches.
+    """
+    text = _fold_market(market)
+    seen = set()
+    for pattern in (_MARKET_SEP, _MARKET_SEP_HYPHEN):
+        for seg in pattern.split(text):
+            seg = " ".join(_MARKET_PUNCT.sub(" ", seg).split())
+            if seg and seg not in seen:
+                seen.add(seg)
+                yield seg
 
 
 def resolve_cluster(market):
@@ -564,7 +602,7 @@ def resolve_cluster(market):
     photo from an EU CV is cosmetic and the cost of leaving a DOB on a US CV is
     an automatic rejection at best.
     """
-    text = unicodedata.normalize("NFKC", str(market or "")).lower()
+    text = _fold_market(market)
     found = {c for alias, c in _CJK_CLUSTER.items() if alias in text}
     for seg in _market_segments(market):
         if seg in _CODE_CLUSTER:
