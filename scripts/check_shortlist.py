@@ -121,6 +121,12 @@ MARKET_TOKENS = {
 _DECOY_PHRASES = {
     "new south wales": "au",
     "new england": "us",
+    # A district, not a country. Amsterdam, London, Berlin and Manchester all
+    # have one, and `Zeedijk (Chinatown), Amsterdam` was reading as a China row
+    # under a Netherlands brief. None means "strip it and claim nothing".
+    "chinatown": None,
+    "china town": None,
+    "little italy": None,
 }
 
 # The 50 states plus DC, matched CASE-SENSITIVELY after a comma, because that is
@@ -593,7 +599,8 @@ def _check_market_fit(brief, rows):
         for phrase, actual in _DECOY_PHRASES.items():
             if phrase in lowered:
                 lowered = lowered.replace(phrase, " ")
-                named.add(actual)
+                if actual:
+                    named.add(actual)
         named |= {market for market, tokens in MARKET_TOKENS.items()
                   if any(token in lowered for token in tokens)}
         # A two-letter state after a comma is positive evidence of the US, and it
@@ -610,6 +617,15 @@ def _check_market_fit(brief, rows):
         # — measured, and the reason the position is checked rather than assumed.
         # It also gets `China, TX` right, which no strong/weak token list would.
         state = _US_STATE.search(location)
+        # `DE` is Delaware AND the ISO code for Germany, so `Munich, DE` — how
+        # most EU aggregator feeds write a German location — warned under a
+        # German brief. Two letters cannot settle that on their own, and the
+        # brief can: a code matching the brief's OWN market is evidence FOR the
+        # brief, and this check exists to find rows outside it. `Wilmington, DE`
+        # under a US brief is unaffected — `us` is in markets either way.
+        if state and state.group(1).lower() in markets:
+            named.add(state.group(1).lower())
+            state = None
         if state:
             named.add("us")
         brief_at = max((lowered.rfind(token) for market in markets

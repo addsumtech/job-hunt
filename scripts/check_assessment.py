@@ -96,6 +96,17 @@ PASSING_VERDICTS = ("pass", "recorded")
 # correctly named blocking row fired a false DISQUALIFIER_NOT_NAMED. Same root
 # cause, opposite symptom: silent there, cry-wolf here.
 _ROW_ID = re.compile(r"(?<![0-9A-Za-z])R\d+(?![0-9A-Za-z])")
+# NAMING a row is not the same as mentioning one. `The role requires deep SAP R3
+# experience` satisfied row R3 — so a disqualifier section could be told it had
+# named the wall when it had only happened to contain a product name, and the
+# reader is shown a wall they still walk into.
+#
+# modes/assess.md mandates the shape this matches: `- **R2** — …`. A bare
+# in-prose mention no longer counts, which is stricter than before and is the
+# safe direction for a check whose whole job is that the row was pointed at.
+_NAMED_ROW = re.compile(
+    r"(?:^|\n)\s*(?:[-*+]\s*)?\**(R\d+)\**(?![0-9A-Za-z])"
+    r"|\*\*(R\d+)\*\*(?![0-9A-Za-z])")
 _HEADING = re.compile(r"^\s{0,3}#{1,6}\s")
 
 
@@ -339,7 +350,8 @@ def check(workspace: pathlib.Path, market_dir: pathlib.Path,
                 f"shown is a wall they walk into")
         else:
             heading_index, body = section
-            named = set(_ROW_ID.findall("\n".join(body)))
+            named = {rid for pair in _NAMED_ROW.findall("\n".join(body))
+                     for rid in pair if rid}
             for row in blocking:
                 if str(row.get("id")) not in named:
                     findings.append(

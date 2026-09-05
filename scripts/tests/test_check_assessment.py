@@ -811,3 +811,53 @@ def test_a_disqualifier_row_is_recognised_whatever_language_names_it(line):
 @pytest.mark.parametrize("line", ["XR1Y", "R1A", "AR1"])
 def test_a_row_id_glued_to_other_ascii_is_not_one(line):
     assert ca._ROW_ID.findall(line) == [], line
+
+
+@pytest.mark.parametrize("body,named", [
+    ("- **R3** — 该岗位要求本地注册执业资格。", ["R3"]),
+    ("- R1：该岗位要求你已经持有欧盟工作许可。", ["R1"]),
+    ("**R2** is a hard blocker for this application.", ["R2"]),
+    ("- **R1** — this role requires an existing EU work permit.", ["R1"]),
+    # The one that made this a defect: a product name is not a naming.
+    ("The role requires deep SAP R3 experience, which the candidate lacks.", []),
+    ("Experience with SAP R3 and Oracle R12 is expected.", []),
+])
+def test_only_a_named_row_counts_as_named(body, named):
+    """`DISQUALIFIER_NOT_NAMED` was satisfied by any `R\\d+` anywhere in the
+    section, so `SAP R3` told the reader the wall had been named when it had
+    not — a wall they still walk into. modes/assess.md mandates the shape this
+    matches, and an in-prose mention no longer counts."""
+    found = sorted({r for pair in ca._NAMED_ROW.findall(body) for r in pair if r})
+    assert found == named, body
+
+
+def test_a_product_name_in_the_section_does_not_name_the_wall(tmp_path):
+    """Mutation-found: the regex was pinned and its CALL SITE was not, so
+    reverting `check` to the loose matcher left the suite green.
+
+    A blocking row whose id appears only inside `SAP R3` has not been named,
+    and the reader is shown a wall they still walk into."""
+    assessment = copy.deepcopy(ASSESSMENT)
+    assessment["requirements"][0]["match"] = "gap"        # R1: knockout + gap
+    ws, market_dir, root = build(tmp_path, assessment=assessment)
+    md = ws / "fit-assessment.md"
+    md.write_text(md.read_text(encoding="utf-8").replace(
+        "- **R2** — 该岗位明确要求你已经持有欧盟工作许可。这是法律层面的门槛，不是表述问题。",
+        "该岗位要求 SAP R1 与 Oracle R12 的深度经验，候选人并不具备。"),
+        encoding="utf-8")
+    assert_finding("\n".join(ca.check(ws, market_dir, TODAY, root)),
+                   "DISQUALIFIER_NOT_NAMED", about="R1")
+
+
+def test_a_properly_named_wall_is_accepted(tmp_path):
+    """The twin: the documented shape must satisfy it, or the check is
+    unsatisfiable and gets routed around."""
+    assessment = copy.deepcopy(ASSESSMENT)
+    assessment["requirements"][0]["match"] = "gap"
+    ws, market_dir, root = build(tmp_path, assessment=assessment)
+    md = ws / "fit-assessment.md"
+    md.write_text(md.read_text(encoding="utf-8").replace(
+        "- **R2** — 该岗位明确要求你已经持有欧盟工作许可。这是法律层面的门槛，不是表述问题。",
+        "- **R1** — 该岗位明确要求五年 C++ 经验，这是硬门槛。"), encoding="utf-8")
+    assert_no_finding("\n".join(ca.check(ws, market_dir, TODAY, root)),
+                      "DISQUALIFIER_NOT_NAMED")

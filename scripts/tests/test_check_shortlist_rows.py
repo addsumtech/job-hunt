@@ -446,3 +446,23 @@ def test_a_state_code_settles_it_only_when_it_comes_after_the_country(
     found = cs._check_market_fit({"markets": [market]},
                                  [{"id": "r", "location": location}])
     assert bool(found) is warns, found
+
+
+@pytest.mark.parametrize("location,market,warns", [
+    # `DE` is Delaware AND the ISO code for Germany, and most EU aggregator
+    # feeds write a German location this way. Two letters cannot settle it; the
+    # brief can, because this check exists to find rows OUTSIDE the brief.
+    ("Munich, DE", "de", False),
+    ("Wilmington, DE", "us", False),
+    ("Munich, DE", "nl", True),
+    # A district is not a country. Amsterdam, London, Berlin and Manchester all
+    # have a Chinatown.
+    ("Zeedijk (Chinatown), Amsterdam", "nl", False),
+    ("Chinatown, London", "uk", False),
+    ("Chinatown, San Francisco, CA", "nl", True),
+    ("Beijing, China", "nl", True),
+])
+def test_a_two_letter_code_and_a_district_are_not_countries(location, market, warns):
+    found = cs._check_market_fit({"markets": [market]},
+                                 [{"id": "r", "location": location}])
+    assert bool(found) is warns, found

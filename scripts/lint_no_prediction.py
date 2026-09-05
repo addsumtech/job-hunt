@@ -89,7 +89,19 @@ _QUOTE_FIELD = re.compile(r"quote=")
 # `‰` and the abbreviation `pct` are the same claim in different clothes;
 # both exited 0.
 _PERCENT = re.compile(r"[%％‰]|(?<![A-Za-z])pct(?![A-Za-z])", re.I)
-_SCORE = re.compile(r"(?<![0-9０-９])[0-9０-９]+\s*[/／]\s*[0-9０-９]+(?![0-9０-９])")
+# The decimal guards matter: `GPA 3.8/4.0` and `GPA 8.35/10` are real, honest,
+# extremely common academic content, and the digits either side of the slash
+# were being read out of the middle of them as `8/4` and `35/10`.
+# The guards reject a DECIMAL, not a full stop. `GPA 3.8/4.0` and `GPA 8.35/10`
+# are real, honest, extremely common academic content and the digits either side
+# of the slash were read out of the middle of them as `8/4` and `35/10`. But
+# `Coverage 9/10.` ends a sentence, and a first attempt that rejected any
+# adjacent `.` silenced that too — caught by this file's own surface test. So
+# the lookarounds reject only a dot with a DIGIT on the far side.
+_SCORE = re.compile(
+    r"(?<![0-9０-９])(?<![0-9０-９][.．])"
+    r"[0-9０-９]+\s*[/／]\s*[0-9０-９]+"
+    r"(?![0-9０-９])(?![.．][0-9０-９])")
 
 # The Chinese half was four hand-listed words, so 「成功率」「入围率」「七成」 and
 # 「百分之七十」 all shipped clean — and `--lang zh` is the DEFAULT

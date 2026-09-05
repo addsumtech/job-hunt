@@ -580,3 +580,19 @@ def test_the_cjk_suffix_exclusions_hold_in_both_directions(text, fires):
     parallel of the Chinese `七成` the file already handled — did not trip
     anything at all. The Arabic-digit `8 成` was a pre-existing gap."""
     assert bool(lnp.scan_text(text, _JUDGEMENT_PAGE)) is fires, text
+
+
+@pytest.mark.parametrize("text,fires", [
+    # A GPA is real, sourced, past academic fact and the n/m pattern was reading
+    # `8/4` and `35/10` out of the middle of one. Flagged by an independent pass
+    # as pre-existing, and it is: the decimal guards were never there.
+    ("GPA 3.8/4.0", False), ("GPA 8.35/10", False), ("GPA 90.4/100", False),
+    ("version 2.5/3.1", False),
+    # …but a full stop is not a decimal point. Rejecting any adjacent `.`
+    # silenced `Coverage 9/10.` at the end of a sentence — caught by this file's
+    # own surface test, which is why the guards look for a DIGIT past the dot.
+    ("Coverage 9/10.", True), ("COVERAGE: 9/9", True), ("You score 8/11", True),
+    ("8/10", True), ("ratio 1/2.", True),
+])
+def test_a_decimal_is_not_an_n_over_m_score(text, fires):
+    assert bool(lnp.scan_text(text, "fit-assessment.md")) is fires, text
