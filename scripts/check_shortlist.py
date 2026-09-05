@@ -596,14 +596,26 @@ def _check_market_fit(brief, rows):
                 named.add(actual)
         named |= {market for market, tokens in MARKET_TOKENS.items()
                   if any(token in lowered for token in tokens)}
-        # A two-letter state after a comma is POSITIVE evidence of the US, not
-        # one guess among several, so it outranks a country token the same string
-        # happens to contain. `Holland, MI 49423` names the Netherlands by
-        # substring and Michigan by structure, and the intersection test read the
-        # first and went quiet — a Michigan town passing a Netherlands brief.
-        definite_us = bool(_US_STATE.search(location))
-        if definite_us:
+        # A two-letter state after a comma is positive evidence of the US, and it
+        # outranks a country token the same string happens to contain —
+        # `Holland, MI 49423` names the Netherlands by substring and Michigan by
+        # structure, and the intersection test read the first and went quiet.
+        #
+        # But only when the state code comes LATER, because that is how job
+        # boards write a location: City, Region, Country. In `Holland, MI 49423`
+        # the country token IS the city name and the state follows it; in
+        # `Amsterdam, NH, Netherlands` the country is last and settles it. An
+        # earlier version of this rule made the state unconditionally definitive
+        # and cried wolf on every Dutch row written with a province abbreviation
+        # — measured, and the reason the position is checked rather than assumed.
+        # It also gets `China, TX` right, which no strong/weak token list would.
+        state = _US_STATE.search(location)
+        if state:
             named.add("us")
+        brief_at = max((lowered.rfind(token) for market in markets
+                        for token in MARKET_TOKENS.get(market, ())
+                        if token in lowered), default=-1)
+        definite_us = bool(state) and brief_at < state.start()
         if not named:
             continue
         if not (definite_us and "us" not in markets) and named & markets:

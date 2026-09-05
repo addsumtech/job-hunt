@@ -4,6 +4,8 @@ Risk register row 1: a fabricated shortlist is internally consistent, perfectly
 formatted, and every field has the right shape. The one thing a fabricated row
 cannot do is appear in raw/ — so that is what is checked, verbatim, per row.
 """
+import pytest
+
 import check_shortlist as cs
 import discover_fixtures as fx
 
@@ -405,3 +407,42 @@ def test_the_rows_that_really_are_in_the_brief_market_stay_quiet():
 def test_a_us_brief_is_quiet_on_us_rows_including_the_ambiguous_one():
     warned = _warned(["us"])
     assert "michigan" not in warned and "ohio" not in warned
+
+
+# ---------------------------------------------------------------------------
+# The state code outranks a country token only when it comes LATER.
+#
+# Found re-reading my own fix, 2026-09-05. Making the state UNCONDITIONALLY
+# definitive caught `Holland, MI 49423` and then cried wolf on every honest
+# Dutch row written with a province abbreviation — `Amsterdam, NH, Netherlands`
+# warned under a Netherlands brief.
+#
+# Position is the real signal, and it is how job boards write a location:
+# City, Region, Country. In `Holland, MI` the country token IS the city name
+# and the state follows it; in `Amsterdam, NH, Netherlands` the country is last
+# and settles it. It also gets `China, TX` right — a Texas town — which no
+# strong-versus-weak token list would.
+# ---------------------------------------------------------------------------
+
+_POSITION = [
+    # (location, brief market, should warn)
+    ("Amsterdam, NH, Netherlands", "nl", False),
+    ("Utrecht, UT, Nederland", "nl", False),
+    ("Den Haag, ZH, Netherlands", "nl", False),
+    ("Rotterdam, South Holland, Netherlands (Hybrid)", "nl", False),
+    ("Holland, MI 49423", "nl", True),
+    ("Columbus, OH 43215", "nl", True),
+    ("China, TX", "cn", True),
+    ("Beijing, China", "cn", False),
+    ("Columbus, OH 43215", "us", False),
+    ("Holland, MI 49423", "us", False),
+]
+
+
+@pytest.mark.parametrize("location,market,warns", _POSITION,
+                         ids=[f"{m}-{loc[:22]}" for loc, m, _ in _POSITION])
+def test_a_state_code_settles_it_only_when_it_comes_after_the_country(
+        location, market, warns):
+    found = cs._check_market_fit({"markets": [market]},
+                                 [{"id": "r", "location": location}])
+    assert bool(found) is warns, found
