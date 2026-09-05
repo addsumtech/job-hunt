@@ -235,7 +235,7 @@ def test_a_workspace_that_does_not_exist_writes_no_journal(tmp_path, capsys):
 import json as _json
 
 import lint_no_prediction as lnp
-from findings import codes
+from findings import codes, assert_no_finding
 
 
 def _out(found: list) -> str:
@@ -243,13 +243,21 @@ def _out(found: list) -> str:
     return "\n".join(found)
 
 
-def _round(tmp_path, card_title="AI AI/ML Engineer (100 % remote) (m/f/d)"):
+def _round(tmp_path, card_title="AI AI/ML Engineer (100 % remote) (m/f/d)",
+           journaled=True):
+    """A discover round. `journaled` controls whether an adapter_call names the
+    raw file -- which is what makes it a capture rather than a file on disk."""
     ws = tmp_path / "job-profiles" / "tester" / "searches" / "r"
     (ws / "raw").mkdir(parents=True)
     (ws / "raw" / "linkedin-1.json").write_text(
         _json.dumps([{"title": card_title, "company": "EWOR",
                       "url": "https://example.invalid/1"}]),
         encoding="utf-8")
+    if journaled:
+        (ws / "journal.jsonl").write_text(
+            _json.dumps({"action": "adapter_call", "site": "linkedin",
+                         "stdout_file": "raw/linkedin-1.json"}) + "\n",
+            encoding="utf-8")
     return ws
 
 
@@ -344,3 +352,157 @@ def test_a_prediction_word_in_the_capture_is_not_exempted_by_it(tmp_path):
     found = lnp.scan_text("Boost your chances of success in this role.",
                           "fit-assessment.md", corpus)
     assert "PREDICTION_WORD" in codes(_out(found))
+
+
+
+# ---------------------------------------------------------------------------
+# The two narrowings the 2026-09-05 audit found, both measured as off switches.
+# ---------------------------------------------------------------------------
+
+def test_a_raw_file_no_adapter_call_names_is_not_a_capture(tmp_path):
+    """The off switch, measured: dropping a hand-written JSON into raw/ took an
+    unchanged shortlist from exit 1 to exit 0. The corpus must be what the
+    adapters returned, and the journal is the only record of that."""
+    ws = _round(tmp_path, journaled=False)
+    (ws / "raw" / "scratch.json").write_text(
+        _json.dumps({"scratch": "fit score 8/10 overall"}), encoding="utf-8")
+    corpus = lnp.capture_corpus(ws)
+    assert corpus == ""
+    assert "SCORE_PATTERN" in codes(_out(
+        lnp.scan_text("Fit score 8/10 overall for this role.", "shortlist.md", corpus)))
+
+
+def test_the_same_file_does_mask_once_an_adapter_call_names_it(tmp_path):
+    """The twin. Without it the rule could be 'never mask', which deletes the
+    exemption the honest DeepHealth title needs."""
+    ws = _round(tmp_path, journaled=False)
+    (ws / "raw" / "scratch.json").write_text(
+        _json.dumps({"scratch": "fit score 8/10 overall"}), encoding="utf-8")
+    (ws / "journal.jsonl").write_text(
+        _json.dumps({"action": "adapter_call", "stdout_file": "raw/scratch.json"}) + "\n",
+        encoding="utf-8")
+    corpus = lnp.capture_corpus(ws)
+    assert lnp.scan_text("Fit score 8/10 overall for this role.",
+                         "shortlist.md", corpus) == []
+
+
+def test_a_stdout_file_pointing_outside_the_workspace_is_dropped(tmp_path):
+    """A journal is data. A data file that can name any path as a capture is a
+    traversal, not a corpus."""
+    ws = _round(tmp_path, journaled=False)
+    outside = tmp_path / "outside.json"
+    outside.write_text(_json.dumps({"x": "fit score 8/10 overall"}), encoding="utf-8")
+    (ws / "journal.jsonl").write_text(
+        _json.dumps({"action": "adapter_call",
+                     "stdout_file": "../../../../outside.json"}) + "\n",
+        encoding="utf-8")
+    assert lnp.journaled_captures(ws) == []
+    assert "SCORE_PATTERN" in codes(_out(lnp.scan_text(
+        "Fit score 8/10 overall for this role.", "shortlist.md",
+        lnp.capture_corpus(ws))))
+
+
+def test_a_score_hiding_in_a_captured_url_is_still_a_finding(tmp_path):
+    """Substring matching handed the exemption to any n/m a model cared to write:
+    every capture carries dated URLs, and '8/10' sits inside '/2026/08/10/'."""
+    ws = tmp_path / "job-profiles" / "tester" / "searches" / "r"
+    (ws / "raw").mkdir(parents=True)
+    (ws / "raw" / "linkedin-1.json").write_text(
+        _json.dumps({"url": "https://example.com/2026/08/10/job"}), encoding="utf-8")
+    (ws / "journal.jsonl").write_text(
+        _json.dumps({"action": "adapter_call", "stdout_file": "raw/linkedin-1.json"}) + "\n",
+        encoding="utf-8")
+    corpus = lnp.capture_corpus(ws)
+    assert "8/10" in corpus, "the URL really is in the corpus; the fix is the boundary"
+    assert "SCORE_PATTERN" in codes(_out(lnp.scan_text("8/10", "shortlist.md", corpus)))
+
+
+def test_answer_guide_is_one_of_the_scanned_surfaces(tmp_path):
+    """It is the file the candidate reads OUT LOUD, and it shipped unscanned."""
+    ws = tmp_path / "ws"
+    (ws / "mock").mkdir(parents=True)
+    (ws / "mock" / "answer-guide.md").write_text(
+        "You have a 70% chance on this one.\n", encoding="utf-8")
+    names = [p.name for p in lnp.target_files(ws)]
+    assert "answer-guide.md" in names, names
+
+
+# ---------------------------------------------------------------------------
+# Score NOUNS. The percent and n/m bans catch the SYMBOLS; an audit on
+# 2026-09-05 measured what that leaves through on D2, the invariant this file
+# exists for. Every one of these shipped silently.
+#
+# Parameterised in both directions on purpose: the firing list is what the ban
+# is for, and the quiet list is longer, because a lint that fires on `30 分钟`
+# or `8 points to cover` gets switched off and then nothing is enforced.
+# ---------------------------------------------------------------------------
+import pytest
+
+_FIRES = [
+    "匹配度 85 分", "综合评分 85", "给你打 85 分", "这份简历 85 分", "匹配度 0.85",
+    "評価 85 点", "점수 85점", "契合度：8",
+    "overall score: 85", "rated 8.5", "match score 85", "fit score of 7",
+    "4.5 stars", "3 stars", "confidence: 0.85", "match 0.72",
+    "grade: B+", "rating: A", "评级 B",
+    "Bewertung 8", "Punktzahl 85", "beoordeling 7", "cijfer 8",
+    "puntuación 85", "punteggio 8", "valutazione 7",
+]
+_QUIET = [
+    # the disclaimer this skill is required to print, in both languages
+    "以上是对证据的清点，也不给 0–100 分。",
+    "This skill states no interview outcome estimate and no 0–100 score.",
+    # ordinary Chinese that contains 分 or 点
+    "面试时长 30 分钟", "80 分钟", "学分 120", "三分之一", "打车 20 分钟",
+    "下午 3 点", "重点 3 个", "第 2 部分", "分级诊疗有 3 层",
+    # ordinary prose that contains a score noun
+    "8 points to cover", "Note that the deadline is 3 May",
+    "graded coursework in 2019", "score the answer against the rubric",
+    "a rating system with 4 levels of review",
+    # Korean lunch, not a Korean score
+    "점심 12시",
+]
+
+
+@pytest.mark.parametrize("text", _FIRES, ids=range(len(_FIRES)))
+def test_a_score_expressed_as_a_noun_is_banned(text):
+    assert "SCORE_NOUN" in codes(_out(lnp.scan_text(text, "fit-assessment.md"))), text
+
+
+@pytest.mark.parametrize("text", _QUIET, ids=range(len(_QUIET)))
+def test_ordinary_text_that_merely_contains_a_number_is_not(text):
+    assert_no_finding(_out(lnp.scan_text(text, "fit-assessment.md")), "SCORE_NOUN")
+
+
+def test_a_slash_score_is_reported_once_not_twice(text=None):
+    """`score 8/11` is one defect. _SCORE already owns the n/m shape, so the noun
+    pattern steps back — a finding list that says the same thing twice teaches
+    its reader to skim."""
+    assert codes(_out(lnp.scan_text("You score 8/11 on the requirements.", "x"))) \
+        == {"SCORE_PATTERN"}
+
+
+def test_an_employer_published_scale_quoted_with_its_source_is_still_allowed():
+    """The one allowlist in this file. Quoting an employer's own rubric is
+    reporting; the new patterns must not delete that."""
+    quoted = ("> A minimum score of 4 is required across all behaviours.\n"
+              "> — Civil Service Success Profiles https://gov.uk/x\n")
+    assert lnp.scan_text(quoted, "cheatsheet.md") == []
+    assert "SCORE_NOUN" in codes(_out(lnp.scan_text(
+        "A minimum score of 4 is required across all behaviours.", "cheatsheet.md")))
+
+
+def test_a_score_the_round_actually_captured_is_masked_like_any_other_number(tmp_path):
+    """The capture exemption composes with the new patterns: an employer that
+    publishes `rated 4.5` in its own posting may be quoted."""
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    (ws / "posting-source.txt").write_text(
+        "Our team is rated 4.5 by employees on Glassdoor.", encoding="utf-8")
+    corpus = lnp.capture_corpus(ws)
+    assert lnp.scan_text("Our team is rated 4.5 by employees on Glassdoor.",
+                         "fit-assessment.md", corpus) == []
+    # The twin: a score the capture does NOT contain still fires. `rating 4.5`
+    # is one word away from the captured `rated 4.5`, and that is the whole
+    # difference between quoting an employer and inventing a verdict.
+    assert "SCORE_NOUN" in codes(_out(lnp.scan_text(
+        "Overall rating 4.5 for this candidate.", "fit-assessment.md", corpus)))

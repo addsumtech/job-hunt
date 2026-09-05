@@ -2,7 +2,9 @@
 """Ban invented numbers and prediction vocabulary from anything a reader sees.
 
 There is no data behind "45-65% chance of an interview"; it is a made-up number that
-reads with the authority of arithmetic. Collapsing strong / partial / gap into one
+reads with the authority of arithmetic. The ban is on the CONCEPT, not on the
+punctuation: `匹配度 85 分` and `rated 8.5` are the same invented number as `85%`,
+and for two years this file caught only the ones carrying a `%` or a slash. Collapsing strong / partial / gap into one
 score needs a weight for a partial match, and any weight would be invented too. So the
 conclusion is a word, the counts are printed with the evidence behind each row, and
 this lint keeps the made-up numbers out.
@@ -132,7 +134,68 @@ _WORDS = re.compile(
     re.IGNORECASE)
 _ATTRIBUTION = re.compile(r"^\s*>?\s*(?:—|--|-|Source:|来源[:：])\s+.*https?://\S+")
 
-CHECKS = (("PERCENT", _PERCENT), ("SCORE_PATTERN", _SCORE), ("PREDICTION_WORD", _WORDS))
+
+# ---------------------------------------------------------------------------
+# Score NOUNS. The two bans above catch the SYMBOLS -- `%` and `n/m` -- and an
+# audit on 2026-09-05 measured what that leaves through, on the invariant this
+# whole file exists for: `匹配度 85 分`, `overall score: 85`, `rated 8.5`,
+# `4.5 stars`, `confidence: 0.85`, `grade: B+`, `Bewertung 8` all shipped
+# silently. Collapsing evidence into a number needs a weight for a partial match
+# and any weight would be invented -- that is true whichever word carries the
+# number, so the ban has to be on the concept and not on the punctuation.
+#
+# Covering the languages this skill renders CVs in (en/de/nl/fr/es/it/zh/ja/ko),
+# because banning it in English and Chinese only is the defect one level up.
+#
+# NOT included, deliberately: a bare `85 points`. `points` is ordinary prose --
+# references/motivation-letter.md really does say "3 points" -- and this repo
+# treats a gate that fires on correct output as the worse failure. A stated hole
+# beats a cry-wolf.
+_SCORE_NOUN_LATIN = (r"scores?|scored|scoring|ratings?|rated|graded|"
+                     r"bewertung|punktzahl|beoordeling|cijfer|"
+                     r"puntuaci[o\u00f3]n|punteggio|valutazione")
+# `note` (fr) and `mark` (en) are left out on purpose: both are high-frequency
+# ordinary words, and a French grade written `15/20` is already _SCORE's.
+_SCORE_NOUN_CJK = (r"匹配度|契合度|吻合度|评分|評分|打分|得分|分数|分數|总分|總分|"
+                   r"综合分|綜合分|评级|評級|等级|等級|評価|点数|點數|점수|평점|평가")
+
+_SCORE_NOUN = re.compile(
+    r"\b(?:" + _SCORE_NOUN_LATIN + r")\b\s*(?:of|:|=|is|at|von|van|di)?\s*"
+    r"(?<![0-9.\-\u2013])[0-9]+(?:\.[0-9]+)?\b(?![/／])"
+    r"|(?:" + _SCORE_NOUN_CJK + r")\s*[:：为是]?\s*"
+    r"(?<![0-9０-９.．\-\u2013])[0-9０-９]+(?:[.．][0-9０-９]+)?(?![/／])",
+    re.I)
+# The `(?![/／])` tail hands `score 8/11` back to _SCORE, which already owns the
+# n/m shape. One defect, one finding: reporting the same span twice is how a
+# reader learns to skim the finding list.
+
+# A confidence expressed as a fraction of one is the same claim wearing a decimal.
+_SCORE_DECIMAL = re.compile(
+    r"\b(?:score|rating|fit|match|confidence|probability)\b\s*(?:of|:|=|is)?\s*"
+    r"0?\.[0-9]+\b", re.I)
+
+# Units that ARE a scale on their own.
+_SCORE_UNITS = re.compile(r"\b[0-9]+(?:\.[0-9]+)?\s*(?:stars?|pts)\b", re.I)
+
+# Letter scales. SKILL.md names `B+` in the same breath as `7/10` and "score: 82".
+# The noun is required so an ordinary capital letter cannot trip it.
+_SCORE_LETTER = re.compile(
+    r"(?:\bgrade\b|\brating\b|评级|評級|等级|等級)\s*[:：=]?\s*"
+    r"[A-F][+\-]?(?![A-Za-z0-9])", re.I)
+
+# The bare unit form: 85 分 / 85점. The exclusion lists are what keep this off
+# ordinary Chinese -- 分钟, 分析, 分类, 分级 ... and Korean 점심 (lunch). 点 is
+# NOT given a bare form: 下午 3 点 is a clock time, so Japanese 点数 has to carry
+# its noun above.
+_SCORE_BARE = re.compile(
+    r"(?<![0-9０-９.．\-\u2013])[0-9０-９]+(?:[.．][0-9０-９]+)?"
+    r"\s*(?:分(?![钟鐘析部类類布支别別配享散开開成级級秒钱錢手])|점(?!심))")
+
+CHECKS = (("PERCENT", _PERCENT), ("SCORE_PATTERN", _SCORE),
+          ("PREDICTION_WORD", _WORDS),
+          ("SCORE_NOUN", _SCORE_NOUN), ("SCORE_NOUN", _SCORE_DECIMAL),
+          ("SCORE_NOUN", _SCORE_UNITS), ("SCORE_NOUN", _SCORE_LETTER),
+          ("SCORE_NOUN", _SCORE_BARE))
 
 
 _WS = re.compile(r"\s+")
@@ -157,6 +220,32 @@ def _json_strings(node, out: list) -> None:
             _json_strings(value, out)
 
 
+def journaled_captures(workspace: pathlib.Path) -> list:
+    """The raw files an `adapter_call` record names, and nothing else.
+
+    `stdout_file` is stored workspace-relative by the wrapper. A path that escapes
+    the workspace is dropped rather than followed: a journal is data, and a data
+    file that can name `/etc/passwd` as a capture is a traversal, not a corpus.
+    """
+    root = workspace.resolve()
+    out, seen = [], set()
+    for record in journal._records(workspace):
+        if record.get("action") != "adapter_call":
+            continue
+        named = record.get("stdout_file")
+        if not named:
+            continue
+        path = (workspace / str(named)).resolve()
+        try:
+            path.relative_to(root)
+        except ValueError:
+            continue
+        if path.is_file() and path not in seen:
+            seen.add(path)
+            out.append(path)
+    return sorted(out)
+
+
 def capture_corpus(workspace: pathlib.Path) -> str:
     """Everything this round actually CAPTURED, normalised for membership tests.
 
@@ -165,6 +254,13 @@ def capture_corpus(workspace: pathlib.Path) -> str:
     the rendered markdown -- are deliberately excluded. A corpus the model can write
     is a corpus the model can use to authorise its own invented number, which would
     turn this masking into an off switch.
+
+    A raw file only counts if the journal says an adapter wrote it. Globbing
+    `raw/*.json` was an OFF SWITCH, measured: dropping a hand-written
+    `{"scratch": "fit score 8/10 overall"}` into that directory took the lint from
+    exit 1 to exit 0 on unchanged prose. The corpus has to be what the adapters
+    actually returned, and the only record of that is the `adapter_call` line the
+    wrapper appends -- which the model cannot write without running the adapter.
 
     An unreadable capture is skipped rather than fatal: this function only ever
     REMOVES findings, so a corpus that comes back short fails closed.
@@ -176,7 +272,7 @@ def capture_corpus(workspace: pathlib.Path) -> str:
             pieces.append(source.read_text(encoding="utf-8", errors="replace"))
         except OSError:
             pass
-    for path in sorted((workspace / "raw").glob("*.json")):
+    for path in journaled_captures(workspace):
         try:
             node = json.loads(path.read_text(encoding="utf-8", errors="replace"))
         except (OSError, ValueError):
@@ -194,16 +290,24 @@ def mask_copied_numbers(line: str, corpus: str) -> str:
     quoting `(100 % remote)` off the card is exempt, while writing `100 % chance`
     around a number the card happened to contain is not -- the neighbours are what
     make it a quotation rather than a reuse of the digits.
+
+    The window matches on TOKEN boundaries, not as a substring. A bare `8/10`
+    passed as "captured" because the corpus held
+    `https://example.com/2026/08/10/job` and `"8/10" in that` is true -- every
+    capture carries dated URLs, so substring matching handed the exemption to any
+    n/m a model cared to write. Both sides are space-padded, which is exact
+    because `_normalise` has already collapsed all whitespace to single spaces.
     """
     if not corpus:  # fast path only: `x in ""` is already False for every window
         return line
+    padded = " " + corpus + " "
     tokens = [(m.start(), m.end(), m.group(0)) for m in re.finditer(r"\S+", line)]
     out = list(line)
     for index, (start, end, token) in enumerate(tokens):
         if not _NUMERIC_TOKEN.search(token):
             continue
         window = [t[2] for t in tokens[max(0, index - 1):index + 2]]
-        if _normalise(" ".join(window)) in corpus:
+        if " " + _normalise(" ".join(window)) + " " in padded:
             out[start:end] = " " * (end - start)
     return "".join(out)
 
@@ -296,8 +400,12 @@ def cannot_run(workspace: pathlib.Path, reason: str) -> int:
 
 def target_files(workspace: pathlib.Path) -> list[pathlib.Path]:
     found = []
+    # mock/answer-guide.md is here because it is the file the candidate reads OUT
+    # LOUD in the real room. It shipped unscanned by anything: a "70% chance" line
+    # in it passed check_mock and every lint, on the one surface where an invented
+    # number is spoken to a human rather than merely printed.
     for relative in ("fit-assessment.md", "shortlist.md", "cheatsheet.md",
-                     "mock/cheatsheet.md"):
+                     "mock/cheatsheet.md", "mock/answer-guide.md"):
         path = workspace / relative
         if path.exists():
             found.append(path)
