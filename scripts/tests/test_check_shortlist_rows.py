@@ -353,3 +353,55 @@ def test_a_receipt_is_written_on_pass_and_on_fail(tmp_path, capsys):
         encoding="utf-8").strip().splitlines()[-1])
     assert receipt["verdict"] == "fail"
     assert any(f.startswith("SOURCE_ID_NOT_IN_RAW") for f in receipt["findings"])
+
+
+# ---------------------------------------------------------------------------
+# The country matcher, audited 2026-09-05. This is the one check standing
+# between a UK user and "there are no London backend roles", and `indeed`
+# resolves --location against a US gazetteer, so it fires exactly where it is
+# most needed. Two ways it went quiet:
+# ---------------------------------------------------------------------------
+
+_ROWS = [
+    {"id": "michigan", "location": "Holland, MI 49423"},
+    {"id": "nsw", "location": "Sydney, New South Wales"},
+    {"id": "new-england", "location": "Boston, New England Region"},
+    {"id": "amsterdam", "location": "Amsterdam, Netherlands"},
+    {"id": "noord", "location": "Noord-Holland"},
+    {"id": "eu", "location": "Remote in EU"},
+    {"id": "ohio", "location": "Columbus, OH 43215"},
+]
+
+
+def _warned(markets):
+    out = cs._check_market_fit({"markets": markets}, _ROWS)
+    return {f.split("id=")[1].split("'")[1] for f in out}
+
+
+def test_a_us_town_sharing_a_country_name_no_longer_passes_a_dutch_brief():
+    """`Holland, MI 49423` names the Netherlands by substring and Michigan by
+    structure, and the intersection test read the first and went quiet. A
+    two-letter state after a comma is positive evidence, not one guess."""
+    assert "michigan" in _warned(["nl"])
+
+
+def test_a_longer_place_name_containing_a_country_wins():
+    """`Sydney, New South Wales` resolved to `uk` because it contains "wales",
+    and `Boston, New England Region` because it contains "england" — both passed
+    a UK brief in silence."""
+    warned = _warned(["uk"])
+    assert "nsw" in warned and "new-england" in warned
+
+
+def test_the_rows_that_really_are_in_the_brief_market_stay_quiet():
+    """The cry-wolf half, and the longer list: this check fires on a WARN, and a
+    warning that goes off on correct rows is one the reader stops reading."""
+    warned = _warned(["nl"])
+    assert "amsterdam" not in warned
+    assert "noord" not in warned, "Noord-Holland is the Netherlands"
+    assert "eu" not in warned
+
+
+def test_a_us_brief_is_quiet_on_us_rows_including_the_ambiguous_one():
+    warned = _warned(["us"])
+    assert "michigan" not in warned and "ohio" not in warned

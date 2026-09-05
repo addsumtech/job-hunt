@@ -103,6 +103,19 @@ MARKET_TOKENS = {
            "northern ireland"),
     "us": ("united states", "u.s.a", "usa"),
 }
+# Phrases that CONTAIN a country token and name somewhere else. Stripped before
+# the token scan, so the longer, more specific name wins — the same
+# longest-match rule render_cv.resolve_cluster uses.
+#
+# Measured 2026-09-05: `Sydney, New South Wales` resolved to `uk` because it
+# contains "wales", and `Boston, New England Region` because it contains
+# "england". Both then passed a UK brief in silence, on the one check standing
+# between a UK user and "there are no London backend roles".
+_DECOY_PHRASES = {
+    "new south wales": "au",
+    "new england": "us",
+}
+
 # The 50 states plus DC, matched CASE-SENSITIVELY after a comma, because that is
 # how every adapter renders a US location ("Columbus, OH 43215") and because
 # lowercase `in`/`or`/`me` are ordinary English words. Two letters are ambiguous
@@ -569,11 +582,24 @@ def _check_market_fit(brief, rows):
         if not location:
             continue
         lowered = _normalise(location)
-        named = {market for market, tokens in MARKET_TOKENS.items()
-                 if any(token in lowered for token in tokens)}
-        if _US_STATE.search(location):
+        named = set()
+        for phrase, actual in _DECOY_PHRASES.items():
+            if phrase in lowered:
+                lowered = lowered.replace(phrase, " ")
+                named.add(actual)
+        named |= {market for market, tokens in MARKET_TOKENS.items()
+                  if any(token in lowered for token in tokens)}
+        # A two-letter state after a comma is POSITIVE evidence of the US, not
+        # one guess among several, so it outranks a country token the same string
+        # happens to contain. `Holland, MI 49423` names the Netherlands by
+        # substring and Michigan by structure, and the intersection test read the
+        # first and went quiet — a Michigan town passing a Netherlands brief.
+        definite_us = bool(_US_STATE.search(location))
+        if definite_us:
             named.add("us")
-        if not named or named & markets:
+        if not named:
+            continue
+        if not (definite_us and "us" not in markets) and named & markets:
             continue
         findings.append(
             f"WARN_ROW_OUTSIDE_BRIEF_MARKET: row {index} (id={row.get('id')!r}) "
