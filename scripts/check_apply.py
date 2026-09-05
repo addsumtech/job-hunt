@@ -224,10 +224,28 @@ def main(argv=None) -> int:
         findings.append("NO_MODE_ENTRY: journal.jsonl has no mode_entry for apply — "
                         "modes/apply.md is loaded unconditionally on entering the "
                         "mode; run scripts/enter_mode.py --mode apply and read it")
-    elif mode_path.exists() and entry.get("mode_file_sha256") != journal.sha256_file(mode_path):
+    elif not mode_path.exists():
+        # `mode_path.exists()` guarded the comparison, so a wrong --skill-root
+        # switched the layer-1.5 backstop off and said nothing.
+        findings.append(f"MODE_FILE_MISSING: {mode_path} is not on disk, so the hash "
+                        "recorded at mode entry could not be checked against it; "
+                        "point --skill-root at the skill")
+    elif entry.get("mode_file_sha256") != journal.sha256_file(mode_path):
         findings.append("MODE_FILE_CHANGED: modes/apply.md changed after this run "
                         "entered the mode, so what was read is not what is on disk — "
                         "re-enter the mode and re-read it")
+
+    # ── every receipt was written by journal.receipt(), not by hand ───────
+    # The hash was journalled from the start and read by nothing, so a run could
+    # append `{"action":"gate","gate":"...","verdict":"pass"}` by hand and this
+    # gate exited 0 on it. Reported rather than filtered: dropping a forged PASS
+    # would promote an older genuine FAIL into last position.
+    for gate_name, line_no in journal.unverified_receipts(ws):
+        findings.append(
+            f"RECEIPT_UNVERIFIED: the {gate_name!r} receipt at gate-record "
+            f"{line_no} does not match its own receipt_hash — it was hand-written "
+            f"or edited after the gate ran, so it is not evidence that the gate "
+            f"ran. Re-run {gate_name}")
 
     # ── the journal itself is readable ────────────────────────────────────
     # journal._records drops an unparseable line, which is right for READING (a

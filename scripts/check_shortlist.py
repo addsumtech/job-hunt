@@ -626,6 +626,15 @@ PASSING_VERDICTS = ("pass", "recorded")
 
 def _check_upstream_receipts(workspace):
     findings = []
+    # Every receipt was written by journal.receipt(), not by hand. Reported
+    # rather than filtered: dropping a forged PASS would promote an older
+    # genuine FAIL into last position and read as the current state.
+    for gate_name, line_no in journal.unverified_receipts(workspace):
+        findings.append(
+            f"RECEIPT_UNVERIFIED: the {gate_name!r} receipt at gate-record "
+            f"{line_no} does not match its own receipt_hash — it was hand-written "
+            f"or edited after the gate ran, so it is not evidence that the gate ran")
+
     for gate in UPSTREAM_GATES:
         receipts = journal.read_receipts(workspace, gate)
         if not receipts:
@@ -987,8 +996,14 @@ def _check_mode_entry(workspace, skill_root):
             "schemas — and this record is the only thing that reports it was "
             "not. Run `python3 scripts/enter_mode.py --workspace <ws> --mode "
             "discover`, then read the file.")
-    elif (mode_path.is_file()
-          and entry.get("mode_file_sha256") != journal.sha256_file(mode_path)):
+    elif not mode_path.is_file():
+        # `mode_path.is_file()` guarded the comparison, so a wrong --skill-root
+        # switched the layer-1.5 backstop off and reported nothing at all.
+        findings.append(
+            f"MODE_FILE_MISSING: {mode_path} is not on disk, so the hash recorded "
+            "at mode entry could not be checked against it; point --skill-root at "
+            "the skill")
+    elif entry.get("mode_file_sha256") != journal.sha256_file(mode_path):
         findings.append(
             "MODE_FILE_CHANGED: modes/discover.md changed after this run entered "
             "the mode, so the schema that was read is not the schema on disk. "

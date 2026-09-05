@@ -312,3 +312,75 @@ def test_no_script_calls_yaml_safe_load_on_a_file_it_read_itself():
     assert not offenders, (
         "these read a file and parse it inline instead of using journal.load_yaml, so "
         "a malformed file exits 1 with no receipt:\n  " + "\n  ".join(offenders))
+
+
+# ---------------------------------------------------------------------------
+# Receipt integrity. Audited 2026-09-05.
+#
+# `receipt_hash` was computed and journalled from the day receipts existed and
+# read back by NOTHING, so every receipt was trust-on-write: a run could append
+# `{"action":"gate","gate":"check_claims","verdict":"pass","input_hashes":{}}`
+# by hand and check_apply exited 0 on a workspace whose only real receipt was a
+# FAILING one.
+#
+# Tamper evidence, not a security boundary — anything that can write the journal
+# can also compute the hash. What it buys is that a hand-written "the gate
+# passed" line stops looking like a gate that passed.
+# ---------------------------------------------------------------------------
+
+def test_a_receipt_this_module_wrote_verifies(tmp_path):
+    rec = journal.receipt(tmp_path, "check_claims", {"cv.md": "abc"}, "pass")
+    assert journal.receipt_intact(rec)
+    assert journal.unverified_receipts(tmp_path) == []
+
+
+def test_a_hand_written_receipt_does_not_verify(tmp_path):
+    journal.receipt(tmp_path, "check_claims", {}, "fail", ["X: bad"])
+    journal.append(tmp_path, {"action": "gate", "gate": "check_letter",
+                              "verdict": "pass", "input_hashes": {}, "findings": []})
+    assert [g for g, _ in journal.unverified_receipts(tmp_path)] == ["check_letter"]
+
+
+def test_a_receipt_edited_after_the_gate_ran_does_not_verify(tmp_path):
+    journal.receipt(tmp_path, "check_claims", {}, "fail", ["X: bad"])
+    path = tmp_path / "journal.jsonl"
+    lines = path.read_text(encoding="utf-8").splitlines()
+    rec = json.loads(lines[-1])
+    rec["verdict"] = "pass"                      # the edit an honest reader must catch
+    lines[-1] = json.dumps(rec, ensure_ascii=False)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    assert [g for g, _ in journal.unverified_receipts(tmp_path)] == ["check_claims"]
+
+
+def test_the_hash_excludes_itself_so_it_is_reproducible_from_the_record(tmp_path):
+    """If the hash covered itself no round-trip could ever verify, and the check
+    would be a check that always fails — which gets deleted, not fixed."""
+    rec = journal.receipt(tmp_path, "lint_cv", {}, "pass")
+    reread = json.loads((tmp_path / "journal.jsonl").read_text(
+        encoding="utf-8").splitlines()[-1])
+    assert reread["receipt_hash"] == rec["receipt_hash"]
+    assert journal.receipt_intact(reread)
+
+
+def test_unverified_receipts_are_reported_not_filtered_out(tmp_path):
+    """read_receipts must still return a forged receipt. Dropping it would turn
+    a forgery into MISSING_RECEIPT — "the gate never ran", which sends the reader
+    somewhere else — and could promote an older genuine FAIL into last position,
+    where composers read it as the current state."""
+    journal.receipt(tmp_path, "check_claims", {}, "fail", ["X: bad"])
+    journal.append(tmp_path, {"action": "gate", "gate": "check_claims",
+                              "verdict": "pass", "input_hashes": {}, "findings": []})
+    receipts = journal.read_receipts(tmp_path, "check_claims")
+    assert len(receipts) == 2
+    assert receipts[-1]["verdict"] == "pass"
+    assert journal.unverified_receipts(tmp_path)
+
+
+def test_a_non_mapping_row_becomes_an_empty_mapping_rather_than_an_exception():
+    """`(row or {})` guarded None and every falsy value and NOT a non-empty
+    string, so one missing `id:` in hand-written YAML crashed count_coverage and
+    consistency with no finding and no receipt."""
+    assert journal.as_mapping("R1") == {}
+    assert journal.as_mapping(None) == {}
+    assert journal.as_mapping(["R1"]) == {}
+    assert journal.as_mapping({"id": "R1"}) == {"id": "R1"}

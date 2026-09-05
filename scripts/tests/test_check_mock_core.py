@@ -571,3 +571,15 @@ def test_an_empty_open_loops_file_is_still_a_finding(tmp_path):
     ws = F.build(tmp_path)
     (ws / "mock" / "open-loops.md").write_text("\n", encoding="utf-8")
     assert any(f.startswith("NO_OPEN_LOOPS:") for f in run(ws))
+
+
+def test_a_skill_root_without_the_mode_file_is_reported_not_skipped(tmp_path):
+    """Mutation-found 2026-09-05: `mode_path.exists()` guarded the hash
+    comparison, so pointing --skill-root anywhere else switched the layer-1.5
+    backstop off and this gate reported nothing."""
+    ws = F.build(tmp_path)
+    empty = tmp_path / "emptyroot"
+    (empty / "modes").mkdir(parents=True)
+    code = check_mock.main(["--workspace", str(ws), "--round", "2",
+                            "--skill-root", str(empty), "--today", "2026-08-09"])
+    assert code == 1

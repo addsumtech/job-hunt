@@ -9,6 +9,7 @@ import hashlib
 import pathlib
 
 import check_shortlist as cs
+import journal
 import discover_fixtures as fx
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
@@ -56,3 +57,23 @@ def test_the_hash_is_read_from_the_real_mode_file():
     expected = hashlib.sha256(
         (REPO / "modes" / "discover.md").read_bytes()).hexdigest()
     assert record["mode_file_sha256"] == expected
+
+
+def test_a_hand_written_receipt_is_reported(tmp_path, capsys):
+    """Mutation-found 2026-09-05: the RECEIPT_UNVERIFIED loop in this gate was
+    unpinned — deleting it left every shortlist test green."""
+    workspace = fx.build_workspace(tmp_path)
+    journal.append(workspace, {"action": "gate", "gate": "check_no_write",
+                               "verdict": "pass", "input_hashes": {}, "findings": []})
+    code, captured = run(workspace, capsys)
+    assert code == 1
+    assert "RECEIPT_UNVERIFIED" in captured.out
+
+
+def test_a_skill_root_without_the_mode_file_is_reported_not_skipped(tmp_path, capsys):
+    workspace = fx.build_workspace(tmp_path)
+    empty = tmp_path / "emptyroot"
+    (empty / "modes").mkdir(parents=True)
+    code = cs.main(["--workspace", str(workspace), "--skill-root", str(empty)])
+    assert code == 1
+    assert "MODE_FILE_MISSING" in capsys.readouterr().out

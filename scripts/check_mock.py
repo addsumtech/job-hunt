@@ -83,7 +83,14 @@ def check_mode_entry(workspace: pathlib.Path, skill_root: pathlib.Path) -> list:
             f"modes/{MODE}.md is loaded unconditionally on entering the mode; run "
             f"scripts/enter_mode.py --mode {MODE} and read it"
         ]
-    if mode_path.exists() and entry.get("mode_file_sha256") != journal.sha256_file(mode_path):
+    if not mode_path.exists():
+        return [
+            f"MODE_FILE_MISSING: {mode_path} is not on disk, so the hash recorded "
+            f"at mode entry could not be checked against it. `mode_path.exists()` "
+            f"was a silent skip: a wrong --skill-root disabled the layer-1.5 "
+            f"backstop entirely and the gate reported nothing"
+        ]
+    if entry.get("mode_file_sha256") != journal.sha256_file(mode_path):
         return [
             f"MODE_FILE_CHANGED: modes/{MODE}.md changed after this run entered the "
             "mode, so what was read is not what is on disk — re-enter the mode and "

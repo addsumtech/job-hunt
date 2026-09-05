@@ -171,11 +171,25 @@ def check(workspace: pathlib.Path, market_dir: pathlib.Path,
         findings.append("NO_MODE_ENTRY: journal.jsonl has no mode_entry for assess — "
                         "modes/assess.md is loaded unconditionally on entering the "
                         "mode; run scripts/enter_mode.py --mode assess and read it")
-    elif (mode_path.exists()
-          and entry.get("mode_file_sha256") != journal.sha256_file(mode_path)):
+    elif not mode_path.exists():
+        # `mode_path.exists()` guarded the comparison, so a wrong --skill-root
+        # switched the layer-1.5 backstop off and reported nothing at all.
+        findings.append(f"MODE_FILE_MISSING: {mode_path} is not on disk, so the hash "
+                        "recorded at mode entry could not be checked against it; "
+                        "point --skill-root at the skill")
+    elif entry.get("mode_file_sha256") != journal.sha256_file(mode_path):
         findings.append("MODE_FILE_CHANGED: modes/assess.md changed after this run "
                         "entered the mode, so what was read is not what is on disk — "
                         "re-enter the mode and re-read it")
+
+    # Every receipt was written by journal.receipt(), not by hand. Reported
+    # rather than filtered: dropping a forged PASS would promote an older
+    # genuine FAIL into last position and read as the current state.
+    for gate_name, line_no in journal.unverified_receipts(workspace):
+        findings.append(
+            f"RECEIPT_UNVERIFIED: the {gate_name!r} receipt at gate-record "
+            f"{line_no} does not match its own receipt_hash — it was hand-written "
+            f"or edited after the gate ran, so it is not evidence that the gate ran")
 
     # 0b. Every upstream gate ran, on this workspace, and did not fail.
     for gate in UPSTREAM_GATES:
@@ -199,7 +213,7 @@ def check(workspace: pathlib.Path, market_dir: pathlib.Path,
 
     # 2. Row-level sourcing. `no_evidence` with an empty list is the honest shape.
     for row in assessment.get("requirements") or []:
-        row = row or {}
+        row = journal.as_mapping(row)
         resolvable = [e for e in (row.get("evidence") or [])
                       if str((e or {}).get("ref", "")).strip() in block_ids]
         if row.get("match") == "no_evidence":
@@ -308,9 +322,9 @@ def check(workspace: pathlib.Path, market_dir: pathlib.Path,
                         "carried into an assessment; assess always recomputes")
 
     # 7. Disqualifiers render before the verdict, in a section that names their ids.
-    blocking = [row or {} for row in (assessment.get("requirements") or [])
-                if (row or {}).get("screening") == "knockout"
-                and (row or {}).get("match") in ("gap", "no_evidence")]
+    blocking = [journal.as_mapping(row) for row in (assessment.get("requirements") or [])
+                if journal.as_mapping(row).get("screening") == "knockout"
+                and journal.as_mapping(row).get("match") in ("gap", "no_evidence")]
     if blocking:
         section = _first_section(lines, DISQUALIFIER_HEADINGS)
         if section is None:

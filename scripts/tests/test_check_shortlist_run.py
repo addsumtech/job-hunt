@@ -82,8 +82,7 @@ def test_the_valid_workspace_is_still_completely_quiet(tmp_path, capsys):
 
 def test_no_adapter_receipts_at_all_fires(tmp_path, capsys):
     workspace = fx.build_workspace(tmp_path)
-    fx.write_journal(workspace, [{"action": "gate", "gate": "check_no_write",
-                                  "verdict": "pass"}])
+    fx.write_journal(workspace, [fx.upstream_receipt("check_no_write")])
     code, captured = run(workspace, capsys)
     assert code == 1
     assert "NO_ADAPTER_RECEIPTS" in codes(captured.out)

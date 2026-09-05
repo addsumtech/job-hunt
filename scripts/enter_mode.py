@@ -46,7 +46,7 @@ def latest_mode_entry(workspace, mode: str):
     if not path.exists():
         return None
     found = None
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in journal._decode(path).splitlines():
         line = line.strip()
         if not line:
             continue
@@ -73,7 +73,7 @@ def _assessment_present(ws) -> bool:
     path = ws / "journal.jsonl"
     if not path.exists():
         return False
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in journal._decode(path).splitlines():
         try:
             rec = json.loads(line)
         except json.JSONDecodeError:

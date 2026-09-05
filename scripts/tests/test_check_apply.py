@@ -508,9 +508,9 @@ def test_another_mode_s_failing_gate_is_not_this_composer_s_finding(tmp_path, ca
     with, and there is no edit in apply mode that clears it."""
     root = _skill_root(tmp_path)
     ws = _good_workspace(tmp_path, root)
-    journal.append(ws, {"action": "gate", "gate": "check_mock", "mode": "interview",
-                        "verdict": "fail", "findings": ["DRIFT: answer 2"],
-                        "input_hashes": {}})
+    journal.append(ws, journal.sign_receipt(
+        {"action": "gate", "gate": "check_mock", "mode": "interview",
+         "verdict": "fail", "findings": ["DRIFT: answer 2"], "input_hashes": {}}))
     assert check_apply.main(_argv(ws, root)) == 0
     assert capsys.readouterr().out.strip() == ""
 
@@ -521,9 +521,9 @@ def test_an_unstamped_failing_receipt_is_still_checked(tmp_path, capsys):
     the hole straight back."""
     root = _skill_root(tmp_path)
     ws = _good_workspace(tmp_path, root)
-    journal.append(ws, {"action": "gate", "gate": "check_pages", "mode": "unknown",
-                        "verdict": "fail", "findings": ["CV_TOO_LONG: 4 pages"],
-                        "input_hashes": {}})
+    journal.append(ws, journal.sign_receipt(
+        {"action": "gate", "gate": "check_pages", "mode": "unknown",
+         "verdict": "fail", "findings": ["CV_TOO_LONG: 4 pages"], "input_hashes": {}}))
     assert check_apply.main(_argv(ws, root)) == 1
     assert "UPSTREAM_FAILED: check_pages" in capsys.readouterr().out
 
@@ -759,3 +759,44 @@ def test_an_unreadable_honest_stop_says_so_rather_than_blaming_its_fields(
     out = capsys.readouterr().out
     assert "honest-stop.yaml" in out
     assert "could not be read" in out or "cannot be classified" in out, out
+
+
+# ---------------------------------------------------------------------------
+# The composer must actually CALL the two integrity checks. Mutation on
+# 2026-09-05 found both wirings unpinned: deleting the RECEIPT_UNVERIFIED loop
+# and the MODE_FILE_MISSING branch left the whole suite green, so the checks
+# existed and nothing said they were connected.
+# ---------------------------------------------------------------------------
+
+def test_a_hand_written_pass_receipt_is_reported_by_this_composer(tmp_path, capsys):
+    """`receipt_hash` was journalled from the start and read by nothing, so a run
+    could append a `verdict: pass` line by hand and this gate exited 0 on it."""
+    root = _skill_root(tmp_path)
+    ws = _good_workspace(tmp_path, root)
+    journal.append(ws, {"action": "gate", "gate": "check_letter",
+                        "verdict": "pass", "input_hashes": {}, "findings": []})
+    assert check_apply.main(_argv(ws, root)) == 1
+    out = capsys.readouterr().out
+    assert "RECEIPT_UNVERIFIED" in out and "check_letter" in out
+
+
+def test_a_workspace_whose_receipts_were_all_written_by_the_gates_is_quiet(
+        tmp_path, capsys):
+    """The twin, and the one that would catch an over-tight hash: every honest
+    run has to stay silent or this check gets switched off."""
+    root = _skill_root(tmp_path)
+    ws = _good_workspace(tmp_path, root)
+    assert check_apply.main(_argv(ws, root)) == 0
+    assert "RECEIPT_UNVERIFIED" not in capsys.readouterr().out
+
+
+def test_a_skill_root_without_the_mode_file_is_reported_not_skipped(
+        tmp_path, capsys):
+    """`mode_path.exists()` guarded the hash comparison, so a wrong --skill-root
+    switched the layer-1.5 backstop off and the gate said nothing at all."""
+    root = _skill_root(tmp_path)
+    ws = _good_workspace(tmp_path, root)
+    empty = tmp_path / "emptyroot"
+    (empty / "modes").mkdir(parents=True)
+    assert check_apply.main(["--workspace", str(ws), "--skill-root", str(empty)]) == 1
+    assert "MODE_FILE_MISSING" in capsys.readouterr().out

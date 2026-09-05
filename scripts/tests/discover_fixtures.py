@@ -9,6 +9,8 @@ import pathlib
 
 import yaml
 
+import journal
+
 import hashlib
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
@@ -20,8 +22,12 @@ UPSTREAM_GATE_RECEIPTS = ("check_no_write", "lint_no_prediction")
 
 def upstream_receipt(gate, verdict="pass"):
     """A passing receipt for a gate discover runs before check_shortlist."""
-    return {"ts": "2026-08-09T14:05:00Z", "action": "gate", "gate": gate,
-            "verdict": verdict, "findings": [], "input_hashes": {}}
+    # Signed, because check_shortlist verifies every receipt's hash: an UNSIGNED
+    # receipt in a fixture is simulating a hand-written one, which is what
+    # RECEIPT_UNVERIFIED exists to catch and is a different test.
+    return journal.sign_receipt(
+        {"ts": "2026-08-09T14:05:00Z", "action": "gate", "gate": gate,
+         "verdict": verdict, "findings": [], "input_hashes": {}})
 
 
 def mode_entry_record():

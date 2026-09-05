@@ -762,3 +762,27 @@ def test_an_invented_percentage_still_fails_this_gate(tmp_path):
                   encoding="utf-8")
     findings = ca.check(ws, market_dir, TODAY, root)
     assert_finding("\n".join(findings), "PERCENT")
+
+
+def test_a_hand_written_receipt_is_reported_by_this_composer(tmp_path):
+    """Mutation-found 2026-09-05: deleting the RECEIPT_UNVERIFIED loop here left
+    the suite green, so the check existed and nothing said it was wired in."""
+    ws, market_dir, root = build(tmp_path)
+    journal.append(ws, {"action": "gate", "gate": "consistency",
+                        "verdict": "pass", "input_hashes": {}, "findings": []})
+    assert_finding("\n".join(ca.check(ws, market_dir, TODAY, root)),
+                   "RECEIPT_UNVERIFIED", about="consistency")
+
+
+def test_a_workspace_whose_receipts_were_written_by_the_gates_is_quiet(tmp_path):
+    ws, market_dir, root = build(tmp_path)
+    assert_no_finding("\n".join(ca.check(ws, market_dir, TODAY, root)),
+                      "RECEIPT_UNVERIFIED")
+
+
+def test_a_skill_root_without_the_mode_file_is_reported_not_skipped(tmp_path):
+    ws, market_dir, root = build(tmp_path)
+    empty = tmp_path / "emptyroot"
+    (empty / "modes").mkdir(parents=True)
+    assert_finding("\n".join(ca.check(ws, market_dir, TODAY, empty)),
+                   "MODE_FILE_MISSING")

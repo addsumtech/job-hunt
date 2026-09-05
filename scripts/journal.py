@@ -172,18 +172,79 @@ def receipt(workspace, gate: str, input_hashes: dict, verdict: str,
     for key, value in (extra or {}).items():
         if key not in record:
             record[key] = value
-    payload = json.dumps(record, ensure_ascii=False, sort_keys=True,
-                         separators=(",", ":"))
-    record["receipt_hash"] = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    record["receipt_hash"] = _receipt_hash(record)
     append(workspace, record)
     return record
 
 
+def _receipt_hash(record: dict) -> str:
+    """The hash over a receipt's own fields, `receipt_hash` itself excluded.
+
+    Excluding it is what makes the value reproducible from the record as read
+    back, so `receipt_intact` can recompute rather than trust.
+    """
+    payload = json.dumps({k: v for k, v in record.items() if k != "receipt_hash"},
+                         ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def sign_receipt(record: dict) -> dict:
+    """A copy of `record` carrying the hash `receipt()` would have given it.
+
+    For callers that must build a well-formed receipt without going through
+    `receipt()` — test fixtures that seed an upstream gate's result without
+    running it. Exposed rather than hidden: `receipt_intact` is tamper EVIDENCE,
+    not a security boundary, so a private signer would only have meant fixtures
+    reaching into `_receipt_hash` anyway. A fixture that hand-writes an UNSIGNED
+    receipt is simulating a forgery, which is a different test.
+    """
+    signed = {k: v for k, v in record.items() if k != "receipt_hash"}
+    signed["receipt_hash"] = _receipt_hash(signed)
+    return signed
+
+
+def receipt_intact(record: dict) -> bool:
+    """Was this receipt written by `receipt()` and unedited since?
+
+    The hash was computed and journalled from the day receipts existed and read
+    back by nothing, which made every receipt trust-on-write: a run could append
+    `{"action":"gate","gate":"check_claims","verdict":"pass","input_hashes":{}}`
+    by hand and check_apply exited 0 on it. Measured 2026-09-05 on a workspace
+    whose only real receipt was a FAILING one.
+
+    This is tamper EVIDENCE, not a security boundary — anything that can write
+    the journal can also run this function. What it buys is that a hand-written
+    "the gate passed" line no longer looks like a gate that passed, which is the
+    failure mode this skill actually has: not an attacker, a model taking a
+    shortcut and a reader who cannot tell.
+    """
+    if not isinstance(record, dict):
+        return False
+    recorded = record.get("receipt_hash")
+    return isinstance(recorded, str) and recorded == _receipt_hash(record)
+
+
 def read_receipts(workspace, gate: str | None = None) -> list:
-    """Every gate receipt in the journal, oldest first, optionally one gate."""
+    """Every gate receipt in the journal, oldest first, optionally one gate.
+
+    Returns them ALL, intact or not. Filtering the unverifiable out here would
+    turn a forged receipt into a MISSING_RECEIPT, which reads as "the gate was
+    never run" and sends the reader looking for the wrong thing; worse, dropping
+    a forged PASS could promote an older genuine FAIL into last position and be
+    read as the current state. Composers call `unverified_receipts` and report.
+    """
     return [rec for rec in _records(workspace)
             if rec.get("action") == "gate"
             and (gate is None or rec.get("gate") == gate)]
+
+
+def unverified_receipts(workspace) -> list:
+    """[(gate, index)] for every gate receipt whose hash does not check out."""
+    out = []
+    for index, rec in enumerate(read_receipts(workspace), 1):
+        if not receipt_intact(rec):
+            out.append((str(rec.get("gate")), index))
+    return out
 
 
 # --------------------------------------------------------------- reading YAML input
@@ -194,6 +255,22 @@ def read_receipts(workspace, gate: str | None = None) -> list:
 # and "the file could not be parsed" is a different instruction from "the file
 # says something wrong".
 UNREADABLE_INPUT = "UNREADABLE_INPUT"
+
+
+def as_mapping(item):
+    """A row as a dict, or an empty dict if it is anything else.
+
+    The idiom this replaces was `(row or {})`, which guards None and every falsy
+    value and NOT a non-empty string — so a requirement written `- R1` instead of
+    `- {id: R1, ...}`, one missing `id:` in hand-written YAML, raised
+    AttributeError deep inside a generator. Measured 2026-09-05: count_coverage
+    and consistency both exited 1 with no finding and NO RECEIPT, which is
+    indistinguishable from a gate nobody ran.
+
+    Reporting the bad row is count_coverage's job (INVALID_ROW). This just stops
+    every OTHER reader of the same list from crashing before it gets there.
+    """
+    return item if isinstance(item, dict) else {}
 
 
 class YamlUnreadable(Exception):
