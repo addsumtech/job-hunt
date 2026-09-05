@@ -163,13 +163,13 @@ conventions:
       同时向 HR 问清楚公司内部由谁负责这套流程。
     applies_when: "Whenever the start of the role depends on a residence title being issued — frame the question as what this employer is set up to do, and ask before you invest in later rounds."
     added: "2026-08-09"
-    review_by: "2026-11-09"
+    review_by: "2027-09-05"
     source:
       kind: "published"
       publisher: "Bundesministerium der Justiz / juris"
       title: "§ 81a AufenthG - Einzelnorm (Aufenthaltsgesetz)"
       url: "https://www.gesetze-im-internet.de/aufenthg_2004/__81a.html"
-      retrieved: "2026-08-09"
+      retrieved: "2026-09-05"
       quote: "in Vollmacht des Ausländers … Verpflichtung des Arbeitgebers, auf die Einhaltung der Mitwirkungspflicht des Ausländers … hinzuwirken"
       note: "The accelerated procedure is available only for the residence purposes the provision enumerates, and it runs on an agreement between the employer and the authority, so an employer that has none cannot simply opt in late. The salary figures are re-announced every calendar year, which is why none is printed here."
       also:

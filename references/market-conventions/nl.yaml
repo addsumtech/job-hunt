@@ -112,25 +112,26 @@ conventions:
       requirements" 页面查当年的数额，不要沿用别人去年报的数字。
     applies_when: "Any Netherlands role where the highly skilled migrant route would be used, and at every salary-negotiation step within it."
     added: "2026-08-09"
-    review_by: "2026-11-09"
+    review_by: "2027-02-05"
     source:
       kind: "published"
       publisher: "IND (Immigratie- en Naturalisatiedienst)"
       title: "Required amounts income requirements"
       url: "https://ind.nl/en/required-amounts-income-requirements"
-      retrieved: "2026-08-09"
+      retrieved: "2026-09-05"
       quote: "The required amounts change every year on January 1"
       also:
         - publisher: "IND (Immigratie- en Naturalisatiedienst)"
           title: "Required amounts income requirements"
           url: "https://ind.nl/en/required-amounts-income-requirements"
-          retrieved: "2026-08-09"
+          retrieved: "2026-09-05"
           quote: "The highly skilled migrant must meet the required amount that applies on the date of the application; The highly skilled migrant must then meet the required amount applicable on the date on which the employment contract with the new employer commences."
         - publisher: "IND (Immigratie- en Naturalisatiedienst)"
-          title: "Required amounts income requirements"
-          url: "https://ind.nl/en/required-amounts-income-requirements"
-          retrieved: "2026-08-09"
+          title: "Highly skilled migrant"
+          url: "https://ind.nl/en/residence-permits/work/highly-skilled-migrant"
+          retrieved: "2026-09-05"
           quote: "The agreed salary is in line with the market rate. In line with the market rate means that you earn the same as what people in the same job earn on average."
+          note: "Re-checked on the review date: this sentence is on the highly skilled migrant conditions page, NOT on the required-amounts page it was cited to. The claim was true and its citation was wrong, which is the failure a review is for."
     why: |-
       The posting states a band, not the statutory criterion the band has to clear, and the criterion
       moves each year. Candidates negotiate as if only the employer's willingness matters, and
@@ -145,9 +146,11 @@ conventions:
       the income norm while it runs, and moving to a new employer means the new employer and the
       employee must file a fresh joint request. There is also a prior-residence condition attached
       to the scheme's definition of an incoming employee, so not every internationally recruited
-      hire qualifies. The exempt percentage and the income thresholds are set per year and a reduction
-      has been announced for a future year, so a rate quoted from an older source can already be
-      wrong. Read any net-pay figure quoted "with the expat ruling" as conditional until the decision
+      hire qualifies. The exempt percentage and the income thresholds are set per year, and a reduction
+      in the percentage together with a rise in the income norm is scheduled for the start of a
+      coming calendar year — but not yet final: it takes effect only if it passes both Houses. So
+      a rate quoted from an older source can already be wrong, and one quoted from the announcement
+      is not yet law. Read any net-pay figure quoted "with the expat ruling" as conditional until the decision
       exists, ask whether this employer routinely files it, and check the Belastingdienst page
       for the year your contract would start.
     text_zh: |-
@@ -155,13 +158,14 @@ conventions:
       优惠）之名管理，它不是你入职后自己去领的福利。必须由你和雇主共同填写申请，并且只有在税务局下
       发正式决定 (beschikking) 之后才能适用。该决定有最长期限，期间雇主还要持续核验
       收入门槛；换雇主时，新雇主要和你重新共同提出申请。此外，该制度对"来荷雇员"的定义还附带入职
-      前居住地条件，因此并非所有从境外招聘的人都符合。免税比例和收入门槛按年度设定，且已宣布将在未
-      来某一年下调，所以从旧资料里抄来的比例可能已经不对。雇主报出的"含该优惠"的税后数字，在决定
+      前居住地条件，因此并非所有从境外招聘的人都符合。免税比例和收入门槛按年度设定；已宣布下调比例
+      并同时上调收入门槛，自某个未来自然年年初起算，但尚未最终确定——须先通过参众两院才生效。
+      所以从旧资料里抄来的比例可能已经不对，而从公告里抄来的也还不是法律。雇主报出的"含该优惠"的税后数字，在决定
       书下来之前都只是条件性的；面试时可以直接问这家雇主是否惯例办理，并按你实际入职的年度到税务局
       页面核对当年的比例和门槛。
     applies_when: "Whenever a Netherlands offer is discussed in net-pay terms, or an employer mentions the expat ruling as part of the package."
     added: "2026-08-09"
-    review_by: "2026-11-09"
+    review_by: "2027-02-05"
     source:
       kind: "published"
       publisher: "Belastingdienst"
@@ -189,7 +193,8 @@ conventions:
           title: "30% ruling: compensation for expats down to 27%"
           url: "https://business.gov.nl/amendments/30-percent-ruling-compensation-down-to-27-percent/"
           retrieved: "2026-08-09"
-          quote: "The tax advantage of the 30% ruling (expat ruling) will go down. It will be 27% from 2027"
+          retrieved: "2026-09-05"
+          quote: "From 1 January 2027 you may pay your employee a maximum of 27% of their wages tax-free.; The effective date of this measure is not yet final. Entry into force is subject to its passing through the Lower and Upper Houses."
     why: |-
       Recruiters quote take-home pay "with the expat ruling" as if it were automatic, and the scheme
       has been renamed and repeatedly amended, so second-hand descriptions go stale fast. Nothing
@@ -403,7 +408,7 @@ conventions:
       议工资级别；被要求提供工资单时，你可以拒绝。
     applies_when: "At first recruiter contact and at every pay discussion in the Netherlands. The payslip rule is a Netherlands-specific self-regulatory norm; the EU directive layer applies across EU member states via national implementing law — do not assume it for non-EU EEA states without checking."
     added: "2026-08-09"
-    review_by: "2026-11-09"
+    review_by: "2027-01-15"
     protected_trait_note: "The quoted right requires the initial pay or its range to rest on objective, gender-neutral criteria. The trait names the standard the EMPLOYER's criteria must meet inside a quoted legal test, not an attribute of the reader; dropping it would misquote the very right this entry exists to point at."
     source:
       kind: "published"
@@ -428,7 +433,9 @@ conventions:
           title: "Implementatie richtlijn loontransparantie"
           url: "https://wetgevingskalender.overheid.nl/Regeling/WGK025384"
           retrieved: "2026-08-09"
-          quote: "Wetsvoorstel ingediend bij Tweede Kamer"
+          retrieved: "2026-09-05"
+          quote: "Wetsvoorstel ingediend bij Tweede Kamer; Nota n.a.v. verslag"
+          note: "Re-checked on the review date: still before the Tweede Kamer, and still moving — the most recent step on the calendar was three days before this check. Neither chamber has passed it."
     why: |-
       Recruiters in many markets open with "what are you on now?", and a candidate coming from
       such a market answers it reflexively and anchors themselves. Neither the Dutch recruitment
