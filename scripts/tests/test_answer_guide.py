@@ -168,3 +168,72 @@ def test_an_absent_guide_is_left_to_the_session_artifact_check(tmp_path):
     assert found == []
     codes_out = codes("\n".join(check_mock.check_session_artifacts(ws / "mock")))
     assert "NO_ANSWER_GUIDE" in codes_out
+
+
+# ---------------------------------------------------------------------------
+# The 2026-09-05 audit: four ways this check silently skipped its own work.
+# Each firing case below has a quiet twin, because the fix for a silent skip is
+# the easiest kind to over-tighten into a gate that fires on correct output.
+# ---------------------------------------------------------------------------
+
+BROKEN = "verdict: 'stretch\nrequirements:\n  - id: R1\n    match: no_evidence\n"
+
+
+def test_an_unparseable_assessment_is_a_finding_not_a_shrug(tmp_path):
+    """`except Exception: return {}` turned a broken file into "there is no file",
+    disabling the one honesty check here while stderr reported the wrong reason —
+    so the run looked clean and the notice blamed an absence that was not the
+    problem."""
+    out, notices = run(tmp_path, EVIDENCED.replace("row: R1", "row: R2"),
+                       assessment=BROKEN)
+    assert_finding(out, "ASSESSMENT_UNREADABLE")
+    assert not any(n.startswith("NO_ASSESSMENT_TO_CHECK_AGAINST") for n in notices), \
+        "an unreadable file must not be reported as an absent one"
+
+
+def test_a_genuinely_absent_assessment_still_only_notices(tmp_path):
+    """The twin. Interview mode may be entered on a posting plus a CV, and that
+    case must stay a notice — promoting it to a finding would fail every honest
+    round that has no assessment."""
+    out, notices = run(tmp_path, EVIDENCED, assessment=None)
+    assert_no_finding(out, "ASSESSMENT_UNREADABLE")
+    assert any(n.startswith("NO_ASSESSMENT_TO_CHECK_AGAINST") for n in notices)
+
+
+def test_a_lowercase_row_id_is_checked_not_skipped(tmp_path):
+    """`matches.get('r1')` missed, `None` is not in _UNEVIDENCED, and the entry
+    passed. A miss that reads as a pass is the worst shape a lookup can have."""
+    out, _ = run(tmp_path, EVIDENCED.replace("row: R1", "row: r2"))
+    assert_finding(out, "GUIDE_GAP_AS_EVIDENCED", about="r2")
+
+
+def test_a_row_id_padded_with_whitespace_in_the_yaml_is_still_matched(tmp_path):
+    assessment = ASSESSMENT.replace("  - id: R2", '  - id: "R2  "')
+    out, _ = run(tmp_path, EVIDENCED.replace("row: R1", "row: R2"), assessment)
+    assert_finding(out, "GUIDE_GAP_AS_EVIDENCED", about="R2")
+
+
+def test_an_id_no_row_declares_is_reported(tmp_path):
+    """A typo'd id checked nothing and looked exactly like an id that checked out."""
+    out, _ = run(tmp_path, EVIDENCED.replace("row: R1", "row: R99"))
+    assert_finding(out, "GUIDE_UNKNOWN_ROW", about="R99")
+
+
+def test_a_declared_id_does_not_fire_the_unknown_row_finding(tmp_path):
+    """The twin: every honest entry names a real row, so this must stay quiet."""
+    out, _ = run(tmp_path, EVIDENCED)
+    assert_no_finding(out, "GUIDE_UNKNOWN_ROW")
+
+
+def test_a_duplicate_row_id_is_reported_rather_than_resolved_last_one_wins(tmp_path):
+    """Two rows with one id give the entry no single match value. Silently taking
+    the last one picked a verdict at random — and `gap` then `strong` is exactly
+    how a gap gets laundered."""
+    assessment = ASSESSMENT + "  - id: R2\n    match: strong\n"
+    out, _ = run(tmp_path, EVIDENCED.replace("row: R1", "row: R2"), assessment)
+    assert_finding(out, "DUPLICATE_ROW_ID", about="R2")
+
+
+def test_distinct_ids_do_not_fire_the_duplicate_finding(tmp_path):
+    out, _ = run(tmp_path, EVIDENCED)
+    assert_no_finding(out, "DUPLICATE_ROW_ID")

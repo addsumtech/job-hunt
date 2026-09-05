@@ -9,6 +9,7 @@ import count_coverage as cc
 import enter_mode
 import journal
 import vocab
+from findings import assert_finding, assert_no_finding
 
 TODAY = datetime.date(2026, 8, 9)
 
@@ -717,3 +718,47 @@ def test_a_workspace_that_does_not_exist_writes_no_journal(tmp_path, capsys):
     assert ca.main(["--workspace", str(missing)]) == 2
     assert not missing.exists()
     assert "does not exist" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# Two gates running the same lint must run the SAME lint.
+#
+# Found 2026-09-05. lint_no_prediction gained a capture-corpus masking on
+# 2026-09-02 so that an employer's own `AI/ML Engineer (100 % remote)` title --
+# which discover requires rendered verbatim -- stops failing the percent ban.
+# check_assessment re-scans the same bytes and was calling scan_text without the
+# corpus, so it undid that masking one gate later: the honest artifact passed one
+# gate and failed the next, and no rewording could fix it because the "%" is the
+# employer's.
+# ---------------------------------------------------------------------------
+
+def _captured(tmp_path, phrase):
+    """A workspace whose journal names a real capture containing `phrase`."""
+    (tmp_path / "raw").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "raw" / "linkedin-1.json").write_text(
+        json.dumps([{"title": phrase}]), encoding="utf-8")
+    journal.append(tmp_path, {"action": "adapter_call", "site": "linkedin",
+                              "stdout_file": "raw/linkedin-1.json"})
+
+
+def test_a_percentage_quoted_from_a_capture_does_not_fail_this_gate(tmp_path):
+    ws, market_dir, root = build(tmp_path)
+    phrase = "AI/ML Engineer (100 % remote)"
+    _captured(ws, phrase)
+    md = (ws / "fit-assessment.md")
+    md.write_text(md.read_text(encoding="utf-8") + f"\n\n岗位标题逐字：{phrase}\n",
+                  encoding="utf-8")
+    findings = ca.check(ws, market_dir, TODAY, root)
+    assert_no_finding("\n".join(findings), "PERCENT")
+
+
+def test_an_invented_percentage_still_fails_this_gate(tmp_path):
+    """The twin. Passing the corpus must not amount to switching the scan off:
+    a number with no capture behind it is exactly what this lint is for."""
+    ws, market_dir, root = build(tmp_path)
+    _captured(ws, "AI/ML Engineer (100 % remote)")
+    md = (ws / "fit-assessment.md")
+    md.write_text(md.read_text(encoding="utf-8") + "\n\n匹配度约 85 % 。\n",
+                  encoding="utf-8")
+    findings = ca.check(ws, market_dir, TODAY, root)
+    assert_finding("\n".join(findings), "PERCENT")

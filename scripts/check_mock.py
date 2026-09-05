@@ -543,19 +543,44 @@ _AG_BASES = ("evidenced", "honest_gap")
 _UNEVIDENCED = ("gap", "no_evidence")
 
 
-def _assessment_matches(workspace: pathlib.Path) -> dict:
-    """{requirement id: match} from fit-assessment.yaml, or {} when there is none.
+def _norm_row_id(value) -> str:
+    """Row ids compare on trimmed casefold. `R1`, `r1` and `'R3 '` name one row to
+    every human reading the file, and treating them as three was a silent skip:
+    the lookup missed, `None` is not in `_UNEVIDENCED`, and the entry passed."""
+    return " ".join(str(value or "").split()).casefold()
 
-    Returns a plain dict rather than raising: interview mode can legitimately be
-    entered on a posting plus a CV with no assessment in the workspace, and the
-    cross-check below reports that it could not run instead of inventing a verdict.
+
+def _assessment_matches(workspace: pathlib.Path):
+    """({normalised id: match}, duplicate_ids, error) from fit-assessment.yaml.
+
+    Three outcomes, kept apart because they need different answers. No file at all
+    is legitimate -- interview mode can be entered on a posting plus a CV -- and
+    the caller says so. A file that will not parse is NOT that: `except Exception:
+    return {}` turned a broken assessment into "there is no assessment", disabling
+    GUIDE_GAP_AS_EVIDENCED while stderr reported the wrong reason. Duplicate ids
+    make the lookup ambiguous, so they are reported rather than resolved by
+    last-one-wins.
     """
+    path = workspace / "fit-assessment.yaml"
+    if not path.is_file():
+        return {}, [], None
     try:
-        data = journal.load_yaml(workspace / "fit-assessment.yaml")
-    except Exception:
-        return {}
-    rows = (data or {}).get("requirements") or []
-    return {str(r.get("id")): str(r.get("match")) for r in rows if isinstance(r, dict)}
+        data = journal.load_yaml(path)
+    except Exception as exc:                       # noqa: BLE001 - reported, not swallowed
+        return {}, [], f"{type(exc).__name__}: {exc}"
+    rows = (data or {}).get("requirements")
+    if not isinstance(rows, list):
+        return {}, [], "requirements is not a list"
+    matches, seen, duplicates = {}, set(), []
+    for row in rows:
+        if not isinstance(row, dict) or row.get("id") is None:
+            continue
+        key = _norm_row_id(row.get("id"))
+        if key in seen and key not in duplicates:
+            duplicates.append(str(row.get("id")).strip())
+        seen.add(key)
+        matches[key] = str(row.get("match"))
+    return matches, duplicates, None
 
 
 def check_answer_guide(path: pathlib.Path, workspace: pathlib.Path) -> tuple:
@@ -577,8 +602,19 @@ def check_answer_guide(path: pathlib.Path, workspace: pathlib.Path) -> tuple:
     marks = list(_AG_HEADING.finditer(text))
     if not marks:
         return ([f"NO_ANSWER_GUIDE_ENTRIES: {path} has no '## ' entries"], notices)
-    matches = _assessment_matches(workspace)
-    if not matches:
+    matches, duplicates, error = _assessment_matches(workspace)
+    if error:
+        findings.append(
+            f"ASSESSMENT_UNREADABLE: fit-assessment.yaml could not be parsed "
+            f"({error}), so no answer-guide.md entry could be checked for a gap "
+            f"written up as evidenced experience. A check that could not run must "
+            f"not look like one that passed")
+    elif duplicates:
+        findings.append(
+            f"DUPLICATE_ROW_ID: fit-assessment.yaml declares {', '.join(duplicates)} "
+            f"more than once, so an answer-guide entry naming it has no single match "
+            f"value to be checked against")
+    elif not matches:
         notices.append(
             "NO_ASSESSMENT_TO_CHECK_AGAINST: fit-assessment.yaml is absent or has no "
             "requirement rows, so answer-guide.md entries could not be checked for a "
@@ -606,11 +642,19 @@ def check_answer_guide(path: pathlib.Path, workspace: pathlib.Path) -> tuple:
             continue
         if not row or not matches:
             continue
-        for rid in [part.strip() for part in row.group(1).split(",") if part.strip()]:
-            if matches.get(rid) in _UNEVIDENCED and basis.group(1) == "evidenced":
+        for raw_id in [part.strip() for part in row.group(1).split(",") if part.strip()]:
+            rid = _norm_row_id(raw_id)
+            if rid not in matches:
+                findings.append(
+                    f"GUIDE_UNKNOWN_ROW: answer-guide.md entry {title!r} names row "
+                    f"{raw_id!r}, which fit-assessment.yaml does not declare. An id "
+                    f"nothing resolves is an entry nothing checks, and it looked "
+                    f"exactly like a checked one")
+                continue
+            if matches[rid] in _UNEVIDENCED and basis.group(1) == "evidenced":
                 findings.append(
                     f"GUIDE_GAP_AS_EVIDENCED: answer-guide.md entry {title!r} serves "
-                    f"{rid}, which fit-assessment.yaml scored {matches[rid]!r}, but is "
+                    f"{raw_id}, which fit-assessment.yaml scored {matches[rid]!r}, but is "
                     "written as 'evidenced'. An answer that satisfies an interviewer on "
                     "a requirement the candidate has no evidence for can only be "
                     "invented experience; the honest form of this entry is basis: "
@@ -1046,6 +1090,9 @@ def run(workspace, round_no: int, answer_bank=None, today=None, vocab_scanner=_A
             assessment_path,
             workspace / "mock" / "open-loops.md",
             workspace / "mock" / "cheatsheet.md",
+            # The guide is what the candidate says out loud. It shipped scanned by
+            # nothing, so a "70% chance" line in it passed every gate in the skill.
+            workspace / "mock" / "answer-guide.md",
         ],
         scanner,
     )

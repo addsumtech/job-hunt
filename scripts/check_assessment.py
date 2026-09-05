@@ -212,9 +212,17 @@ def check(workspace: pathlib.Path, market_dir: pathlib.Path,
                             f"to a block")
 
     # 3. The prediction lint, over every rendered surface in the workspace.
+    #
+    # The capture corpus is passed. Re-scanning WITHOUT it made this gate
+    # contradict lint_no_prediction on the same bytes: a row rendering an
+    # employer's own `AI/ML Engineer (100 % remote)` title -- which discover
+    # requires verbatim -- passed one gate and failed the next, so the artifact
+    # that broke was the honest one. Two gates running the same lint must run the
+    # same lint.
+    corpus = prediction.capture_corpus(workspace)
     for path in prediction.target_files(workspace):
         findings += prediction.scan_text(path.read_text(encoding="utf-8"),
-                                         str(path.relative_to(workspace)))
+                                         str(path.relative_to(workspace)), corpus)
 
     # 4. Consistency notices must be attached where they fired.
     for notice in consistency.notices(assessment):
