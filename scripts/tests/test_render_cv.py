@@ -945,3 +945,112 @@ def test_an_ongoing_role_is_recognised_in_any_language(end):
                                  "left in 2020", "2020"])
 def test_a_finished_role_is_not(end):
     assert not render_cv._is_current({"end": end}), end
+
+
+# ---------------------------------------------------------------------------
+# The market vocabulary, audited 2026-09-05.
+#
+# Endonyms all resolved to None — `Nederland`, `Österreich`, `España`, `Suomi`,
+# `한국`, `Việt Nam` — so a profile written in its own market's language got no
+# cluster, and the personal-data interlock could not fire on it. A candidate
+# writing their own country's name for their own country is the ordinary case.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("market,cluster", [
+    ("Nederland", 2), ("Österreich", 2), ("Schweiz", 2), ("España", 2),
+    ("Suomi", 2), ("Sverige", 2), ("Deutschland", 2), ("ドイツ", 2),
+    ("한국", 3), ("Việt Nam", 3), ("日本", 3), ("中國", 3),
+    ("미국", 1), ("États-Unis", 1), ("Pays-Bas", 2), ("Nouvelle-Zélande", 1),
+    ("us", 1), ("nl", 2), ("cn", 3),
+])
+def test_a_market_named_in_its_own_language_resolves(market, cluster):
+    assert render_cv.resolve_cluster(market) == cluster, market
+
+
+@pytest.mark.parametrize("market", ["Brazil", "Mexico", "South Africa", "", None])
+def test_a_market_this_module_does_not_know_still_resolves_to_none(market):
+    """The twin: the fix is more aliases, not a matcher that says yes to
+    anything. What an unknown market MEANS is the next test."""
+    assert render_cv.resolve_cluster(market) is None
+
+
+# --- the conservative default ------------------------------------------------
+
+def _with_personal(market):
+    return {"meta": {"target_market": market},
+            "contact": {"personal": {"date_of_birth": "1992-05-01",
+                                     "nationality": "Brazilian"}}}
+
+
+@pytest.mark.parametrize("market", ["Brazil", "Mexico", "South Africa", "Israel"])
+def test_an_unrecognised_market_withholds_protected_data(market):
+    """`resolve_cluster` returns None for these, and None was read as "not
+    Cluster 1, so print it" — so the interlock could not fire on exactly the
+    markets nobody had thought about. SKILL.md already stated the rule this
+    implements: in genuine doubt, omit."""
+    assert list(render_cv.personal_items(_with_personal(market))) == []
+
+
+@pytest.mark.parametrize("market", ["us", "uk", "Canada"])
+def test_cluster_one_still_withholds_it(market):
+    assert list(render_cv.personal_items(_with_personal(market))) == []
+
+
+@pytest.mark.parametrize("market", ["de", "Nederland", "cn", "日本"])
+def test_a_market_that_expects_them_still_gets_them(market):
+    """The cry-wolf half, and the one that matters most: widening suppression to
+    unknown markets must not take the fields away from the markets that expect
+    them."""
+    assert list(render_cv.personal_items(_with_personal(market)))
+
+
+# --- labels ------------------------------------------------------------------
+
+@pytest.mark.parametrize("lang,expected", [
+    ("zh", "出生日期"), ("ja", "生年月日"), ("ko", "생년월일"),
+    ("de", "Geburtsdatum"), ("nl", "Geboortedatum"), ("fr", "Date de naissance"),
+])
+def test_a_personal_data_label_is_written_in_the_cvs_language(lang, expected):
+    """`Date Of Birth` above a Chinese value is the mirror image of the Chinese
+    furniture in an English page this skill already calls a bug."""
+    assert render_cv.personal_label("date_of_birth", lang) == expected
+
+
+def test_an_untranslated_key_falls_back_rather_than_raising():
+    assert render_cv.personal_label("security_clearance", "zh") == "Security Clearance"
+    assert render_cv.personal_label("date_of_birth", "pl") == "Date Of Birth"
+
+
+def test_a_language_with_no_headings_table_says_so(capsys):
+    """Documented and silent until now: a Polish or Vietnamese CV rendered with
+    ENGLISH section headings above its own-language content, and the first
+    person to notice was the recruiter."""
+    render_cv.reset_market_warnings()
+    render_cv.headings({"meta": {"language": "pl"}})
+    assert "no built-in section headings" in capsys.readouterr().err
+
+
+def test_a_language_that_has_one_stays_quiet(capsys):
+    render_cv.reset_market_warnings()
+    assert render_cv.headings({"meta": {"language": "nl"}})["experience"] == "Werkervaring"
+    assert capsys.readouterr().err == ""
+
+
+def test_supplying_meta_headings_silences_it(capsys):
+    """The escape hatch the warning names must actually work, or the warning is
+    telling people to do something that does not help."""
+    render_cv.reset_market_warnings()
+    render_cv.headings({"meta": {"language": "pl", "headings": {"experience": "Doświadczenie"}}})
+    assert capsys.readouterr().err == ""
+
+
+def test_the_header_actually_uses_the_localized_label():
+    """Mutation-found: `personal_label` was tested directly and `personal_items`
+    was not, so reverting the yield to the English YAML key left the suite
+    green — the translation existed and nothing said it reached the page."""
+    profile = {"meta": {"language": "zh", "target_market": "中国"},
+               "contact": {"personal": {"date_of_birth": "1995-03",
+                                        "marital_status": "未婚"}}}
+    labels = [label for label, _ in render_cv.personal_items(profile)]
+    assert labels == ["出生日期", "婚姻状况"], labels
+    assert not any(c.isascii() and c.isalpha() for label in labels for c in label)

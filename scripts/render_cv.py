@@ -106,6 +106,19 @@ HEADINGS = {
 }
 
 
+# One warning per (profile, language). Same reason as _MARKET_WARNED below: an
+# md + docx + pdf run renders from one profile object three times, and the
+# identical line printed three times is how a warning gets trained away.
+_HEADING_WARNED = []
+
+
+def _warn_once(seen, key, message):
+    if key in seen:
+        return
+    seen.append(key)
+    print(message, file=sys.stderr)
+
+
 def headings(profile):
     """Section labels for the profile's language (default 'en').
 
@@ -120,8 +133,20 @@ def headings(profile):
     # table. Any key a language table doesn't translate falls back to the English
     # label instead of raising — so adding a new section never needs all nine
     # tables updated at once, and a partially-localized language degrades cleanly.
+    language = str(meta.get("language") or "en").strip().lower()[:2]
     base = dict(HEADINGS["en"])
-    base.update(HEADINGS.get(meta.get("language", "en"), {}))
+    if language not in HEADINGS and not (meta.get("headings") or {}):
+        # Documented, and until now silent. A Polish, Vietnamese, Thai, Arabic,
+        # Swedish, Portuguese or Russian CV rendered with ENGLISH section
+        # headings above its own-language content and said nothing, so the first
+        # person to notice was the recruiter.
+        _warn_once(_HEADING_WARNED, (id(profile), language),
+                   f"WARNING: no built-in section headings for meta.language "
+                   f"{language!r}; the CV will use ENGLISH headings above "
+                   f"{language!r} content. Set meta.headings to a "
+                   f"{{section_key: label}} map to localize them. Built-in: "
+                   f"{', '.join(sorted(HEADINGS))}.")
+    base.update(HEADINGS.get(language, {}))
     override = meta.get("headings") or {}
     if isinstance(override, dict):
         unknown = sorted(k for k in override if k not in base)
@@ -427,19 +452,52 @@ def _contact_links(profile):
 # codes are matched only when they are the WHOLE segment: otherwise "Remote in
 # Berlin" would resolve to India via "in", and a false resolution is worse than
 # none — it silences the warning.
+# ENDONYMS ARE IN HERE, and that is not decoration. `Nederland`, `Österreich`,
+# `España`, `Suomi`, `Sverige`, `한국` and `Việt Nam` all resolved to None on
+# 2026-09-05 — so a profile written in its own market's language got no cluster,
+# and the personal-data interlock could not fire on it at all. A candidate
+# writing their own country's name for their own country is the ordinary case,
+# not the exotic one.
 _CLUSTER_NAMES = {
     1: ["united states of america", "united states", "u s a", "america", "canada",
         "united kingdom", "great britain", "britain", "england", "scotland", "wales",
         "northern ireland", "republic of ireland", "ireland", "australia",
-        "new zealand", "u k", "u s"],
+        "new zealand", "u k", "u s", "etats unis", "états unis", "estados unidos",
+        "vereinigte staaten", "verenigde staten", "royaume uni", "reino unido",
+        "grossbritannien", "großbritannien", "groot brittannie", "eire",
+        "nouvelle zelande", "nouvelle zélande", "irlande", "australie",
+        "nueva zelanda", "irlanda", "australien", "kanada", "canada"],
     2: ["the netherlands", "netherlands", "holland", "germany", "deutschland",
         "france", "belgium", "spain", "italy", "portugal", "austria", "switzerland",
         "sweden", "norway", "denmark", "finland", "poland", "czechia",
-        "czech republic", "luxembourg", "greece", "romania", "hungary", "ireland eu",
-        "european union", "eea"],
+        "czech republic", "luxembourg", "greece", "romania", "hungary",
+        # `ireland eu` used to sit here and could never resolve: `ireland` is
+        # Cluster 1 and matches the same string, and resolve_cluster takes
+        # min() because suppression is the safe direction. An entry listed
+        # under a cluster it can never reach is a table that lies to its
+        # reader — and an Irish CV is an anglophone CV, so Cluster 1 was the
+        # right answer all along.
+        "european union", "eea",
+        # endonyms
+        "nederland", "belgie", "belgië", "belgique", "osterreich", "österreich",
+        "schweiz", "suisse", "svizzera", "espana", "españa", "italia", "portugal",
+        "suomi", "sverige", "norge", "danmark", "polska", "cesko", "česko",
+        "ellada", "elláda", "magyarorszag", "magyarország", "romania", "românia",
+        "luxemburg", "letzebuerg", "lëtzebuerg", "europese unie", "union europeenne",
+        "europaische union", "europäische union", "frankreich", "duitsland",
+        "allemagne", "alemania", "germania", "pays bas", "paises bajos",
+        "niederlande", "olanda", "autriche", "suede", "suède", "norvege",
+        "norvège", "danemark", "finlande", "pologne", "grece", "grèce",
+        "belgien", "spanien", "italien", "schweden", "polen", "griechenland"],
     3: ["mainland china", "china", "hong kong", "taiwan", "japan", "south korea",
         "republic of korea", "korea", "singapore", "malaysia", "thailand", "vietnam",
-        "indonesia", "philippines", "india"],
+        "indonesia", "philippines", "india",
+        # endonyms
+        "nippon", "nihon", "hanguk", "한국", "대한민국", "viet nam", "việt nam",
+        "zhongguo", "malaysia", "singapura", "prathet thai", "bharat",
+        "pilipinas", "indonesia",
+        "coree du sud", "corée du sud", "japon", "chine", "inde", "singapour",
+        "japan", "korea del sur", "giappone", "cina", "china"],
 }
 _CLUSTER_CODES = {
     1: ["us", "usa", "ca", "can", "uk", "gb", "ie", "irl", "au", "aus", "nz"],
@@ -451,9 +509,18 @@ _CLUSTER_CODES = {
 # substring. Without these a Chinese-language profile resolves to None and the
 # unknown-market warning fires on a perfectly ordinary Chinese CV.
 _CLUSTER_CJK = {
-    1: ["美国", "英国", "加拿大", "澳大利亚", "新西兰", "爱尔兰"],
-    2: ["荷兰", "德国", "法国", "比利时", "西班牙", "意大利", "瑞士", "瑞典", "欧盟"],
-    3: ["中国", "中国大陆", "香港", "台湾", "日本", "韩国", "新加坡", "马来西亚", "泰国", "印度"],
+    1: ["美国", "美國", "英国", "英國", "加拿大", "澳大利亚", "澳大利亞",
+        "新西兰", "紐西蘭", "爱尔兰", "愛爾蘭", "アメリカ", "イギリス", "カナダ",
+        "미국", "영국", "캐나다", "호주"],
+    2: ["荷兰", "荷蘭", "德国", "德國", "法国", "法國", "比利时", "比利時",
+        "西班牙", "意大利", "瑞士", "瑞典", "挪威", "丹麦", "丹麥", "芬兰", "芬蘭",
+        "波兰", "波蘭", "奥地利", "奧地利", "葡萄牙", "欧盟", "歐盟",
+        "オランダ", "ドイツ", "フランス", "독일", "네덜란드", "프랑스"],
+    3: ["中国", "中國", "中华人民共和国", "中華人民共和國",
+        "中国大陆", "中國大陸", "香港", "台湾", "台灣",
+        "日本", "韩国", "韓国", "韓國", "新加坡", "马来西亚", "馬來西亞",
+        "泰国", "泰國", "印度", "越南", "印度尼西亚", "菲律宾",
+        "한국", "대한민국", "일본", "중국", "싱가포르"],
 }
 
 _NAME_CLUSTER, _CODE_CLUSTER, _CJK_CLUSTER = {}, {}, {}
@@ -468,7 +535,11 @@ for _c, _names in _CLUSTER_CJK.items():
         _CJK_CLUSTER.setdefault(_n, _c)
 _MAX_NAME_WORDS = max(len(_n.split()) for _n in _NAME_CLUSTER)
 
-_MARKET_SEP = re.compile(r"[,()\[\]/|;·–—-]+")
+# A plain hyphen is NOT a separator. `États-Unis`, `Pays-Bas`,
+# `Nouvelle-Zélande` and `Corée-du-Sud` are how those countries are spelled, and
+# splitting on it meant every hyphenated country name resolved to nothing.
+# The DASHES stay: `Remote — EU` really does use one to separate two facts.
+_MARKET_SEP = re.compile(r"[,()\[\]/|;·–—]+")
 _MARKET_PUNCT = re.compile(r"[^\w\s]", re.UNICODE)
 
 # The protected fields, in the order they are reported. `contact.personal` is a
@@ -534,6 +605,7 @@ def reset_market_warnings():
     """Forget which profiles have already warned. main() calls this at the top
     of every CLI run so the guard is per-run, not per-process."""
     _MARKET_WARNED.clear()
+    _HEADING_WARNED.clear()
 
 
 def _warn_unknown_market(profile):
@@ -555,16 +627,71 @@ def _warn_unknown_market(profile):
         return
     _MARKET_WARNED.append((profile, market))
     print(f"WARNING: meta.target_market {market!r} matches no known CV-convention "
-          f"cluster, so the Cluster-1 personal-data interlock cannot fire. These "
-          f"fields will render as-is: {', '.join(fields)}. If this is a "
-          f"US/Canada/UK/Ireland/Australia/NZ target, set meta.target_market to a "
-          f"recognised country name and re-render — protected personal data on "
-          f"such a CV is a discrimination-law liability and a common auto-reject.",
-          file=sys.stderr)
+          f"cluster, so these fields were WITHHELD rather than rendered: "
+          f"{', '.join(fields)}. That is the conservative default (SKILL.md): "
+          f"leaving a date of birth on a US or UK CV is a discrimination-law "
+          f"liability and a common auto-reject, while omitting a photo from a "
+          f"European one is cosmetic. If this market does expect them, set "
+          f"meta.target_market to a country name this renderer knows and "
+          f"re-render.", file=sys.stderr)
 
 
-def _is_cluster1(profile):
-    return resolve_cluster((profile.get("meta") or {}).get("target_market")) == 1
+def _suppress_personal_data(profile) -> bool:
+    """Whether protected personal data must be withheld from this render.
+
+    Cluster 1 (US/CA/UK/IE/AU/NZ) — and ALSO any market this module does not
+    recognise, which is the half that was missing. `resolve_cluster` returns
+    None for Brazil, Mexico, South Africa, Israel and every Gulf market, and
+    None was being read as "not Cluster 1, so print it": the interlock could
+    not fire on exactly the markets nobody had thought about.
+
+    SKILL.md:219 already states the rule this now implements — "When in genuine
+    doubt about a market, follow the conservative default and omit them" — and
+    the cost asymmetry is in `resolve_cluster`'s own docstring: stripping a
+    photo from an EU CV is cosmetic, leaving a DOB on a US CV is an automatic
+    reject. The unrecognised-market WARNING still prints, so the candidate can
+    name a recognised market and get the fields back.
+    """
+    return resolve_cluster((profile.get("meta") or {}).get("target_market")) in (1, None)
+
+
+# Personal-data labels, in the languages that have a headings table. The label
+# used to be `str(key).replace("_", " ").title()` — the ENGLISH YAML key — so a
+# Chinese CV printed `Date Of Birth` and `Marital Status` above Chinese values.
+# Chinese furniture in an English page is a bug this skill already names; the
+# mirror image is the same bug.
+#
+# A key with no translation falls back to the English title-case form rather
+# than raising, so adding a `contact.personal` field never needs nine tables
+# updated at once — the same rule `headings` uses.
+PERSONAL_LABELS = {
+    "nl": {"date_of_birth": "Geboortedatum", "nationality": "Nationaliteit",
+           "hometown": "Woonplaats", "marital_status": "Burgerlijke staat",
+           "gender": "Geslacht"},
+    "de": {"date_of_birth": "Geburtsdatum", "nationality": "Staatsangehörigkeit",
+           "hometown": "Wohnort", "marital_status": "Familienstand",
+           "gender": "Geschlecht"},
+    "fr": {"date_of_birth": "Date de naissance", "nationality": "Nationalité",
+           "hometown": "Domicile", "marital_status": "Situation familiale",
+           "gender": "Sexe"},
+    "es": {"date_of_birth": "Fecha de nacimiento", "nationality": "Nacionalidad",
+           "hometown": "Residencia", "marital_status": "Estado civil",
+           "gender": "Sexo"},
+    "it": {"date_of_birth": "Data di nascita", "nationality": "Nazionalità",
+           "hometown": "Residenza", "marital_status": "Stato civile",
+           "gender": "Sesso"},
+    "zh": {"date_of_birth": "出生日期", "nationality": "国籍",
+           "hometown": "籍贯", "marital_status": "婚姻状况", "gender": "性别"},
+    "ja": {"date_of_birth": "生年月日", "nationality": "国籍",
+           "hometown": "出身地", "marital_status": "配偶者", "gender": "性別"},
+    "ko": {"date_of_birth": "생년월일", "nationality": "국적",
+           "hometown": "출신지", "marital_status": "결혼 여부", "gender": "성별"},
+}
+
+
+def personal_label(key, language="en") -> str:
+    table = PERSONAL_LABELS.get(str(language or "en").strip().lower()[:2], {})
+    return table.get(str(key), str(key).replace("_", " ").strip().title())
 
 
 def personal_items(profile):
@@ -573,17 +700,18 @@ def personal_items(profile):
     Drawn from ``contact.personal`` (a dict like {date_of_birth, nationality,
     hometown, marital_status}). These are normal on CVs in much of the EU and
     East Asia and absent in the Anglophone world — so they are suppressed
-    entirely for a Cluster-1 target even if present (see `_is_cluster1`)."""
-    if _is_cluster1(profile):
+    entirely for a Cluster-1 target — or an unrecognised one — even if present
+    (see `_suppress_personal_data`)."""
+    if _suppress_personal_data(profile):
         return
     personal = (profile.get("contact") or {}).get("personal") or {}
     if not isinstance(personal, dict):
         return
+    language = (profile.get("meta") or {}).get("language", "en")
     for key, value in personal.items():
         if value in (None, ""):
             continue
-        label = str(key).replace("_", " ").strip().title()
-        yield label, normalize_text(value)
+        yield personal_label(key, language), normalize_text(value)
 
 
 # Formats BOTH renderers can embed. LaTeX (via graphicx under a Unicode engine)
@@ -634,7 +762,7 @@ def photo_path(profile):
     round's PDF in place. The skill tells the agent to set `meta.photo` for EU
     and Asian markets and never says which formats work; this is that list.
     """
-    if _is_cluster1(profile):
+    if _suppress_personal_data(profile):
         return None
     p = (profile.get("meta") or {}).get("photo")
     if not p:
