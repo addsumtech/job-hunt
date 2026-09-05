@@ -24,27 +24,82 @@ PROFILES_ROOT = pathlib.Path.home() / ".claude" / "job-profiles"
 # moves one file, and then it is wrong in a way that only shows up at runtime.
 SKILL_ROOT = pathlib.Path(__file__).resolve().parent.parent
 
-# Keep ASCII alphanumerics and CJK/kana/hangul; everything else becomes a
-# separator. Dropping CJK would turn a Chinese employer name into an empty
-# slug and collapse two different companies onto the same directory.
-_KEEP = re.compile(
-    r"[^0-9a-z"
-    r"぀-ヿ"      # kana
-    r"㐀-䶿"      # CJK ext A
-    r"一-鿿"      # CJK unified
-    r"가-힯"      # hangul
-    r"]+"
-)
 _ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+# Latin letters that no amount of decomposition reduces to an ASCII base. NFKD
+# turns é into e+◌́ but leaves ß, ø, ł, đ and æ whole, so they are spelled out.
+_LATIN_SPECIALS = str.maketrans({
+    "ß": "ss", "ẞ": "ss", "ø": "o", "Ø": "o", "æ": "ae", "Æ": "ae",
+    "œ": "oe", "Œ": "oe", "ł": "l", "Ł": "l", "đ": "d", "Đ": "d",
+    "þ": "th", "Þ": "th", "ð": "d", "Ð": "d", "ı": "i", "ŧ": "t", "ħ": "h",
+})
+
+
+def _fold_latin(ch: str) -> str:
+    """Strip diacritics from LATIN letters only, leaving every other script alone.
+
+    Folding by script matters in both directions. `Müller` and `Möller` were
+    both becoming `m-ller` -- two different employers sharing one workspace, so
+    the resume lookup offers the wrong prior application, which is precisely the
+    failure this module's docstring says it exists to prevent. And folding
+    indiscriminately would decompose Thai and Devanagari vowel signs, which are
+    letters there, not accents.
+    """
+    if not unicodedata.name(ch, "").startswith("LATIN"):
+        return ch
+    return "".join(c for c in unicodedata.normalize("NFKD", ch)
+                   if not unicodedata.combining(c))
+
+
+def _keepable(ch: str) -> bool:
+    """Letters and digits of ANY script, plus the combining marks that spell
+    words in Thai, Devanagari, Arabic and Hebrew.
+
+    The old rule was an allowlist of four scripts, so a Cyrillic, Greek, Arabic,
+    Thai or Devanagari employer slugged to the EMPTY STRING -- and an empty slug
+    makes `profile_dir` return PROFILES_ROOT itself, i.e. the shared parent of
+    every candidate's private data. `unicodedata.category` is the general rule
+    the allowlist was approximating.
+    """
+    return ch.isalnum() or unicodedata.category(ch).startswith("M")
 
 
 def slugify(text: str) -> str:
-    s = unicodedata.normalize("NFKC", str(text or "")).lower()
-    return _KEEP.sub("-", s).strip("-")
+    """A filesystem-safe, script-preserving slug.
+
+    Latin is transliterated down to ASCII so that `Société Générale` and
+    `Societe Generale` are one directory; every other script is kept as written,
+    because there is no transliteration of `阿里巴巴` or `Яндекс` that a human
+    would recognise in a path.
+    """
+    s = unicodedata.normalize("NFKC", str(text or "")).translate(_LATIN_SPECIALS)
+    s = "".join(_fold_latin(ch) for ch in s).casefold()
+    out, pending = [], False
+    for ch in s:
+        if _keepable(ch):
+            out.append(ch)
+            pending = False
+        elif out and not pending:
+            out.append("-")
+            pending = True
+    return "".join(out).strip("-")
 
 
 def profile_dir(name: str) -> pathlib.Path:
-    return PROFILES_ROOT / slugify(name)
+    """<PROFILES_ROOT>/<slug>. Refuses a name that slugs to nothing.
+
+    Without this, `profile_dir("")` returns PROFILES_ROOT itself — the shared
+    parent of every candidate's private data — and the caller then writes a
+    master profile, an answer bank and every application into the root. Loud is
+    the only safe direction: an empty slug is always a caller bug, never a real
+    candidate.
+    """
+    slug = slugify(name)
+    if not slug:
+        raise ValueError(
+            f"name {name!r} contains no letters or digits, so it has no profile "
+            f"directory; PROFILES_ROOT is not a profile")
+    return PROFILES_ROOT / slug
 
 
 def master_profile(name: str) -> pathlib.Path:
@@ -75,6 +130,12 @@ def workspace(name: str, company: str, role: str, date: str) -> pathlib.Path:
     """
     if not _ISO_DATE.match(str(date)):
         raise ValueError(f"date must be YYYY-MM-DD, got {date!r}")
+    for label, value in (("company", company), ("role", role)):
+        if not slugify(value):
+            raise ValueError(
+                f"{label} {value!r} contains no letters or digits, so the "
+                f"workspace name would collapse; two such runs would share one "
+                f"directory and the resume lookup would offer the wrong one")
     stem = f"{slugify(company)}-{slugify(role)}-{date}"
     return profile_dir(name) / "applications" / stem
 
