@@ -112,8 +112,14 @@ _ZH_RATE = ("概率|通过率|命中率|录取率|录用率|成功率|入围率|
             "机率|機率|錄取率|錄用率|成功機會|勝算")
 # 七成 = 70%. The lookahead keeps 成功/成长/成员/成果/成本/成熟/成为 out; those are
 # the ordinary compounds a Chinese numeral can legitimately sit in front of.
-_ZH_TENTHS = r"[一二三四五六七八九]成(?![功长员果本熟为立就分])"
+# Arabic digits too. `八成` fired and `8 成` did not — a pre-existing gap this
+# audit walked into, and the two spellings are the same claim.
+_ZH_TENTHS = r"[一二三四五六七八九0-9０-９]\s*成(?![功长员果本熟为立就分交交])"
 _ZH_PERCENT_SPELLED = r"百分之[零一二三四五六七八九十百]+"
+# Japanese tenths. `_ZH_TENTHS` gave Chinese 七成 its own rule and Japanese has
+# the exact parallel in 割 — `可能性は7割です` is the same invented probability
+# and sailed through a file whose commit claimed every language it writes in.
+_JA_TENTHS = r"[0-9０-９一二三四五六七八九][\s]*割(?![引り])"
 
 # Outcome forecasts in the other languages this skill writes in. The English and
 # Chinese vocabularies were enforced and the rest were not, so
@@ -171,7 +177,8 @@ _WORDS = re.compile(
     r"|確率"
     r"|" + _ZH_RATE + r"|" + _ZH_TENTHS + r"|" + _ZH_PERCENT_SPELLED
     + r"|" + _FORECAST_DE + r"|" + _FORECAST_NL + r"|" + _FORECAST_FR
-    + r"|" + _FORECAST_ES_IT + r"|" + _FORECAST_JA + r"|" + _FORECAST_KO,
+    + r"|" + _FORECAST_ES_IT + r"|" + _FORECAST_JA + r"|" + _FORECAST_KO
+    + r"|" + _JA_TENTHS,
     re.IGNORECASE)
 _ATTRIBUTION = re.compile(r"^\s*>?\s*(?:—|--|-|Source:|来源[:：])\s+.*https?://\S+")
 
@@ -199,6 +206,34 @@ _SCORE_NOUN_LATIN = (r"scores?|scored|scoring|ratings?|rated|graded|"
 # ordinary words, and a French grade written `15/20` is already _SCORE's.
 _SCORE_NOUN_CJK = (r"匹配度|契合度|吻合度|评分|評分|打分|得分|分数|分數|总分|總分|"
                    r"综合分|綜合分|评级|評級|等级|等級|評価|点数|點數|점수|평점|평가")
+
+# WHERE each half applies. D2 bans the skill from scoring THIS CANDIDATE'S FIT;
+# it does not ban the candidate's own past, measured results — which is exactly
+# why cv.md and letter.md were excluded from this lint from the start.
+#
+# `mock/cheatsheet.md` and `mock/answer-guide.md` are the same kind of file: the
+# candidate's own material, to be said out loud. A cheatsheet reminding someone
+# they "scored 92 on the HackerRank test last year" or that a repo "received 500
+# stars" is honest sourced history, and banning it there was a cry-wolf found on
+# 2026-09-05. The judgement-facing artifacts — where the skill itself writes the
+# number — keep the full ban.
+#
+# The FIT nouns stay banned everywhere, including on the candidate's own pages:
+# 匹配度/契合度 and `fit score`/`match score`/`confidence` are about this
+# application and can only be invented, wherever they are written.
+_JUDGEMENT_SURFACES = ("fit-assessment.md", "shortlist.md", "assessment-")
+_FIT_NOUN = re.compile(
+    r"(?:匹配度|契合度|吻合度)\s*[:：为是]?\s*"
+    r"(?<![0-9０-９.．\-\u2013])[0-9０-９]+(?:[.．][0-9０-９]+)?"
+    r"|\b(?:fit|match|compatibility)\s+(?:score|rating)\b\s*(?:of|:|=|is)?\s*"
+    r"(?<![0-9.\-\u2013])[0-9]+(?:\.[0-9]+)?\b",
+    re.I)
+
+
+def _is_judgement_surface(label: str) -> bool:
+    name = str(label or "").replace("\\", "/").split("/")[-1]
+    return any(mark in name for mark in _JUDGEMENT_SURFACES)
+
 
 _SCORE_NOUN = re.compile(
     r"\b(?:" + _SCORE_NOUN_LATIN + r")\b\s*(?:of|:|=|is|at|von|van|di)?\s*"
@@ -230,13 +265,18 @@ _SCORE_LETTER = re.compile(
 # its noun above.
 _SCORE_BARE = re.compile(
     r"(?<![0-9０-９.．\-\u2013])[0-9０-９]+(?:[.．][0-9０-９]+)?"
-    r"\s*(?:分(?![钟鐘析部类類布支别別配享散开開成级級秒钱錢手])|점(?!심))")
+    r"\s*(?:分(?![钟鐘析部类類布支别別配享散开開成级級秒钱錢手"
+    r"公司行店销銷工区區层層队隊会會段期割母子])|점(?!심))")
 
+
+# Everywhere this lint runs.
 CHECKS = (("PERCENT", _PERCENT), ("SCORE_PATTERN", _SCORE),
           ("PREDICTION_WORD", _WORDS),
-          ("SCORE_NOUN", _SCORE_NOUN), ("SCORE_NOUN", _SCORE_DECIMAL),
-          ("SCORE_NOUN", _SCORE_UNITS), ("SCORE_NOUN", _SCORE_LETTER),
-          ("SCORE_NOUN", _SCORE_BARE))
+          ("SCORE_NOUN", _FIT_NOUN))
+# Only where the skill itself is producing the number. See _JUDGEMENT_SURFACES.
+JUDGEMENT_CHECKS = (("SCORE_NOUN", _SCORE_NOUN), ("SCORE_NOUN", _SCORE_DECIMAL),
+                    ("SCORE_NOUN", _SCORE_UNITS), ("SCORE_NOUN", _SCORE_LETTER),
+                    ("SCORE_NOUN", _SCORE_BARE))
 
 
 _WS = re.compile(r"\s+")
@@ -414,6 +454,7 @@ def blockquote_allowlist(lines: list[str]) -> set[int]:
 
 
 def scan_text(text: str, label: str, corpus: str = "") -> list[str]:
+    checks = CHECKS + (JUDGEMENT_CHECKS if _is_judgement_surface(label) else ())
     lines = text.splitlines()
     exempt = blockquote_allowlist(lines)
     in_mock = mock_block_lines(lines)
@@ -423,7 +464,7 @@ def scan_text(text: str, label: str, corpus: str = "") -> list[str]:
             continue
         quoted = mask_mock_quote(line) if number in in_mock else line
         masked = mask_exempt_spans(mask_copied_numbers(quoted, corpus))
-        for code, pattern in CHECKS:
+        for code, pattern in checks:
             for match in pattern.finditer(masked):
                 original = line[match.start():match.end()]
                 findings.append(f"{code}: {label}:{number + 1}: {original!r} "

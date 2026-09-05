@@ -484,11 +484,15 @@ def test_a_slash_score_is_reported_once_not_twice(text=None):
 def test_an_employer_published_scale_quoted_with_its_source_is_still_allowed():
     """The one allowlist in this file. Quoting an employer's own rubric is
     reporting; the new patterns must not delete that."""
+    # On a JUDGEMENT surface: cheatsheet.md and answer-guide.md are the
+    # candidate's own pages and the generic score nouns no longer apply there,
+    # so the allowlist has to be demonstrated where the ban actually runs.
     quoted = ("> A minimum score of 4 is required across all behaviours.\n"
               "> — Civil Service Success Profiles https://gov.uk/x\n")
-    assert lnp.scan_text(quoted, "cheatsheet.md") == []
+    assert lnp.scan_text(quoted, "fit-assessment.md") == []
     assert "SCORE_NOUN" in codes(_out(lnp.scan_text(
-        "A minimum score of 4 is required across all behaviours.", "cheatsheet.md")))
+        "A minimum score of 4 is required across all behaviours.",
+        "fit-assessment.md")))
 
 
 def test_a_score_the_round_actually_captured_is_masked_like_any_other_number(tmp_path):
@@ -506,3 +510,73 @@ def test_a_score_the_round_actually_captured_is_masked_like_any_other_number(tmp
     # difference between quoting an employer and inventing a verdict.
     assert "SCORE_NOUN" in codes(_out(lnp.scan_text(
         "Overall rating 4.5 for this candidate.", "fit-assessment.md", corpus)))
+
+
+# ---------------------------------------------------------------------------
+# WHERE the score ban applies. Found by an independent adversarial pass over my
+# own widening, 2026-09-05: banning every score noun everywhere fired on the
+# candidate's own sourced history —
+#
+#     Coding assessment: scored 92 on the HackerRank test last year.
+#     Previous performance review: rated 4.5 by manager in 2024.
+#     GitHub repo received 500 stars after the launch.
+#     코딩 테스트 결과는 92점이었습니다.
+#
+# — every one of which is exactly what a cheatsheet or an answer guide exists to
+# remind someone of. D2 bans the SKILL from scoring this candidate's fit; it has
+# never banned the candidate's own measured past, which is why cv.md and
+# letter.md were excluded from this lint on day one. cheatsheet.md and
+# answer-guide.md are the same kind of page.
+# ---------------------------------------------------------------------------
+
+_CANDIDATE_PAGE, _JUDGEMENT_PAGE = "mock/answer-guide.md", "fit-assessment.md"
+
+_REAL_HISTORY = [
+    "Coding assessment: scored 92 on the HackerRank test last year.",
+    "Previous performance review: rated 4.5 by manager in 2024.",
+    "GitHub repo received 500 stars after the launch.",
+    "This epic was scoped at 13 pts using Fibonacci estimation.",
+    "코딩 테스트 결과는 92점이었습니다.",
+]
+
+
+@pytest.mark.parametrize("text", _REAL_HISTORY, ids=range(len(_REAL_HISTORY)))
+def test_the_candidates_own_past_result_is_not_a_score_on_their_own_page(text):
+    assert_no_finding(_out(lnp.scan_text(text, _CANDIDATE_PAGE)), "SCORE_NOUN")
+
+
+@pytest.mark.parametrize("text", ["overall score: 85", "rated 8.5", "4.5 stars",
+                                  "grade: B+", "这份简历 85 分", "評価 85 点"])
+def test_the_same_shape_is_still_banned_where_the_skill_writes_the_number(text):
+    assert "SCORE_NOUN" in codes(_out(lnp.scan_text(text, _JUDGEMENT_PAGE))), text
+
+
+@pytest.mark.parametrize("text", ["匹配度 85 分", "契合度：8", "match score 85",
+                                  "fit score of 7"])
+def test_a_fit_score_is_banned_on_every_surface(text):
+    """The half that cannot be scoped: 匹配度 and `fit score` are about THIS
+    application, so they can only ever be invented — wherever they are written,
+    including on the candidate's own page."""
+    for page in (_JUDGEMENT_PAGE, _CANDIDATE_PAGE):
+        assert "SCORE_NOUN" in codes(_out(lnp.scan_text(text, page))), (text, page)
+
+
+@pytest.mark.parametrize("text", ["a 70% chance", "you will get the interview",
+                                  "成功率很高"])
+def test_a_prediction_is_banned_on_every_surface_too(text):
+    """Scoping the score nouns must not scope the forecast ban with them: a
+    "70% chance" line in an answer guide is what put that file in the scan set."""
+    assert lnp.scan_text(text, _CANDIDATE_PAGE), text
+
+
+@pytest.mark.parametrize("text,fires", [
+    ("该公司在上海设有12分公司。", False), ("该公司有3分行、5分店", False),
+    ("面试时长 30 分钟", False), ("这份简历 85 分", True), ("점수 85점", True),
+    ("書類選考通過の可能性は7割です。", True), ("3割引セールを担当した", False),
+    ("你有 8 成把握", True), ("八成能过", True),
+])
+def test_the_cjk_suffix_exclusions_hold_in_both_directions(text, fires):
+    """`分公司` (branch office) tripped the bare-分 rule, and `7割` — the Japanese
+    parallel of the Chinese `七成` the file already handled — did not trip
+    anything at all. The Arabic-digit `8 成` was a pre-existing gap."""
+    assert bool(lnp.scan_text(text, _JUDGEMENT_PAGE)) is fires, text
