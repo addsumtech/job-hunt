@@ -1,4 +1,6 @@
 import copy
+
+import pytest
 import datetime
 import json
 
@@ -786,3 +788,26 @@ def test_a_skill_root_without_the_mode_file_is_reported_not_skipped(tmp_path):
     (empty / "modes").mkdir(parents=True)
     assert_finding("\n".join(ca.check(ws, market_dir, TODAY, empty)),
                    "MODE_FILE_MISSING")
+
+
+@pytest.mark.parametrize("line", [
+    # The case that actually failed: a CJK character DIRECTLY against the id,
+    # with no punctuation between. `**R1**` and `R1：` always worked, because a
+    # star and a fullwidth colon are non-word characters and `\b` holds there —
+    # writing only those is how a test for this can pass on the broken regex.
+    "R1的证据在简历第二段",
+    "见R1和R2两行",
+    "- **R1** — 该岗位要求你已经持有欧盟工作许可。",
+    "- **R1** — this role requires an existing EU work permit.",
+])
+def test_a_disqualifier_row_is_recognised_whatever_language_names_it(line):
+    """`\\b` does not exist between a CJK character and `R`, so a section written
+    `R1的…` matched nothing and a correctly named blocking row fired a false
+    DISQUALIFIER_NOT_NAMED. Same root cause as the reference regex, opposite
+    symptom: silent there, cry-wolf here."""
+    assert "R1" in ca._ROW_ID.findall(line), line
+
+
+@pytest.mark.parametrize("line", ["XR1Y", "R1A", "AR1"])
+def test_a_row_id_glued_to_other_ascii_is_not_one(line):
+    assert ca._ROW_ID.findall(line) == [], line

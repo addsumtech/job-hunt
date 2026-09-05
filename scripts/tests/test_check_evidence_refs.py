@@ -2,6 +2,8 @@ import json
 
 import yaml
 
+import pytest
+
 import check_evidence_refs as cer
 
 BLOCKS = {"blocks": [{"id": "CV-001", "source": "cv", "text": "C++ reconstruction pipeline"},
@@ -150,3 +152,24 @@ def test_the_same_clean_state_never_produces_two_verdicts(tmp_path):
     verdicts = [json.loads(line)["verdict"] for line in
                 (ws / "journal.jsonl").read_text(encoding="utf-8").splitlines()]
     assert verdicts == ["recorded", "recorded"]
+
+
+# ---------------------------------------------------------------------------
+# `\b` does not exist between a CJK character and an ASCII letter — both are
+# word characters to `re`. So `见CV-001显示` matched NOTHING while
+# `see CV-001 here` matched, and internal block ids stayed in Chinese
+# reader-facing prose with no STRIPPED_ID, in a skill whose default output
+# language is Chinese.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("text", ["见CV-001显示", "参照CV-001。", "（CV-001）",
+                                  "see CV-001 here", "CV-001", "[JD-004]"])
+def test_a_block_id_is_found_whatever_sits_next_to_it(text):
+    assert cer.REF_RE.findall(text), text
+
+
+@pytest.mark.parametrize("text", ["MYCV-001x", "XCV-0012", "CV-0012", "ACV-001"])
+def test_an_id_glued_to_other_ascii_is_not_a_reference(text):
+    """The cry-wolf half: the boundary still has to hold on the ASCII side, or
+    STRIPPED_ID starts firing on ordinary identifiers."""
+    assert not cer.REF_RE.findall(text), text

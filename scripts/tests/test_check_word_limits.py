@@ -4,6 +4,8 @@ import sys
 import yaml
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
+import pytest
+
 import check_word_limits as cwl
 import journal
 
@@ -105,3 +107,38 @@ def test_each_run_leaves_exactly_one_receipt(tmp_path):
     cwl.main(["--workspace", str(ws)])
     assert [r["verdict"] for r in journal.read_receipts(ws, "check_word_limits")] == \
         ["pass"]
+
+
+# ---------------------------------------------------------------------------
+# A stated limit in the posting's own language is still a stated limit. With
+# `words?|字` only, `(max. 300 Wörter)`, `(maximaal 300 woorden)`,
+# `(300 mots maximum)` and `(500자 이내)` all parsed as NO limit — and for a
+# posting that is not `structured`, no limit means no finding at all, so a
+# 600-word answer against a 300-word cap passed in silence.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("heading,expected", [
+    ("Motivation (max. 300 Wörter)", "300"),
+    ("Motivatie (maximaal 300 woorden)", "300"),
+    ("Motivation (300 mots maximum)", "300"),
+    ("Esperienza (fino a 300 parole)", "300"),
+    ("Experiencia (hasta 250 palabras)", "250"),
+    ("지원동기 (500자 이내)", "500"),
+    ("動機 (400字)", "400"),
+    ("Statement (250 words)", "250"),
+    ("Leadership (up to 200 words)", "200"),
+])
+def test_a_limit_is_read_in_the_postings_own_language(heading, expected):
+    match = cwl._LIMIT.search(heading)
+    assert match is not None, heading
+    assert match.group("n") == expected
+
+
+@pytest.mark.parametrize("heading", [
+    "Leadership", "About me (a short section)", "Q3 — 2019 to 2024",
+    "Delivering at Pace", "Experience with 3 teams",
+])
+def test_a_heading_with_no_stated_limit_does_not_acquire_one(heading):
+    """The cry-wolf half: inventing a limit is worse than missing one, because
+    OVER_LIMIT then fires on an answer nobody capped."""
+    assert cwl._LIMIT.search(heading) is None, heading

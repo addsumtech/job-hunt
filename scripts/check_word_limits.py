@@ -36,8 +36,18 @@ import journal
 GATE = "check_word_limits"
 NO_LIMIT_MARKER = re.compile(r"<!--\s*word-limits:\s*none stated", re.I)
 _HEADING = re.compile(r"^###\s+(?P<title>.+?)\s*$", re.M)
-_LIMIT = re.compile(r"\(?\s*(?:max\.?\s*|word limit:?\s*|up to\s*)?"
-                    r"(?P<n>\d{2,4})\s*(?:words?|字)\s*\)?", re.I)
+# The unit and the "at most" cue in every language this skill writes CVs in.
+# With `words?|字` only, `Motivation (max. 300 Wörter)`, `(maximaal 300 woorden)`,
+# `(300 mots maximum)` and `(500자 이내)` all parsed as NO limit — and for a
+# posting that is not `structured`, no limit means no finding at all, so a
+# 600-word answer against a stated 300-word cap passed in silence.
+_LIMIT = re.compile(
+    r"\(?\s*(?:max\.?\s*|maximaal\s*|maximum\s*|hoechstens\s*|höchstens\s*|"
+    r"bis zu\s*|tot\s*|jusqu'?à\s*|hasta\s*|fino a\s*|"
+    r"word limit:?\s*|up to\s*)?"
+    r"(?P<n>\d{2,4})\s*"
+    r"(?:words?|woorden|w[oö]rter|mots|palabras|parole|字|자|文字)"
+    r"\s*(?:or less|maximum|max\.?|ou moins|o menos|以内|이내|以下)?\s*\)?", re.I)
 _WORD = re.compile(r"[^\W\d_]+", re.UNICODE)
 
 

@@ -91,7 +91,11 @@ UPSTREAM_GATES = ("evidence_blocks", "count_coverage", "consistency",
                   "check_evidence_refs", "lint_no_prediction")
 PASSING_VERDICTS = ("pass", "recorded")
 
-_ROW_ID = re.compile(r"\bR\d+\b")
+# NOT `\b`, for the reason spelled out in check_evidence_refs.REF_RE: a
+# disqualifier section written `- **R1** — 该岗位要求…` matched nothing, so a
+# correctly named blocking row fired a false DISQUALIFIER_NOT_NAMED. Same root
+# cause, opposite symptom: silent there, cry-wolf here.
+_ROW_ID = re.compile(r"(?<![0-9A-Za-z])R\d+(?![0-9A-Za-z])")
 _HEADING = re.compile(r"^\s{0,3}#{1,6}\s")
 
 

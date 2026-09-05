@@ -41,7 +41,11 @@ import yaml  # noqa: E402
 
 GATE = "check_evidence_refs"
 
-REF_RE = re.compile(r"\b(?:CV|JD)-\d{3}\b")
+# NOT `\b`: there is no word boundary between a CJK character and `C`, because
+# both are word characters to `re`. So `见CV-001显示` matched NOTHING while
+# `see CV-001 here` matched — internal block ids stayed in Chinese reader-facing
+# prose with no STRIPPED_ID, in a skill whose default output language is Chinese.
+REF_RE = re.compile(r"(?<![0-9A-Za-z])(?:CV|JD)-\d{3}(?![0-9A-Za-z])")
 _BRACKETED = re.compile(
     r"[\(（\[【]\s*(?:CV|JD)-\d{3}(?:\s*[,、;；]\s*(?:CV|JD)-\d{3})*\s*[\)）\]】]")
 
