@@ -95,6 +95,13 @@ RAW_TEXT_FLOOR = 0.7
 # speak up. Country-level tokens only: city names are ambiguous across markets
 # (London, Ohio is 25 miles from Columbus and is exactly what `opencli indeed
 # search --location "London"` returns), which is the reason this check exists.
+# City-level tokens, declared rather than mixed in silently. The rule above is
+# country-level only, and "the hague" breaks it — deliberately, because it is
+# the seat of government and unambiguous in a way `london` is not. Declaring it
+# is what lets test_market_vocabularies_agree check every OTHER token against
+# render_cv's country table without either hiding this one or failing on it.
+CITY_TOKENS = frozenset({"the hague"})
+
 MARKET_TOKENS = {
     "cn": ("china", "中国", "中國", "中华人民共和国"),
     "nl": ("netherlands", "nederland", "holland", "the hague"),
