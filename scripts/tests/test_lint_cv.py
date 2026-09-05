@@ -100,3 +100,40 @@ def test_each_run_leaves_exactly_one_receipt_including_the_exit_2_path(tmp_path)
     assert lint_cv.main(["--workspace", str(ws)]) == 2
     assert [r["verdict"] for r in journal.read_receipts(ws, "lint_cv")] == \
         ["pass", "could_not_run"]
+
+
+# ---------------------------------------------------------------------------
+# lint_cv enforced a style rule on one alphabet. Four bullets opening `负责…`
+# ("responsible for") and three opening `Führte…` produced NOTHING, while
+# `Verantwortlich` ×3 did fire — because it happens to be pure ASCII.
+# `_WORD_RE = [A-Za-z]...` also truncated at the first non-ASCII letter, so
+# REPEATED_VERB compared the string "F" for every German bullet.
+# ---------------------------------------------------------------------------
+
+def test_the_word_matcher_reads_a_whole_non_ascii_word():
+    assert lint_cv._WORD_RE.match("Führte").group(0) == "Führte"
+    assert lint_cv._WORD_RE.match("Ștefan").group(0) == "Ștefan"
+
+
+def test_a_weak_opener_is_flagged_in_chinese():
+    cv = "\n".join(["- 负责设计推荐系统", "- 负责优化训练流程", "- 负责撰写文档"])
+    assert any(f.startswith("WEAK_OPENER") for f in lint_cv.findings_for(cv))
+
+
+def test_a_repeated_verb_is_counted_in_german():
+    cv = "\n".join(["- Führte die Migration durch", "- Führte Workshops durch",
+                    "- Führte Interviews mit dem Team"])
+    assert any(f.startswith("REPEATED_VERB") for f in lint_cv.findings_for(cv))
+
+
+def test_a_repeated_verb_is_counted_in_chinese():
+    cv = "\n".join(["- 构建了训练流水线", "- 构建了评估框架", "- 构建了部署脚本"])
+    assert any(f.startswith("REPEATED_VERB") for f in lint_cv.findings_for(cv))
+
+
+def test_varied_non_ascii_bullets_stay_quiet():
+    """The cry-wolf half: a CJK opener is two to four characters, so the matcher
+    must not take the whole clause (never repeats) or one character (always
+    repeats)."""
+    cv = "\n".join(["- 构建了训练流水线", "- 优化了推理延迟", "- 撰写了技术文档"])
+    assert not any(f.startswith("REPEATED_VERB") for f in lint_cv.findings_for(cv))
