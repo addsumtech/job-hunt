@@ -177,6 +177,14 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Count must-have and responsibility "
                                                  "coverage. The only counting path.")
     parser.add_argument("--workspace", required=True, type=pathlib.Path)
+    # zh and en ONLY, and that is a real limit rather than an oversight worth
+    # papering over. The card carries the required disclaimer verbatim, and
+    # check_assessment finds it by an exact anchor in one of those two
+    # languages — so a third language needs a SOURCED translation of the
+    # disclaimer and a matching anchor, not a rendering flag. A German or
+    # Japanese assessment therefore embeds an English (or Chinese) counts block
+    # inside otherwise localized prose. Stated here so the next reader knows it
+    # was decided, and see SKILL.md's gate table.
     parser.add_argument("--lang", choices=("zh", "en"), default="zh")
     args = parser.parse_args(argv)
 
