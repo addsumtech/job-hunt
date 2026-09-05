@@ -270,10 +270,18 @@ def test_three_judges_must_be_three_files(tmp_path):
     assert any(f.startswith("SAME_TRANSCRIPT") for f in last["findings"])
 
 
-def test_re_parsing_the_previous_rounds_replies_is_reported(tmp_path, capsys):
+def test_re_parsing_the_previous_rounds_replies_fails_the_gate(tmp_path, capsys):
     """The round stamp forced the parser to RUN for round n; it did not force it
     to run on round n's JUDGEMENTS. Re-parsing round 1's transcripts produced a
-    correctly-stamped round-2 receipt for a round nobody judged."""
+    correctly-stamped round-2 receipt for a round nobody judged.
+
+    UPDATED 2026-09-05. This test asserted `== 0` — reporting the finding and
+    exiting clean — and that was the remaining half of the defect: check_apply
+    reads the LATEST parse_verdicts receipt and its round stamp, and a
+    "recorded" verdict is a passing one, so the composer shipped the package
+    anyway. A finding nothing acts on is a comment. The gate now fails, and the
+    receipt says `fail` rather than `recorded`.
+    """
     import parse_verdicts
     ws = tmp_path / "ws"
     ws.mkdir()
@@ -286,6 +294,10 @@ def test_re_parsing_the_previous_rounds_replies_is_reported(tmp_path, capsys):
             "--recruiter", names[1], "--hiring-manager", names[2]]
     assert parse_verdicts.main(argv + ["--round", "1"]) == 0
     capsys.readouterr()
-    assert parse_verdicts.main(argv + ["--round", "2"]) == 0   # same files, new round
+    assert parse_verdicts.main(argv + ["--round", "2"]) == 1   # same files, new round
     out = capsys.readouterr().out
     assert "SAME_JUDGEMENTS_AS_ROUND_1" in out
+    last = journal.read_receipts(ws, "parse_verdicts")[-1]
+    assert last["verdict"] == "fail", (
+        "a 'recorded' verdict is a passing one to check_apply, which is how the "
+        "round nobody judged got shipped")

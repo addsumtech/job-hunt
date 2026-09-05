@@ -211,7 +211,10 @@ def main(argv=None) -> int:
     hashes = {_relative(p, ws): journal.sha256_file(p) for p in paths.values()}
     previous = [r for r in journal.read_receipts(ws, GATE)
                 if r.get("round") is not None and int(r["round"]) != int(args.round)]
-    if previous and set((previous[-1].get("input_hashes") or {}).values()) == set(hashes.values()):
+    stale_round = bool(
+        previous
+        and set((previous[-1].get("input_hashes") or {}).values()) == set(hashes.values()))
+    if stale_round:
         # Stamping the round forced the parser to RUN for round n; it did not force
         # it to run on round n's JUDGEMENTS. Re-parsing the previous round's
         # transcripts produced a correctly-stamped receipt for a round nobody judged.
@@ -250,9 +253,16 @@ def main(argv=None) -> int:
     # rests on — would have been the one required gate whose receipt could not be
     # checked. Nothing reads these keys by name (the path-keyed map
     # check_render_freshness uses is a different field, `dispatch.input_hashes`).
+    # `stale_round` joins AMBIGUOUS for the same reason: neither produced a
+    # usable verdict FOR THIS ROUND. It printed the finding and exited 0 with a
+    # "recorded" receipt, so check_apply — which reads that receipt and its round
+    # stamp — passed a round nobody judged. That is the bypass the round stamp was
+    # added to close, reopened one level up.
     journal.receipt(ws, GATE, hashes,
-                    "fail" if combined == "AMBIGUOUS" else "recorded", findings,
-                    extra={"round": int(args.round)})
+                    "fail" if combined == "AMBIGUOUS" or stale_round else "recorded",
+                    findings, extra={"round": int(args.round)})
+    if stale_round:
+        return 1
     return 0 if combined == "PASS" else 1
 
 

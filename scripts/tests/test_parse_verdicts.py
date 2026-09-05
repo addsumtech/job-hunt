@@ -227,3 +227,39 @@ def test_every_verdict_this_gate_writes_is_in_the_journal_vocabulary(tmp_path):
     pv.main(argv)
     assert {r["verdict"] for r in journal.read_receipts(ws, "parse_verdicts")} \
         <= set(journal.VERDICTS)
+
+
+def _round_argv(ws, n):
+    return ["--workspace", str(ws), "--round", str(n),
+            "--ats", str(ws / "ats.txt"),
+            "--recruiter", str(ws / "rec.txt"),
+            "--hiring-manager", str(ws / "hm.txt")]
+
+
+def test_reparsing_the_previous_rounds_transcripts_fails_rather_than_records(tmp_path):
+    """Stamping the round forced the parser to RUN for round n; it did not force
+    it to run on round n's JUDGEMENTS. The finding printed and the gate exited 0
+    with a "recorded" receipt, so check_apply — which reads that receipt and its
+    round stamp — passed a round nobody judged. That is the bypass the round
+    stamp exists to close, reopened one level up."""
+    ws, argv = _files(tmp_path)
+    assert pv.main(argv) == 0
+    assert pv.main(_round_argv(ws, 2)) == 1
+    last = journal.read_receipts(ws, "parse_verdicts")[-1]
+    assert last["verdict"] == "fail"
+    assert any(f.startswith("SAME_JUDGEMENTS_AS_ROUND_") for f in last["findings"])
+
+
+def test_a_genuinely_new_round_still_records_and_exits_zero(tmp_path):
+    """The twin: new transcripts must go back to a clean pass, or the fix has
+    simply made round 2 impossible."""
+    ws, argv = _files(tmp_path)
+    assert pv.main(argv) == 0
+    for name in ("ats.txt", "rec.txt", "hm.txt"):
+        path = ws / name
+        path.write_text(path.read_text(encoding="utf-8") + "\nRound two rewrite.\n",
+                        encoding="utf-8")
+    assert pv.main(_round_argv(ws, 2)) == 0
+    last = journal.read_receipts(ws, "parse_verdicts")[-1]
+    assert last["verdict"] == "recorded"
+    assert not any(f.startswith("SAME_JUDGEMENTS") for f in last["findings"])
