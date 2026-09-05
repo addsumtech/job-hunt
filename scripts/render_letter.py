@@ -76,7 +76,11 @@ def build_latex(d, engine=None):
     e = render_cv.latex_escape
     s = d.get("sender", {}) or {}
     r = d.get("recipient", {}) or {}
-    parts = render_cv.latex_preamble(engine=engine, margin="2.5cm") + [
+    # `meta` is passed for the paper size. Without it the CV in an application
+    # package printed on Letter for a US role while the letter beside it printed
+    # on A4 — one package, two page sizes, and nothing said so.
+    parts = render_cv.latex_preamble(engine=engine, margin="2.5cm",
+                                     meta=d.get("meta")) + [
         r"\pagestyle{empty}",
         r"\begin{document}",
         r"\noindent %s\\ %s\\ %s\\[1em]" % (

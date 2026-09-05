@@ -1441,6 +1441,54 @@ def _main_font_setup(meta):
     return _font_chain(fonts, "setmainfont")
 
 
+# ---------------------------------------------------------------------------
+# Paper size. Not the same axis as the CV-convention cluster, and reusing the
+# cluster would have been wrong: Cluster 1 is US/CA/UK/IE/AU/NZ, but the UK,
+# Ireland, Australia and New Zealand all print on A4. Letter is a North
+# American convention, not an Anglophone one.
+#
+# Only the two markets this skill has convention tables and cluster codes for
+# are asserted here. Other Letter-using countries exist; naming them from memory
+# in a file that is meant to be checkable is exactly the kind of unsourced claim
+# this skill bans elsewhere, so they set `meta.paper` instead.
+_LETTER_CODES = {"us", "usa", "ca", "can"}
+_LETTER_NAMES = {"united states of america", "united states", "u s a", "u s",
+                 "america", "canada"}
+_LETTER_CJK = ("美国", "美國", "加拿大")
+PAPERS = {"a4": "a4paper", "letter": "letterpaper"}
+
+
+def paper_for(meta) -> str:
+    """The LaTeX documentclass paper option for this profile.
+
+    `meta.paper` wins when set — it is the escape hatch for Mexico, the
+    Philippines and anywhere else that prints Letter, without this module
+    claiming a list it has not verified. Otherwise US and Canada get Letter and
+    everything else A4, which was hard-coded for every market until 2026-09-05:
+    every US and Canadian CV this skill has ever produced came out on A4.
+    """
+    meta = meta if isinstance(meta, dict) else {}
+    declared = str(meta.get("paper") or "").strip().lower()
+    if declared:
+        if declared not in PAPERS:
+            raise ValueError(
+                f"meta.paper must be one of {sorted(PAPERS)}, got {declared!r}")
+        return PAPERS[declared]
+    market = meta.get("target_market")
+    text = unicodedata.normalize("NFKC", str(market or "")).lower()
+    if any(name in text for name in _LETTER_CJK):
+        return PAPERS["letter"]
+    for seg in _market_segments(market):
+        if seg in _LETTER_CODES or seg in _LETTER_NAMES:
+            return PAPERS["letter"]
+        words = seg.split()
+        for n in range(len(words), 0, -1):
+            for i in range(len(words) - n + 1):
+                if " ".join(words[i:i + n]) in _LETTER_NAMES:
+                    return PAPERS["letter"]
+    return PAPERS["a4"]
+
+
 def latex_preamble(engine=None, cjk=False, meta=None, margin="2cm"):
     """The documentclass + encoding/font lines, chosen by ENGINE, not by content.
 
@@ -1466,7 +1514,7 @@ def latex_preamble(engine=None, cjk=False, meta=None, margin="2cm"):
     the pdfLaTeX lines and therefore its own copy of this bug.
     """
     meta = meta or {}
-    lines = [r"\documentclass[11pt,a4paper]{article}"]
+    lines = [r"\documentclass[11pt,%s]{article}" % paper_for(meta)]
     if _is_unicode_engine(engine):
         lines.append(r"\usepackage{fontspec}")
         main = _main_font_setup(meta)

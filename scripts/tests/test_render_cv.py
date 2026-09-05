@@ -841,3 +841,47 @@ def test_the_shipped_example_and_fixtures_satisfy_their_own_schema(tmp_path):
         # it raises here with the field names rather than yielding a bare [] mismatch.
         assert render_cv.missing_required_fields(
             render_cv.load_profile(root / rel)) == [], rel
+
+
+# ---------------------------------------------------------------------------
+# Paper size. `\documentclass[11pt,a4paper]` was hard-coded for every market, so
+# every US and Canadian CV this skill ever produced came out on A4.
+#
+# Deliberately NOT keyed on the CV-convention cluster: Cluster 1 is
+# US/CA/UK/IE/AU/NZ, and the UK, Ireland, Australia and New Zealand all print on
+# A4. Letter is North American, not Anglophone — one enum reused for two
+# different axes is how a rule ends up right for half its members.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("market", ["us", "ca", "United States", "Canada",
+                                    "美国", "加拿大", "remote (US) / hybrid Berlin"])
+def test_north_america_gets_letter(market):
+    assert render_cv.paper_for({"target_market": market}) == "letterpaper"
+
+
+@pytest.mark.parametrize("market", ["uk", "ie", "au", "nz", "nl", "de", "jp", "cn",
+                                    "Boston, MA", "", None])
+def test_everywhere_else_including_the_rest_of_cluster_1_gets_a4(market):
+    """`Boston, MA` is here on purpose: a bare US state is not a market token,
+    and guessing one would be the same substring failure check_shortlist has."""
+    assert render_cv.paper_for({"target_market": market}) == "a4paper"
+
+
+def test_meta_paper_overrides_the_market():
+    """The escape hatch for Mexico, the Philippines and anywhere else that
+    prints Letter, without this module asserting a country list it has not
+    verified."""
+    assert render_cv.paper_for({"target_market": "nl", "paper": "letter"}) == "letterpaper"
+    assert render_cv.paper_for({"target_market": "us", "paper": "a4"}) == "a4paper"
+
+
+def test_an_unknown_meta_paper_is_refused_rather_than_silently_a4():
+    with pytest.raises(ValueError):
+        render_cv.paper_for({"paper": "foolscap"})
+
+
+def test_the_preamble_carries_the_chosen_paper():
+    us = "\n".join(render_cv.latex_preamble(meta={"target_market": "us"}))
+    nl = "\n".join(render_cv.latex_preamble(meta={"target_market": "nl"}))
+    assert "letterpaper" in us and "a4paper" not in us
+    assert "a4paper" in nl and "letterpaper" not in nl
