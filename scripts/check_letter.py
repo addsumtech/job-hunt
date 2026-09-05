@@ -24,6 +24,7 @@ import unicodedata
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import journal
+import render_letter
 
 GATE = "check_letter"
 # motivation-letter.md:119 — "250–350 words optimal for the body … 400 words is
@@ -61,6 +62,23 @@ def findings_for(letter: dict, posting: dict) -> list:
                        f"{', '.join(repr(h) for h in hits)} — render_letter prints "
                        f"body strings verbatim, so this renders literally "
                        f"(**bold** prints four asterisks)")
+
+    # A salutation or sign-off the skill cannot source is a hole the WRITER has
+    # to fill, and the gate is what stops it shipping. render_letter used to put
+    # "Dear Hiring Manager," / "Sincerely," on every letter regardless of
+    # language — against motivation-letter.md:272, "Never mix languages in one
+    # letter" — and nothing said so.
+    language = str(((letter.get("meta") or {}) if isinstance(letter.get("meta"), dict)
+                    else {}).get("language") or "en").strip().lower()[:2]
+    for field, code in (("salutation", "NO_SALUTATION"), ("closing", "NO_CLOSING")):
+        if str(letter.get(field) or "").strip():
+            continue
+        if getattr(render_letter, f"{field}_for")(letter):
+            continue          # a sourced default covers this language
+        out.append(f"{code}: letter.yaml has no {field} and this skill has no "
+                   f"sourced {field} for language {language!r}, so the rendered "
+                   f"letter has none. Write one in the letter's own language "
+                   f"(motivation-letter.md: never mix languages in one letter)")
 
     joined = " ".join(str(p) for p in body)
     if not cjk_dominant(joined):

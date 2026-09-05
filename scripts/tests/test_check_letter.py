@@ -1,6 +1,7 @@
 import pathlib
 import sys
 
+import pytest
 import yaml
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
@@ -201,3 +202,41 @@ def test_dominance_is_a_ratio_not_a_trigger_on_any_cjk_character():
     body = ["word " * 100, "word " * 100, "word " * 100 + "at 阿里巴巴."]
     assert not check_letter.cjk_dominant(" ".join(body))
     assert check_letter.cjk_dominant("我在莱顿大学医学中心从事研究 with Python")
+
+
+# ---------------------------------------------------------------------------
+# render_letter used to print `Dear Hiring Manager,` / `Sincerely,` on every
+# letter regardless of language, against motivation-letter.md:272 — "Never mix
+# languages in one letter" — in the renderer that file drives. Those defaults
+# are gone for languages the skill cannot source, so the gate is what stops a
+# letter shipping with no opener at all.
+# ---------------------------------------------------------------------------
+
+def _lang_letter(lang, **kw):
+    d = {"meta": {"language": lang}, "body": ["Genoeg tekst hier."],
+         "recipient": {"company": "Acme"}}
+    d.update(kw)
+    return d
+
+
+@pytest.mark.parametrize("lang,codes", [
+    ("zh", {"NO_SALUTATION", "NO_CLOSING"}),
+    ("ja", {"NO_SALUTATION", "NO_CLOSING"}),
+    ("de", {"NO_CLOSING"}),
+    ("nl", {"NO_CLOSING"}),
+    ("en", set()),
+])
+def test_a_missing_line_the_skill_cannot_source_is_reported(lang, codes):
+    out = check_letter.findings_for(_lang_letter(lang), {"company": "Acme",
+                                                    "role_title": "r"})
+    got = {f.split(":")[0] for f in out if f.startswith("NO_")}
+    assert got == codes, out
+
+
+def test_writing_the_lines_silences_it():
+    """The twin: this must be satisfiable by writing the letter properly, or it
+    is a gate that fails every CJK letter forever."""
+    out = check_letter.findings_for(
+        _lang_letter("zh", salutation="尊敬的招聘团队：", closing="此致敬礼"),
+        {"company": "Acme", "role_title": "r"})
+    assert not [f for f in out if f.startswith("NO_")], out
