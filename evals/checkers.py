@@ -625,14 +625,6 @@ CLUSTER1_MARKERS = ("date of birth", "geburtsdatum", "date de naissance",
 # date of birth. These are spellings, not a second cluster table, and
 # test_eval_checkers_apply.py asserts the skill's resolver agrees about every one
 # of them -- so a disagreement is a red test rather than a quiet grade.
-CLUSTER1_MARKET_SPELLINGS = (
-    "United States of America", "United States", "USA", "U.S.", "U S A", "U S",
-    "US", "America", "Canada",
-    "United Kingdom", "Great Britain", "Britain", "UK", "U K", "England",
-    "Scotland", "Wales", "Northern Ireland", "Republic of Ireland", "Ireland",
-    "Australia", "New Zealand",
-    "美国", "英国", "加拿大", "澳大利亚", "新西兰", "爱尔兰")
-
 # ISO-ish codes, matched as WHOLE SEGMENTS and never as substrings.
 #
 # MEASURED IN THE ITERATION-2 PILOT: the skill writes `target_market: de` into
@@ -648,20 +640,71 @@ CLUSTER1_MARKET_SPELLINGS = (
 # resolve to Italy. Segments only.
 CLUSTER1_MARKET_CODES = (
     "us", "usa", "ca", "can", "uk", "gb", "ie", "irl", "au", "aus", "nz")
+# Cluster-1 country NAMES, matched as phrases rather than as codes. The
+# punctuated forms the pilot needed (`U.S.`, `U S A`) are kept alongside the
+# transcription: `_market_code_segments` handles the bare codes, but a CV whose
+# market reads `United States (Los Angeles, CA)` is graded off these.
+CLUSTER1_MARKET_SPELLINGS = (
+    "U.S.", "U S A", "U S", "US", "UK", "U K",
+    "united states of america", "united states", "u s a", "america", "canada",
+    "united kingdom", "great britain", "britain", "england", "scotland",
+    "wales", "northern ireland", "republic of ireland", "ireland", "australia",
+    "new zealand", "u k", "u s", "etats unis", "états unis",
+    "estados unidos", "vereinigte staaten", "verenigde staten", "royaume uni", "reino unido",
+    "grossbritannien", "großbritannien", "groot brittannie", "eire", "nouvelle zelande",
+    "nouvelle zélande", "irlande", "australie", "nueva zelanda", "irlanda",
+    "australien", "kanada", "canada", "美国", "美國",
+    "英国", "英國", "加拿大", "澳大利亚", "澳大利亞",
+    "新西兰", "紐西蘭", "爱尔兰", "愛爾蘭", "アメリカ",
+    "イギリス", "カナダ", "미국", "영국", "캐나다",
+    "호주",
+)
 # Cluster 2 and 3 in the skill's terms: markets where a photo and a date of
 # birth are an ordinary convention, so STRIPPING them is the failure.
+# TRANSCRIBED from the skill's tables, not imported from them. An eval harness
+# that asks the thing it grades for its ground truth cannot catch that thing
+# being wrong. `test_every_market_the_skill_resolves_the_harness_also_classifies`
+# is the reconciliation, and on 2026-09-05 it earned its keep: widening the
+# skill's tables with endonyms turned 142 of these red in one run.
 CONVENTIONAL_PHOTO_MARKET_SPELLINGS = (
-    "The Netherlands", "Netherlands", "Holland", "Germany", "Deutschland",
-    "France", "Belgium", "Spain", "Italy", "Portugal", "Austria", "Switzerland",
-    "Sweden", "Norway", "Denmark", "Finland", "Poland", "Czechia",
-    "Czech Republic", "Luxembourg", "Greece", "Romania", "Hungary",
-    "European Union", "EEA",
-    "Mainland China", "China", "Hong Kong", "Taiwan", "Japan", "South Korea",
-    "Republic of Korea", "Korea", "Singapore", "Malaysia", "Thailand",
-    "Vietnam", "Indonesia", "Philippines", "India",
-    "德国", "荷兰", "法国", "比利时", "西班牙", "意大利", "瑞士", "瑞典", "欧盟",
-    "中国", "中国大陆", "香港", "台湾", "日本", "韩国", "新加坡", "马来西亚",
-    "泰国", "印度")
+    "the netherlands", "netherlands", "holland", "germany", "deutschland",
+    "france", "belgium", "spain", "italy", "portugal",
+    "austria", "switzerland", "sweden", "norway", "denmark",
+    "finland", "poland", "czechia", "czech republic", "luxembourg",
+    "greece", "romania", "hungary", "european union",
+    "eea", "nederland", "belgie", "belgië", "belgique",
+    "osterreich", "österreich", "schweiz", "suisse", "svizzera",
+    "espana", "españa", "italia", "portugal", "suomi",
+    "sverige", "norge", "danmark", "polska", "cesko",
+    "česko", "ellada", "elláda", "magyarorszag", "magyarország",
+    "romania", "românia", "luxemburg", "letzebuerg", "lëtzebuerg",
+    "europese unie", "union europeenne", "europaische union", "europäische union", "frankreich",
+    "duitsland", "allemagne", "alemania", "germania", "pays bas",
+    "paises bajos", "niederlande", "olanda", "autriche", "suede",
+    "suède", "norvege", "norvège", "danemark", "finlande",
+    "pologne", "grece", "grèce", "belgien", "spanien",
+    "italien", "schweden", "polen", "griechenland", "mainland china",
+    "china", "hong kong", "taiwan", "japan", "south korea",
+    "republic of korea", "korea", "singapore", "malaysia", "thailand",
+    "vietnam", "indonesia", "philippines", "india", "nippon",
+    "nihon", "hanguk", "한국", "대한민국", "viet nam",
+    "việt nam", "zhongguo", "malaysia", "singapura", "prathet thai",
+    "bharat", "pilipinas", "indonesia", "coree du sud", "corée du sud",
+    "japon", "chine", "inde", "singapour", "japan",
+    "korea del sur", "giappone", "cina", "china", "荷兰",
+    "荷蘭", "德国", "德國", "法国", "法國",
+    "比利时", "比利時", "西班牙", "意大利", "瑞士",
+    "瑞典", "挪威", "丹麦", "丹麥", "芬兰",
+    "芬蘭", "波兰", "波蘭", "奥地利", "奧地利",
+    "葡萄牙", "欧盟", "歐盟", "オランダ", "ドイツ",
+    "フランス", "독일", "네덜란드", "프랑스", "中国",
+    "中國", "中华人民共和国", "中華人民共和國", "中国大陆", "中國大陸",
+    "香港", "台湾", "台灣", "日本", "韩国",
+    "韓国", "韓國", "新加坡", "马来西亚", "馬來西亞",
+    "泰国", "泰國", "印度", "越南", "印度尼西亚",
+    "菲律宾", "한국", "대한민국", "일본", "중국",
+    "싱가포르",
+)
 CONVENTIONAL_PHOTO_MARKET_CODES = (
     "nl", "de", "fr", "be", "es", "it", "pt", "at", "ch", "se", "no", "dk",
     "fi", "pl", "cz", "lu", "gr", "ro", "hu", "eu",

@@ -684,17 +684,19 @@ def test_a_two_letter_code_never_matches_a_word_that_merely_contains_it(market):
     assert conv == (render_cv.resolve_cluster(market) in (2, 3))
 
 
-# The skill's tables list `ireland eu` under Cluster 2, and it can never resolve
-# there: `ireland` (Cluster 1) matches the same string and `resolve_cluster`
-# takes min(), because suppression is the safe direction. So the entry is dead
-# weight that tells a reader Ireland-EU is treated as a photo market when it is
-# not.
+# `ireland eu` used to be here: listed under Cluster 2 and unable to resolve
+# there, because `ireland` (Cluster 1) matches the same string and
+# `resolve_cluster` takes min(). It was recorded as a known documentation defect
+# in the table rather than fixed — and then, on 2026-09-05, transcribing the
+# skill's tables into the eval harness turned it into a red test, because the
+# harness had to claim Ireland-EU was a photo market to match a line that never
+# applied. The entry is deleted; the behaviour is unchanged and always was
+# correct (an Irish CV is an anglophone CV).
 #
-# Recorded rather than silently tolerated, and recorded as an exact set: a
-# SECOND unreachable entry is a red test. The behaviour itself is correct —
-# an Irish CV is an anglophone CV and Cluster 1 is the right answer — so this
-# is a documentation defect in the table, not a grading defect.
-KNOWN_UNREACHABLE = {"ireland eu"}
+# The set stays, empty, and stays asserted as an exact set: a new unreachable
+# entry must be a red test, and deleting the assertion along with its last
+# member is how the next one gets in unnoticed.
+KNOWN_UNREACHABLE = set()
 
 
 def test_no_new_unreachable_entry_in_the_skill_market_tables():
