@@ -19,6 +19,7 @@ test_render_pdf_compile.py does — three silent skips inside a green build is a
 failure mode this repo has been bitten by once already.
 """
 import pathlib
+import shutil
 import sys
 
 import pytest
@@ -30,6 +31,14 @@ import render_letter
 ENGINE = render_cv.find_latex_engine()
 needs_engine = pytest.mark.skipif(ENGINE is None,
                                   reason="no LaTeX engine installed")
+# A LaTeX engine and `pdftotext` are separate installs, and these tests need
+# both. `needs_engine` guards only the first, so on a machine with tectonic and
+# no poppler these crashed with FileNotFoundError instead of skipping — and the
+# in-body `if returncode != 0: skip` could never catch that, because a missing
+# binary raises before there is a return code to read. Found by running the suite
+# with a stripped PATH, which is closer to CI than this machine is.
+needs_pdftotext = pytest.mark.skipif(shutil.which("pdftotext") is None,
+                                     reason="pdftotext (poppler) is not installed")
 
 PNG_1X1 = (
     b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
@@ -73,6 +82,7 @@ def test_han_and_kana_folded_scalar_spaces_are_still_stripped():
 
 
 @needs_engine
+@needs_pdftotext
 def test_korean_spaces_survive_into_the_compiled_pdf(tmp_path):
     """The assertion this file SHOULD have made the first time.
 
@@ -189,6 +199,7 @@ def test_the_off_page_threshold_is_the_margin():
 
 
 @needs_engine
+@needs_pdftotext
 def test_ordinary_publication_dois_and_repo_urls_stay_on_the_page(tmp_path):
     """Measured against the pre-fix renderer on this exact fixture: widest ink at
     xMax 598.57 on a 595.276pt A4 sheet — printed off the paper — at exit 0.

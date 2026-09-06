@@ -24,6 +24,7 @@ Laude, Leiden University  Leiden, NL" with "2021-09 – 2023-02" alone underneat
 """
 import pathlib
 import re
+import shutil
 import subprocess
 import sys
 
@@ -35,6 +36,14 @@ import render_cv  # noqa: E402
 ENGINE = render_cv.find_latex_engine()
 needs_engine = pytest.mark.skipif(ENGINE is None,
                                   reason="no LaTeX engine installed")
+# A LaTeX engine and `pdftotext` are separate installs, and these tests need
+# both. `needs_engine` guards only the first, so on a machine with tectonic and
+# no poppler these crashed with FileNotFoundError instead of skipping — and the
+# in-body `if returncode != 0: skip` could never catch that, because a missing
+# binary raises before there is a return code to read. Found by running the suite
+# with a stripped PATH, which is closer to CI than this machine is.
+needs_pdftotext = pytest.mark.skipif(shutil.which("pdftotext") is None,
+                                     reason="pdftotext (poppler) is not installed")
 
 PROFILE = {
     "meta": {"name": "Test Person", "target_market": "nl", "language": "en"},
@@ -129,6 +138,7 @@ def test_latex_entry_headings_do_not_rely_on_a_bare_hfill():
 
 
 @needs_engine
+@needs_pdftotext
 def test_a_long_heading_keeps_its_dates_with_the_heading(tmp_path):
     """The real artifact. Compile it and read the text back.
 
@@ -155,6 +165,7 @@ def test_a_long_heading_keeps_its_dates_with_the_heading(tmp_path):
 
 
 @needs_engine
+@needs_pdftotext
 def test_every_entry_keeps_its_metadata_with_its_own_heading(tmp_path):
     """Generalises the above over every entry, so a regression in one section is
     not hidden by another passing.

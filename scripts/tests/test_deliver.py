@@ -293,7 +293,14 @@ def test_the_record_is_not_a_gate_receipt(tmp_path):
 
 
 def test_a_refused_pdf_is_named_in_the_record(tmp_path, monkeypatch):
-    """The reason a PDF is missing has to survive the session that produced it."""
+    """The reason a PDF is missing has to survive the session that produced it.
+
+    Asserted over the WHOLE list, never `[0]`. How many PDFs are refused depends
+    on the machine: with a LaTeX engine only the CJK one is (its font is mocked
+    away), without one every .md is, and `mock/assessment-1.md` sorts first. The
+    first version of this test indexed [0], passed here and failed in CI — an
+    environment-dependent assertion, which is a test bug and not a finding.
+    """
     import json
     ws = build(tmp_path, md="# 岗位候选\n\n中文内容。\n")
     monkeypatch.setattr(deliver, "pick_cjk_font", lambda: None)
@@ -301,8 +308,13 @@ def test_a_refused_pdf_is_named_in_the_record(tmp_path, monkeypatch):
     rec = [json.loads(l) for l in
            (ws / "journal.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
     delivery = [r for r in rec if r.get("action") == "delivery"][0]
-    assert delivery["pdf_refused"], "a refused PDF left no trace"
-    assert "shortlist.pdf" in delivery["pdf_refused"][0]
+    refused = delivery["pdf_refused"]
+    assert refused, "a refused PDF left no trace"
+    shortlist = [n for n in refused if "shortlist.pdf" in n]
+    assert shortlist, f"the CJK document is not named among {refused}"
+    assert "CJK font" in shortlist[0], (
+        "the entry must carry WHY, not just that something was refused: "
+        f"{shortlist[0]}")
 
 
 def test_an_unwritable_workspace_journal_does_not_fail_the_delivery(tmp_path, monkeypatch):
