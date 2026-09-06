@@ -824,30 +824,37 @@ def _suppress_personal_data(profile) -> bool:
 # Chinese furniture in an English page is a bug this skill already names; the
 # mirror image is the same bug.
 #
+# `age` was the one key missing from all eight tables, so every CJK CV printed
+# the English word above a Chinese, Japanese or Korean value — and `age` is one
+# of the five fields SKILL.md's interlock is specified around and the single
+# most common personal field on an East Asian résumé. The fallback below is why
+# it was silent; `test_every_interlock_field_has_a_label` is why the next one
+# will not be.
+#
 # A key with no translation falls back to the English title-case form rather
 # than raising, so adding a `contact.personal` field never needs nine tables
 # updated at once — the same rule `headings` uses.
 PERSONAL_LABELS = {
-    "nl": {"date_of_birth": "Geboortedatum", "nationality": "Nationaliteit",
+    "nl": {"date_of_birth": "Geboortedatum", "age": "Leeftijd", "nationality": "Nationaliteit",
            "hometown": "Woonplaats", "marital_status": "Burgerlijke staat",
            "gender": "Geslacht"},
-    "de": {"date_of_birth": "Geburtsdatum", "nationality": "Staatsangehörigkeit",
+    "de": {"date_of_birth": "Geburtsdatum", "age": "Alter", "nationality": "Staatsangehörigkeit",
            "hometown": "Wohnort", "marital_status": "Familienstand",
            "gender": "Geschlecht"},
-    "fr": {"date_of_birth": "Date de naissance", "nationality": "Nationalité",
+    "fr": {"date_of_birth": "Date de naissance", "age": "Âge", "nationality": "Nationalité",
            "hometown": "Domicile", "marital_status": "Situation familiale",
            "gender": "Sexe"},
-    "es": {"date_of_birth": "Fecha de nacimiento", "nationality": "Nacionalidad",
+    "es": {"date_of_birth": "Fecha de nacimiento", "age": "Edad", "nationality": "Nacionalidad",
            "hometown": "Residencia", "marital_status": "Estado civil",
            "gender": "Sexo"},
-    "it": {"date_of_birth": "Data di nascita", "nationality": "Nazionalità",
+    "it": {"date_of_birth": "Data di nascita", "age": "Età", "nationality": "Nazionalità",
            "hometown": "Residenza", "marital_status": "Stato civile",
            "gender": "Sesso"},
-    "zh": {"date_of_birth": "出生日期", "nationality": "国籍",
+    "zh": {"date_of_birth": "出生日期", "age": "年龄", "nationality": "国籍",
            "hometown": "籍贯", "marital_status": "婚姻状况", "gender": "性别"},
-    "ja": {"date_of_birth": "生年月日", "nationality": "国籍",
+    "ja": {"date_of_birth": "生年月日", "age": "年齢", "nationality": "国籍",
            "hometown": "出身地", "marital_status": "配偶者", "gender": "性別"},
-    "ko": {"date_of_birth": "생년월일", "nationality": "국적",
+    "ko": {"date_of_birth": "생년월일", "age": "나이", "nationality": "국적",
            "hometown": "출신지", "marital_status": "결혼 여부", "gender": "성별"},
 }
 

@@ -1199,3 +1199,57 @@ def test_the_shape_warning_does_not_override_the_market_interlock(capsys):
     doc["meta"]["target_market"] = "United States"
     assert list(render_cv.personal_items(doc)) == []
     assert "contact.personal is a" not in capsys.readouterr().err
+
+
+# ---- every field the interlock names must have a label in every table ------
+#
+# `age` was missing from all eight, so a Chinese CV printed
+# "Age: 34 · 出生日期: 1992-05-01 · 婚姻状况: 已婚" — the English word above a
+# Chinese value, which is the exact bug the comment over PERSONAL_LABELS records
+# fixing for `date_of_birth`. One key short of complete, and the silent
+# title-case fallback is why nobody saw it.
+#
+# `age` is not an arbitrary key either: SKILL.md's personal-data interlock is
+# specified around five fields — photo, date of birth, AGE, marital status,
+# nationality — and age is the single most common personal field on an East
+# Asian résumé.
+
+INTERLOCK_PERSONAL_FIELDS = ["date_of_birth", "age", "marital_status", "nationality"]
+
+
+@pytest.mark.parametrize("language", sorted(render_cv.PERSONAL_LABELS))
+@pytest.mark.parametrize("field", INTERLOCK_PERSONAL_FIELDS)
+def test_every_interlock_field_has_a_label(language, field):
+    """The property that would have caught it. Testing `age` alone pins one
+    regression; walking the interlock's own field list finds the next one."""
+    label = render_cv.personal_label(field, language)
+    fallback = field.replace("_", " ").title()
+    assert label != fallback, (
+        f"{language} has no translation for {field}, so a {language} CV prints "
+        f"the English '{fallback}' above a {language} value")
+
+
+def test_the_interlock_field_list_matches_what_skill_md_names():
+    """If SKILL.md ever adds a sixth protected field, this list must follow —
+    otherwise the test above quietly stops covering it."""
+    text = (pathlib.Path(__file__).resolve().parents[2] / "SKILL.md").read_text(
+        encoding="utf-8")
+    for phrase in ("date of birth", "age", "marital status", "nationality"):
+        assert phrase in text.lower(), phrase
+
+
+@pytest.mark.parametrize("language, expected", [
+    ("zh", "年龄"), ("ja", "年齢"), ("ko", "나이"),
+    ("de", "Alter"), ("nl", "Leeftijd"), ("fr", "Âge"),
+    ("es", "Edad"), ("it", "Età"),
+])
+def test_the_age_label_is_the_market_s_own_word(language, expected):
+    assert render_cv.personal_label("age", language) == expected
+
+
+def test_an_unknown_key_still_falls_back_rather_than_raising():
+    """The fallback is deliberate: adding a `contact.personal` field must not
+    require nine tables updated at once. It is only wrong for the fields the
+    interlock names, which is what the parametrized test above covers."""
+    assert render_cv.personal_label("driving_licence", "zh") == "Driving Licence"
+    assert render_cv.personal_label("age", "en") == "Age"
