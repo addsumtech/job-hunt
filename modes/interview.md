@@ -14,7 +14,8 @@ Nothing else in the workspace is modified, and `profile.yaml` is never touched.
 **Record the mode entry first, before reading anything else:**
 
 ```bash
-python3 scripts/enter_mode.py --workspace <workspace> --mode interview
+python3 scripts/enter_mode.py --workspace <workspace> --mode interview \
+    --because "<why interview, in one line, from what the user asked>"
 ```
 
 This writes the content hash of this file to `journal.jsonl`. `scripts/check_mock.py`

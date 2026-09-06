@@ -470,7 +470,8 @@ running, and listed in `requirements.txt` — so `--install` handles those.
 On entering a mode, run:
 
 ```bash
-python3 scripts/enter_mode.py --workspace <ws> --mode <mode>
+python3 scripts/enter_mode.py --workspace <ws> --mode <mode> \
+    --because "<why this mode, in one line, from what the user asked>"
 ```
 
 then read `modes/<mode>.md` in full. The entry writes the mode file's content hash to

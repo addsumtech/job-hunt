@@ -16,7 +16,8 @@ working; a run that builds its own path breaks resumption silently.
 ## 0. Enter the mode — before anything else
 
 ```
-python3 scripts/enter_mode.py --workspace <ws> --mode assess
+python3 scripts/enter_mode.py --workspace <ws> --mode assess \
+    --because "<why assess, in one line, from what the user asked>"
 ```
 
 This writes a `mode_entry` record to `journal.jsonl` carrying this file's content hash,
@@ -319,7 +320,7 @@ or invent one.
 
 **If an entry's `review_by` has passed, still render it, with a 「已过复核期」 banner.**
 A date going by while the code did not change should not stop the skill working. The CI
-lint (`check_conventions.py --all`) fails on the expired date so a person fixes it; the
+lint (`check_conventions.py --ci`) fails on the expired date so a person fixes it; the
 runtime gate downgrades it to `WARN_EXPIRED_REVIEW_BY` and instead requires the banner
 string 「已过复核期」 to appear in `fit-assessment.md` (`MISSING_STALE_BANNER`). On an
 English card the banner is **"past its review date"** — like every other anchor in this

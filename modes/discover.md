@@ -21,7 +21,8 @@ no gate can report it, because both halves are individually correct.
 ## On entering this mode — before anything else
 
 ```bash
-python3 scripts/enter_mode.py --workspace <ws> --mode discover
+python3 scripts/enter_mode.py --workspace <ws> --mode discover \
+    --because "<why discover, in one line, from what the user asked>"
 ```
 
 This writes a `mode_entry` record carrying **this file's content hash** into

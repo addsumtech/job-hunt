@@ -272,7 +272,8 @@ Record the entry before doing anything else — `check_apply.py` requires it, an
 hash is what proves the file you read is the file on disk:
 
 ```bash
-python3 scripts/enter_mode.py --workspace <workspace> --mode apply
+python3 scripts/enter_mode.py --workspace <workspace> --mode apply \
+    --because "<why apply, in one line, from what the user asked>"
 # The master path comes from scripts/paths.py, never hand-built — and it takes
 # the CV LANGUAGE, because one candidate can have one master per language.
 # Without it this resolves to profile.yaml every time, and the provenance gate

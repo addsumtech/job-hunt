@@ -89,7 +89,7 @@ anyway and reporting three PASSes would be the exact failure this skill spends
 most of its design avoiding: an output that looks reviewed and was not.
 
 The honest degraded form is to run the loop that way, and to state in the
-completion message and in `RUN_NOTES` that the judges shared the author's context
+completion message and the run notes that the judges shared the author's context
 and their verdicts are therefore weaker evidence than the skill's shape implies.
 `parse_verdicts.py` still checks the verdicts are well-formed; nothing it can see
 tells it whether the judge was isolated, which is exactly why this has to be
