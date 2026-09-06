@@ -846,3 +846,69 @@ def test_an_unfinished_or_limited_claim_is_reported_in_any_language(term, leaf):
                          ids=[t[1][:28] for t in _DROPS_NOTHING_THAT_MATTERS])
 def test_an_honest_reframing_is_still_silent(term, leaf):
     assert check_claims.relation(term, leaf) == check_claims.SOURCED
+
+
+# ---- a negated completion is a status marker ------------------------------
+#
+# SKILL.md cites `(nog niet afgerond)` BY NAME as one of the five spellings this
+# gate covers. Measured 2026-09-06: of six languages writing the same unfinished
+# degree, five fired and Dutch did not — the one the documentation used as its
+# example. A Dutch candidate could present an unfinished MSc as held and the
+# honesty gate said pass.
+#
+# Neither half of the phrase is a status word alone. `afgerond` means the degree
+# IS finished, so putting it in the status set would fire on every completed
+# degree; `nog` and `niet` are connectives. The PAIR is the qualifier.
+
+NEGATED = {
+    "nl": "nog niet afgerond",
+    "de": "noch nicht abgeschlossen",
+    "en": "not yet completed",
+    "fr": "pas encore terminé",
+    "es": "no terminado",
+    "it": "non completato",
+}
+
+
+@pytest.mark.parametrize("language, phrase", sorted(NEGATED.items()))
+def test_a_negated_completion_is_caught_in_every_language(language, phrase):
+    assert check_claims.dropped_status("MSc Informatica",
+                                       f"MSc Informatica ({phrase})") is not None, language
+
+
+@pytest.mark.parametrize("phrase", [
+    "in progress", "in Bearbeitung", "修了見込み", "재학중", "在读",
+])
+def test_the_documented_spellings_still_fire(phrase):
+    """The five SKILL.md names, unchanged by the fix."""
+    assert check_claims.dropped_status("MSc X", f"MSc X ({phrase})") is not None
+
+
+@pytest.mark.parametrize("leaf", [
+    "MSc Informatica (afgerond)",          # Dutch for COMPLETED
+    "MSc Informatik (abgeschlossen)",      # German for completed
+    "MSc Informatica completed 2024",
+])
+def test_a_completed_degree_is_not_a_dropped_qualifier(leaf):
+    """The half that stops the fix from crying wolf. Adding `afgerond` to the
+    status set — the obvious patch — would fire on every finished degree."""
+    term = leaf.split(" (")[0].replace(" completed 2024", "")
+    assert check_claims.dropped_status(term, leaf) is None, leaf
+
+
+def test_a_department_name_containing_a_negator_is_still_not_a_qualifier():
+    """The whole-span rule has to survive: a negator and a completion word at
+    opposite ends of real content must not turn it into a status marker."""
+    assert check_claims.dropped_status(
+        "Engineer", "Engineer, Basic Materials Group") is None
+    assert check_claims.dropped_status(
+        "Engineer", "Engineer, No Completed Projects Group") is None
+
+
+def test_the_negated_completion_helper_needs_both_halves_and_proximity():
+    assert check_claims._negated_completion(["nog", "niet", "afgerond"]) is True
+    assert check_claims._negated_completion(["not", "yet", "completed"]) is True
+    assert check_claims._negated_completion(["afgerond"]) is False, "no negator"
+    assert check_claims._negated_completion(["niet"]) is False, "no completion word"
+    assert check_claims._negated_completion(
+        ["not", "a", "b", "c", "d", "completed"]) is False, "too far apart"

@@ -203,6 +203,11 @@ _STATUS_CJK = (
 _IGNORABLE_TOKENS = frozenset(
     ("in of the to as at by on for and or level status since until from est "
      "approx approximately self grade "
+     # "not YET finished". These carry no claim either way, which is what this
+     # set is for — and without them the whole-span check rejected "not yet
+     # completed" and "pas encore terminé" while accepting "no terminado" and
+     # "non completato", so four of six languages fired and two did not.
+     "yet still encore ancora todavia todavía aun aún ainda ännu "
      # de / nl
      "im am und oder bis seit ab noch nicht nog niet en van het op voor tot "
      "afgerond abgeschlossen "
@@ -263,6 +268,49 @@ def _is_ignorable(token) -> bool:
     return token in _IGNORABLE_TOKENS or any(ch.isdigit() for ch in token)
 
 
+# A NEGATED completion is a status marker, and neither half of it is one on its
+# own. "nog niet afgerond" is Dutch for "not yet completed": `nog`, `niet` and
+# `afgerond` are all connectives or completion words, all correctly ignorable
+# alone — `afgerond` by itself means the degree IS finished — so `dropped_status`
+# saw no status token and stayed silent.
+#
+# SKILL.md cites `(nog niet afgerond)` by name as one of the five spellings this
+# gate covers. Measured 2026-09-06: of six languages writing the same unfinished
+# degree, five fired and Dutch did not — the one the documentation used as its
+# example. A Dutch candidate could present an unfinished MSc as held and the
+# honesty gate said pass.
+#
+# Adding `afgerond` to the status set would fire on every COMPLETED degree, which
+# is why the pair is what is matched rather than either word.
+_NEGATORS = frozenset("""
+    not no never nog niet geen nicht kein keine noch non pas sans ne
+    sin senza nao não ikke inte ingen
+""".split())
+_COMPLETION_WORDS = frozenset("""
+    completed complete finished awarded conferred obtained graduated
+    afgerond voltooid behaald afgestudeerd
+    abgeschlossen beendet erworben absolviert
+    termine terminé acheve achevé obtenu diplome diplômé
+    terminado completado obtenido titulado finalizado
+    completato terminato conseguito laureato
+    avslutad slutford slutförd fullfort fullført
+""".split())
+
+
+def _negated_completion(tokens) -> bool:
+    """Is a negator paired with a completion word inside this dropped span?
+
+    Window of three, so "nog niet afgerond" and "noch nicht abgeschlossen" both
+    match while a negator and a completion word at opposite ends of a long
+    department name do not.
+    """
+    for i, token in enumerate(tokens):
+        if token in _NEGATORS:
+            if any(t in _COMPLETION_WORDS for t in tokens[i + 1:i + 4]):
+                return True
+    return False
+
+
 def dropped_status(term, leaf):
     """The status marker `term` drops off `leaf`, or None.
 
@@ -292,9 +340,18 @@ def dropped_status(term, leaf):
     if at is None:
         return None
     dropped = have[:at] + have[at + n:]
-    if not any(_is_status(t) for t in dropped):
+    if not any(_is_status(t) for t in dropped) and not _negated_completion(dropped):
         return None
-    if any(not _is_status(t) and not _is_ignorable(t) for t in dropped):
+    # The negator and the completion word are the qualifier here, so they count
+    # as accounted-for rather than as leftover content. Widening
+    # `_IGNORABLE_TOKENS` globally instead would make `completed` invisible
+    # everywhere, and "MSc A" off "MSc A completed 2024" must stay silent — it
+    # drops no status and reads as an honest trim.
+    def _accounted(token):
+        return (_is_status(token) or _is_ignorable(token)
+                or token in _NEGATORS or token in _COMPLETION_WORDS)
+
+    if any(not _accounted(t) for t in dropped):
         return None
     return " ".join(dropped)
 
