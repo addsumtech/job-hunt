@@ -109,7 +109,11 @@ def test_the_self_check_names_every_script():
             # tell a run to execute it mid-application, which is both useless to
             # that run and slow. Same category as check_skill_lossless, which is
             # CI-only for the same reason.
-            "mutants.py"}
+            "mutants.py",
+            # The shared AI-tell library. `lint_cv`, `check_letter` and
+            # `check_word_limits` import it; nothing runs it, so a checklist line
+            # for it would be a line the reader can never tick.
+            "prose_tells.py"}
     section = _self_check_items()
     for f in sorted((ROOT / "scripts").glob("*.py")):
         if f.name in skip:
@@ -488,10 +492,38 @@ def test_skill_md_does_not_credit_a_script_with_a_code_it_never_emits():
     """
     scripts = {p.stem: p.read_text(encoding="utf-8")
                for p in (ROOT / "scripts").glob("*.py")}
+
+    def emitted_by(name):
+        """The codes a script can print — its own, plus those of the sibling
+        modules it imports.
+
+        A gate that shares a check with another gate emits the code through a
+        library: `lint_cv`, `check_letter` and `check_word_limits` all report
+        `AI_VOCABULARY`, and the string lives once, in `prose_tells.py`. Reading
+        only the gate's own source would have made layer 1 either wrong about
+        which gate reports it or forced the message to be copied three times,
+        which is the drift the library exists to prevent.
+        """
+        text = scripts.get(name, "")
+        for mod in re.findall(r"^import ([a-z_]+)$", text, re.M):
+            if mod in scripts:
+                text += scripts[mod]
+        return text
+
     wrong = []
     for line in SKILL.read_text(encoding="utf-8").splitlines():
-        for name in re.findall(r"scripts/([a-z_]+)\.py", line):
-            for code in re.findall(r"`([A-Z][A-Z0-9_]{4,})`", line):
-                if name in scripts and code not in scripts[name]:
-                    wrong.append(f"{name}.py is credited with {code}: {line.strip()[:70]}")
+        named = [n for n in re.findall(r"scripts/([a-z_]+)\.py", line) if n in scripts]
+        if not named:
+            continue
+        # ANY of the scripts the line names, not every one of them. A row that
+        # credits a gate AND the library behind it names two scripts, and asking
+        # each to carry every code on the line reports the library for the gate's
+        # own findings. Where a line names one script — which is the shape of the
+        # defect this test was written for, `check_apply.py` credited with a
+        # `NEXT_MODES` notice it never prints — any and every are the same test.
+        haystack = "".join(emitted_by(n) for n in named)
+        for code in re.findall(r"`([A-Z][A-Z0-9_]{4,})`", line):
+            if code not in haystack:
+                wrong.append(f"{'/'.join(named)} is credited with {code}: "
+                             f"{line.strip()[:70]}")
     assert not wrong, "\n  ".join([""] + wrong)

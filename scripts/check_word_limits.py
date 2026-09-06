@@ -32,6 +32,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import journal
+import prose_tells
 
 GATE = "check_word_limits"
 NO_LIMIT_MARKER = re.compile(r"<!--\s*word-limits:\s*none stated", re.I)
@@ -62,14 +63,14 @@ def _words(text: str) -> int:
 
 
 def sections(text: str) -> list:
-    """[(title, declared_limit|None, body_word_count)] for each `###` heading."""
+    """[(title, declared_limit|None, body_word_count, body)] for each `###` heading."""
     out, marks = [], list(_HEADING.finditer(text))
     for i, m in enumerate(marks):
         end = marks[i + 1].start() if i + 1 < len(marks) else len(text)
         title = m.group("title")
         lim = _LIMIT.search(title)
-        out.append((title, int(lim.group("n")) if lim else None,
-                    _words(text[m.end():end])))
+        body = text[m.end():end]
+        out.append((title, int(lim.group("n")) if lim else None, _words(body), body))
     return out
 
 
@@ -84,7 +85,17 @@ def findings_for(text: str, posting: dict) -> list:
                        "form is scored criterion by criterion, so an unlabelled essay "
                        "cannot be marked against it")
         return out
-    for title, limit, words in rows:
+    for title, limit, words, body in rows:
+        # A criterion answer is 250 words of connected prose written to persuade a
+        # marker — the same register as a motivation letter, and the one artifact
+        # that is actually SCORED here, since the three CV judges are routed away
+        # from a structured application by design. Until now the statement carrying
+        # spearheaded, pivotal, "not just X — it is Y", three tricolons and a
+        # "valuable asset" close exited 0 clean. Measured per criterion rather than
+        # over the file, so a dense 250-word answer is not diluted by a sparse one
+        # and the finding names which criterion to rewrite.
+        out += prose_tells.vocabulary_findings(body, f"{title!r}")
+        out += prose_tells.prose_findings(body, f"{title!r}")
         if words == 0:
             out.append(f"EMPTY_CRITERION: {title!r} has no body — an unaddressed "
                        f"Essential criterion is usually an auto-reject")
@@ -92,7 +103,7 @@ def findings_for(text: str, posting: dict) -> list:
             out.append(f"OVER_LIMIT: {title!r} is {words} words against its stated "
                        f"limit of {limit} — over-limit statements are cut or "
                        f"penalised, so the tail you wrote may simply not be read")
-    if structured and not any(l is not None for _, l, _ in rows) \
+    if structured and not any(l is not None for _, l, _, _ in rows) \
             and not NO_LIMIT_MARKER.search(text):
         out.append("NO_LIMIT_DECLARED: no criterion heading carries a word limit and "
                    "the file does not say the posting stated none. Add the employer's "

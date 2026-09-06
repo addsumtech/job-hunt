@@ -90,6 +90,38 @@ holds both halves: that apply mode ends by offering the next modes, and that
 `check_apply` stays silent on stdout when it is clean.
 
 
+## How this skill writes to the user
+
+The CV and the letter have a gate for machine-sounding prose (`AI_VOCABULARY`,
+`EM_DASH_DENSITY`, `NOT_JUST_PIVOT`, `TRICOLON_DENSITY` — `scripts/prose_tells.py`).
+The documents this skill writes to the *reader* — `shortlist.md`,
+`fit-assessment.md`, the completion message — have none, and cannot: measured
+across all eight of them from the iteration-2 runs, the vocabulary check found
+nothing and every structural finding was a false positive on a table or a list.
+So the rules below are rules, not a check, and the artifact is the only place to
+verify them.
+
+- **Address the reader as "you", and say who said what.** "You told me you are on
+  a search-year permit with eleven months left" is auditable; "the candidate has
+  limited runway" is a summary of them written for someone else.
+- **Every claim carries its evidence reference or its source line.** A row without
+  one is an opinion, and the reader cannot object to one line of it.
+- **Say the uncomfortable thing in the first sentence of its paragraph**, not
+  after two of setup. "The advert says nothing either way about sponsorship" —
+  then the consequence.
+- **Name what was not done.** "No page was fetched live and no site was logged
+  into for this assessment" costs one line and is the difference between a report
+  and a claim.
+- **No throat-clearing and no summary of the summary.** Do not open with "Great
+  question", do not close by restating the table above it in prose, and do not
+  offer to help further — the hand-off section already asks one specific question.
+- **Plain words for hard things.** `recognised sponsor`, `kennismigrant` and
+  `knockout` are terms the reader will meet in the real process, so use them and
+  gloss them once. Everything else gets the ordinary word.
+- **A tell you would flag in the candidate's letter is a tell in yours.** The
+  vocabulary list in `prose_tells.py` applies to this skill's own prose too; it
+  simply has no gate behind it here.
+
 ## NOT ALLOWED
 
 These actions constitute misrepresentation. Do not do them, do not suggest them, and do not accept user instructions to do them.
@@ -175,8 +207,11 @@ After completing all REFRAME and KEYWORD-INSERT edits, review the **full CV** fo
 2. **Sentence structure variety:** Do bullets follow an identical grammatical template (verb → noun phrase → result → percentage)? Vary the structure — some bullets can lead with the outcome, some with the scope, some with the action.
 3. **Voice and specificity:** Does the CV read as one person's work history, or as a generic template filled in with different nouns? Each role should have at least one detail that is unmistakably that candidate's experience.
 4. **Prose quality:** Flawless-but-voiceless prose signals AI generation to experienced recruiters. Preserve natural sentence rhythms even when the grammar is corrected.
+5. **The 2026 vocabulary:** `spearheaded`, `pivotal`, `intricate`, `showcasing`, `delve`, `realm`, `robust`, `cutting-edge`, `seamless`, "a valuable asset". `lint_cv.py` reports these as `AI_VOCABULARY` over the whole document, and `check_letter.py` adds the structural tells on a letter (`EM_DASH_DENSITY`, `NOT_JUST_PIVOT`, `TRICOLON_DENSITY`).
 
 If the uniformity check fails on any dimension, make targeted repairs before delivering the final CV.
+
+The lint is the floor, not the check. It sees the word `pivotal`; it cannot see that three roles were written to the same template. A clean `lint_cv` run is not evidence the CV reads as a person's — dimensions 1–4 above are the part no gate measures, and `references/gap-analysis.md` carries them in full.
 
 ## FIT SNAPSHOT — show before tailoring (baseline) and after (delta)
 
@@ -597,10 +632,10 @@ a fabrication the candidate then repeats back), and the shortlist's `why_matched
 | Claim provenance | `scripts/check_claims.py` | a term with no source (skills, certifications, titles, orgs, degrees, institutions, project roles, publications, awards, volunteer, board); a status qualifier dropped off a real credential — in every language this skill writes CVs in, so `(in Bearbeitung)`, `(nog niet afgerond)`, `（修了見込み）`, `(재학중)` and `（在读）` count exactly as `(in progress)` and `B1` do; a mutated master profile |
 | Verdict parsing | `scripts/parse_verdicts.py` | anything that is not exactly PASS/REJECT; a non-unanimous round |
 | Render freshness | `scripts/check_render_freshness.py` | a judge that read a file the disk no longer has |
-| CV lint | `scripts/lint_cv.py` | clichés, weak openers, over-long bullets, repeated verbs |
-| Letter | `scripts/check_letter.py` | markdown in a body string, length, duplicated name, wrong company/role; a missing salutation or sign-off in a language this skill has no sourced default for (`NO_SALUTATION` / `NO_CLOSING`) — the renderer no longer prints an English one onto a non-English letter, so the gate is what stops it shipping with none. The 250–350 band is an ENGLISH word count, so a CJK-dominant letter is reported (`NOTICE_CJK_LENGTH_UNSCORED`, stderr) rather than scored — this skill has no sourced length convention for one, and the one-page constraint behind the band is measured directly by `check_pages` on the rendered PDF |
+| CV lint | `scripts/lint_cv.py` | clichés, weak openers, over-long bullets, repeated verbs; the 2026 AI vocabulary from `scripts/prose_tells.py` (`AI_VOCABULARY`). The cliché and vocabulary scans run over the WHOLE document, not only the bullets — the summary is the line a recruiter reads first, and it used to be the one line nothing checked. Headings and the contact line are skipped, so an employer called "Robust Systems" is not reported as a cliché. A CV is exempt from the structural checks: a skills line reads "Python, C++, MATLAB" and would fire the tricolon check on every correct CV |
+| Letter | `scripts/check_letter.py` | machine-prose tells over the whole body — the 2026 AI vocabulary (`AI_VOCABULARY`), em-dash density (`EM_DASH_DENSITY`), the "not just X, but Y" pivot (`NOT_JUST_PIVOT`) and tricolon density (`TRICOLON_DENSITY`), all from `scripts/prose_tells.py`, whose thresholds are calibrated against real letters including this skill's own; markdown in a body string, length, duplicated name, wrong company/role; a missing salutation or sign-off in a language this skill has no sourced default for (`NO_SALUTATION` / `NO_CLOSING`) — the renderer no longer prints an English one onto a non-English letter, so the gate is what stops it shipping with none. The 250–350 band is an ENGLISH word count, so a CJK-dominant letter is reported (`NOTICE_CJK_LENGTH_UNSCORED`, stderr) rather than scored — this skill has no sourced length convention for one, and the one-page constraint behind the band is measured directly by `check_pages` on the rendered PDF |
 | Page count and PDF text | `scripts/check_pages.py` | a PDF longer than the market's table allows; a letter over one page; an unreadable PDF; a PDF whose text is missing `meta.name` or an `experience[].org`, or whose text cannot be read at all (`UNVERIFIED_PDF_TEXT` — not a pass); a start date in a calendar it cannot read (`START_DATE_UNREAD` — years of experience is then *unknown*, not zero, and the permissive budget is used rather than the strictest) |
-| Word limits | `scripts/check_word_limits.py` | a supporting-statement criterion over its stated limit, empty, or with no limit recorded |
+| Word limits | `scripts/check_word_limits.py` | a supporting-statement criterion over its stated limit, empty, or with no limit recorded; and the machine-prose tells from `scripts/prose_tells.py`, measured per criterion so the finding names which answer to rewrite. This is the artifact that is actually MARKED — the three CV judges are routed away from a structured application by design — and it had no reader for its prose at all |
 | Apply completion | `scripts/check_apply.py` | a missing receipt; a receipt that does not match its own `receipt_hash`, i.e. hand-written or edited rather than produced by a gate (`RECEIPT_UNVERIFIED`); a gate that only ran its `--record` setup (`NOT_VERIFIED`); ANY gate left failing, named or not; an unclassified stop; a missing brief. `RECEIPT_UNVERIFIED` and `MODE_FILE_MISSING` are checked by every composer — apply, assess, discover and interview — not just this one |
 | Mock interview | `scripts/check_mock.py` | an invented tag or band; a tag with no quote, or a quote that is not in the transcript; a pass emitting the other pass's tags; a scraped question with no id, no date, or the wrong country; an answer-bank entry with no source; a collapsed claim with no walk-back; an unsourced fact neither promoted nor walked back |
 | Evidence blocks | `scripts/evidence_blocks.py` | the posting and CV cut into addressable `JD-nnn` / `CV-nnn`; the only chunker |

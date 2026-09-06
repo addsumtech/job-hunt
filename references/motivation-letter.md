@@ -259,6 +259,21 @@ When a material gap exists and the gap analysis says "address in cover letter", 
 | Generic enthusiasm | "I am passionate about innovation and excited to contribute to your mission" | State *which* aspect of the company's work and *why it connects to your work* |
 | Formulaic structure that matches every template | Hook → "my experience includes" → generic company praise → generic close | Lead with something that would only appear in a letter for this specific company |
 | Abstract claims, no concrete detail | "I have strong communication skills and a track record of success" | Evidence or remove: "presented quarterly findings to a 12-person exec team" |
+| The 2026 vocabulary | spearheaded · pivotal · intricate · showcasing · delve · realm · robust · cutting-edge · seamless · "valuable asset" · "thrive in a fast-paced environment" | Say what the candidate did. The word is doing no work the specific fact would not do better |
+| "Not just X, but Y" | "This is not just a role — it is a chance to…" | The single most recognisable construction in model prose. State the thing you mean without the contrast |
+| Em dashes at model rate | three or more in a 300-word letter | Models use them at two to three times the human rate. Keep one at most; a comma or a full stop does the same work without the signature |
+| The rule of three, applied to everything | "efficient, effective, and reliable" three times in one letter | One tricolon is good writing. Three is a template. Keep the one that carries the most weight |
+
+**These five are checked mechanically.** `scripts/check_letter.py` reports them as
+`AI_VOCABULARY`, `NOT_JUST_PIVOT`, `EM_DASH_DENSITY` and `TRICOLON_DENSITY`, and
+`scripts/lint_cv.py` reports the vocabulary on the CV — over the whole document,
+because the summary is the line a recruiter reads first. The thresholds are
+densities calibrated against real letters (including this skill's own), not
+absolutes: a single em dash and a single tricolon are ordinary writing and are
+never reported. `scripts/prose_tells.py` carries the calibration table and, just
+as importantly, what is deliberately NOT checked and why. The rest of this
+section is the half no gate can measure — a gate can see the word `pivotal`; it
+cannot see that the letter could have been sent to any employer.
 
 ### The 80/20 rule for AI-assisted letters
 

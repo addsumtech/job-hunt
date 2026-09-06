@@ -354,9 +354,13 @@ After completing all REFRAME and KEYWORD-INSERT edits, review the **full CV** fo
 3. **Voice and specificity:** Does the CV read as one person's work history, or as a generic template filled in with different nouns? Each role should have at least one detail that is unmistakably that candidate's experience.
 4. **Prose quality:** Flawless-but-voiceless prose signals AI generation to experienced recruiters. Preserve natural sentence rhythms even when the grammar is corrected.
 
+5. **The 2026 vocabulary:** `spearheaded`, `pivotal`, `intricate`, `showcasing`, `delve`, `realm`, `robust`, `cutting-edge`, `seamless`, "a valuable asset". These are the terms recruiters currently report flagging, and `scripts/lint_cv.py` reports them as `AI_VOCABULARY` — over the **whole document**, not only the bullets, because the summary is the line a recruiter reads first and it used to be the one line nothing checked.
+
 If the uniformity check fails on any dimension, make targeted repairs before delivering the final CV.
 
-Cross-reference: `motivation-letter.md §6` (AI-Authenticity) for the same principle applied to the cover letter.
+The lint is the floor, not the check. It sees the word `pivotal`; it cannot see that three roles were written to the same template, and dimensions 1–4 above are exactly the part no gate measures. Passing `lint_cv` cleanly is not evidence the CV reads as a person's.
+
+Cross-reference: `motivation-letter.md §6` (AI-Authenticity) for the same principle applied to the cover letter — including the structural tells (em-dash density, "not just X, but Y", tricolon density) that are checked on a letter and deliberately **not** on a CV: a skills line reads "Python, C++, MATLAB" and a bullet is terse by design, so those checks would fire on every correct CV.
 
 ---
 

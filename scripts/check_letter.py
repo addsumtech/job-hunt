@@ -26,6 +26,8 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import journal
 import render_letter
 
+import prose_tells
+
 GATE = "check_letter"
 # motivation-letter.md:119 — "250–350 words optimal for the body … 400 words is
 # the hard ceiling". :121 — "3–4 paragraphs total … Never more than 4 unless a
@@ -54,6 +56,16 @@ def findings_for(letter: dict, posting: dict) -> list:
     body = letter.get("body") or []
     if isinstance(body, str):
         body = [body]
+
+    # The letter is where machine prose is most detectable — a CV bullet is terse
+    # by design, a letter is 300 words of connected prose — and until now it was
+    # the ONE artifact with no cliché or AI-tell check at all. A letter carrying
+    # results-driven, spearheading, pivotal, leverage, robust, delve, intricate,
+    # realm, showcasing, "not just X — it is Y", three tricolons and three em
+    # dashes passed this gate reporting only its word count.
+    joined = "\n".join(str(p) for p in body)
+    out += prose_tells.vocabulary_findings(joined, "letter.yaml body")
+    out += prose_tells.prose_findings(joined, "letter.yaml body")
 
     for i, para in enumerate(body):
         hits = [label for label, rx in MARKUP if rx.search(str(para))]

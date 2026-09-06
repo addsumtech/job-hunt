@@ -470,3 +470,5 @@ else — do not silently leave the artifacts undelivered.
 - [ ] A discover-stage 「基于卡片信息的初判」 verdict was **not** copied in. assess
       always recomputes.
 - [ ] `check_assessment.py` exited 0 and its receipt is in `journal.jsonl`.
+
+**Voice.** The assessment is the longest thing this skill hands a person to read. `SKILL.md`, "How this skill writes to the user", governs its prose — address them as "you", carry the evidence reference on every row, and lead each paragraph with the uncomfortable half.

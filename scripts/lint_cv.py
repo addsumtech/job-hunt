@@ -20,6 +20,8 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import journal
 
+import prose_tells
+
 GATE = "lint_cv"
 
 # Multi-word clichés are unambiguous. "leveraged" is not: a finance CV
@@ -71,8 +73,36 @@ _CJK_OPENER = re.compile(
     r"^[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af]{2}[了過过着]?")
 
 
+# A heading, or the contact line. Neither is prose the candidate wrote about
+# themselves, and a company legitimately called "Robust Systems" should not be
+# reported as a cliche on the line that merely names it.
+_NOT_PROSE = re.compile(r"^\s*(#|\||!\[|\s*$)|@|https?://")
+
+
+def _lexical_findings(text: str, name: str) -> list:
+    """Cliches and the 2026 AI vocabulary, over the WHOLE document.
+
+    The bullet-only scan misses the summary, and the summary is the line a
+    recruiter reads first. Measured: "Results-driven professional with a proven
+    track record of leveraging synergy" produced ZERO findings as a summary and
+    one as a bullet -- the same three cliches, invisible in the more damaging
+    place.
+    """
+    out = []
+    for n, line in enumerate(text.split("\n"), 1):
+        if _NOT_PROSE.search(line) or _BULLET_RE.match(line):
+            continue          # bullets are covered below, with their own message
+        hits = [label for label, rx in CLICHES if rx.search(line)]
+        if hits:
+            out.append(f"CLICHE: {name}:{n} contains "
+                       f"{', '.join(repr(h) for h in hits)} — say the specific "
+                       f"thing instead")
+        out += prose_tells.vocabulary_findings(line, f"{name}:{n}")
+    return out
+
+
 def findings_for(text: str, name: str = "cv.md") -> list:
-    out, openers = [], {}
+    out, openers = _lexical_findings(text, name), {}
     for n, line in enumerate(text.split("\n"), 1):
         m = _BULLET_RE.match(line)
         if not m:
@@ -82,6 +112,10 @@ def findings_for(text: str, name: str = "cv.md") -> list:
         if hits:
             out.append(f"CLICHE: {name}:{n} contains {', '.join(repr(h) for h in hits)} "
                        f"— say the specific thing instead")
+        # The 2026 set applies to a bullet as much as to the summary. Wiring it
+        # only into the whole-document pass, which SKIPS bullets to avoid
+        # double-reporting, left every bullet exempt from it.
+        out += prose_tells.vocabulary_findings(body, f"{name}:{n}")
         low = body.lower()
         for opener in WEAK_OPENERS:
             if low.startswith(opener):

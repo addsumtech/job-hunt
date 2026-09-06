@@ -747,3 +747,5 @@ else — do not silently leave the artifacts undelivered.
 - [ ] `scripts/check_no_write.py` and `scripts/check_shortlist.py` both exited 0, and
       the completion message cites their `journal.jsonl` receipts.
 - [ ] No chaining into `apply`. The shortlist is handed back for a person to choose.
+
+**Voice.** The shortlist is a document the user reads, not a dump. `SKILL.md`, "How this skill writes to the user", governs its prose — every row's provenance visible, what was not searched said out loud, no closing offer to help further.

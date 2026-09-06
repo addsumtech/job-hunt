@@ -471,3 +471,5 @@ else — do not silently leave the artifacts undelivered.
 - [ ] every `answer-guide.md` entry carries `- row:`, `- basis:` and `- source:`, no entry is a first-person script, and no entry serving a gapped row claims `evidenced`
 - [ ] every walk-back and every promoted claim from §6 is on disk
 - [ ] `scripts/check_mock.py` exited 0 and its receipt is in `journal.jsonl`
+
+**Voice.** The debrief tells someone what they got wrong. `SKILL.md`, "How this skill writes to the user", governs its prose — quote them rather than characterise them, and say the finding before the cushioning.
