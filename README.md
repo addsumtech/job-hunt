@@ -185,16 +185,6 @@ both. The three judge personas were run end to end through `codex exec` on
 accepted all three and recorded a PASS. `gemini` and `cursor-agent` were on the same
 machine and were not tested; nothing here claims they work.
 
-## Honest limits
-
-There is no hosted version and no web UI: it runs on your machine and writes files.
-It does not submit applications for you and it does not log into anything on your
-behalf — where a platform needs a session, it says so and waits while you sign in.
-Job-board coverage is uneven by region, and the skill names which platforms serve
-yours before searching rather than pretending to cover all of them. And it will tell
-you when a role is not worth your time, which is occasionally the whole value and
-never what you wanted to hear.
-
 ---
 
 Repository layout, the profile schema, the workspace shape, and the full test and
