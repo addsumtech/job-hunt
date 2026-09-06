@@ -373,6 +373,8 @@ In both cases give the final per-judge verdicts, the ATS coverage % (or `n/a`), 
 
 **Check for existing profiles next.** Before building or parsing, check `~/.claude/job-profiles/` for any saved master profiles. If one or more exist, offer to reuse one (retargeting it for this new application) instead of rebuilding from scratch. A returning user can confirm a name and you jump straight to Step 2. New users with no saved profiles proceed to build/parse below.
 
+**Reusing a master carries their experience forward, never their target.** `meta.target_market`, `meta.language` and any `contact.personal` in that file describe the application it was last built for. Re-ask the region and language (Step 0, question 2) before tailoring, and re-confirm any personal field the new market's cluster would treat differently — the master is the source of truth about the candidate, not about where they are applying.
+
 **Offer to save the master** to `~/.claude/job-profiles/<name>/profile.yaml` so it's reusable across applications. This master profile is the source of truth and is **NEVER mutated by tailoring** — tailoring always works on a copy (Step 4).
 
 **Application workspace.** All per-application files live under:

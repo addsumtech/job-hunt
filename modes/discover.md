@@ -173,14 +173,35 @@ Before any search, tell the user which adapters serve their region and which nee
 a login. This is what lets them fix a missing session BEFORE the round runs
 rather than after it.
 
-| region | works without a login | needs a login | not usable |
+This table is about ONE thing: which adapters return **job listings**, i.e. rows
+that can become `shortlist.yaml` entries. Everything else about any adapter —
+flags, pagination, measured login state, identity field — lives in
+`references/discovery-sources.md`, which is the source of truth and must be read
+before calling anything outside SKILL.md's four.
+
+| region | job listings, no login | job listings, needs a login | do not use for listings |
 |---|---|---|---|
 | United States | `indeed` (its native site) | `linkedin` | — |
-| China | `51job` | `boss` | `nowcoder`, `maimai`, `1point3acres` expose no job-search command; `maimai search-talents` is the recruiter side |
-| Netherlands · Germany · UK · rest of Europe | — | `linkedin` | **`indeed` — it resolves locations against a US gazetteer and answers a London search with Ohio** |
+| China | `51job` | `boss` | — |
+| Netherlands · Germany · UK · rest of Europe | — | `linkedin` | **`indeed`** — it resolves locations against a US gazetteer and answers a London search with Ohio |
 | Middle East · anywhere with no convention table | — | `linkedin` | `target_market: other`; say plainly there is no convention data for this market |
 
-Anything outside this table: read `references/discovery-sources.md` before calling it.
+**A site being absent from the "job listings" columns does not make it useless,
+and saying it has "no search command" is wrong.** `nowcoder` and `1point3acres`
+both have one; `discovery-sources.md` records what those searches actually
+return, and the distinction it draws is the one that matters — nowcoder is
+"an interview-experience (面经) source, not a job source", and 1point3acres is a
+forum. They inform a round and they do not produce shortlist rows, because a
+forum thread is not a posting with a `source_id` a row can be traced to.
+
+For a Chinese campus round (`seniority: new_grad`) both are worth naming to the
+user as places to read 面经 and 内推 threads alongside the shortlist — that is a
+pointer, not a row. `maimai`'s only read command is `search-talents`, the
+recruiter side, so it has nothing to offer a candidate. `upwork` is freelance
+work rather than employment.
+
+Get this wrong in the other direction and the cost is real: told that nowcoder
+"has no job-search command", a 校招 round skips the site most relevant to it.
 
 ### 3. Hand the login to the user, then wait
 

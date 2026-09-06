@@ -59,11 +59,17 @@ def test_files_land_flat_with_the_round_as_a_filename_prefix(tmp_path):
     assert not (dest / "shortlist.md").exists(), "unprefixed name would collide"
 
 
-def test_a_nested_output_is_flattened_not_lost(tmp_path):
+def test_a_nested_output_is_flattened_with_its_directory_in_the_name(tmp_path):
+    """`mock/assessment-1.md` keeps `mock` in the delivered name.
+
+    Flattening on the basename alone is what let two same-named files in
+    different directories overwrite each other — see the collision tests below.
+    """
     ws = build(tmp_path)
     dest = tmp_path / "out"
     assert run(ws, dest, "--no-pdf") == 0
-    assert (dest / "2026-09-06-round-assessment-1.md").is_file()
+    assert (dest / "2026-09-06-round-mock-assessment-1.md").is_file()
+    assert not (dest / "2026-09-06-round-assessment-1.md").exists()
 
 
 def test_the_default_destination_is_downloads_itself():
@@ -203,3 +209,42 @@ def test_the_skill_file_lists_delivery_and_the_path_to_tell_the_user():
     text = (REPO / "SKILL.md").read_text(encoding="utf-8")
     assert "scripts/deliver.py" in text
     assert "~/Downloads" in text
+
+
+# ---- flattening must not silently drop a file -----------------------------
+#
+# MEASURED on the first version of this script, by probing it rather than by
+# reading it. `mock/notes.md` and a root-level `notes.md` both became
+# `<slug>-notes.md`: one overwrote the other, and the run printed "Delivered 2
+# file(s)" over a directory holding one. Interview mode writes
+# `mock/transcript-n.md`, `mock/assessment-n.md` and `mock/answer-guide.md`
+# beside root-level outputs, so this is the ordinary layout, not a corner.
+
+def test_two_same_named_files_in_different_directories_both_survive(tmp_path):
+    ws = tmp_path / "round"
+    (ws / "mock").mkdir(parents=True)
+    (ws / "notes.md").write_text("ROOT\n", encoding="utf-8")
+    (ws / "mock" / "notes.md").write_text("NESTED\n", encoding="utf-8")
+    dest = tmp_path / "out"
+    assert run(ws, dest, "--no-pdf") == 0
+    assert (dest / "round-notes.md").read_text(encoding="utf-8") == "ROOT\n"
+    assert (dest / "round-mock-notes.md").read_text(encoding="utf-8") == "NESTED\n"
+
+
+def test_the_reported_count_matches_what_actually_landed(tmp_path, capsys):
+    """The overwrite was survivable; reporting two deliveries over one file was
+    the part that would have gone unnoticed."""
+    ws = tmp_path / "round"
+    (ws / "mock").mkdir(parents=True)
+    (ws / "notes.md").write_text("ROOT\n", encoding="utf-8")
+    (ws / "mock" / "notes.md").write_text("NESTED\n", encoding="utf-8")
+    assert run(ws, tmp_path / "out", "--no-pdf") == 0
+    said = capsys.readouterr().out
+    landed = len(list((tmp_path / "out").iterdir()))
+    assert f"Delivered {landed} file(s)" in said
+
+
+def test_flat_name_keeps_the_whole_relative_path():
+    assert deliver.flat_name("r", pathlib.Path("mock/assessment-1.md")) == \
+        "r-mock-assessment-1.md"
+    assert deliver.flat_name("r", pathlib.Path("cv.md")) == "r-cv.md"

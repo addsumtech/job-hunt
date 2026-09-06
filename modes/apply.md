@@ -4,6 +4,12 @@ Make a **single `AskUserQuestion` call** with up to 4 questions. Drop any questi
 
 1. **CV source** — Do you have a CV to use, or should I build one for you? (If they choose *build*, follow up: can you share an example whose style I should mimic, or should I design a clean template?)
 2. **Target region** — offer the three clusters (see `references/cv-craft.md §2`): **(1) Anglophone developed** (US, Canada, UK, Ireland, Australia, NZ), **(2) EU / EEA** (NL, DE, FR, BE, ES, IT, Nordics, …), **(3) East & SE Asia** (China, Japan, Korea, Singapore, Malaysia, Thailand), plus **Other**. The region options ARE these clusters — do **not** promote an individual country to its own top-level choice even when it is a returning user's saved default (e.g. the **Netherlands is offered *inside* EU / EEA**, never as a separate region). Once they pick a cluster, confirm the **specific country** (it refines length/photo/personal-data conventions) and the **CV language**: English for Cluster 1; **English or the official local language** for Clusters 2 and 3 (match the posting when unsure). Set `meta.target_market`, `meta.language`, and — for a non-built-in language — `meta.headings`. This drives formatting, content conventions, and the rendered language.
+
+   **A saved profile is never an answer to this question.** The instruction above to drop questions the user already answered means answered *by the user, in this request* — not found in a file. A master profile's `meta.target_market` records where a PREVIOUS application went; a CV is a record of what someone has done, and nothing in it says where they now want to work. Reading a region off it is the same class of error as reading a salary floor off a payslip.
+
+   The cost is not cosmetic, because this one field arms the personal-data interlock. A returning user whose master says `nl` (Cluster 2) who is now applying in the US gets `_suppress_personal_data` returning False, and a photo or date of birth reaches a CV that US employers route straight to rejection. The reverse is just as wrong: inheriting a Cluster-1 market strips the Bewerbungsfoto a German employer expects. **Ask it every run, of every user, saved profile or not.**
+
+   Discover mode carries the same rule for the same reason (`modes/discover.md`, "Before Step 0"). Assess and interview do not need it: both are handed a posting, and the posting states its own location.
 3. **Output formats** — Markdown / PDF / .docx (multi-select).
 4. **Motivation letter** — Do you want a cover/motivation letter as well?
 
@@ -12,6 +18,8 @@ Make a **single `AskUserQuestion` call** with up to 4 questions. Drop any questi
 **Resume an in-progress application first.** Before anything else, check `~/.claude/job-profiles/*/applications/` for a workspace that matches this target (by company/role) and already contains a `posting.yaml` and/or `tailored-profile.yaml`. If one exists, a prior run was interrupted — show the user what's already there and offer to **resume from where it stopped** (e.g. posting already extracted → jump to gap analysis or tailoring) rather than rebuilding from Step 0. Only start fresh if they prefer it or no matching workspace exists.
 
 **Check for existing profiles next.** Before building or parsing, check `~/.claude/job-profiles/` for any saved master profiles. If one or more exist, offer to reuse one (retargeting it for this new application) instead of rebuilding from scratch. A returning user can confirm a name and you jump straight to Step 2. New users with no saved profiles proceed to build/parse below.
+
+**Reusing a master carries their experience forward, never their target.** `meta.target_market`, `meta.language` and any `contact.personal` in that file describe the application it was last built for. Re-ask the region and language (Step 0, question 2) before tailoring, and re-confirm any personal field the new market's cluster would treat differently — the master is the source of truth about the candidate, not about where they are applying.
 
 The canonical profile schema is `assets/profile.example.yaml`. Everything downstream renders from a profile in this schema.
 

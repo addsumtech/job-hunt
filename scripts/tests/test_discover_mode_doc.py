@@ -329,3 +329,74 @@ def test_the_employer_type_is_a_lean_not_a_filter():
     t = text()
     assert "not a filter" in t
     assert "no preference" in t
+
+
+# ---- the platform table may not invent adapter facts -----------------------
+#
+# I shipped one. The first version of this table said `nowcoder`, `maimai` and
+# `1point3acres` "expose no job-search command". Verified against
+# `opencli <site> --help`: nowcoder has search, jobs, referral, salary,
+# experience and papers, and 1point3acres has search, forum, hot, latest and
+# digest. Only maimai was right.
+#
+# `references/discovery-sources.md` already held the accurate, nuanced version --
+# nowcoder is "an interview-experience (面经) source, not a job source" -- so the
+# table had duplicated a source of truth and corrupted it in the copy. The cost
+# lands on exactly the user the claim is about: told that nowcoder has no job
+# search, a Chinese 校招 round skips the site most relevant to it.
+
+import re as _re
+
+SOURCES = REPO / "references" / "discovery-sources.md"
+
+
+def registered_sites():
+    return set(_re.findall(r"^  ([a-z0-9_]+):$",
+                           SOURCES.read_text(encoding="utf-8"), _re.M))
+
+
+def test_every_adapter_the_table_names_is_registered_in_discovery_sources():
+    """The table may name adapters; it may not introduce them."""
+    named = set(_re.findall(r"`([a-z0-9_]+)`", text())) & (
+        registered_sites() | {"nowcoder", "maimai", "1point3acres", "upwork"})
+    missing = sorted(named - registered_sites())
+    assert not missing, f"named in discover.md but not registered: {missing}"
+
+
+def flat():
+    """The file with its line wrapping removed.
+
+    Assertions about prose must not depend on where a paragraph happens to wrap;
+    the first version of this test failed on a correct file for that reason.
+    """
+    return " ".join(text().split())
+
+
+def test_the_table_corrects_the_claim_rather_than_repeating_it():
+    """The wrong claim appears once, in quotes, as the thing NOT to say. What
+    must be present is the correction, not the absence of the string."""
+    f = flat()
+    assert 'saying it has "no search command" is wrong' in f
+    assert "`nowcoder` and `1point3acres` both have one" in f
+
+
+def test_the_two_sites_are_not_listed_as_unusable():
+    """The failure was structural: they sat in a 'not usable' column. The column
+    now covers job LISTINGS only, and neither site is in it."""
+    f = flat()
+    row = f[f.index("| China |"):f.index("| Netherlands")]
+    assert "nowcoder" not in row and "1point3acres" not in row, row
+
+
+def test_the_reason_a_forum_is_not_a_listing_source_is_given():
+    """"Not a job source" has to carry its reason, or the next editor promotes
+    it back into the listings column."""
+    t = text()
+    assert "面经" in t
+    assert "source_id" in t and "forum thread is not a posting" in t
+
+
+def test_the_table_defers_to_discovery_sources_for_everything_else():
+    t = text()
+    assert "references/discovery-sources.md" in t
+    assert "source of truth" in t

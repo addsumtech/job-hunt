@@ -68,6 +68,19 @@ def cjk_chars(text: str) -> int:
     return len(_CJK.findall(text))
 
 
+
+def flat_name(slug: str, rel: pathlib.Path) -> str:
+    """`mock/assessment-1.md` -> `<slug>-mock-assessment-1.md`.
+
+    The whole relative path goes into the name, not just the basename. Flattening
+    on the basename alone silently overwrites: interview mode writes
+    `mock/transcript-1.md` and `mock/answer-guide.md` beside root-level files,
+    and two same-named files in different directories became one delivered file
+    while the run reported it had delivered both.
+    """
+    return f"{slug}-" + "-".join(rel.parts)
+
+
 def is_deliverable(path: pathlib.Path, workspace: pathlib.Path) -> bool:
     rel = path.relative_to(workspace)
     if set(rel.parts[:-1]) & SKIP_DIRS:
@@ -169,7 +182,11 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
         font = pick_cjk_font()
 
     for src in sources:
-        target = dest / f"{slug}-{src.name}"
+        target = dest / flat_name(slug, src.relative_to(workspace))
+        if target.exists() and target.read_bytes() != src.read_bytes():
+            # Cannot happen with flat_name, and if it ever does the honest
+            # answer is a second name rather than a silent overwrite.
+            target = target.with_name(target.stem + "-2" + target.suffix)
         shutil.copy2(src, target)
         written.append(target)
         if make_pdf and src.suffix == ".md":

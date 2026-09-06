@@ -392,7 +392,15 @@ def _paragraphs(path: pathlib.Path) -> list[str]:
 # The number of paragraphs SKILL.md and modes/apply.md carry word-for-word. Spec
 # section 6 requires the duplication; this pins its SIZE, which is the only thing that
 # moves when a copy drifts.
-SHARED_WITH_APPLY = 16
+# 17 since 2026-09-06. The new one is "Reusing a master carries their experience
+# forward, never their target", and the duplication is deliberate rather than
+# undecided: it guards `meta.target_market`, the field that arms the personal-data
+# interlock. SKILL.md is always loaded and apply.md only on mode entry, so a run
+# that read layer 1 alone would otherwise inherit a stale market off a saved
+# profile with nothing telling it not to — and inheriting `nl` for a US
+# application is how a date of birth reaches a CV that US employers bin for
+# carrying one.
+SHARED_WITH_APPLY = 17
 
 
 def test_the_paragraphs_layer_1_shares_with_a_mode_file_are_byte_identical():
