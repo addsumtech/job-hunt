@@ -9,7 +9,6 @@
   <img alt="Claude Code" src="https://img.shields.io/badge/Claude_Code-supported-5b5bd6">
   <img alt="Codex" src="https://img.shields.io/badge/Codex-verified-111827">
   <img alt="Modes" src="https://img.shields.io/badge/modes-discover_·_assess_·_apply_·_interview-0f766e">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-3248-2f6feb">
   <a href="https://github.com/dong845/job-hunt/releases"><img alt="Release" src="https://img.shields.io/badge/release-v1.0.0-1f883d"></a>
 </p>
 
