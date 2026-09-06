@@ -248,3 +248,67 @@ def test_flat_name_keeps_the_whole_relative_path():
     assert deliver.flat_name("r", pathlib.Path("mock/assessment-1.md")) == \
         "r-mock-assessment-1.md"
     assert deliver.flat_name("r", pathlib.Path("cv.md")) == "r-cv.md"
+
+
+# ---- a hand-off that left no trace ----------------------------------------
+#
+# The gates run BEFORE delivery, so no composer can check that delivery
+# happened — and a gate that says what to do next is prompting rather than
+# checking, which this repo has decided against on purpose
+# (test_mode_declaration_and_handoff.py: "a clean gate run still says nothing on
+# stdout"). What is left is a record: a later reader can tell a run that skipped
+# the last step from one that took it.
+
+def test_a_delivery_leaves_a_record_in_the_workspace_journal(tmp_path):
+    import json
+    ws = build(tmp_path)
+    assert run(ws, tmp_path / "out", "--no-pdf") == 0
+    records = [json.loads(l) for l in
+               (ws / "journal.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
+    delivery = [r for r in records if r.get("action") == "delivery"]
+    assert len(delivery) == 1
+    assert delivery[0]["destination"].endswith("out")
+    assert "2026-09-06-round-shortlist.md" in delivery[0]["files"]
+
+
+def test_the_record_is_not_a_gate_receipt(tmp_path):
+    """Delivery decides nothing and has no verdict. Filing it as a gate would
+    put a passing receipt in the journal for something that was never a check —
+    and `check_apply` fails on ANY gate receipt reading `fail`, named or not."""
+    import json
+
+    def gates(ws):
+        return [json.loads(l) for l
+                in (ws / "journal.jsonl").read_text(encoding="utf-8").splitlines()
+                if l.strip() and json.loads(l).get("action") == "gate"]
+
+    ws = build(tmp_path)              # the fixture seeds one unrelated gate line
+    before = len(gates(ws))
+    assert run(ws, tmp_path / "out", "--no-pdf") == 0
+    assert len(gates(ws)) == before, "delivery added a gate receipt"
+    delivery = [json.loads(l) for l
+                in (ws / "journal.jsonl").read_text(encoding="utf-8").splitlines()
+                if l.strip() and json.loads(l).get("action") == "delivery"][0]
+    assert "verdict" not in delivery and "receipt_hash" not in delivery
+
+
+def test_a_refused_pdf_is_named_in_the_record(tmp_path, monkeypatch):
+    """The reason a PDF is missing has to survive the session that produced it."""
+    import json
+    ws = build(tmp_path, md="# 岗位候选\n\n中文内容。\n")
+    monkeypatch.setattr(deliver, "pick_cjk_font", lambda: None)
+    assert run(ws, tmp_path / "out") == 0
+    rec = [json.loads(l) for l in
+           (ws / "journal.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
+    delivery = [r for r in rec if r.get("action") == "delivery"][0]
+    assert delivery["pdf_refused"], "a refused PDF left no trace"
+    assert "shortlist.pdf" in delivery["pdf_refused"][0]
+
+
+def test_an_unwritable_workspace_journal_does_not_fail_the_delivery(tmp_path, monkeypatch):
+    """The files are already copied at that point. Failing here would report a
+    delivery that did happen as one that did not."""
+    ws = build(tmp_path)
+    monkeypatch.setattr(deliver.journal, "append",
+                        lambda *a, **k: (_ for _ in ()).throw(OSError("read-only")))
+    assert run(ws, tmp_path / "out", "--no-pdf") == 0

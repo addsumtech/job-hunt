@@ -31,6 +31,7 @@ import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import doctor
 import journal
 import paths
 
@@ -98,6 +99,7 @@ def main(argv=None) -> int:
     ap.add_argument("--because", default=None,
                     help="one line: why this mode, from what the user asked")
     args = ap.parse_args(argv)
+    missing = doctor.fast_capabilities()
     root = pathlib.Path(args.skill_root) if args.skill_root else paths.SKILL_ROOT
     path = paths.mode_file(args.mode, root)
     ws = pathlib.Path(args.workspace)
@@ -132,7 +134,19 @@ def main(argv=None) -> int:
         # Recorded here rather than left to the model's memory, so check_apply
         # can state it at the end.
         "assessment_present": _assessment_present(ws),
+        # Recorded on every entry because a capability the machine lacks
+        # explains an output the user never got. `doctor.py` existed for a
+        # week before this line and was named in SKILL.md and in no mode
+        # file, so no run ever invoked it: a new user learned their machine
+        # could not render a PDF when a PDF failed to appear. This is the
+        # cheap half -- sound about what is missing, silent about what works.
+        "capabilities_missing": missing,
     })
+    if missing:
+        print(f"NOTICE_MISSING_CAPABILITIES: {', '.join(missing)}. "
+              f"Run `python3 scripts/doctor.py` for what each one costs and "
+              f"how to install it. This mode still runs; some outputs will "
+              f"not be produced.", file=sys.stderr)
     print(f"entered mode {args.mode}; read {path} in full before doing anything else")
     return 0
 

@@ -81,8 +81,13 @@ Two rules on the offer itself:
   application; `assess` needs a posting. Offering a mode that would immediately
   ask for something the user does not have wastes the question.
 
-`scripts/check_apply.py` prints the offer as a `NEXT_MODES` notice at the end of
-apply, so it reaches the completion message even when this section was skimmed.
+**No gate prints this offer, deliberately.** `modes/apply.md` Step 7.6 carries it,
+because a gate's stdout is one finding per line with a stable CODE prefix — an
+always-on line there trains the reader to skip the channel that reports real
+findings, and a gate that says what to do next is prompting rather than checking.
+The hand-off is the mode file's job, and `test_mode_declaration_and_handoff.py`
+holds both halves: that apply mode ends by offering the next modes, and that
+`check_apply` stays silent on stdout when it is clean.
 
 
 ## NOT ALLOWED
@@ -430,6 +435,21 @@ python3 scripts/doctor.py --install  # installs the missing PYTHON packages only
 Run it once for a new user. It reports capabilities rather than binary names —
 the PDF check renders a PDF, because looking for `xelatex` alone once called this
 machine broken while `tectonic` was installed and every PDF rendered fine.
+
+**The cheap half of it runs on its own, every mode entry.** `enter_mode.py` calls
+`doctor.fast_capabilities()` — imports and `which`, no rendering, milliseconds —
+records the result in the `mode_entry` line and prints
+`NOTICE_MISSING_CAPABILITIES` on stderr when something is absent. That exists
+because this script spent its first week named here and in none of the four mode
+files, so no run ever invoked it: a new user learned their machine could not
+render a PDF when a PDF failed to appear. A capability that does not enter the
+scaffolding is a capability nobody uses.
+
+The fast check is sound about what is MISSING and silent about what works — no
+pandoc on PATH means no PDF, full stop, while pandoc plus an engine can both be
+present and still fail. Confirming a capability stays with `doctor.py`, which
+renders one. A warning may only fire when it is sure, or it becomes the line
+everyone filters out.
 
 Nothing here blocks a run: a machine with no LaTeX engine still produces Markdown
 and .docx, and one with no `opencli` can still do assess, apply and interview from

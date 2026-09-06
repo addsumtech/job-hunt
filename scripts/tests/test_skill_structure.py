@@ -469,3 +469,24 @@ def test_every_verdict_is_offered_wherever_layer_1_lists_the_verdicts():
         missing = [v for v in vocab.VERDICTS if v not in window]
         assert not missing, (
             f"a verdict template line omits {missing}: {line.strip()[:90]}")
+
+
+def test_skill_md_does_not_credit_a_script_with_a_code_it_never_emits():
+    """SKILL.md said `check_apply.py` prints a `NEXT_MODES` notice. It does not,
+    and `test_mode_declaration_and_handoff.py` asserts it must not — a gate that
+    says what to do next is prompting rather than checking, and an always-on line
+    on stdout trains the reader to skip the findings channel.
+
+    So layer 1 described a mechanism that had been deliberately rejected, and a
+    reader trusting it would have waited for a notice that never comes. Cheap to
+    check mechanically, so it is checked rather than trusted.
+    """
+    scripts = {p.stem: p.read_text(encoding="utf-8")
+               for p in (ROOT / "scripts").glob("*.py")}
+    wrong = []
+    for line in SKILL.read_text(encoding="utf-8").splitlines():
+        for name in re.findall(r"scripts/([a-z_]+)\.py", line):
+            for code in re.findall(r"`([A-Z][A-Z0-9_]{4,})`", line):
+                if name in scripts and code not in scripts[name]:
+                    wrong.append(f"{name}.py is credited with {code}: {line.strip()[:70]}")
+    assert not wrong, "\n  ".join([""] + wrong)

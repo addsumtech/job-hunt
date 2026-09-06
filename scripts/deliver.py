@@ -45,6 +45,8 @@ import subprocess
 import sys
 import tempfile
 
+import journal
+
 SKIP_DIRS = {"raw"}
 SKIP_NAMES = {"journal.jsonl", ".DS_Store", "master-fingerprint.json"}
 SKIP_SUFFIXES = {".err", ".pyc"}
@@ -233,6 +235,20 @@ def main(argv: list[str] | None = None) -> int:
         print(f"DELIVER_NOTHING_TO_COPY: {ws} holds no deliverable files",
               file=sys.stderr)
         return 2
+
+    # A record, not a gate receipt: delivery decides nothing and has no verdict.
+    # It exists because a hand-off that left no trace was indistinguishable from
+    # one that never happened, so a composer could not tell a run that skipped
+    # the last step from a run that took it.
+    try:
+        journal.append(ws, {
+            "action": "delivery",
+            "destination": str(dest),
+            "files": [q.name for q in written],
+            "pdf_refused": notes,
+        })
+    except OSError:
+        pass  # a workspace we can read but not write is not a delivery failure
 
     print(f"Delivered {len(written)} file(s) to {dest}")
     for p in written:

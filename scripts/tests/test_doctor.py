@@ -152,3 +152,84 @@ def test_the_skill_tells_a_new_user_to_run_it():
     assert "scripts/doctor.py" in t
     assert "--install" in t
     assert "never installed for the user" in t or "never installed for you" in t
+
+
+# ---- the hook that makes any of this run ----------------------------------
+#
+# `doctor.py` shipped named in SKILL.md and in none of the four mode files, so no
+# run ever invoked it: a new user learned their machine could not render a PDF
+# when a PDF failed to appear. A capability that does not enter the scaffolding
+# is a capability nobody uses.
+#
+# `enter_mode.py` is the one choke point every mode passes through — all four
+# composers require its `mode_entry` record — so the cheap half of the check
+# lives there.
+
+def test_the_fast_check_is_sound_about_missing(monkeypatch):
+    """It may only warn when it is sure. A warning that fires on a working
+    machine is the line everyone filters out."""
+    monkeypatch.setattr(doctor.shutil, "which", lambda b: None)
+    missing = doctor.fast_capabilities()
+    assert "PDF rendering (pandoc + a LaTeX engine)" in missing
+    assert "pdftotext" in missing and "opencli" in missing
+
+
+def test_the_fast_check_stays_quiet_when_the_tools_are_on_path(monkeypatch):
+    monkeypatch.setattr(doctor.shutil, "which", lambda b: "/x/" + b)
+    monkeypatch.setattr(doctor, "requirements", lambda: [])
+    assert doctor.fast_capabilities() == []
+
+
+def test_the_fast_check_renders_nothing(monkeypatch):
+    """It runs on every mode entry, so it must not shell out at all."""
+    ran = []
+    monkeypatch.setattr(doctor.subprocess, "run",
+                        lambda *a, **k: ran.append(a) or None)
+    monkeypatch.setattr(doctor.shutil, "which", lambda b: "/x/" + b)
+    doctor.fast_capabilities()
+    assert ran == [], f"fast_capabilities shelled out: {ran}"
+
+
+def test_entering_a_mode_records_and_reports_what_is_missing(tmp_path, monkeypatch, capsys):
+    import enter_mode
+    monkeypatch.setattr(enter_mode.doctor, "fast_capabilities",
+                        lambda: ["pdftotext", "opencli"])
+    assert enter_mode.main(["--workspace", str(tmp_path), "--mode", "discover"]) == 0
+    err = capsys.readouterr().err
+    assert "NOTICE_MISSING_CAPABILITIES" in err
+    assert "pdftotext" in err and "doctor.py" in err
+    import json
+    rec = json.loads((tmp_path / "journal.jsonl").read_text(encoding="utf-8").strip())
+    assert rec["capabilities_missing"] == ["pdftotext", "opencli"]
+
+
+def test_a_missing_capability_never_blocks_mode_entry(tmp_path, monkeypatch):
+    """No LaTeX engine still leaves Markdown and .docx; no opencli still leaves
+    assess, apply and interview from a pasted posting. Refusing the mode would
+    cost more than the missing capability does."""
+    import enter_mode
+    monkeypatch.setattr(enter_mode.doctor, "fast_capabilities",
+                        lambda: ["PDF rendering (pandoc + a LaTeX engine)"])
+    assert enter_mode.main(["--workspace", str(tmp_path), "--mode", "apply"]) == 0
+
+
+def test_a_complete_machine_leaves_an_empty_list_not_a_missing_field(tmp_path, monkeypatch):
+    """A record written without the field cannot be told from one that found
+    nothing missing — the same silence the mode_entry record exists to break."""
+    import json
+    import enter_mode
+    monkeypatch.setattr(enter_mode.doctor, "fast_capabilities", lambda: [])
+    assert enter_mode.main(["--workspace", str(tmp_path), "--mode", "assess"]) == 0
+    rec = json.loads((tmp_path / "journal.jsonl").read_text(encoding="utf-8").strip())
+    assert rec["capabilities_missing"] == []
+
+
+def test_the_skill_says_the_check_runs_automatically():
+    """Documenting a hook that does not exist is how NEXT_MODES happened. This
+    one does exist, and the claim is pinned to the code that implements it."""
+    t = " ".join((REPO / "SKILL.md").read_text(encoding="utf-8").split())
+    assert "runs on its own, every mode entry" in t
+    assert "NOTICE_MISSING_CAPABILITIES" in t
+    src = (REPO / "scripts" / "enter_mode.py").read_text(encoding="utf-8")
+    assert "fast_capabilities()" in src
+    assert "NOTICE_MISSING_CAPABILITIES" in src

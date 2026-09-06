@@ -90,6 +90,36 @@ def can_render_pdf() -> tuple[bool, str]:
     return False, f"pandoc + {engines[0]} produced no PDF"
 
 
+def fast_capabilities() -> list[str]:
+    """What is missing, decided WITHOUT rendering anything. Milliseconds.
+
+    `enter_mode.py` runs on every mode entry and cannot afford `checks()`, which
+    renders a PDF. So this trades one direction of accuracy away, deliberately,
+    and the asymmetry is the point:
+
+      it is SOUND about missing   -- no pandoc on PATH means no PDF, full stop
+      it is UNSOUND about present -- pandoc and an engine can both be installed
+                                     and still fail to produce a file
+
+    A warning may only fire when it is sure, or it becomes the line everyone
+    filters out. Confirming that a capability WORKS stays with `doctor.py`, which
+    renders one. This function never claims anything works; it only names what
+    demonstrably cannot.
+    """
+    missing = []
+    for pkg, module in requirements():
+        if not importable(module):
+            missing.append(f"python package {pkg}")
+    if not shutil.which("pandoc") or not any(
+            shutil.which(e) for e in ("tectonic", "xelatex", "lualatex", "pdflatex")):
+        missing.append("PDF rendering (pandoc + a LaTeX engine)")
+    if not shutil.which("pdftotext"):
+        missing.append("pdftotext")
+    if not shutil.which("opencli"):
+        missing.append("opencli")
+    return missing
+
+
 def install_hint(binary: str) -> str:
     mac = platform.system() == "Darwin"
     brew = {"pandoc": "brew install pandoc", "tectonic": "brew install tectonic",
