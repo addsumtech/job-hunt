@@ -1119,3 +1119,83 @@ def test_a_valid_paper_override_is_not_refused(tmp_path, capsys):
 ])
 def test_both_things_a_hyphen_does_are_handled(market, cluster):
     assert render_cv.resolve_cluster(market) == cluster, market
+
+
+# ---- a malformed contact.personal must not vanish silently ----------------
+#
+# MEASURED 2026-09-06 on a Netherlands target, where the market EXPECTS these
+# fields: `personal:` written as a list of one-key dicts — which reads perfectly
+# fine in YAML and is a shape a model produces — made `protected_fields` return
+# [] and `personal_items` yield nothing. The date of birth and nationality
+# simply were not on the CV, and stderr was empty.
+#
+# Every other over-strip in this module is loud: the unrecognised-market path
+# prints a WARNING naming each withheld field. Silence was the outlier, and it
+# is the dangerous direction — a US target would have withheld them anyway, so
+# the only case this shape changes is the one where the data was wanted.
+
+EXAMPLE_PROFILE = (pathlib.Path(__file__).resolve().parents[2]
+                   / "assets" / "profile.example.yaml")
+
+
+def _nl_profile(personal):
+    import yaml as _yaml
+    base = _yaml.safe_load(EXAMPLE_PROFILE.read_text(encoding="utf-8"))
+    doc = copy.deepcopy(base)
+    doc["meta"]["target_market"] = "Netherlands"
+    doc.setdefault("contact", {})["personal"] = personal
+    return doc
+
+
+@pytest.mark.parametrize("shape", [
+    [{"date_of_birth": "1992-05-01"}, {"nationality": "Dutch"}],
+    "date_of_birth: 1992-05-01",
+    42,
+    True,
+])
+def test_a_non_mapping_personal_block_warns_rather_than_disappearing(shape, capsys):
+    doc = _nl_profile(shape)
+    assert render_cv.protected_fields(doc) == []
+    assert list(render_cv.personal_items(doc)) == []
+    err = capsys.readouterr().err
+    assert "contact.personal is a" in err
+    assert "not a mapping" in err
+
+
+@pytest.mark.parametrize("shape", [
+    [{"date_of_birth": "1992-05-01"}], "dob: 1992", 42, True,
+])
+def test_protected_fields_warns_on_its_own(shape, capsys):
+    """`check_personal_data` calls ONLY this one — it never renders. A version
+    that guarded the shape inline here and left the warning to `personal_items`
+    would be silent on the gate's own path, and the first draft of the test
+    above could not tell the two apart because it called both.
+    """
+    assert render_cv.protected_fields(_nl_profile(shape)) == []
+    assert "contact.personal is a" in capsys.readouterr().err
+
+
+def test_a_valid_personal_block_still_renders_and_stays_quiet(capsys):
+    doc = _nl_profile({"date_of_birth": "1992-05-01", "nationality": "Dutch"})
+    assert render_cv.protected_fields(doc) == [
+        "contact.personal.date_of_birth", "contact.personal.nationality"]
+    assert [v for _, v in render_cv.personal_items(doc)] == ["1992-05-01", "Dutch"]
+    assert "contact.personal" not in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("empty", [None, "", {}, []])
+def test_an_absent_personal_block_is_not_worth_warning_about(empty, capsys):
+    """A profile that simply has no personal data is the ordinary case for most
+    candidates. A warning there would be the noise this one exists to avoid."""
+    doc = _nl_profile(empty)
+    assert render_cv.protected_fields(doc) == []
+    assert "contact.personal" not in capsys.readouterr().err
+
+
+def test_the_shape_warning_does_not_override_the_market_interlock(capsys):
+    """Shape and market are separate questions. A US target withholds whatever
+    the shape is, and `_suppress_personal_data` stays the thing that decides it."""
+    doc = _nl_profile({"date_of_birth": "1992-05-01"})
+    doc["meta"]["target_market"] = "United States"
+    assert list(render_cv.personal_items(doc)) == []
+    assert "contact.personal is a" not in capsys.readouterr().err

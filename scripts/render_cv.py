@@ -705,14 +705,47 @@ def resolve_cluster(market):
     return resolved
 
 
+_PERSONAL_SHAPE_WARNED: list = []
+
+
+def _personal_mapping(profile):
+    """`contact.personal` as a dict, warning ONCE if it is any other shape.
+
+    A list, a string or a number here made the whole personal block vanish:
+    `protected_fields` returned [] and `personal_items` yielded nothing, so a
+    Dutch or German CV lost the date of birth and nationality its market
+    expects — and said nothing. Every other over-strip in this module is loud;
+    the unrecognised-market path prints a full WARNING naming the withheld
+    fields. Silence here was the outlier, and the one shape a model gets wrong
+    by writing `personal:` as a list of one-key dicts, which reads fine in YAML.
+
+    It is a warning and not a refusal: the rest of the CV is correct and worth
+    rendering, and the user can fix one key. Suppression stays the job of
+    `_suppress_personal_data`, which is about the MARKET, not the shape.
+    """
+    contact = journal.as_mapping(journal.as_mapping(profile).get("contact"))
+    personal = contact.get("personal")
+    if personal in (None, "", [], {}):
+        return {}
+    if isinstance(personal, dict):
+        return personal
+    _warn_once(
+        _PERSONAL_SHAPE_WARNED, (id(profile), repr(personal)[:80]),
+        f"WARNING: contact.personal is a {type(personal).__name__}, not a "
+        f"mapping, so no personal data was rendered at all. It must be a dict — "
+        f"`personal: {{date_of_birth: ..., nationality: ...}}` — not a list of "
+        f"one-key entries. For a market that expects these fields this is a "
+        f"silent drop of exactly the data the CV needs; for a US/UK target they "
+        f"would have been withheld anyway. Fix the shape and re-render.")
+    return {}
+
+
 def protected_fields(profile):
     """Names of the protected personal-data fields actually present."""
     out = []
-    personal = journal.as_mapping(
-        journal.as_mapping(profile).get("contact")).get("personal") or {}
-    if isinstance(personal, dict):
-        out += [f"contact.personal.{k}" for k, v in personal.items()
-                if v not in (None, "")]
+    personal = _personal_mapping(profile)
+    out += [f"contact.personal.{k}" for k, v in personal.items()
+            if v not in (None, "")]
     if journal.as_mapping(journal.as_mapping(profile).get("meta")).get("photo"):
         out.append(_PHOTO_FIELD)
     return out
@@ -834,8 +867,7 @@ def personal_items(profile):
     (see `_suppress_personal_data`)."""
     if _suppress_personal_data(profile):
         return
-    personal = journal.as_mapping(
-        journal.as_mapping(profile).get("contact")).get("personal") or {}
+    personal = _personal_mapping(profile)
     if not isinstance(personal, dict):
         return
     language = journal.as_mapping(
