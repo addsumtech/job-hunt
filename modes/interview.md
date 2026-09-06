@@ -418,6 +418,48 @@ as a checklist of what the panel is told to look for:
 as a verdict is fabrication. Everywhere else, no score, no percentage, no probability, no
 "strong candidate", no invented scale — see the banned-vocabulary block in SKILL.md.
 
+## Hand the artifacts over — `deliver.py`, not a sentence in the final message
+
+A workspace under `~/.claude/job-profiles/` is where the skill works, and it is
+not where a person looks. Nobody browses a dotfile directory, and a path pasted
+into a chat message is gone the moment the session scrolls. So the last step of
+every mode is a command, not a claim:
+
+```bash
+python3 scripts/deliver.py --workspace <ws>
+```
+
+It copies this round's readable artifacts **straight into `~/Downloads`**, named
+`<slug>-<file>`, renders every Markdown to **PDF as well**, and prints the paths.
+Quote them in the completion message. The slug prefix is not a folder in
+disguise: two rounds both produce `shortlist.md`, and a bare name would have the
+second silently overwrite the first.
+
+**The PDF is verified, not trusted.** `pandoc --pdf-engine=tectonic` on a Chinese
+document exits 0, prints a warning nobody reads, and writes a PDF whose every CJK
+glyph is a box — measured, 528 characters in and 0 read back. So a CJK document
+gets a CJK font chosen by probing what this machine actually has, and every PDF
+is read back with `pdftotext` and compared against its source before it counts as
+delivered. One that lost characters is deleted and reported; the Markdown still
+ships.
+
+**It is a copy, and the split is deliberate.** `raw/`, `journal.jsonl` and the
+adapter `.err` files stay in the workspace: they are the provenance chain, they
+are unreadable to a person, and an audit has to read them where they live rather
+than in an export that may have gone stale.
+
+**Do not move the workspace itself.** `scripts/paths.py` owns that layout,
+`modes/apply.md`'s resume-an-unfinished-run lookup finds work BY the path shape,
+and `check_claims.py` fingerprints the master profile at that path. `~/Downloads`
+is also a directory the user's own housekeeping empties.
+
+`deliver.py` exits 0 or 2, never 1 — there is no such thing as a delivery
+finding. Exit 2 with `DELIVER_DEST_UNWRITABLE` is the macOS case worth knowing:
+`~/Downloads` sits behind TCC, it can start refusing writes part-way through a
+session, and `os.access` says yes while the write fails. The script probes by
+writing a real file. When it exits 2, say so and offer `--to` with somewhere
+else — do not silently leave the artifacts undelivered.
+
 ## Self-check before reporting the session complete
 
 - [ ] `references/interview-shapes.md` was read this session

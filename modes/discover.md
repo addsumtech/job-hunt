@@ -101,7 +101,21 @@ languages: ["Chinese", "English"]    # languages the user can work in
 salary_floor: {currency: CNY, amount: 30000, period: month}   # or null
 avoid: ["外包", "销售导向岗位"]
 experience_track: "medical imaging / MRI reconstruction"
+employer_types: ["国企", "外企"]     # cn only — see below; omit for other markets
 ```
+
+**`employer_types` is asked for a `cn` round and omitted everywhere else.** In the
+Chinese market the same job title means different work, hours, pay structure and
+security depending on whether the employer is a 大型私企, a 中小型私企, a 国企 or
+a 外企, and the adapter hands you that distinction for free: 51job returns
+`companyType` and `companySize` on every card, so a stated preference can be
+applied to real rows instead of guessed at. Ask it as a multi-select alongside
+the other preferences, and treat "no preference" as a legitimate answer rather
+than as all four.
+
+It is a preference, not a filter: a row outside the chosen types is not dropped
+silently — it is ranked below and its `why_matched` says which type it is. The
+user asked for a lean, not a wall.
 
 **Every field here is asked, never inferred.** Reading a salary floor off a past
 payslip, an avoid-list off a CV, or a target market off the language someone happens
@@ -109,7 +123,7 @@ to be typing in produces a file that looks like the user's preferences and is no
 and because it is reused across every later round, one wrong inference quietly
 steers months of searching.
 
-- **First run** (the file does not exist): ask the eight questions above, in the
+- **First run** (the file does not exist): ask the questions above, in the
   user's language, in one pass. `salary_floor: null` is a legitimate answer and the
   only correct one if the user declines — never substitute a market median.
   `target_market: other` is likewise legitimate: markets outside `cn/nl/de/uk/us`
@@ -120,6 +134,81 @@ steers months of searching.
 - Rewriting it is an explicit act with the user watching. Bump `updated` when you do.
 - `brief.yaml` below is this round's *narrowing* of these preferences, not a copy of
   them: preferences are durable, a brief is one round.
+
+## Before Step 0 — region, then platforms, then the login hand-off
+
+**This order is not a suggestion, and getting it wrong costs the round.** Measured
+2026-09-06: a round opened by confirming a stored `search-preferences.yaml` whose
+`target_market` was `nl`, bundling the region into a yes/no confirmation of eight
+other fields. The user actually wanted China. Everything downstream — which
+adapters exist, which languages the queries run in, which convention table
+applies, whether the stored salary floor means anything — had to be redone.
+
+Run these three in order, before the trigger reason and before `brief.yaml`.
+
+### 1. Ask the region, as options, on its own
+
+Never infer it. Not from the language the user is typing in, not from their
+profile's `meta.target_market`, and not from a stored preference file — a stored
+`target_market` is shown for confirmation, and the region for THIS round is asked
+whether or not one exists. `brief.locations` is the round's own narrowing;
+`search-preferences.target_market` is the durable setting, and the two can
+legitimately differ.
+
+Offer concrete regions rather than a blank question — United States, United
+Kingdom, Netherlands / Europe, China, Middle East, and whatever else fits what
+you know about them. Then ask cities inside it, because an adapter's location
+parameter takes a city, not a country.
+
+**If the round's region is a different market than the stored `target_market`,
+re-ask the whole preferences file**, not just the market: a salary floor in EUR
+and an avoid-list entry reading "roles requiring fluent Dutch" mean nothing in
+Shanghai. Back the old file up before rewriting it — the user may be exploring,
+not switching, and a durable preference file silently overwritten is a job search
+the user has to reconstruct from memory.
+
+### 2. Say which platforms that region actually has
+
+Before any search, tell the user which adapters serve their region and which need
+a login. This is what lets them fix a missing session BEFORE the round runs
+rather than after it.
+
+| region | works without a login | needs a login | not usable |
+|---|---|---|---|
+| United States | `indeed` (its native site) | `linkedin` | — |
+| China | `51job` | `boss` | `nowcoder`, `maimai`, `1point3acres` expose no job-search command; `maimai search-talents` is the recruiter side |
+| Netherlands · Germany · UK · rest of Europe | — | `linkedin` | **`indeed` — it resolves locations against a US gazetteer and answers a London search with Ohio** |
+| Middle East · anywhere with no convention table | — | `linkedin` | `target_market: other`; say plainly there is no convention data for this market |
+
+Anything outside this table: read `references/discovery-sources.md` before calling it.
+
+### 3. Hand the login to the user, then wait
+
+`opencli <site> login` is a **write** command. `references/source-policy.md` puts
+it on the Red list: it is handed to the user to run and never run here, and there
+is no confirm-then-send path because a confirmation flow is a write path with a
+speed bump.
+
+So say it plainly and wait:
+
+> `boss` needs a browser session. Run `opencli boss login` yourself, finish the
+> login in the browser, and tell me when it's done — then I can search there.
+> It is a logged-in adapter, which `source-policy.md` puts in the yellow tier:
+> the search runs inside your own session, and account risk is not zero.
+
+**`opencli auth status` can be confidently wrong, so re-probe before you believe
+it.** Measured 2026-09-06: the quick probe reported `boss` as `not_logged_in`
+while the session was live — `opencli boss login` answered `already_logged_in`
+and `opencli auth status --site boss --full` returned `logged_in`. This is worse
+than the `unknown` case the probe section below describes, because the answer
+looks decided. **Before telling a user to log into a site the probe called
+`not_logged_in`, re-probe that site with `--full`.** A round that skips a site on
+a false negative reports a thin market that is not thin: in the measured round,
+`boss` turned out to hold the three best-matched postings of the day, and it was
+one wrong probe away from never being searched.
+
+Only once the region is fixed, the platforms are named, and the sessions the
+round needs are actually live, go on to the trigger reason and `brief.yaml`.
 
 ## Step 0 — state the trigger reason BEFORE searching
 
@@ -558,6 +647,48 @@ the provenance checks read; `shortlist.md` is what the user reads and acts on.
 Removing a fabricated row from the machine file alone moves it out of the
 checked artifact and leaves it in the read one — the remediation becomes the
 cover-up. `MD_ROW_NOT_IN_SHORTLIST` reports it if you forget.
+
+## Hand the artifacts over — `deliver.py`, not a sentence in the final message
+
+A workspace under `~/.claude/job-profiles/` is where the skill works, and it is
+not where a person looks. Nobody browses a dotfile directory, and a path pasted
+into a chat message is gone the moment the session scrolls. So the last step of
+every mode is a command, not a claim:
+
+```bash
+python3 scripts/deliver.py --workspace <ws>
+```
+
+It copies this round's readable artifacts **straight into `~/Downloads`**, named
+`<slug>-<file>`, renders every Markdown to **PDF as well**, and prints the paths.
+Quote them in the completion message. The slug prefix is not a folder in
+disguise: two rounds both produce `shortlist.md`, and a bare name would have the
+second silently overwrite the first.
+
+**The PDF is verified, not trusted.** `pandoc --pdf-engine=tectonic` on a Chinese
+document exits 0, prints a warning nobody reads, and writes a PDF whose every CJK
+glyph is a box — measured, 528 characters in and 0 read back. So a CJK document
+gets a CJK font chosen by probing what this machine actually has, and every PDF
+is read back with `pdftotext` and compared against its source before it counts as
+delivered. One that lost characters is deleted and reported; the Markdown still
+ships.
+
+**It is a copy, and the split is deliberate.** `raw/`, `journal.jsonl` and the
+adapter `.err` files stay in the workspace: they are the provenance chain, they
+are unreadable to a person, and an audit has to read them where they live rather
+than in an export that may have gone stale.
+
+**Do not move the workspace itself.** `scripts/paths.py` owns that layout,
+`modes/apply.md`'s resume-an-unfinished-run lookup finds work BY the path shape,
+and `check_claims.py` fingerprints the master profile at that path. `~/Downloads`
+is also a directory the user's own housekeeping empties.
+
+`deliver.py` exits 0 or 2, never 1 — there is no such thing as a delivery
+finding. Exit 2 with `DELIVER_DEST_UNWRITABLE` is the macOS case worth knowing:
+`~/Downloads` sits behind TCC, it can start refusing writes part-way through a
+session, and `os.access` says yes while the write fails. The script probes by
+writing a real file. When it exits 2, say so and offer `--to` with somewhere
+else — do not silently leave the artifacts undelivered.
 
 ## Self-check before reporting the round
 

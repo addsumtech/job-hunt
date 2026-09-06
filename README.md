@@ -133,6 +133,8 @@ job-hunt/
     ├── check_word_limits.py         # supporting-statement per-criterion word limits
     ├── consistency.py               # contradictions between assessment fields — reports, never repairs
     ├── count_coverage.py            # the ONLY path that produces coverage counts
+    ├── deliver.py                   # hand-off: copy the round's readable artifacts
+    │                                #   to ~/Downloads/job-hunt/<slug>/ (not a gate)
     ├── enter_mode.py                # mode entry + the mode file's content hash
     ├── evidence_blocks.py           # cuts posting and CV into addressable JD-nnn / CV-nnn blocks
     ├── journal.py                   # gate receipts in journal.jsonl (library)

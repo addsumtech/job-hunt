@@ -248,3 +248,84 @@ def test_the_language_rule_the_pairing_rests_on_is_written_down():
     # stated, the next reader sees seven paired literals and no reason for them.
     body = text()
     assert "the user's language" in body or "跟用户走" in body
+
+
+# ---- region first, then platforms, then the login hand-off -----------------
+#
+# MEASURED 2026-09-06. A round opened by confirming a stored
+# `search-preferences.yaml` whose `target_market` was `nl`, with the region
+# bundled into a yes/no confirmation of eight other fields. The user wanted
+# China. Every downstream decision — which adapters exist, which languages the
+# queries run in, which convention table applies, whether the stored salary
+# floor means anything — had to be redone.
+#
+# In the same round `boss` was reachable the whole time and the quick auth probe
+# said `not_logged_in`. It held the three best-matched postings of the day and
+# was one wrong probe away from never being searched.
+
+def test_the_region_is_asked_before_the_trigger_reason_and_the_brief():
+    """Order is the whole point: a region settled after brief.yaml is a region
+    that already picked the adapters, the query languages and the caps."""
+    t = text()
+    assert "## Before Step 0" in t
+    assert t.index("## Before Step 0") < t.index("## Step 0 — state the trigger reason")
+    assert t.index("## Before Step 0") < t.index("brief.yaml — this round's reproducible basis")
+
+
+def test_the_region_may_not_be_inferred_from_a_stored_preference():
+    t = text()
+    assert "Never infer it" in t
+    for source in ("the language the user is typing in", "stored preference"):
+        assert source in t, source
+
+
+def test_a_region_in_a_different_market_re_asks_the_whole_preferences_file():
+    """A EUR salary floor and 'roles requiring fluent Dutch' mean nothing in
+    Shanghai, and the old file must be backed up rather than overwritten."""
+    t = text()
+    assert "re-ask the whole preferences file" in t
+    assert "Back the old file up" in t
+
+
+def test_the_platform_table_names_what_each_region_can_actually_use():
+    t = text()
+    for cell in ("51job", "boss", "linkedin", "indeed"):
+        assert cell in t, cell
+    # the one that silently answers a London search with Ohio
+    assert "US gazetteer" in t
+    assert "Middle East" in t and "United States" in t
+
+
+def test_the_login_is_handed_to_the_user_and_never_run_here():
+    t = text()
+    assert "opencli boss login" in t
+    assert "never run here" in t
+    assert "account risk is not zero" in t
+
+
+def test_a_not_logged_in_probe_must_be_re_probed_before_it_is_believed():
+    """The probe can be confidently wrong, which is worse than `unknown`."""
+    t = text()
+    assert "--full" in t
+    assert "confidently wrong" in t or "can be confidently wrong" in t
+    assert "not_logged_in" in t
+
+
+# ---- the cn-only employer-type preference ---------------------------------
+
+def test_the_china_employer_type_preference_exists_with_its_four_values():
+    """51job returns companyType and companySize on every card, so this is a
+    preference that can be applied to real rows instead of guessed at."""
+    t = text()
+    assert "employer_types" in t
+    for kind in ("大型私企", "中小型私企", "国企", "外企"):
+        assert kind in t, kind
+    assert "companyType" in t
+
+
+def test_the_employer_type_is_a_lean_not_a_filter():
+    """A row outside the chosen types is ranked lower, not dropped silently —
+    dropping it would make the shortfall unexplainable."""
+    t = text()
+    assert "not a filter" in t
+    assert "no preference" in t

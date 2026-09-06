@@ -562,6 +562,7 @@ a fabrication the candidate then repeats back), and the shortlist's `why_matched
 | Assess | `scripts/check_assessment.py` | composes the six above and requires their receipts; disclaimer, disqualifier section, the 「那该怎么办」 half, verbatim conventions, stale-review banner; a top-level `level_direction` or `effort` the card prints but nobody assessed, and a work-authorization token spelled outside its set |
 | Migration losslessness (CI only) | `scripts/check_skill_lossless.py` | a baseline line that exists nowhere in this tree |
 | Adapter classification | `scripts/check_opencli_result.py` | *(wrapper, not a gate)* a non-zero exit, a login wall, a platform stop-signal, or an empty identity field |
+| Delivery | `scripts/deliver.py` | *(hand-off, not a gate)* copies the round's readable artifacts to `~/Downloads/` as `<slug>-<file>`, renders every Markdown to PDF as well, and prints the path to quote. Exits 0 or 2, never 1. `DELIVER_DEST_UNWRITABLE` is macOS TCC refusing `~/Downloads` mid-session — say so and offer `--to`, never leave the artifacts undelivered |
 | Read-only | `scripts/check_no_write.py` | a journaled command whose published `access:` is `write`, or whose access cannot be resolved at all |
 | Shortlist | `scripts/check_shortlist.py` | a row whose `source_id` or `raw_text` is in no raw capture, or whose `id` is not `<site>-<source_id>`; a duplicated or over-counted source report; "no results" with no adapter that exited 0; a missing disclosure block or provisional stamp; a detail fetch outside the top three; an uncapped brief, or a run that exceeded the caps the brief declares; a posting URL rendered in `shortlist.md` that is in no `shortlist.yaml` row; a row whose company or salary contradicts its own capture; a missing or stale mode entry. Warns (does not fail) when a row's location names a country outside `brief.markets` |
 
@@ -787,6 +788,9 @@ Ran, leaving a `mode_entry` record rather than a gate receipt:
 Ran, leaving nothing in the journal (they render; they do not judge):
 - [ ] `scripts/render_cv.py`, plus `scripts/render_letter.py` /
       `scripts/render_rirekisho.py` if applicable.
+- [ ] `scripts/deliver.py` — the LAST step of every mode. A workspace under
+      `~/.claude/job-profiles/` is where the skill works, not where a person
+      looks, and a path pasted into a chat message is gone once it scrolls.
 
 In CI, not in a workspace (no receipt exists for these, by design):
 - [ ] `scripts/check_skill_lossless.py` — only when this skill's own files changed.
@@ -824,6 +828,8 @@ Told the user:
 - [ ] Any remaining honest gaps, and — if the loop ended un-passed — whether this is
       POORLY BUILT or an HONEST STRETCH.
 - [ ] The workspace path and every output file, including the `.tex`.
+- [ ] **The delivered files** `deliver.py` printed — in `~/Downloads`, Markdown AND PDF.
+      That is the one the user can actually open; the workspace path is for an audit.
 - [ ] In discover: the §0 来源与读取质量 table, the trigger reason, every row's band
       marked 「基于卡片信息的初判」, and — if the run degraded — the disclosure block
       with its answers filled in. **In the user's language**: an English round says
