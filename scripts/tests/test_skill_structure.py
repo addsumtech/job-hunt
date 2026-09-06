@@ -400,7 +400,11 @@ def _paragraphs(path: pathlib.Path) -> list[str]:
 # profile with nothing telling it not to — and inheriting `nl` for a US
 # application is how a date of birth reaches a CV that US employers bin for
 # carrying one.
-SHARED_WITH_APPLY = 17
+# 18 since 2026-09-06: "One candidate has one CV per language" joins it. Same
+# reasoning as 17 — the rule guards against silent data loss (a Chinese CV
+# overwriting an English master), SKILL.md is always loaded and apply.md only on
+# mode entry, and a run that read layer 1 alone would write the path by hand.
+SHARED_WITH_APPLY = 18
 
 
 def test_the_paragraphs_layer_1_shares_with_a_mode_file_are_byte_identical():

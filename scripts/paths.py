@@ -102,8 +102,95 @@ def profile_dir(name: str) -> pathlib.Path:
     return PROFILES_ROOT / slug
 
 
-def master_profile(name: str) -> pathlib.Path:
-    return profile_dir(name) / "profile.yaml"
+# One candidate, several CVs — one per language. A returning user who has an
+# English CV and then supplies a Chinese one has TWO masters, not a replacement:
+# a Chinese CV is a different document with different conventions, not a
+# translation of the English one, and overwriting is silent data loss the user
+# only discovers when they next need the file that is gone.
+#
+# The language lives in the FILE (`meta.language`), and the filename only mirrors
+# it. `master_profiles` reads the file rather than trusting the name, because a
+# name is a claim and the content is the fact.
+_LANGUAGE_ALIASES = {
+    "english": "en", "en": "en", "en-us": "en", "en-gb": "en", "英文": "en",
+    "chinese": "zh", "zh": "zh", "zh-cn": "zh", "zh-hans": "zh", "mandarin": "zh",
+    "中文": "zh", "简体中文": "zh", "汉语": "zh",
+    "zh-tw": "zh-tw", "zh-hant": "zh-tw", "繁體中文": "zh-tw",
+    "dutch": "nl", "nl": "nl", "nederlands": "nl",
+    "german": "de", "de": "de", "deutsch": "de",
+    "french": "fr", "fr": "fr", "français": "fr", "francais": "fr",
+    "spanish": "es", "es": "es", "español": "es", "espanol": "es",
+    "italian": "it", "it": "it", "italiano": "it",
+    "japanese": "ja", "ja": "ja", "jp": "ja", "日本語": "ja",
+    "korean": "ko", "ko": "ko", "kr": "ko", "한국어": "ko",
+}
+
+
+def normalise_language(language) -> str:
+    """A language tag reduced to one stable key, or "" when there is none.
+
+    Case, region subtags and the endonym all collapse to the same slot, so
+    "English", "en-US" and "英文" cannot become three masters for one CV. An
+    unknown language is slugified rather than rejected: this skill writes CVs in
+    languages this table has not been taught, and refusing them would be worse
+    than filing them under their own name.
+    """
+    raw = str(language or "").strip().lower()
+    if not raw:
+        return ""
+    if raw in _LANGUAGE_ALIASES:
+        return _LANGUAGE_ALIASES[raw]
+    base = raw.split("-")[0].split("_")[0]
+    if base in _LANGUAGE_ALIASES:
+        return _LANGUAGE_ALIASES[base]
+    return slugify(raw)
+
+
+def master_profile(name: str, language=None) -> pathlib.Path:
+    """The master for one language. No language means the unsuffixed slot.
+
+    `profile.yaml` stays exactly where it was — every profile saved before this
+    existed lives there, and moving it would break `check_claims`' fingerprint,
+    apply mode's resume lookup and every path a user has already written down.
+    A language-tagged master is `profile.<lang>.yaml` beside it.
+    """
+    key = normalise_language(language)
+    if not key:
+        return profile_dir(name) / "profile.yaml"
+    return profile_dir(name) / f"profile.{key}.yaml"
+
+
+def master_profiles(name: str) -> dict:
+    """{language key: path} for every master on disk, language read from content.
+
+    The filename is a mirror, not the source: a file called `profile.en.yaml`
+    whose `meta.language` says `zh` is filed under `zh`, because the renderer,
+    the heading tables and the letter salutations all key off `meta.language`
+    and the filename reaches none of them.
+
+    A master with no readable `meta.language` is filed under `""` — the
+    unsuffixed slot's ordinary state for profiles written before languages were
+    tracked. Unreadable YAML is skipped rather than raising: one corrupt file
+    must not hide the others.
+    """
+    # Imported here, not at module scope: paths.py is imported by scripts that
+    # never touch YAML, and journal.py imports nothing from paths.
+    import journal
+
+    out = {}
+    directory = profile_dir(name)
+    if not directory.is_dir():
+        return out
+    for path in sorted(directory.glob("profile*.yaml")):
+        if ".bak" in path.name:
+            continue
+        try:
+            loaded = journal.load_yaml(path)
+        except journal.YamlUnreadable:
+            continue
+        out.setdefault(
+            normalise_language((loaded.get("meta") or {}).get("language")), path)
+    return out
 
 
 def search_prefs(name: str) -> pathlib.Path:

@@ -133,6 +133,7 @@ job-hunt/
     ├── check_word_limits.py         # supporting-statement per-criterion word limits
     ├── consistency.py               # contradictions between assessment fields — reports, never repairs
     ├── count_coverage.py            # the ONLY path that produces coverage counts
+    ├── doctor.py                    # first-run environment check; --install for pip only
     ├── deliver.py                   # hand-off: copy the round's readable artifacts
     │                                #   to ~/Downloads/job-hunt/<slug>/ (not a gate)
     ├── enter_mode.py                # mode entry + the mode file's content hash
@@ -145,6 +146,7 @@ job-hunt/
     ├── opencli_meta.py              # resolves an adapter command's published access: (library)
     ├── parse_verdicts.py            # PASS/REJECT parsing, fail-closed on AMBIGUOUS
     ├── paths.py                     # the one definition of the workspace shape (library)
+    ├── save_profile.py              # guarded master save: one CV per language
     ├── render_cv.py                 # CV → md / docx / pdf(LaTeX)
     ├── render_letter.py             # motivation letter → md / docx / pdf
     ├── render_rirekisho.py          # Japanese 履歴書 form renderer

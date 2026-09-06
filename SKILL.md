@@ -377,6 +377,8 @@ In both cases give the final per-judge verdicts, the ATS coverage % (or `n/a`), 
 
 **Offer to save the master** to `~/.claude/job-profiles/<name>/profile.yaml` so it's reusable across applications. This master profile is the source of truth and is **NEVER mutated by tailoring** — tailoring always works on a copy (Step 4).
 
+**One candidate has one CV per language, and saving a new one never overwrites another language's.** A Chinese CV is a different document from an English one — different conventions, length rules and personal-data expectations — not a translation of it, so a user who supplies both has two masters: `profile.yaml` and `profile.<lang>.yaml` beside it. **Save through `python3 scripts/save_profile.py --name <name> --profile <file>`, never by writing the path yourself.** It resolves the slot by reading each existing master's own `meta.language` rather than trusting a filename, so a second English CV goes back into the legacy `profile.yaml` instead of becoming a duplicate; it backs up what it replaces; and it refuses a profile with no `meta.language`, because the unsuffixed slot is where a legacy English master usually lives and dropping an untagged CV there is the overwrite this is here to prevent. On the read side the same rule runs backwards: tailor from the master whose language matches the CV language chosen in Step 0, and say which file you took as the base. Reaching for the English master to build a Chinese CV throws away the one the user wrote for exactly that purpose.
+
 **Application workspace.** All per-application files live under:
 
 ```
@@ -417,6 +419,29 @@ The point is not to coach a story — it's to make sure every word on the page i
 - **Honest only.** This brief never invents a story; it points each CV claim back to a true source and prepares a truthful answer. If a claim has no defensible source, the fix is to change the CV, not to coach a cover story.
 - **Keep it thin.** This is a defense brief generated from data you already hold — not a mock-interview module. A page or less.
 - **Flag the over-reach signal.** If preparing the brief surfaces a claim the candidate cannot truthfully defend, treat it as a tailoring error and walk the claim back on the CV.
+
+## Before the first mode on a new machine
+
+```bash
+python3 scripts/doctor.py            # what works, what does not, what each costs
+python3 scripts/doctor.py --install  # installs the missing PYTHON packages only
+```
+
+Run it once for a new user. It reports capabilities rather than binary names —
+the PDF check renders a PDF, because looking for `xelatex` alone once called this
+machine broken while `tectonic` was installed and every PDF rendered fine.
+
+Nothing here blocks a run: a machine with no LaTeX engine still produces Markdown
+and .docx, and one with no `opencli` can still do assess, apply and interview from
+a pasted posting. What the report buys is saying WHICH capability is missing
+before the user hits it, instead of discovering it when a PDF does not appear.
+
+**System binaries are never installed for the user.** A LaTeX engine is a
+package-manager action of several hundred megabytes; running one unasked is the
+same class of act as running `opencli <site> login` for them, which
+`references/source-policy.md` keeps on its Red list. Print the command, let them
+run it. Python packages are different — small, scoped to the interpreter already
+running, and listed in `requirements.txt` — so `--install` handles those.
 
 ## Mode entry
 
@@ -564,6 +589,8 @@ a fabrication the candidate then repeats back), and the shortlist's `why_matched
 | Assess | `scripts/check_assessment.py` | composes the six above and requires their receipts; disclaimer, disqualifier section, the 「那该怎么办」 half, verbatim conventions, stale-review banner; a top-level `level_direction` or `effort` the card prints but nobody assessed, and a work-authorization token spelled outside its set |
 | Migration losslessness (CI only) | `scripts/check_skill_lossless.py` | a baseline line that exists nowhere in this tree |
 | Adapter classification | `scripts/check_opencli_result.py` | *(wrapper, not a gate)* a non-zero exit, a login wall, a platform stop-signal, or an empty identity field |
+| First-run environment | `scripts/doctor.py` | *(precondition, not a gate)* every capability the skill needs, checked by USING it — the PDF check renders a PDF, because an earlier `command -v xelatex` check called a working machine broken while tectonic was installed. `--install` installs the Python packages; system binaries are never installed for the user, only their command printed |
+| Saving a master | `scripts/save_profile.py` | *(guarded write, not a gate)* one master per language; a new language never overwrites another, a repeat language is backed up first, and a profile with no `meta.language` is refused |
 | Delivery | `scripts/deliver.py` | *(hand-off, not a gate)* copies the round's readable artifacts to `~/Downloads/` as `<slug>-<file>`, renders every Markdown to PDF as well, and prints the path to quote. Exits 0 or 2, never 1. `DELIVER_DEST_UNWRITABLE` is macOS TCC refusing `~/Downloads` mid-session — say so and offer `--to`, never leave the artifacts undelivered |
 | Read-only | `scripts/check_no_write.py` | a journaled command whose published `access:` is `write`, or whose access cannot be resolved at all |
 | Shortlist | `scripts/check_shortlist.py` | a row whose `source_id` or `raw_text` is in no raw capture, or whose `id` is not `<site>-<source_id>`; a duplicated or over-counted source report; "no results" with no adapter that exited 0; a missing disclosure block or provisional stamp; a detail fetch outside the top three; an uncapped brief, or a run that exceeded the caps the brief declares; a posting URL rendered in `shortlist.md` that is in no `shortlist.yaml` row; a row whose company or salary contradicts its own capture; a missing or stale mode entry. Warns (does not fail) when a row's location names a country outside `brief.markets` |
@@ -793,6 +820,10 @@ Ran, leaving nothing in the journal (they render; they do not judge):
 - [ ] `scripts/deliver.py` — the LAST step of every mode. A workspace under
       `~/.claude/job-profiles/` is where the skill works, not where a person
       looks, and a path pasted into a chat message is gone once it scrolls.
+- [ ] `scripts/doctor.py` — once per machine, before the first mode. Reports
+      capabilities by using them; `--install` covers the Python packages only.
+- [ ] `scripts/save_profile.py` — every master save goes through it. One CV per
+      language, and a new language never overwrites another's file.
 
 In CI, not in a workspace (no receipt exists for these, by design):
 - [ ] `scripts/check_skill_lossless.py` — only when this skill's own files changed.
