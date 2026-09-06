@@ -130,7 +130,13 @@ def work_authorization_alignment(condition: dict | None,
     The output is always "these two appear to conflict, check it yourself", never
     "you are not eligible".
     """
-    condition = condition or {}
+    # `condition or {}` is the exact idiom `journal.as_mapping`'s docstring says
+    # it exists to replace: it guards None and every falsy value and NOT a
+    # non-empty string, so `stated_conditions: [visa_sponsorship]` — a plausible
+    # hand-edit — raised AttributeError here. Measured 2026-09-06: exit 1, no
+    # finding, NO RECEIPT, which a composer reads as a gate that never ran while
+    # the caller reads "found problems".
+    condition = journal.as_mapping(condition)
     if condition.get("type") not in AUTH_CONDITION_TYPES:
         return None
     if declared_status in (None, "", "unknown"):
@@ -149,7 +155,12 @@ def work_authorization_alignment(condition: dict | None,
 
 def overall_authorization_alignment(conditions: list[dict] | None,
                                     declared_status: str | None) -> str | None:
-    results = [work_authorization_alignment(c, declared_status) for c in (conditions or [])]
+    # The CONTAINER can be wrong too: `stated_conditions: none` is a plausible way
+    # to write "there are none" and iterating a string yields its characters,
+    # while a bool or an int is not iterable at all.
+    if not isinstance(conditions, (list, tuple)):
+        conditions = []
+    results = [work_authorization_alignment(c, declared_status) for c in conditions]
     for level in ("conflict", "verify", "supported"):
         if level in results:
             return level

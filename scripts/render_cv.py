@@ -369,7 +369,8 @@ def section_order(profile):
     hiding). Otherwise pick the academic or industry default.
     """
     default = _ACADEMIC_ORDER if is_academic_profile(profile) else _INDUSTRY_ORDER
-    explicit = (profile.get("meta") or {}).get("section_order")
+    explicit = journal.as_mapping(
+        journal.as_mapping(profile).get("meta")).get("section_order")
     if not explicit:
         return default
     if isinstance(explicit, str):       # tolerate a single key written as a scalar
@@ -402,9 +403,15 @@ REQUIRED_PROFILE_FIELDS = (("meta", "name"), ("contact", "email"))
 
 def missing_required_fields(profile) -> list:
     """The declared-required fields this profile does not supply, as 'a.b' strings."""
+    # `(x or {}).get` guards None and every falsy value and NOT a non-empty
+    # string, a list, an int or True — so `meta: "us"` in hand-written YAML
+    # raised AttributeError inside the function whose whole job is to REPORT a
+    # malformed profile. The boundary check crashed before it could say what was
+    # wrong. `journal.as_mapping` is the idiom written for exactly this.
     missing = []
     for section, key in REQUIRED_PROFILE_FIELDS:
-        value = ((profile or {}).get(section) or {}).get(key)
+        value = journal.as_mapping(
+            journal.as_mapping(profile).get(section)).get(key)
         if not (str(value).strip() if value is not None else ""):
             missing.append(f"{section}.{key}")
     return missing
@@ -701,11 +708,12 @@ def resolve_cluster(market):
 def protected_fields(profile):
     """Names of the protected personal-data fields actually present."""
     out = []
-    personal = (profile.get("contact") or {}).get("personal") or {}
+    personal = journal.as_mapping(
+        journal.as_mapping(profile).get("contact")).get("personal") or {}
     if isinstance(personal, dict):
         out += [f"contact.personal.{k}" for k, v in personal.items()
                 if v not in (None, "")]
-    if (profile.get("meta") or {}).get("photo"):
+    if journal.as_mapping(journal.as_mapping(profile).get("meta")).get("photo"):
         out.append(_PHOTO_FIELD)
     return out
 
@@ -737,7 +745,8 @@ def _warn_unknown_market(profile):
     evidence that rendering a DOB is safe, and silence there is what made the
     original claim false.
     """
-    market = (profile.get("meta") or {}).get("target_market")
+    market = journal.as_mapping(
+        journal.as_mapping(profile).get("meta")).get("target_market")
     if resolve_cluster(market) is not None:
         return
     fields = protected_fields(profile)
@@ -772,7 +781,8 @@ def _suppress_personal_data(profile) -> bool:
     reject. The unrecognised-market WARNING still prints, so the candidate can
     name a recognised market and get the fields back.
     """
-    return resolve_cluster((profile.get("meta") or {}).get("target_market")) in (1, None)
+    return resolve_cluster(journal.as_mapping(
+        journal.as_mapping(profile).get("meta")).get("target_market")) in (1, None)
 
 
 # Personal-data labels, in the languages that have a headings table. The label
@@ -824,10 +834,12 @@ def personal_items(profile):
     (see `_suppress_personal_data`)."""
     if _suppress_personal_data(profile):
         return
-    personal = (profile.get("contact") or {}).get("personal") or {}
+    personal = journal.as_mapping(
+        journal.as_mapping(profile).get("contact")).get("personal") or {}
     if not isinstance(personal, dict):
         return
-    language = (profile.get("meta") or {}).get("language", "en")
+    language = journal.as_mapping(
+        journal.as_mapping(profile).get("meta")).get("language", "en")
     for key, value in personal.items():
         if value in (None, ""):
             continue
@@ -884,7 +896,7 @@ def photo_path(profile):
     """
     if _suppress_personal_data(profile):
         return None
-    p = (profile.get("meta") or {}).get("photo")
+    p = journal.as_mapping(journal.as_mapping(profile).get("meta")).get("photo")
     if not p:
         return None
     path = pathlib.Path(str(p)).expanduser()
@@ -2334,6 +2346,13 @@ def main(argv=None):
         # Exit 2 = "could not run", the same meaning it carries in every gate. A
         # renderer has no receipt to leave, so the exit code and this line are the
         # whole of the report — which is why it must not be a traceback.
+        print(f"cannot render: {exc}", file=sys.stderr)
+        return 2
+    except ValueError as exc:
+        # A profile that PARSES but is the wrong shape — `meta: "us"`, a missing
+        # required field — is also "could not run", not "rendered and something
+        # failed". It was escaping as a traceback at exit 1, which in this script
+        # already means the PDF step failed.
         print(f"cannot render: {exc}", file=sys.stderr)
         return 2
 

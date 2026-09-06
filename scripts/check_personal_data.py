@@ -23,7 +23,11 @@ GATE = "check_personal_data"
 
 
 def findings_for(profile) -> list:
-    market = (profile.get("meta") or {}).get("target_market")
+    # Same class as render_cv.missing_required_fields: a non-dict `meta`
+    # sailed past `or {}` and raised AttributeError, so the gate exited 1
+    # with no finding and no receipt.
+    market = journal.as_mapping(journal.as_mapping(profile).get("meta")).get(
+        "target_market")
     fields = render_cv.protected_fields(profile)
     if not fields:
         return []

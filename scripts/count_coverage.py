@@ -148,6 +148,21 @@ def _assessed(value, allowed: tuple, zh_labels: dict, lang: str) -> str:
     return zh_labels[value] if lang == "zh" else value
 
 
+def _verdict_zh(verdict) -> str:
+    """The Chinese verdict word, for a verdict of ANY shape.
+
+    `VERDICT_ZH.get(verdict, ...)` raised `TypeError: unhashable type: 'list'` on
+    `verdict: [worth_applying]` — one stray bracket in hand-written YAML — and the
+    gate exited 1 with no receipt, which a composer reads as a gate that never
+    ran while the caller reads "found problems". An unusable verdict is exactly
+    what the refusal string is for, so it is returned rather than raised.
+    """
+    try:
+        return VERDICT_ZH.get(verdict, "证据不足—不出结论")
+    except TypeError:
+        return "证据不足—不出结论"
+
+
 def render_block(assessment: dict, counts: dict, lang: str = "zh") -> str:
     verdict = assessment.get("verdict", "insufficient_evidence")
     direction = _assessed(assessment.get("level_direction"), vocab.LEVEL_DIRECTION,
@@ -161,7 +176,7 @@ def render_block(assessment: dict, counts: dict, lang: str = "zh") -> str:
             f"核心职责已证实：     {counts['resp_demonstrated']} of {counts['resp_total']}\n"
             f"职级匹配：           {direction}\n"
             f"可补缺口所需投入：   {effort}\n"
-            f"投递建议：           {VERDICT_ZH.get(verdict, '证据不足—不出结论')}")
+            f"投递建议：           {_verdict_zh(verdict)}")
     return (
         f"must-haves strongly evidenced:   {counts['must_strong']} of "
         f"{counts['must_total']}   (partial {counts['must_partial']}, "
