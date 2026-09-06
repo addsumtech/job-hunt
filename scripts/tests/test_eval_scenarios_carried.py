@@ -75,3 +75,41 @@ def test_a_digest_is_recorded_for_every_carried_scenario():
     for name, digest in ITERATION_1_SHA256.items():
         assert len(digest) == 64 and all(c in "0123456789abcdef" for c in digest), (
             f"{name}: {digest!r} is not a sha256")
+
+
+# ---- a quiet twin's premise has to be true in its own scenario --------------
+#
+# MEASURED ON THE ITERATION-2 with_skill ARM, eval-19. `interview-well-sourced`
+# is the quiet twin for `interview-unsourced-drift`: its assertion is "a round in
+# which every answer traces to the CV produces no defensive tags", and its job is
+# to fail a skill that tags defensively.
+#
+# Its CV said "offline reconstruction pipeline in C++17; CUDA gridding; nightly
+# Slurm regressions". Its scripted answers said "I OWN the pipeline", "I WROTE
+# the job templates", "I PROFILED the gridding kernel". None of those three scope
+# words was in the CV, so the run tagged all three — correctly — and the twin
+# recorded a failure. The premise was false in the scenario's own text, which
+# makes the assertion unpassable by a correct run: the same shape as a guard that
+# cries wolf, one level up.
+#
+# A no_skill baseline cannot catch this, because it emits no tags at all and
+# passes the twin by never doing the thing the twin is about.
+
+SCOPE_WORDS = ("own", "ported", "profiled", "scatter-add", "wrote", "maintain",
+               "Slurm", "job templates", "C++17", "CUDA")
+
+
+def _section(text, header, stop):
+    return text.split(header, 1)[1].split(stop, 1)[0]
+
+
+def test_the_well_sourced_scenario_cv_carries_every_scope_word_its_answers_use():
+    text = (REPO / "evals" / "scenarios" /
+            "interview-well-sourced.md").read_text(encoding="utf-8")
+    cv = _section(text, "CANDIDATE CV", "=== JOB POSTING").lower()
+    answers = text.split("THE CANDIDATE'S ANSWERS", 1)[1].lower()
+    missing = [w for w in SCOPE_WORDS
+               if w.lower() in answers and w.lower() not in cv]
+    assert not missing, (
+        "the scripted answers use scope this scenario's CV does not carry, so a "
+        f"run that flags it is right and the quiet twin cannot pass: {missing}")

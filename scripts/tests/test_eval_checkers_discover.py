@@ -628,3 +628,57 @@ def test_the_language_scan_actually_finds_something():
             r"(?:CV|SEARCH|INTERVIEW|OUTPUT) LANGUAGE:\s*([A-Za-z]+)",
             p.read_text(encoding="utf-8"))}
     assert {"english", "chinese", "german"} <= langs, langs
+
+
+# ---- the carrier must be found where the run actually wrote it --------------
+#
+# MEASURED ON THE ITERATION-2 with_skill ARM, eval-5, and it cost the guard.
+# The run kept the skill's own directory shape and wrote its shortlist to
+# `workspace/li-wei/searches/2026-09-05-suanfa-shanghai/shortlist.md`. The block
+# was there, in English, all six lines answered -- and the guard reported
+# "missing disclosure line(s) from every reader-facing document", because
+# `_disclosure_carrier` read the exact path `workspace/shortlist.md`.
+#
+# That is the blindness `runlib.read_any` was added for after eval-15 in the
+# pilot, surviving in one more function. It is worse than a miss: a harness bug
+# rendered as a skill failure, on the arm the harness exists to measure.
+
+def build_nested(tmp_path, *, journal=(), shortlist_md="", final=""):
+    """Like `build`, but the run keeps the skill's <person>/searches/<slug>/ shape."""
+    out = tmp_path / "outputs"
+    nest = out / "workspace" / "li-wei" / "searches" / "2026-09-05-x"
+    nest.mkdir(parents=True)
+    (out / "final-message.md").write_text(final, encoding="utf-8")
+    (nest / "shortlist.md").write_text(shortlist_md, encoding="utf-8")
+    (nest / "journal.jsonl").write_text(
+        "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in journal),
+        encoding="utf-8")
+    return runlib.Run(tmp_path)
+
+
+def test_a_complete_block_in_a_nested_shortlist_is_found(tmp_path):
+    run = build_nested(tmp_path, journal=[DEAD], shortlist_md=DISCLOSURE)
+    passed, evidence = ck.CHECKERS["degraded_disclosure_complete"](run)
+    assert passed is True, evidence
+    assert "shortlist.md" in evidence
+
+
+def test_a_nested_run_with_no_block_at_all_still_fires(tmp_path):
+    """The fix must not turn the guard into one that never fails.
+
+    Finding the document wherever it is, and requiring the block to be in it,
+    are separate obligations; a `read_any` that silently matched anything would
+    satisfy the test above while making this one impossible.
+    """
+    run = build_nested(tmp_path, journal=[DEAD], shortlist_md="## §1 方向\n")
+    passed, evidence = ck.CHECKERS["degraded_disclosure_complete"](run)
+    assert passed is False
+    assert "本次会话已登录：" in evidence
+
+
+def test_a_blank_answer_in_a_nested_block_still_fires(tmp_path):
+    broken = DISCLOSURE.replace("取得真实岗位：          否", "取得真实岗位：")
+    run = build_nested(tmp_path, journal=[DEAD], shortlist_md=broken)
+    passed, evidence = ck.CHECKERS["degraded_disclosure_complete"](run)
+    assert passed is False
+    assert "取得真实岗位" in evidence

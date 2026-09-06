@@ -165,3 +165,67 @@ def test_the_stub_is_executable_and_the_fixtures_it_names_exist():
     for name in ("51job-403.json", "indeed-blank-titles.json", "51job-ok.json"):
         assert (REPO / "evals" / "fixtures" / "opencli" / name).is_file(), name
         assert name in RUNBOOK, f"{name} is not wired to an eval in the runbook"
+
+
+def _runbook_guard_column():
+    """{eval name: guard count} as the runbook's own table prints it.
+
+    `—` means zero. A name the table does not list is absent from the mapping,
+    which the test below reports separately from a wrong number.
+    """
+    out = {}
+    for row in re.finditer(
+            r"^\|\s*\d+\s*\|\s*`(?P<name>[a-z0-9-]+)`\s*\|[^|]*\|[^|]*\|"
+            r"\s*(?P<guards>\d+|—)\s*\|",
+            RUNBOOK, re.M):
+        cell = row.group("guards")
+        out[row.group("name")] = 0 if cell == "—" else int(cell)
+    return out
+
+
+def test_the_runbook_guard_column_matches_assertions_yaml():
+    """The table said 24 guards across 15 evals; the file held 10 across 10.
+
+    It drifted because the iteration-2 pilot re-roled every assertion its
+    baseline passed, and the column was hand-maintained. A reader planning a
+    matrix off that table budgets for guards that no longer exist, and — worse —
+    reads a `regression` result as a guard result when comparing the arms.
+
+    The pre-existing guard test is deliberately one-directional (no
+    guard-carrying eval may be left out of stage 1) and so cannot see this: it
+    checks the runbook against the file, never the file against the runbook.
+    """
+    truth = {e["name"]: sum(1 for a in e.get("assertions", [])
+                            if a.get("role") == "discriminating")
+             for e in DOC["evals"]}
+    printed = _runbook_guard_column()
+
+    missing = sorted(set(truth) - set(printed))
+    assert not missing, f"the runbook table does not list: {missing}"
+
+    wrong = {name: (printed[name], truth[name])
+             for name in sorted(truth) if printed[name] != truth[name]}
+    assert not wrong, (
+        "the runbook's guards column disagrees with assertions.yaml "
+        f"(printed, actual): {wrong}")
+
+
+def test_the_runbook_does_not_call_the_stage1_list_the_guard_evals():
+    """Stage 1 names fifteen evals; only ten carry a discriminating assertion.
+
+    The list is a deliberate superset — it pulls in the quiet twins — so the
+    fifteen are right and the DESCRIPTION was wrong. Calling them "the evals
+    that carry a discriminating assertion" tells the next reader that a
+    regression-only eval's result is a guard result.
+    """
+    guard_count = sum(1 for e in DOC["evals"]
+                      for a in e.get("assertions", [])
+                      if a.get("role") == "discriminating")
+    stage1 = RUNBOOK[RUNBOOK.index("## Stage 1"):RUNBOOK.index("## Stage 2")]
+    named = len(re.findall(r"^\s*-\s+eval-\d+\s+`", stage1, re.M))
+    if named == guard_count:
+        return  # they genuinely coincide; nothing to misdescribe
+    assert not re.search(
+        r"FIFTEEN evals that carry a\s+discriminating assertion", stage1), (
+        f"stage 1 names {named} evals but only {guard_count} assertions are "
+        "discriminating; do not describe the list as the guard-carrying evals")

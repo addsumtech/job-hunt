@@ -26,29 +26,38 @@ recorded, because no assertion covers those.
 
 | id | name | mode | baseline_kind | guards |
 |---|---|---|---|---|
-| 0 | `us-rn-nurse` | apply | old_skill | 2 |
+| 0 | `us-rn-nurse` | apply | old_skill | 1 |
 | 1 | `cjk-chinese-swe` | apply | old_skill | — |
 | 2 | `career-switch-teacher-ux` | apply | old_skill | — |
 | 3 | `senior-exec-coo` | apply | old_skill | — |
 | 4 | `uk-nhs-structured` | apply | old_skill | — |
-| 5 | `discover-blocked-adapter` | discover | no_skill | 2 |
-| 6 | `discover-blank-identity-rows` | discover | no_skill | 1 |
+| 5 | `discover-blocked-adapter` | discover | no_skill | 1 |
+| 6 | `discover-blank-identity-rows` | discover | no_skill | — |
 | 7 | `discover-honest-zero` | discover | no_skill | — |
-| 8 | `discover-clean-retrieval` | discover | no_skill | 3 |
-| 9 | `discover-fabricated-row` | discover | no_skill | 2 |
-| 10 | `assess-login-wall-200` | assess | no_skill | 1 |
-| 11 | `assess-thin-inputs` | assess | no_skill | 2 |
-| 12 | `assess-usable-posting` | assess | no_skill | 3 |
+| 8 | `discover-clean-retrieval` | discover | no_skill | — |
+| 9 | `discover-fabricated-row` | discover | no_skill | — |
+| 10 | `assess-login-wall-200` | assess | no_skill | — |
+| 11 | `assess-thin-inputs` | assess | no_skill | 1 |
+| 12 | `assess-usable-posting` | assess | no_skill | 1 |
 | 13 | `assess-expired-convention` | assess | no_skill | 1 |
-| 14 | `apply-us-personal-data` | apply | old_skill | 2 |
-| 15 | `apply-de-photo-conventional` | apply | old_skill | 1 |
+| 14 | `apply-us-personal-data` | apply | old_skill | 1 |
+| 15 | `apply-de-photo-conventional` | apply | old_skill | — |
 | 16 | `apply-ats-reject-genuine-gap` | apply | old_skill | 1 |
 | 17 | `apply-ats-reject-buried-evidence` | apply | old_skill | 1 |
-| 18 | `interview-unsourced-drift` | interview | no_skill | 2 |
-| 19 | `interview-well-sourced` | interview | no_skill | 2 |
-"guards" counts assertions with `role: discriminating`. An eval with none is
-still worth running — it is a regression eval, and several are the quiet twins
-that stop a guard from scoring well by always firing.
+| 18 | `interview-unsourced-drift` | interview | no_skill | 1 |
+| 19 | `interview-well-sourced` | interview | no_skill | 1 |
+"guards" counts assertions with `role: discriminating`, and the column is
+generated from `assertions.yaml`, not maintained by hand — `test_eval_runbook.py`
+fails if the two disagree. It used to be hand-written and drifted: it claimed 24
+guards across 15 evals while the file held 10 across 10, because the iteration-2
+pilot re-roled every assertion its baseline passed and nobody came back to the
+table.
+
+An eval with no guard is still worth running — it is a regression eval, and
+several are the quiet twins that stop a guard from scoring well by always firing.
+That is also why Stage 1 dispatches more evals than there are guards: its list is
+a superset, chosen to include the twins, and the test checks only that no
+guard-carrying eval is left out of it.
 
 ## Arms
 
@@ -170,8 +179,9 @@ name, and confirm it by rendering something rather than by `command -v`.
 1. `mkdir -p ~/code_project/job-hunt-workspace/iteration-2`
 2. For each eval, write `eval-<ID>/eval_metadata.json`:
    `{"eval_id": N, "eval_name": "...", "baseline_kind": "...", "prompt": "<the scenario's TASK line, verbatim>", "assertions": []}`
-3. Dispatch **one baseline run** for each of the FIFTEEN evals that carry a
-   discriminating assertion, in one turn:
+3. Dispatch **one baseline run** for each of these FIFTEEN evals, in one turn.
+   They are every guard-carrying eval plus its quiet twins — a superset of the
+   ten that carry a discriminating assertion, not a list of them:
 
    - eval-0 `us-rn-nurse`
    - eval-5 `discover-blocked-adapter`
@@ -256,9 +266,17 @@ The stub refuses any write command outright; **do not attempt a login on any
 site**, in any arm, for any reason, and do not point a discover eval at a live
 adapter.
 
-Evals 8 and 9 start from a prepared workspace: copy
-`evals/fixtures/workspaces/{clean,fabricated}/` into the run's working directory
-before dispatch.
+**Eval 9 — and only eval 9 — starts from a prepared workspace.** Copy the CONTENTS
+of `evals/fixtures/workspaces/fabricated/` into `<run>/outputs/workspace/` before
+dispatch, and tell the run to search nothing.
+
+This line used to name evals 8 and 9 together, and that was wrong. eval 8 is
+`discover-clean-retrieval`: its scenario asks for an ordinary successful round
+against the `51job-ok` fixture, says nothing about a saved workspace, and the
+iteration-2 baseline ran it with nothing staged. Staging `workspaces/clean/` into
+one arm and not the other would have made the pair meet different conditions,
+which is the one thing a matched pair may not do. `workspaces/clean/` is a
+checker fixture, not a run input.
 
 Eval 13 uses `evals/fixtures/conventions/expired-nl.yaml` as the session's `nl`
 table; say so in the prompt and do not edit the shipped table.
@@ -277,6 +295,70 @@ it had no other option — and `personal_data_retained_where_conventional` faile
 it for dropping a conventional field. The checker now reports an absent file as
 unmeasurable rather than as a drop, but that turns the assertion off; staging
 the file is what turns it back into a measurement of behaviour.
+
+## How many runs to dispatch at once
+
+Measured 2026-09-05, dispatching the with_skill arm: **eight concurrent Opus runs
+exhausted the session limit and all eight died mid-run** with HTTP 429, between one
+and thirteen files written each. Nothing was gradable and every one had to be reset
+and re-staged.
+
+**Count agents, not runs.** An apply run dispatches all three judges in parallel,
+so it is four concurrent agents, not one; an interview run dispatches two
+assessors. Measured again 2026-09-06: three runs dispatched together (evals 0, 18
+and 19 — one apply, two interview) hit the limit a second time, because eval-0's
+three judges were live at the same moment. Four *discover* or *assess* runs are
+four agents and were fine twice; three runs including one apply were not.
+
+Dispatch in batches of about four agents, and reset an aborted run rather than
+grading what it left behind. A partially written run directory is the dangerous artifact here: it
+holds a real `scenario.md`, a real workspace and some real output, so it looks like a
+short run rather than a killed one, and `grade.py` cannot tell the difference. Delete
+`outputs/`, re-stage, re-dispatch.
+
+Both arms of a pair must still be dispatched under the same model. The arms differ by
+which skill is installed and by nothing else; a with_skill arm run on a cheaper model
+to save budget measures the model, which is the one thing this harness exists to
+control for.
+
+## Keeping a run out of the real profile store
+
+The skill's prose tells the model to work under `~/.claude/job-profiles/`, and
+`scripts/paths.py` resolves `PROFILES_ROOT` there. On the machine this harness
+runs on that directory holds a REAL person's CVs, applications and search
+preferences. A run that follows the skill faithfully writes a fictional
+candidate's profile straight into it.
+
+There is no clean mechanism to prevent that. Subagents run in-process, so they
+cannot be given a different HOME (same constraint as the skill isolation above),
+and they do not inherit a per-call environment variable either — so an env-var
+override in `paths.py` would only be as strong as an instruction telling the run
+to export it, i.e. no stronger than just naming the directory. One was written
+and reverted for exactly that reason; do not add it back believing it isolates
+anything.
+
+What actually works is two things together:
+
+1. **Say it in the dispatch prompt.** Give the run its workspace root explicitly
+   and say that everything the skill would put under `~/.claude/job-profiles/`
+   goes there instead, keeping whatever subdirectory shape the skill calls for —
+   only the root moves. Add "do not write to `~/.claude/job-profiles/`, it holds
+   a real person's data". `runlib` already finds artifacts wherever the run put
+   them, so a nested `job-profiles/<person>/applications/<slug>/` grades fine.
+2. **Prove it afterwards.** Snapshot the live store before dispatch and diff it
+   after every run has finished:
+
+~~~bash
+find ~/.claude/job-profiles -print0 | xargs -0 -I{} stat -f '%N %z %m' {} \
+  | sort > <results>/profiles-before.txt
+# ... run everything ...
+find ~/.claude/job-profiles -print0 | xargs -0 -I{} stat -f '%N %z %m' {} \
+  | sort | diff <results>/profiles-before.txt -
+~~~
+
+An empty diff is the only evidence that the instruction held. Without the
+snapshot, a leak is indistinguishable from no leak, and the run notes would not
+mention it because the run would not think it had done anything wrong.
 
 ## Stage 3 — grade, aggregate, view
 

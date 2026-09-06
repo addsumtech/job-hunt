@@ -7,6 +7,7 @@ everything — so every guard here is tested twice, once on the run it must fail
 once on the run it must stay silent about, and its twin is tested the same way.
 """
 import json
+import pathlib
 import re
 
 import pytest
@@ -520,3 +521,145 @@ def test_a_chinese_login_wall_is_still_caught(tmp_path):
     run = build(tmp_path, posting_source=wall)
     text, words = ck._source_words(run)
     assert words < ck.USABLE_MIN_WORDS, words
+
+
+# ---- naming the scale is not standing on it ---------------------------------
+#
+# MEASURED ON THE ITERATION-2 with_skill ARM, eval-11. The run refused exactly as
+# the skill asks -- `verdict: insufficient_evidence`, no coverage card, no
+# recommendation -- and explained the refusal in the one sentence that has to
+# name the scale in order to say the answer is not on it:
+#
+#     not a point on the scale that runs from *apply* to *blocked*, so it does
+#     not get a position on it
+#
+# The guard scanned for the bare substring, found `blocked`, and reported a
+# printed conclusion. Firing on correct output is the worst thing a guard can
+# do: a guard that cries wolf gets switched off, and then it protects nothing.
+#
+# The pair below is the point. Refusing to fire on prose is only safe while the
+# guard still fires on a verdict in its labelled position -- so both are pinned.
+
+REFUSAL_PROSE = (
+    "证据不足—不出结论。\n"
+    "This is not a point on the scale that runs from *apply* to *blocked*, so\n"
+    "it does not get a position on it, and you do not get a recommendation.\n"
+    "A `stretch` or a `likely_screen_out` would both be inventions here.\n")
+
+
+def test_prose_naming_the_verdict_scale_does_not_fire(tmp_path):
+    run = build(tmp_path, assessment={"verdict": "insufficient_evidence"},
+                assessment_md=REFUSAL_PROSE)
+    passed, evidence = ck.CHECKERS["refusal_floor_fires"](run)
+    assert passed is True, evidence
+
+
+@pytest.mark.parametrize("line, shown", [
+    ("apply verdict:                   blocked", "blocked"),
+    ("投递建议：           硬性阻断", "硬性阻断"),
+    ("APPLY VERDICT: stretch — one honest sentence why", "stretch"),
+    ("Recommendation: worth_applying", "worth_applying"),
+    ("- **apply verdict:** likely_screen_out", "likely_screen_out"),
+])
+def test_a_verdict_in_a_value_position_still_fires(tmp_path, line, shown):
+    """Four different labels and a bulleted, bolded one.
+
+    `count_coverage.py` emits the first two verbatim, SKILL.md's FIT SNAPSHOT
+    the third, and an English assessment may reach for a fourth wording of its
+    own — the pre-existing `Recommendation:` test is exactly that case. So the
+    rule is the VALUE POSITION, not a whitelist of labels: whitelisting means
+    the next run to invent a fifth wording walks a verdict straight past the
+    guard, and nothing in this file would have noticed.
+    """
+    run = build(tmp_path, assessment={"verdict": "insufficient_evidence"},
+                assessment_md=REFUSAL_PROSE + line + "\n")
+    passed, evidence = ck.CHECKERS["refusal_floor_fires"](run)
+    assert passed is False
+    assert shown in evidence
+
+
+@pytest.mark.parametrize("line", [
+    "One thing worth noting: this posting is not blocked for you.",
+    "A `stretch` or a `likely_screen_out` would both be inventions here.",
+])
+def test_a_verdict_word_inside_a_sentence_does_not_fire(tmp_path, line):
+    """Including a sentence that carries a colon.
+
+    The colon is what makes this worth pinning: splitting on it is the whole
+    mechanism, and a rule that fired on any right-hand side containing a verdict
+    word would re-create the cry-wolf on the first sentence with a colon in it.
+    """
+    run = build(tmp_path, assessment={"verdict": "insufficient_evidence"},
+                assessment_md="证据不足—不出结论。\n" + line + "\n")
+    passed, evidence = ck.CHECKERS["refusal_floor_fires"](run)
+    assert passed is True, evidence
+
+
+# ---- the stale banner has two spellings, and the card picks one -------------
+#
+# MEASURED ON THE ITERATION-2 with_skill ARM, eval-13. An English assessment
+# rendered the expired NL entry under `**Past its review date**` — which is what
+# `modes/assess.md` asks for in as many words ("On an English card the banner is
+# **past its review date**") and what `check_assessment.py` matches. The eval
+# checker knew only 「已过复核期」 and reported the card as carrying no banner.
+#
+# Cry-wolf again, and worse than eval-11's: on an English card the only correct
+# output IS the one the guard rejected, so the guard was unpassable in that
+# language. The pair is now imported from the skill, so the two copies cannot
+# drift apart again.
+
+EN_BANNER_MD = ("## Market conventions\n\n"
+                "Rendered verbatim from this session's `nl` table. "
+                "**Past its review date** — re-check before relying on it.\n"
+                "> Check the company in the public register of recognised sponsors\n")
+EXPIRED = {"verdict": "worth_applying",
+           "conventions_rendered": ["nl-recognised-sponsor-gate"]}
+
+
+def test_the_english_banner_satisfies_the_stale_guard(tmp_path):
+    run = build(tmp_path, assessment_md=EN_BANNER_MD, assessment=EXPIRED)
+    passed, evidence = ck.CHECKERS["expired_convention_banner_shown"](run)
+    assert passed is True, evidence
+    assert "past its review date" in evidence.lower()
+
+
+def test_the_banner_match_is_case_insensitive(tmp_path):
+    """`check_assessment.py` matches case-insensitively, so this must too.
+
+    A card opening the sentence with the banner writes `Past its review date`;
+    one putting it mid-sentence writes it lowercase. Both are the banner.
+    """
+    md = EN_BANNER_MD.replace("**Past its review date**", "**PAST ITS REVIEW DATE**")
+    run = build(tmp_path, assessment_md=md, assessment=EXPIRED)
+    assert ck.CHECKERS["expired_convention_banner_shown"](run)[0] is True
+
+
+def test_a_card_with_neither_spelling_still_fires(tmp_path):
+    """Accepting a second spelling and accepting anything are different things,
+    and only this test tells them apart."""
+    md = EN_BANNER_MD.replace(
+        "**Past its review date** — re-check before relying on it.\n", "")
+    run = build(tmp_path, assessment_md=md, assessment=EXPIRED)
+    passed, evidence = ck.CHECKERS["expired_convention_banner_shown"](run)
+    assert passed is False
+    assert "已过复核期" in evidence and "past its review date" in evidence
+
+
+def test_the_english_banner_also_fires_the_twin_on_a_current_table(tmp_path):
+    """The twin is what stops "always print the banner" from passing the guard,
+    so it has to see the English spelling too — otherwise an English card gets a
+    free pass to stamp a stale banner on a current table."""
+    run = build(tmp_path, assessment_md=EN_BANNER_MD,
+                assessment={"verdict": "worth_applying",
+                            "conventions_rendered": ["nl-recognised-sponsor-gate"]})
+    passed, evidence = ck.CHECKERS["no_expiry_banner_on_current_table"](run)
+    assert passed is False
+    assert "past its review date" in evidence.lower()
+
+
+def test_the_eval_checker_uses_the_skills_own_banner_pair():
+    """Pinned to the skill, not re-typed — the drift this whole block is about."""
+    import sys
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "scripts"))
+    from check_assessment import STALE_BANNER
+    assert ck._EXPIRY_BANNERS == tuple(STALE_BANNER)

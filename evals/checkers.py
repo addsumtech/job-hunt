@@ -116,10 +116,19 @@ def _disclosure_carrier(run):
     filled-in disclosure row and hide a blank one in shortlist.md. The carrier is
     the surface holding the most of the block, so the block is graded where it
     was actually rendered.
+
+    Scoped to ONE document, but found wherever the run put it -- `_reader_text`,
+    never a bare `read`. Those are different things and this function conflated
+    them for a while: it read the exact path `workspace/shortlist.md`, so a run
+    that kept the skill's own `<person>/searches/<slug>/` shape was graded as
+    having written no disclosure block at all. Measured on the iteration-2
+    with_skill arm, eval-5: the block was there, in English, every line
+    answered, and the guard failed it. Same blindness `read_any` was added for
+    (see runlib), one function further on.
     """
     best_rel, best_present = None, ()
     for rel in runlib.READER_FACING:
-        text = run.read(rel)
+        text = _reader_text(run, rel)
         if not text:
             continue
         present = tuple(p for p in DISCLOSURE_LABELS if _says(text, *p))
@@ -221,7 +230,7 @@ def degraded_disclosure_complete(run):
         return False, ("degraded round missing disclosure line(s) from "
                        + (rel or "every reader-facing document") + ": "
                        + "、".join(_both(pair) for pair in missing))
-    text = run.read(rel)
+    text = _reader_text(run, rel)
     blank = [pair for pair in DISCLOSURE_LABELS if _blank_answer(text, pair)]
     if blank:
         return False, (f"{rel}: disclosure line(s) with a blank answer: "
@@ -362,6 +371,21 @@ def no_genuine_row_dropped(run):
 
 from vocab import REFUSAL, VERDICTS, VERDICT_ZH  # noqa: E402
 
+
+def _skill_stale_banner():
+    """The skill's own STALE_BANNER pair, or its documented default.
+
+    Importing beats re-typing: two copies of a literal in two trees drift, and
+    this one already had. The fallback is the pair as `check_assessment.py` and
+    `modes/assess.md` both spell it today, so a harness run outside the skill
+    tree still knows both languages rather than silently losing one.
+    """
+    try:
+        from check_assessment import STALE_BANNER
+    except Exception:
+        return ("已过复核期", "past its review date")
+    return tuple(STALE_BANNER)
+
 # The posting schema, a fifth time. The other four copies are SKILL.md,
 # references/job-posting-extraction.md, modes/assess.md and modes/apply.md, and
 # scripts/tests/test_posting_schema_agreement.py diffs them because they had
@@ -378,7 +402,35 @@ _WALL = re.compile(r"(?i)(sign in|log in|登录后查看|create an account|"
                    r"verify you are|请登录|同意 cookie|accept cookies)")
 _ASK = re.compile(r"(?i)(粘贴|paste|把完整|send me the full|发我完整)")
 _DISCLAIMER = re.compile(r"(不是对结果的预判|not a forecast of the outcome)")
-_EXPIRY_BANNER = "已过复核期"
+# Imported, not re-typed. The eval checker knew only the Chinese spelling while
+# the skill has always defined both -- `modes/assess.md`: "On an English card the
+# banner is **past its review date**" -- and `check_assessment.py` matches the
+# pair case-insensitively. Measured on the iteration-2 with_skill arm, eval-13:
+# an English assessment rendered the expired NL entry under an English banner,
+# exactly as the skill asks, and the guard reported "rendered from an expired
+# table with no 「已过复核期」 banner". Cry-wolf on correct output, and on an
+# English card the ONLY correct output is the one the guard rejected.
+_EXPIRY_BANNERS = _skill_stale_banner()
+
+
+def _has_expiry_banner(md):
+    return _expiry_banner_found(md) is not None
+
+
+def _expiry_banner_found(md):
+    """Which spelling of the banner the card carries, or None.
+
+    Returned so the evidence can name the banner it actually saw. Reporting the
+    Chinese literal on an English card is how a reader checking the guard's work
+    concludes the guard is looking for the wrong thing.
+    """
+    low = (md or "").lower()
+    for b in _EXPIRY_BANNERS:
+        if b.lower() in low:
+            return b
+    return None
+
+
 
 # A wall is a SHORT page whose text is wall wording. Both halves of the pair use
 # the same test, on purpose: a nine-hundred-word posting whose benefits section
@@ -451,6 +503,53 @@ def extracts_posting_when_usable(run):
                   f"fields, {len(posting['must_haves'])} must_have(s)")
 
 
+# A verdict is a CONCLUSION when it stands in a line's value position -- after
+# the first colon, at the start of the answer. Deliberately not a list of label
+# words: `count_coverage.py` writes `投递建议：` and `apply verdict:`, SKILL.md's
+# FIT SNAPSHOT writes `APPLY VERDICT:`, and an English assessment may write
+# `Recommendation:`. Whitelisting labels means a run that picks a fourth wording
+# leaks a verdict past the guard.
+_VALUE_SPLIT = re.compile(r"[:：]")
+_VALUE_LEAD = re.compile(r"^[\s*_`\-–—>#\[]*")
+
+
+def _verdict_asserted(text):
+    """The five-level verdict this document ASSERTS, or None.
+
+    Was a bare substring scan, and it cried wolf on the iteration-2 with_skill
+    arm, eval-11. The run refused exactly as the skill asks --
+    `verdict: insufficient_evidence`, no coverage card, no recommendation -- and
+    explained itself in the one sentence that has to name the scale to say the
+    answer is not on it:
+
+        not a point on the scale that runs from *apply* to *blocked*, so it
+        does not get a position on it
+
+    `blocked in md` was True, and the guard reported a printed conclusion.
+    Firing on correct output is the worst thing a guard can do: it gets switched
+    off, and then it protects nothing.
+
+    The rule is positional, not lexical. A verdict word inside a sentence is the
+    vocabulary; a verdict word standing as a line's answer is the claim. That
+    holds whatever the label says, so it survives a wording this file has never
+    seen -- which a label whitelist does not.
+    """
+    for line in (text or "").splitlines():
+        parts = _VALUE_SPLIT.split(line, 1)
+        if len(parts) != 2:
+            continue
+        answer = _VALUE_LEAD.sub("", parts[1]).strip()
+        if not answer:
+            continue
+        for key in VERDICTS:
+            if answer.startswith(key):
+                return key
+        for key, zh in VERDICT_ZH.items():
+            if key in VERDICTS and answer.startswith(zh):
+                return zh
+    return None
+
+
 @register("refusal_floor_fires", twin="verdict_produced_when_inputs_suffice")
 def refusal_floor_fires(run):
     """证据不足 — 不出结论. A refusal that still prints a conclusion is not a
@@ -462,12 +561,10 @@ def refusal_floor_fires(run):
     if verdict != REFUSAL:
         return False, (f"verdict is {verdict!r}; on input this thin the only "
                        f"honest value is {REFUSAL!r}")
-    leaked = [zh for key, zh in VERDICT_ZH.items()
-              if key in VERDICTS and zh in md]
-    leaked += [key for key in VERDICTS if key in md]
+    leaked = _verdict_asserted(md)
     if leaked:
         return False, (f"verdict is {REFUSAL} but the rendered assessment still "
-                       f"prints a conclusion: {leaked[0]!r}")
+                       f"prints a conclusion: {leaked!r}")
     if re.search(r"\bof\s+\d+\b|强证据", md):
         return False, "verdict is a refusal but a coverage count is rendered"
     return True, f"verdict {REFUSAL}, no conclusion and no count rendered"
@@ -508,11 +605,13 @@ def expired_convention_banner_shown(run):
         return False, ("the market table for this scenario is expired and the "
                        "run renders no convention at all — the rule is banner, "
                        "not suppression")
-    if _EXPIRY_BANNER not in md:
+    if not _has_expiry_banner(md):
         return False, (f"{len(rendered)} convention(s) rendered from an expired "
-                       f"table with no 「{_EXPIRY_BANNER}」 banner")
+                       "table with no "
+                       + " / ".join(f"「{b}」" for b in _EXPIRY_BANNERS)
+                       + " banner")
     return True, (f"{len(rendered)} convention(s) rendered with the "
-                  f"「{_EXPIRY_BANNER}」 banner")
+                  f"「{_expiry_banner_found(md)}」 banner")
 
 
 @register("no_expiry_banner_on_current_table")
@@ -523,9 +622,9 @@ def no_expiry_banner_on_current_table(run):
     assessment = run.load_yaml_any("workspace/fit-assessment.yaml") or {}
     if not (assessment.get("conventions_rendered") or []):
         return None, "not exercised: no convention was rendered"
-    if _EXPIRY_BANNER in md:
+    if _has_expiry_banner(md):
         return False, (f"the table for this market is in date and the card "
-                       f"still carries 「{_EXPIRY_BANNER}」")
+                       f"still carries 「{_expiry_banner_found(md)}」")
     return True, "conventions rendered from an in-date table, no expiry banner"
 
 
