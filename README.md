@@ -1,234 +1,201 @@
-# job-hunt
+# job-hunt — find roles, judge them, apply, and rehearse, without inventing anything
 
-A Claude Code / Codex skill for the whole job hunt, in four modes:
+<p align="center">
+  <a href="README_CN.md"><strong>简体中文</strong></a>
+</p>
 
-| Mode | Question it answers | Gate |
+<p align="center">
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg"></a>
+  <img alt="Claude Code" src="https://img.shields.io/badge/Claude_Code-supported-5b5bd6">
+  <img alt="Codex" src="https://img.shields.io/badge/Codex-verified-111827">
+  <img alt="Modes" src="https://img.shields.io/badge/modes-discover_·_assess_·_apply_·_interview-0f766e">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-3237-2f6feb">
+</p>
+
+<p align="center">
+  <img src="docs/assets/hero.jpg" alt="One CV on a desk, read under three separate lamps whose light pools overlap">
+</p>
+
+> **A career coach that reads your real history, refuses to embellish it, tells you the
+> things a recruiter would only say in private, and puts the finished package in front
+> of three independent screeners before it hands it to you.**
+
+Runs as a skill in Claude Code or Codex. You talk to it; it does the reading, the
+tailoring, the rendering and the review, and leaves a `.md` and a `.pdf` in your
+Downloads folder.
+
+Most CV tools optimise for the sixty seconds after you paste a job link. This one
+optimises for the interview four weeks later, where every line on the page has to be
+something you can defend.
+
+---
+
+## What it will not do
+
+Each of these is enforced by a script that fails the run, not by a paragraph asking
+the model nicely.
+
+**It will not invent anything.** No skill you have never used, no inflated title, no
+adjusted date, no "improved performance by 40%" when you cannot name the number.
+Every claim entering the CV traces to a line in your source profile, an answer you
+gave this session, or a paper or repository of yours it actually read. Anything else
+goes to a gaps list where you can see it. The failure this exists to stop is specific
+and common: a model reads Kubernetes in the job description, writes it onto your CV,
+and you find out in the technical screen.
+
+**It will not predict your odds.** No "82% match", no interview probability, no 0–100
+score. Those numbers are invented, they read as authoritative, and people make real
+decisions on them. What you get instead is a count of must-haves with the evidence
+reference printed beside each one, so you can argue with a single row rather than
+with a number. A lint enforces this in English and Chinese.
+
+**It will not grade its own homework.** The package goes to three separate reviewers
+with fresh context: an ATS parser, a recruiter giving it the fifteen seconds a real
+one gives a CV in a stack, and a hiring manager reading for credibility. All three
+have to pass. When they do not and the gap is real, the loop stops and says the CV
+cannot honestly close it. That is the correct answer. A tool that stuffs the keyword in instead has moved your rejection to
+a later and more expensive round.
+
+**It will not quietly guess your market.** Region is asked, as options, at the start
+of every round that needs one, and never inferred from where you have worked. Your CV
+records your experience; it says nothing about where you want to apply next.
+
+---
+
+## Four modes, and they do not chain
+
+| Mode | The question it answers | What you get |
 |---|---|---|
-| `discover` | what is out there worth looking at | `check_shortlist.py`, `check_no_write.py` |
-| `assess` | is this posting worth applying to | `check_assessment.py` (composes six) |
-| `apply` | how do I build and pressure-test the application | `check_apply.py` (composes the rest) |
-| `interview` | how do I answer, and what did I get wrong | `check_mock.py` |
+| **discover** | what is out there worth looking at | a shortlist where every row traces to a real posting, each with a provisional read |
+| **assess** | is this one worth applying to | a row-by-row fit assessment, disqualifiers first, and an honest verdict |
+| **apply** | how do I build a package that survives a screen | tailored CV, optional motivation letter, three-judge review, `.md` + `.pdf` |
+| **interview** | how do I answer, and what did I get wrong | a mock round, then a debrief on the claims you could not defend |
 
-They do not auto-chain: finding thirty postings does not generate thirty CVs.
-
-`apply` is the largest. It interviews the user, parses or builds a CV into a
-canonical `profile.yaml`, extracts the target posting, tailors through honest
-reframing (never fabrication), optionally drafts a motivation letter, and
-pressure-tests the package through a review loop modelling the real hiring funnel
-— an ATS Screener, a Recruiter/HR Screener and a Hiring Manager, three independent
-judges, all of whom must pass. Outputs Markdown, .docx, and PDF (via LaTeX).
-
-Two rules run through all four: **never fabricate** — honest reframing only — and
-**never predict an interview or offer probability**, or any 0–100 score. Both are
-enforced by scripts, not only by prose.
+Finding thirty postings does not generate thirty CVs. Each mode ends by offering the
+next one and waiting for you to pick.
 
 ---
 
-## Install
+## Personal data is a trap, and the direction matters
+
+<p align="center">
+  <img src="docs/assets/personal-data.jpg" alt="A US CV with no photo or date of birth beside a German CV that keeps both">
+</p>
+
+A photo and a date of birth on a US application invite a discrimination claim and get
+the CV binned by a compliance-trained recruiter. The same photo and date of birth are
+ordinary on a German one, and leaving them off looks careless. Those two mistakes are
+not symmetric, so the rule is not symmetric either. For the US, Canada, the UK,
+Ireland, Australia and New Zealand the fields are stripped and the suppression is
+stated out loud; for a market the skill has no table for, they are withheld and you
+are told why.
+
+Five convention tables ship with it, covering the United States, the United Kingdom,
+Germany, the Netherlands and China: 38 entries, each carrying its source URL, the
+date it was retrieved and the date it needs re-checking. Past that date the entry
+still renders, under a banner saying it is stale. A convention card that goes out of
+date silently is worse than one that admits it.
+
+---
+
+## What it produces
+
+**CV** in Markdown, `.docx` and PDF (typeset through LaTeX; `tectonic` recommended).
+**Motivation letter** in the same three. **Japanese 履歴書** through its own form
+renderer. **UK NHS and Civil Service** competency forms get the branch they need: a
+supporting statement written per criterion, inside the employer's own word limit,
+which is the artifact those employers actually score.
+
+Non-English output is a first-class path rather than a translation afterthought. CVs
+render with the right personal-data block and the right section labels in Dutch,
+German, French, Spanish, Italian, Chinese, Japanese and Korean, and the checks that
+catch machine-sounding prose or a dropped `(in progress)` on a degree run in those
+languages too.
+
+Finished files land in `~/Downloads` as `<company>-<role>-<date>-cv.md` and `.pdf`,
+with no folder to go hunting for.
+
+---
+
+## What was actually measured
+
+Two numbers, answering different questions.
+
+**`make check`: 3237 tests green.** The code does what its tests say. That is all it
+means. Passing gates are not correct output, and this repository has caught itself
+green-on-wrong often enough to say so on the tin.
+
+**`evals/`: twenty scenarios, two arms.** The comparison is the part that matters,
+because a behaviour both arms produce belongs to the model rather than to the skill.
+In iteration 2 (2026-09-05/06), fifteen runs with the skill were matched one-to-one
+against baseline runs of the same scenario. **Ten guards that discriminate between
+the arms went FAIL on the baseline and PASS with the skill:** the personal-data
+suppression being audible rather than silent, a blocked discover round carrying its
+disclosure block instead of quietly returning fewer rows, the refusal floor holding
+on inputs too thin to judge, the apply loop stopping honestly on a genuine gap, and
+no hire verdict or invented score coming out of the interview mode.
+
+**n = 1 per cell.** That says the skill reached the behaviour on one run each. It says
+nothing about how often it does, and it is not a confidence interval. The scenario
+list and the assertion list were both written by the people who wrote the skill,
+which is why every assertion carries a written falsifier — what a failing output
+would look like — recorded before the run. The full record, generated from the
+grading files rather than typed, is in
+[`evals/iterations/iteration-2-with-skill.md`](evals/iterations/iteration-2-with-skill.md).
+
+---
+
+## Quick start
 
 ```bash
-pip install -r requirements.txt   # PyYAML, python-docx
+git clone https://github.com/dong845/job-hunt.git
+ln -s "$(pwd)/job-hunt" ~/.claude/skills/job-hunt     # or ~/.codex/skills/job-hunt
+pip install -r job-hunt/requirements.txt              # PyYAML, python-docx
+python3 job-hunt/scripts/doctor.py --install          # checks this machine, installs what pip can
 ```
 
-**PDF output** requires a LaTeX engine. `tectonic` is recommended:
+`doctor.py` checks capabilities rather than binary names: it renders an actual PDF
+instead of looking for `xelatex`. An earlier version did look for the binary, missed
+the `tectonic` that was installed, and reported PDF output as broken while every PDF
+rendered fine. It installs Python packages and never system binaries; for a LaTeX
+engine it prints the one command for your platform and lets you run it.
 
-```bash
-brew install tectonic   # macOS
+Then say what you want:
+
+```text
+Use job-hunt. Find me MRI reconstruction roles in the Netherlands.
+Use job-hunt. Here's a posting link and my CV — is this worth applying to?
+Use job-hunt. Tailor my CV to this job and write the cover letter.
+Use job-hunt. Run a mock interview for the role I just applied to.
 ```
 
-Without a LaTeX engine, Markdown and .docx outputs still work normally. The renderer emits a `.tex` file and prints a warning so you can compile it later once a LaTeX engine is available.
+It asks a short round of questions with concrete options: region first, then which
+platforms that region actually has, then which of those need you to log in before it
+can search. Answer them and it goes.
+
+## On Codex and other agents
+
+The enforcement half — every gate, the journal, the renderers, the coverage counts —
+is plain Python with two dependencies, so it behaves identically wherever Python 3
+runs. What differs between hosts is how you ask a question and how you open a fresh
+context for a judge, and
+[`references/portability.md`](references/portability.md) gives the substitution for
+both. The three judge personas were run end to end through `codex exec` on
+2026-09-06 against a real apply workspace, and the skill's own verdict parser
+accepted all three and recorded a PASS. `gemini` and `cursor-agent` were on the same
+machine and were not tested; nothing here claims they work.
+
+## Honest limits
+
+There is no hosted version and no web UI: it runs on your machine and writes files.
+It does not submit applications for you and it does not log into anything on your
+behalf — where a platform needs a session, it says so and waits while you sign in.
+Job-board coverage is uneven by region, and the skill names which platforms serve
+yours before searching rather than pretending to cover all of them. And it will tell
+you when a role is not worth your time, which is occasionally the whole value and
+never what you wanted to hear.
 
 ---
 
-## The `profile.yaml` model
-
-`assets/profile.example.yaml` is the canonical schema. It is the single source of truth for everything the renderers produce. Key rules:
-
-- **Tailoring always works on a copy** — the master profile is never mutated.
-- Master profiles can be saved to `~/.claude/job-profiles/<name>/profile.yaml` and reused across multiple applications.
-- See `assets/profile.example.yaml` for all supported fields (contact, summary, experience, education, skills, projects, etc.).
-
----
-
-## How it runs
-
-One pipeline, in one place. `SKILL.md` holds the rules that must be in context on
-every run — the honesty rule, the NOT-ALLOWED table, the claim-provenance
-checkpoint, the gate table, the self-check. `modes/apply.md` holds the apply
-pipeline itself and is loaded unconditionally on entering the mode, with its
-content hash written to the workspace journal so that "it was loaded" is a fact
-rather than a hope.
-
-A second copy of the pipeline was here until 2026-08-09 and had already drifted —
-it listed eight steps and omitted the interview-readiness brief. Read `SKILL.md`.
-
----
-
-## Manual renderer usage
-
-```bash
-# CV
-python scripts/render_cv.py PROFILE.yaml --format md|docx|pdf --out OUTPUT_PATH
-
-# Motivation letter
-python scripts/render_letter.py LETTER.yaml --format md|docx|pdf --out OUTPUT_PATH
-```
-
----
-
-## Layout
-
-```
-job-hunt/
-├── SKILL.md                        # Orchestrator instructions — layer 1, always in context; routes to a mode first
-├── README.md
-├── requirements.txt
-├── Makefile                        # make check = tests + losslessness + conventions
-├── .github/workflows/checks.yml    # the same three checks in CI
-├── modes/                          # Layer 1.5 — exactly one is loaded, on mode entry
-│   ├── discover.md                  # Layer 1.5 — find roles (read-only)
-│   ├── assess.md                    # Layer 1.5 — judge one posting
-│   ├── apply.md                     # Layer 1.5 — build and pressure-test the package
-│   └── interview.md                 # Layer 1.5 — rehearse and debrief
-├── references/                     # Layer 2 — read on demand
-│   ├── candidate-situations.md      # Non-standard candidates (gap, switch, exec, military, intl)
-│   ├── cv-craft.md                  # CV writing conventions (markets, links, bullets, ordering)
-│   ├── discovery-sources.md         # Per-adapter catalogue for discover
-│   ├── gap-analysis.md              # Gap analysis, tailoring methodology, claim provenance
-│   ├── interview-prep.md            # Interview-readiness brief
-│   ├── interview-shapes.md          # Round types, tags and bands for the mock interview
-│   ├── job-posting-extraction.md   # How to parse a posting (+ fetch sanity, application type)
-│   ├── motivation-letter.md         # Letter craft guide
-│   ├── rirekisho.md                 # Japanese 履歴書 form guide
-│   ├── portability.md               # running this skill on codex or another agent
-│   ├── risk-control-signals.yaml    # Platform stop-signals discover must obey
-│   ├── role-families.md             # Non-tech / regulated role conventions (clinical, sales, legal…)
-│   ├── source-policy.md             # What discover may and may not do to a platform
-│   ├── structured-applications.md   # Competency-form applications (NHS, Civil Service)
-│   └── market-conventions/         # nl / us / cn / uk / de tables + README
-├── agents/                         # Three review judges (hiring funnel) + two mock assessors
-│   ├── ats-screener.md             # Judge 1 of 3 — machine lens (keyword coverage)
-│   ├── recruiter-screener.md       # Judge 2 of 3 — fast human screen (skim/logistics)
-│   ├── hiring-manager.md           # Judge 3 of 3 — deep human lens (fit/credibility)
-│   ├── mock-assessor-transcript.md  # interview pass 1 — what the answers did
-│   └── mock-assessor-provenance.md  # interview pass 2 — where the facts came from
-├── assets/
-│   ├── profile.example.yaml        # canonical profile schema
-│   └── claims.example.yaml         # the provenance ledger, with a retracted row
-├── docs/                           # spec, plans, research — outside the skill corpus
-└── scripts/
-    ├── check_apply.py               # the composing gate: every receipt present, and about current bytes
-    ├── check_assessment.py          # assess mode's composing gate (requires six upstream receipts)
-    ├── check_claims.py              # claim provenance + master-profile immutability
-    ├── check_conventions.py         # CI — market-convention table lint
-    ├── check_evidence_refs.py       # evidence refs resolve; no block ids in reader prose
-    ├── check_letter.py              # letter body constraints
-    ├── check_mock.py                # interview mode's gate: quotes, tags, promotions, question log
-    ├── check_no_write.py            # discover is read-only — a journaled write command fails
-    ├── check_opencli_result.py      # adapter result classifier (wrapper, not a gate)
-    ├── check_pages.py               # page count + the text actually inside the delivered PDF
-    ├── check_personal_data.py       # Cluster-1 personal-data interlock
-    ├── check_render_freshness.py    # the judges read the files still on disk
-    ├── check_shortlist.py           # discover's gate: row provenance, caps, md↔yaml agreement
-    ├── check_skill_lossless.py      # CI only — the migration moved content, did not delete it
-    ├── check_word_limits.py         # supporting-statement per-criterion word limits
-    ├── consistency.py               # contradictions between assessment fields — reports, never repairs
-    ├── count_coverage.py            # the ONLY path that produces coverage counts
-    ├── doctor.py                    # first-run environment check; --install for pip only
-    ├── deliver.py                   # hand-off: the round's readable artifacts land
-    │                                #   in ~/Downloads as <slug>-<file>, md + pdf (not a gate)
-    ├── enter_mode.py                # mode entry + the mode file's content hash
-    ├── evidence_blocks.py           # cuts posting and CV into addressable JD-nnn / CV-nnn blocks
-    ├── journal.py                   # gate receipts in journal.jsonl (library)
-    ├── lint_cv.py                   # clichés, weak openers, bullet length, repeated verbs
-    ├── lint_no_prediction.py        # no probabilities, no 0–100 scores — EN + ZH
-    ├── mock_blocks.py               # fail-closed parser for the assessor blocks (library)
-    ├── mock_vocab.py                # the interview mode's closed vocabularies (library)
-    ├── opencli_meta.py              # resolves an adapter command's published access: (library)
-    ├── parse_verdicts.py            # PASS/REJECT parsing, fail-closed on AMBIGUOUS
-    ├── paths.py                     # the one definition of the workspace shape (library)
-    ├── prose_tells.py               # what makes a CV, letter or supporting statement
-    │                                #   read as machine-written (library)
-    ├── save_profile.py              # guarded master save: one CV per language
-    ├── render_cv.py                 # CV → md / docx / pdf(LaTeX)
-    ├── render_letter.py             # motivation letter → md / docx / pdf
-    ├── render_rirekisho.py          # Japanese 履歴書 form renderer
-    ├── rounds.py                    # judge-round-<n>.json read/merge (library)
-    ├── vocab.py                     # every closed vocabulary in the skill (library)
-    ├── mutants.py                   # break the code on purpose; make mutants / --ci
-    ├── mutants-baseline.json        # surviving mutants known at measurement time
-    ├── lossless-allowlist.json     # deliberate deletions, each with a written reason
-    └── tests/
-        ├── fixtures/
-        ├── required_inline.json    # layer-1 rules that must stay inline, each with its why
-        └── test_*.py               # one module per script above, plus the seam suites
-```
-
-### A workspace
-
-Everything a single application produces lives in one directory whose **shape is
-load-bearing**: the "resume an unfinished application" lookup finds a prior run by
-that shape, so a run that invents its own layout orphans the previous workspace and
-silently re-interviews the user from scratch. `scripts/paths.py` is the only place
-it is defined.
-
-```
-~/.claude/job-profiles/<name>/
-  profile.yaml                 master profile · never mutated by any mode
-  search-preferences.yaml      target market/city/level/languages (written by discover)
-  answer-bank.md               the one artifact that accumulates across applications
-
-  applications/<company>-<role>-<YYYY-MM-DD>/
-    posting.yaml               extracted requirements
-    posting-source.txt         raw capture · never edited
-    cv-source.txt              raw CV text the assessment was cut from (assess mode)
-    evidence-blocks.json       derived · never hand-edited
-    fit-assessment.{yaml,md}
-    coverage.json              the single counting path (assess mode)
-    claims.yaml                append-only · a withdrawal is marked `retracted`, not deleted
-    master-fingerprint.json    sha256 + mtime of profile.yaml at mode entry, so a
-                               mutated master is detectable rather than discovered
-                               on the NEXT application
-    tailored-profile.yaml
-    cv.{md,docx,pdf,tex} · letter.* · supporting-statement.md
-    judge-round-<n>.json       dispatch hashes + the three parsed verdicts
-    interview-brief.md
-    mock/                      transcripts, assessments, question log (interview mode)
-    journal.jsonl              every gate receipt · the evidence a gate actually ran
-```
-
----
-
-## Testing
-
-```bash
-cd scripts && python -m pytest tests/ -v
-```
-
-Everything must pass. `make check` additionally runs the migration losslessness
-check and the market-convention lint.
-
-## Evaluation — what `make check` does and does not prove
-
-**No end-to-end behavioural evaluation has ever been run on this skill.** The
-harness for it is specified (`docs/superpowers/plans/2026-08-09-5-eval-rebuild.md`,
-twenty scenarios) and is **not built**: there is no `evals/` directory.
-
-So `make check` green means exactly this: the unit tests agree with themselves,
-the market tables lint, and no line of the pre-migration skill was lost. It does
-**not** mean any mode was measured against a baseline arm, and no claim in this
-repo should be read as saying otherwise.
-
-The reason to state that plainly: `check_skill_lossless.py` proves the bytes
-survived the layering, not that they arrive in context when they are needed. Only
-a run proves the second thing, and nothing here runs one.
-
-## Evaluation
-
-`evals/README.md` describes the harness: what it measures, what it cannot, and
-why the iteration-1 numbers are not quoted here. `evals/run.md` is the runbook
-for an iteration. `make eval-lint` checks the assertion file; `make eval-verify`
-grades and aggregates a results tree you already have.
-
-No iteration has been run against this harness. When one has, the record lands
-in `evals/iterations/` and is generated, not typed.
+Repository layout, the profile schema, the workspace shape, and the full test and
+eval detail: [`REFERENCE.md`](REFERENCE.md). MIT licensed.

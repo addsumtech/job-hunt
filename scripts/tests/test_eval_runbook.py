@@ -57,8 +57,20 @@ def test_ci_runs_the_assertion_lint():
 
 
 def test_the_readme_points_at_the_harness():
+    """A reader who wants to know what was measured has to be able to reach the
+    harness doc from the front page.
+
+    The pointer moved when README.md became an overview: the README now names the
+    harness and quotes the iteration-2 result, and REFERENCE.md carries the
+    `evals/README.md` link. The invariant is the path from the front page to the
+    harness, not which of the two files holds the final hop, so both are checked
+    — a broken link in either one breaks the path.
+    """
     readme = (REPO / "README.md").read_text(encoding="utf-8")
-    assert "evals/README.md" in readme
+    reference = (REPO / "REFERENCE.md").read_text(encoding="utf-8")
+    assert "evals/" in readme, "the README does not name the harness at all"
+    assert "REFERENCE.md" in readme, "the README no longer links the reference doc"
+    assert "evals/README.md" in reference, "the reference doc lost the harness link"
 
 
 # ---- added beyond the plan ---------------------------------------------------
