@@ -404,7 +404,12 @@ def _paragraphs(path: pathlib.Path) -> list[str]:
 # reasoning as 17 — the rule guards against silent data loss (a Chinese CV
 # overwriting an English master), SKILL.md is always loaded and apply.md only on
 # mode entry, and a run that read layer 1 alone would write the path by hand.
-SHARED_WITH_APPLY = 18
+# 19 since 2026-09-06: "The mechanism is replaceable; the isolation is not" joins
+# it. The review loop is called non-negotiable in layer 1, so the sentence saying
+# what to do on a host with no subagent tool has to be in layer 1 too — a codex run
+# reading only SKILL.md would otherwise hit "dispatch subagents" with no subagents
+# and no stated alternative.
+SHARED_WITH_APPLY = 19
 
 
 def test_the_paragraphs_layer_1_shares_with_a_mode_file_are_byte_identical():

@@ -14,11 +14,28 @@ resume lookup would then find a shell and offer to continue from it.
 """
 from __future__ import annotations
 
+import os
 import pathlib
 import re
 import unicodedata
 
-PROFILES_ROOT = pathlib.Path.home() / ".claude" / "job-profiles"
+# `JOBHUNT_PROFILES_ROOT` relocates the whole store. The default stays under
+# `.claude` even on another host, on purpose: someone who runs this skill from
+# two agents should get ONE set of CVs, not two half-populated ones.
+#
+# This was added once before and reverted, and the difference matters. The first
+# justification was isolating eval runs from the real store, and it was false:
+# subagents run in-process and inherit no per-call environment, so the variable
+# could not reach them and the comment claiming it did would have been wrong.
+# The cross-agent case is a different mechanism — the user exports it in their
+# own shell and every script invoked from that shell sees it — which is why it
+# is here now. See references/portability.md.
+#
+# Read once, at import: a run must not move the store halfway through and leave
+# half its artifacts behind.
+_PROFILES_ENV = os.environ.get("JOBHUNT_PROFILES_ROOT", "").strip()
+PROFILES_ROOT = (pathlib.Path(_PROFILES_ENV).expanduser()
+                 if _PROFILES_ENV else pathlib.Path.home() / ".claude" / "job-profiles")
 # The repo root IS the skill. Every script that needs it asks here rather than
 # writing `.parent.parent` again: a hand-derived root is correct until someone
 # moves one file, and then it is wrong in a way that only shows up at runtime.

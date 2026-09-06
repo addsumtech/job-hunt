@@ -329,6 +329,8 @@ The rirekisho asks for **personal data** a Western CV omits — date of birth, a
 
 **Dispatch all three in parallel** — as fresh independent **Agent** subagents in a **single message (three tool calls at once)** each round, so they run concurrently. They share no state, so parallel dispatch is both faster and avoids ordering bias; never run one, read its verdict, then run the next. Each has **no other context**, so paste everything it needs:
 
+**The mechanism is replaceable; the isolation is not.** On a host with no subagent tool, dispatch three concurrent fresh invocations of that host's own CLI instead — `codex exec "$(cat agents/ats-screener.md) …"` — because `agents/*.md` are standalone personas that need no particular dispatcher. A judge that watched the tailoring is not a second opinion. If the host can open no fresh context at all, run the loop anyway and say plainly, in the completion message and the run notes, that the judges shared the author's context and their verdicts are weaker evidence than this loop's shape implies — never report three PASSes as a review that happened at arm's length when it did not. `references/portability.md`.
+
 - *ATS Screener:* the **full text** of `agents/ats-screener.md` + the structured posting + the tailored CV Markdown (`<workspace>/cv.md`) + the **CV language**. (No letter — ATS doesn't parse letters.)
 - *Recruiter / HR Screener:* the **full text** of `agents/recruiter-screener.md` + the structured posting (`<workspace>/posting.yaml`) + the tailored CV Markdown (`<workspace>/cv.md`) + the motivation letter (`<workspace>/letter.md`) if produced, else `No letter provided.` + the **target market & CV language**.
 - *Hiring Manager:* the **full text** of `agents/hiring-manager.md` + the structured posting + the tailored CV Markdown (`<workspace>/cv.md`) + the motivation letter if produced, else `No letter provided.` + the **target market & CV language** (e.g. "Germany / German") so it calibrates conventions and reads the CV in the right language.
@@ -768,6 +770,8 @@ believing you vetted it.
 ## Self-check — run through this before reporting the package as done
 
 Read-when:
+- [ ] Running on a host that is not Claude Code — codex, another agent, or as a
+      subagent without `AskUserQuestion`? Read `references/portability.md`.
 - [ ] Not a software/research/engineering role? Read `references/role-families.md`.
 - [ ] Employment gap >6 months, career switch, re-entry, over/under-levelled, thin
       experience, executive, military transition or international credentials?

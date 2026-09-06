@@ -100,6 +100,7 @@ job-hunt/
 │   ├── job-posting-extraction.md   # How to parse a posting (+ fetch sanity, application type)
 │   ├── motivation-letter.md         # Letter craft guide
 │   ├── rirekisho.md                 # Japanese 履歴書 form guide
+│   ├── portability.md               # running this skill on codex or another agent
 │   ├── risk-control-signals.yaml    # Platform stop-signals discover must obey
 │   ├── role-families.md             # Non-tech / regulated role conventions (clinical, sales, legal…)
 │   ├── source-policy.md             # What discover may and may not do to a platform
