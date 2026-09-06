@@ -480,8 +480,19 @@ CLUSTER1_SPELLINGS = [
     "remote (US)", "uk", "U.K.", "United Kingdom", "London, United Kingdom",
     "Canada", "Toronto, Canada", "Ireland", "australia", "New Zealand",
 ]
+# "Eindhoven, NL (hybrid)" was here and is deliberately not any more. `NL` is
+# both the Netherlands and Newfoundland and Labrador, and `<place>, <CODE>` is
+# also how "Wilmington, DE" is written — which resolved to cluster 2 and
+# rendered a date of birth, an age, a marital status, a nationality and a photo
+# onto a US CV, silently, with check_personal_data exiting 0 (reproduced
+# 2026-09-06). The renderer cannot tell Eindhoven from Wilmington without a
+# gazetteer, so it takes the side this module's own docstring names as cheaper:
+# stripping a photo off a Dutch CV is cosmetic, warned, and fixed by writing
+# "Netherlands"; leaving a DOB on a US CV is an automatic rejection and was
+# silent. Bare codes are unaffected — "nl", "NL-based" and "NL-remote" all still
+# resolve to 2, which is why they are still in this list.
 KNOWN_NON_CLUSTER1_SPELLINGS = [
-    "nl", "Netherlands", "Amsterdam, Netherlands", "Eindhoven, NL (hybrid)",
+    "nl", "Netherlands", "Amsterdam, Netherlands", "NL-based", "NL-remote",
     "Germany", "Munich, Germany", "Remote — EU", "Austria", "Switzerland",
     "cn", "China", "中国", "Japan", "Tokyo, Japan", "South Korea", "Singapore",
 ]

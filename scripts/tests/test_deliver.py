@@ -60,7 +60,7 @@ def test_files_land_flat_with_the_round_as_a_filename_prefix(tmp_path):
 
 
 def test_a_nested_output_is_flattened_with_its_directory_in_the_name(tmp_path):
-    """`mock/assessment-1.md` keeps `mock` in the delivered name.
+    """`mock/assessment-1.md` keeps `mock` in the delivered name, joined by `__`.
 
     Flattening on the basename alone is what let two same-named files in
     different directories overwrite each other — see the collision tests below.
@@ -68,7 +68,7 @@ def test_a_nested_output_is_flattened_with_its_directory_in_the_name(tmp_path):
     ws = build(tmp_path)
     dest = tmp_path / "out"
     assert run(ws, dest, "--no-pdf") == 0
-    assert (dest / "2026-09-06-round-mock-assessment-1.md").is_file()
+    assert (dest / "2026-09-06-round-mock__assessment-1.md").is_file()
     assert not (dest / "2026-09-06-round-assessment-1.md").exists()
 
 
@@ -228,7 +228,7 @@ def test_two_same_named_files_in_different_directories_both_survive(tmp_path):
     dest = tmp_path / "out"
     assert run(ws, dest, "--no-pdf") == 0
     assert (dest / "round-notes.md").read_text(encoding="utf-8") == "ROOT\n"
-    assert (dest / "round-mock-notes.md").read_text(encoding="utf-8") == "NESTED\n"
+    assert (dest / "round-mock__notes.md").read_text(encoding="utf-8") == "NESTED\n"
 
 
 def test_the_reported_count_matches_what_actually_landed(tmp_path, capsys):
@@ -246,7 +246,7 @@ def test_the_reported_count_matches_what_actually_landed(tmp_path, capsys):
 
 def test_flat_name_keeps_the_whole_relative_path():
     assert deliver.flat_name("r", pathlib.Path("mock/assessment-1.md")) == \
-        "r-mock-assessment-1.md"
+        "r-mock__assessment-1.md"
     assert deliver.flat_name("r", pathlib.Path("cv.md")) == "r-cv.md"
 
 

@@ -5,6 +5,7 @@ Chinese CV, the file is written to `profile.yaml`, and the English one is gone.
 Nothing errors, nothing is logged, and the user finds out the next time they need
 the file that is no longer there.
 """
+import os
 import pathlib
 import subprocess
 import sys
@@ -175,3 +176,109 @@ def test_the_read_side_rule_is_stated_too():
     for f in ("SKILL.md", "modes/apply.md"):
         t = (REPO / f).read_text(encoding="utf-8")
         assert "tailor from the master whose language matches" in " ".join(t.split()), f
+
+
+# ---- the master a RUN must be checked against -----------------------------
+#
+# REPRODUCED 2026-09-06, and it was introduced the same day. `modes/apply.md`
+# told the run to compute `paths.master_profile('<name>')` with no language,
+# which always returns `profile.yaml`. Once one candidate could have several
+# masters, that pointed `check_claims.py` at the wrong one and the provenance
+# gate — the thing that stops this skill inventing credentials — failed in BOTH
+# directions on the same pair of files:
+#
+#   tailoring a Chinese CV, checked against profile.yaml
+#     "CUDA", present in the Chinese master, was reported UNSOURCED
+#     "Kubernetes", in NEITHER Chinese file, passed with exit 0
+#
+# The first is a gate crying wolf at a truthful CV. The second is an unsourced
+# claim reaching a rendered CV with the gate green.
+
+def test_the_resolver_prefers_an_existing_master_over_a_computed_path(store):
+    """A legacy `profile.yaml` holding a Chinese CV IS the Chinese master;
+    `master_profile(name, "zh")` would point past it at a file that does not
+    exist."""
+    write(store / "profile.yaml", "zh", "LEGACY-ZH")
+    assert paths.master_for_language("demo", "zh") == store / "profile.yaml"
+    assert paths.master_for_language("demo", "中文") == store / "profile.yaml"
+
+
+def test_the_resolver_falls_back_to_a_new_slot_for_an_unseen_language(store):
+    write(store / "profile.yaml", "en", "EN")
+    assert paths.master_for_language("demo", "nl") == store / "profile.nl.yaml"
+
+
+def test_the_resolver_picks_the_right_one_when_several_exist(store):
+    write(store / "profile.yaml", "en", "EN")
+    write(store / "profile.zh.yaml", "zh", "ZH")
+    assert paths.master_for_language("demo", "en") == store / "profile.yaml"
+    assert paths.master_for_language("demo", "zh") == store / "profile.zh.yaml"
+
+
+def test_the_provenance_gate_reaches_opposite_verdicts_on_the_two_masters(store, tmp_path):
+    """The end-to-end reproduction, both directions, in one test.
+
+    This is the assertion that would have caught the defect: it does not check a
+    path, it checks that the GATE's answer changes when the master does.
+    """
+    import subprocess
+    write(store / "profile.yaml", "en", "EN")
+    (store / "profile.yaml").write_text(
+        "meta: {name: Li Wei, language: en}\nskills: {programming: [Python, Kubernetes]}\n",
+        encoding="utf-8")
+    (store / "profile.zh.yaml").write_text(
+        "meta: {name: 李维, language: zh}\nskills: {programming: [Python, CUDA]}\n",
+        encoding="utf-8")
+
+    def verdict(tailored, master):
+        ws = tmp_path / f"ws-{abs(hash((tailored, str(master))))}"
+        ws.mkdir()
+        (ws / "tailored-profile.yaml").write_text(tailored, encoding="utf-8")
+        env = {**os.environ, "JOBHUNT_PROFILES_ROOT": str(store.parent)}
+        for extra in (["--record"], []):
+            r = subprocess.run(
+                [sys.executable, str(REPO / "scripts" / "check_claims.py"),
+                 "--workspace", str(ws), "--master", str(master), *extra],
+                capture_output=True, text=True, env=env)
+        return r.returncode, r.stdout
+
+    zh_cv = "meta: {name: 李维, language: zh}\nskills: {programming: [Python, CUDA]}\n"
+    wrong_rc, wrong_out = verdict(zh_cv, store / "profile.yaml")
+    right_rc, _ = verdict(zh_cv, paths.master_for_language("demo", "zh"))
+    assert wrong_rc == 1 and "CUDA" in wrong_out, "the wrong master should cry wolf"
+    assert right_rc == 0, "CUDA is in the Chinese master and must pass"
+
+    bad_cv = "meta: {name: 李维, language: zh}\nskills: {programming: [Python, Kubernetes]}\n"
+    wrong_rc2, _ = verdict(bad_cv, store / "profile.yaml")
+    right_rc2, right_out2 = verdict(bad_cv, paths.master_for_language("demo", "zh"))
+    assert wrong_rc2 == 0, "the wrong master let an unsourced claim through"
+    assert right_rc2 == 1 and "Kubernetes" in right_out2
+
+
+def test_the_finding_names_the_master_it_actually_read(store, tmp_path):
+    """It said "absent from profile.yaml" whatever file it had read, which sends
+    the reader to check a document the gate never opened."""
+    import subprocess
+    (store / "profile.zh.yaml").write_text(
+        "meta: {name: X, language: zh}\nskills: {programming: [Python]}\n", encoding="utf-8")
+    ws = tmp_path / "ws"; ws.mkdir()
+    (ws / "tailored-profile.yaml").write_text(
+        "meta: {name: X, language: zh}\nskills: {programming: [Python, Rust]}\n",
+        encoding="utf-8")
+    env = {**os.environ, "JOBHUNT_PROFILES_ROOT": str(store.parent)}
+    master = store / "profile.zh.yaml"
+    for extra in (["--record"], []):
+        r = subprocess.run(
+            [sys.executable, str(REPO / "scripts" / "check_claims.py"),
+             "--workspace", str(ws), "--master", str(master), *extra],
+            capture_output=True, text=True, env=env)
+    assert "profile.zh.yaml" in r.stdout, r.stdout
+
+
+def test_apply_mode_resolves_the_master_by_language():
+    """The doc is where the defect actually lived: the code was right and the
+    instruction computed the wrong path."""
+    t = (REPO / "modes" / "apply.md").read_text(encoding="utf-8")
+    assert "master_for_language" in t
+    assert "paths.master_profile('<name>')" not in t, (
+        "the language-less form is back, and it resolves to profile.yaml every time")

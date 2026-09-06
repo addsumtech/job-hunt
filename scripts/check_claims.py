@@ -586,8 +586,12 @@ def main(argv=None) -> int:
                             f'{retracted[key]["retracted"]} — remove the claim or '
                             f're-source it')
             continue
+        # The master's real name, not the literal 'profile.yaml'. One candidate
+        # can have several masters now, and a finding that names the wrong file
+        # sends the reader to check a document the gate never read.
         findings.append(f'UNSOURCED: "{term}" appears in '
-                        f'tailored-profile.yaml:{where}, is absent from profile.yaml, '
+                        f'tailored-profile.yaml:{where}, is absent from '
+                        f'{master.name}, '
                         f'and has no claims.yaml row. A keyword that appears in the job '
                         f'description is not evidence the candidate has it — source it '
                         f'or move it to HONEST-GAPS')

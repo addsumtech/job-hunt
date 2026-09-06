@@ -153,14 +153,27 @@ def normalise_language(language) -> str:
     than filing them under their own name.
     """
     raw = str(language or "").strip().lower()
-    if not raw:
-        return ""
-    if raw in _LANGUAGE_ALIASES:
-        return _LANGUAGE_ALIASES[raw]
-    base = raw.split("-")[0].split("_")[0]
-    if base in _LANGUAGE_ALIASES:
-        return _LANGUAGE_ALIASES[base]
-    return slugify(raw)
+    if not raw or raw in ("true", "false", "none", "null"):
+        # YAML turns `language: no` into False (Norwegian), `on`/`yes` into True.
+        # Treating those as a language filed a Norwegian CV under "true".
+        return "" if raw in ("true", "false", "none", "null") else ""
+    for candidate in (raw, raw.split("-")[0].split("_")[0]):
+        if candidate in _LANGUAGE_ALIASES:
+            return _LANGUAGE_ALIASES[candidate]
+    slug = slugify(raw)
+    # The slug can expose a known base the raw form hid: "Chinese (Simplified)"
+    # slugs to "chinese-simplified", whose first token IS an alias. Without this
+    # the function was NOT IDEMPOTENT — f(x) = "chinese-simplified" while
+    # f(f(x)) = "zh" — and `save_profile` looked the master up under one key while
+    # `master_profile` built the filename from the other. Measured 2026-09-06: a
+    # profile whose meta.language read "Chinese (Simplified)" reported "new slot"
+    # and "no other master profiles", took no backup, and overwrote the user's
+    # existing profile.zh.yaml. Same for "English (US)", "Dutch (Netherlands)",
+    # "French Canadian" and "Japanese (business)".
+    head = slug.split("-")[0]
+    if head in _LANGUAGE_ALIASES:
+        return _LANGUAGE_ALIASES[head]
+    return slug
 
 
 def master_profile(name: str, language=None) -> pathlib.Path:
@@ -205,9 +218,76 @@ def master_profiles(name: str) -> dict:
             loaded = journal.load_yaml(path)
         except journal.YamlUnreadable:
             continue
-        out.setdefault(
-            normalise_language((loaded.get("meta") or {}).get("language")), path)
+        key = normalise_language((loaded.get("meta") or {}).get("language"))
+        out.setdefault(key, path)
     return out
+
+
+def master_profile_collisions(name: str) -> dict:
+    """{language: [every file claiming it]} for languages claimed more than once.
+
+    `master_profiles` keeps the first and drops the rest, which is the only
+    answer a mapping can give — but dropping SILENTLY meant a candidate with
+    `profile.yaml` (language: zh) beside `profile.zh.yaml` (language: 中文) had
+    one of the two invisible to the provenance gate, never listed and never
+    backed up, while `save_profile` printed "no other master profiles". A caller
+    that is about to overwrite has to be able to see the other one.
+    """
+    import journal
+
+    claims: dict = {}
+    directory = profile_dir(name)
+    if not directory.is_dir():
+        return {}
+    for path in sorted(directory.glob("profile*.yaml")):
+        if ".bak" in path.name:
+            continue
+        try:
+            loaded = journal.load_yaml(path)
+        except journal.YamlUnreadable:
+            continue
+        claims.setdefault(
+            normalise_language((loaded.get("meta") or {}).get("language")), []
+        ).append(path)
+    return {k: v for k, v in claims.items() if len(v) > 1}
+
+
+def master_for_language(name: str, language) -> pathlib.Path:
+    """The master a run in THIS language must be checked against.
+
+    Existing files win over a computed path, exactly as `save_profile.py`
+    resolves a write: a legacy `profile.yaml` holding a Chinese CV IS the Chinese
+    master, and `master_profile(name, "zh")` would point past it at a file that
+    does not exist.
+
+    WHY THIS EXISTS. `modes/apply.md` told the run to compute
+    `paths.master_profile('<name>')` with no language, which always returns
+    `profile.yaml`. Once one candidate could have several masters, that pointed
+    `check_claims.py` at the wrong one, and the provenance gate — the thing that
+    stops this skill inventing credentials — failed in both directions.
+    Reproduced 2026-09-06 on a candidate with an English and a Chinese master:
+
+        tailoring the Chinese CV, checked against profile.yaml
+          "CUDA" is in the Chinese master and was reported UNSOURCED
+          "Kubernetes" is in NEITHER Chinese file and passed, exit 0
+
+    The first is a gate crying wolf at a truthful CV. The second is an unsourced
+    claim reaching a rendered CV with the gate green, which is the failure this
+    whole skill is built around.
+    """
+    existing = master_profiles(name)
+    key = normalise_language(language)
+    if key in existing:
+        return existing[key]
+    # A master written before languages were tracked carries no meta.language and
+    # is filed under "". It is the ONLY CV a pre-existing user has, so falling
+    # through to a computed path pointed `check_claims --master` at a file that
+    # does not exist and apply mode could not record its baseline at all —
+    # `cannot run check_claims: --master must point at an existing profile.yaml`,
+    # exit 2, for every candidate onboarded before today.
+    if "" in existing:
+        return existing[""]
+    return master_profile(name, language)
 
 
 def search_prefs(name: str) -> pathlib.Path:

@@ -273,10 +273,14 @@ hash is what proves the file you read is the file on disk:
 
 ```bash
 python3 scripts/enter_mode.py --workspace <workspace> --mode apply
-# the master profile path comes from scripts/paths.py, never hand-built:
-#   python3 -c "import sys;sys.path.insert(0,'scripts');import paths;print(paths.master_profile('<name>'))"
+# The master path comes from scripts/paths.py, never hand-built — and it takes
+# the CV LANGUAGE, because one candidate can have one master per language.
+# Without it this resolves to profile.yaml every time, and the provenance gate
+# then checks a Chinese CV against an English master: real skills read as
+# UNSOURCED, and skills the candidate does not have in this language pass.
+#   python3 -c "import sys;sys.path.insert(0,'scripts');import paths;print(paths.master_for_language('<name>', '<cv language>'))"
 python3 scripts/check_claims.py --workspace <workspace> \
-    --master "$(python3 -c "import sys;sys.path.insert(0,'scripts');import paths;print(paths.master_profile('<name>'))")" \
+    --master "$(python3 -c "import sys;sys.path.insert(0,'scripts');import paths;print(paths.master_for_language('<name>', '<cv language>'))")" \
     --record
 ```
 

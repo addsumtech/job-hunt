@@ -103,8 +103,15 @@ def main(argv: list[str] | None = None) -> int:
     else:
         target.parent.mkdir(parents=True, exist_ok=True)
         if replaced is not None and replaced.exists():
-            backup = replaced.with_name(
-                f"{replaced.name}.bak-{datetime.date.today().isoformat()}")
+            # A counter, because three saves in one day left the ORIGINAL
+            # unrecoverable: each `.bak-<date>` overwrote the last while both runs
+            # printed "backed up".
+            stem = f"{replaced.name}.bak-{datetime.date.today().isoformat()}"
+            backup = replaced.with_name(stem)
+            n = 2
+            while backup.exists():
+                backup = replaced.with_name(f"{stem}-{n}")
+                n += 1
             shutil.copy2(replaced, backup)
             print(f"backed up {replaced.name} -> {backup.name}")
         shutil.copy2(src, target)
@@ -112,6 +119,14 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"  language: {language}")
     print(f"  {'replaced' if replaced else 'new slot'}: {target.name}")
+    collisions = paths.master_profile_collisions(args.name)
+    if collisions:
+        for lang, files in sorted(collisions.items()):
+            print(f"  WARNING: {lang or '(untagged)'} is claimed by more than one "
+                  f"file: {', '.join(f.name for f in files)}. Only "
+                  f"{files[0].name} is used; the others are invisible to the "
+                  f"provenance gate. Give each a distinct meta.language, or "
+                  f"delete the one you do not want.", file=sys.stderr)
     if others:
         print("  untouched masters in other languages:")
         for lang, p in sorted(others.items()):

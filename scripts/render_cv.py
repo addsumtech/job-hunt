@@ -594,6 +594,68 @@ def _market_segments(market):
                 yield seg
 
 
+# Two-letter codes that are BOTH a country this table knows and a subdivision of
+# a Cluster-1 country. Exactly four, computed against the 50 US states, DC, the
+# Canadian provinces and the Australian states:
+#
+#   DE  Germany            / Delaware
+#   ID  Indonesia          / Idaho
+#   IN  India              / Indiana
+#   NL  the Netherlands    / Newfoundland and Labrador
+#
+# "Wilmington, DE" resolved to cluster 2 and rendered a date of birth, an age, a
+# marital status, a nationality and a photo onto a US CV — the exact fields US
+# employers bin a CV for carrying. Reproduced 2026-09-06; `check_shortlist.py`
+# already carried a US-state regex for this same ambiguity and this module had
+# none.
+#
+# The fix uses the mechanism `resolve_cluster` already has for this: it adds
+# cluster 1 as WELL, and `min(found)` picks the safe side. That is the module's
+# stated asymmetry — stripping a photo from a German CV is cosmetic and warns;
+# leaving a DOB on a US CV is an automatic reject and is silent.
+_AMBIGUOUS_SUBDIVISION_CODES = {"de": "Delaware", "id": "Idaho",
+                                "in": "Indiana", "nl": "Newfoundland and Labrador"}
+_AMBIGUOUS_WARNED: list = []
+
+# A bare code is the COUNTRY. Nobody writes `meta.target_market: "DE"` meaning
+# Delaware, and `NL-remote` is a Dutch remote role. The subdivision reading only
+# arises in the `<place>, <CODE>` shape — so the code counts as ambiguous only
+# when the same string carries another segment that is neither the code itself
+# nor one of these work-arrangement words.
+#
+# `Eindhoven, NL (hybrid)` matches that shape and is Dutch, so it now
+# over-strips and warns. That is the trade this module's own docstring names:
+# stripping a photo from a Dutch CV is cosmetic and recoverable by writing
+# "Netherlands"; leaving a date of birth on a CV for Wilmington, Delaware is an
+# automatic rejection and was silent.
+_ARRANGEMENT_WORDS = frozenset("""
+based remote hybrid onsite on site nationwide wide area region regional metro
+greater emea apac only preferred relocation relocate willing anywhere
+""".split())
+
+
+def _looks_like_a_place_plus_code(code, segments) -> bool:
+    """Is this the `<place>, <CODE>` shape rather than a bare country code?
+
+    True when some other segment is a word that is neither the code, nor a
+    work-arrangement word, nor a country this table already knows. `wilmington`
+    qualifies; `based`, `remote` and `hybrid` do not; `nl` alone has no other
+    segment at all.
+    """
+    for other in segments:
+        if other == code or code in other.split():
+            continue
+        words = [w for w in other.split() if w]
+        if not words:
+            continue
+        if all(w in _ARRANGEMENT_WORDS for w in words):
+            continue
+        if other in _CODE_CLUSTER or other in _NAME_CLUSTER:
+            continue
+        return True
+    return False
+
+
 def resolve_cluster(market):
     """1, 2, 3 — or None when the string names no market we know.
 
@@ -604,16 +666,36 @@ def resolve_cluster(market):
     """
     text = _fold_market(market)
     found = {c for alias, c in _CJK_CLUSTER.items() if alias in text}
-    for seg in _market_segments(market):
+    segments = list(_market_segments(market))
+    ambiguous = []
+    for seg in segments:
         if seg in _CODE_CLUSTER:
             found.add(_CODE_CLUSTER[seg])
+            if seg in _AMBIGUOUS_SUBDIVISION_CODES and _looks_like_a_place_plus_code(
+                    seg, segments):
+                # Also a US/CA subdivision. Add the safe side and let min() win.
+                found.add(1)
+                ambiguous.append(seg)
         words = seg.split()
         for n in range(_MAX_NAME_WORDS, 0, -1):
             for i in range(len(words) - n + 1):
                 phrase = " ".join(words[i:i + n])
                 if phrase in _NAME_CLUSTER:
                     found.add(_NAME_CLUSTER[phrase])
-    return min(found) if found else None
+    resolved = min(found) if found else None
+    if ambiguous and resolved == 1:
+        _warn_once(
+            _AMBIGUOUS_WARNED, (str(market),),
+            f"WARNING: meta.target_market {market!r} contains "
+            + " and ".join(f"{c.upper()!r}" for c in ambiguous)
+            + ", which is both a country code and a "
+            + " and ".join(_AMBIGUOUS_SUBDIVISION_CODES[c] for c in ambiguous)
+            + " abbreviation. It was read as the US/Canada side and personal data "
+              "will be WITHHELD, because leaving a date of birth on a US CV is an "
+              "auto-reject while omitting a photo from a European one is cosmetic. "
+              "If you meant the country, write it out (e.g. 'Germany', "
+              "'Netherlands') and re-render.")
+    return resolved
 
 
 def protected_fields(profile):

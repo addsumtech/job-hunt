@@ -79,8 +79,15 @@ def flat_name(slug: str, rel: pathlib.Path) -> str:
     `mock/transcript-1.md` and `mock/answer-guide.md` beside root-level files,
     and two same-named files in different directories became one delivered file
     while the run reported it had delivered both.
+
+    The separator is `__`, not `-`. Joining with `-` only moved the collision one
+    level up: `mock/answer/guide.md`, `mock/answer-guide.md` and
+    `mock-answer-guide.md` all flattened to the same name, and the run reported
+    three deliveries over two files. `__` cannot appear in a path SEPARATOR
+    position, so distinct relative paths give distinct names; a filename that
+    literally contains `__` is reported below rather than silently overwritten.
     """
-    return f"{slug}-" + "-".join(rel.parts)
+    return f"{slug}-" + "__".join(rel.parts)
 
 
 def is_deliverable(path: pathlib.Path, workspace: pathlib.Path) -> bool:
@@ -183,17 +190,37 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
             p.read_text(encoding="utf-8", errors="replace")) for p in sources):
         font = pick_cjk_font()
 
+    claimed: dict = {}
     for src in sources:
         target = dest / flat_name(slug, src.relative_to(workspace))
-        if target.exists() and target.read_bytes() != src.read_bytes():
-            # Cannot happen with flat_name, and if it ever does the honest
-            # answer is a second name rather than a silent overwrite.
-            target = target.with_name(target.stem + "-2" + target.suffix)
-        shutil.copy2(src, target)
+        # A REDELIVERY must land on the same name. The previous version renamed
+        # to `-2` whenever the bytes differed, which froze the obvious filename
+        # at round 1 forever: a user opening `<slug>-cv.md` in Downloads after
+        # three judge rounds read the FIRST draft and could send it to the
+        # employer. Same source path, same destination, overwritten.
+        if target in claimed:
+            notes.append(f"{target.name}: not delivered — {claimed[target]} and "
+                         f"{src.relative_to(workspace)} flatten to the same name. "
+                         f"Rename one; a filename containing '__' is the only way "
+                         f"this happens.")
+            continue
+        claimed[target] = src.relative_to(workspace)
+        try:
+            shutil.copy2(src, target)
+        except OSError as exc:
+            # One unreadable file, or a name past the OS limit, must not abandon
+            # the rest of the round with a traceback and exit 1 — this script's
+            # contract is 0 or 2, never 1, and a partial delivery that left no
+            # journal record could not be told from one that never happened.
+            notes.append(f"{src.relative_to(workspace)}: not delivered — {exc}")
+            continue
         written.append(target)
         if make_pdf and src.suffix == ".md":
             pdf = target.with_suffix(".pdf")
-            ok, why = render_pdf(src, pdf, font)
+            try:
+                ok, why = render_pdf(src, pdf, font)
+            except OSError as exc:
+                ok, why = False, str(exc)
             if ok:
                 written.append(pdf)
             else:
@@ -254,7 +281,11 @@ def main(argv: list[str] | None = None) -> int:
     for p in written:
         print(f"  {p.name}")
     for n in notes:
-        print(f"NOTICE_PDF_REFUSED: {n}", file=sys.stderr)
+        # The prefix has to name what happened: this list holds refused PDFs AND
+        # files that could not be copied at all, and calling a permission error a
+        # PDF refusal sends the reader to the renderer.
+        code = "NOTICE_NOT_DELIVERED" if "not delivered" in n else "NOTICE_PDF_REFUSED"
+        print(f"{code}: {n}", file=sys.stderr)
     print(f"\nTell the user these files are in: {dest}")
     return 0
 

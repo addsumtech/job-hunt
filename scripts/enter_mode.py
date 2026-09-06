@@ -79,7 +79,14 @@ def _assessment_present(ws) -> bool:
             rec = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if isinstance(rec, dict) and rec.get("gate") == "check_assessment":
+        if not isinstance(rec, dict) or rec.get("gate") != "check_assessment":
+            continue
+        # A DECIDED receipt only. `could_not_run` and `fail` mean the assessment
+        # gate did not produce one, and counting them made `check_apply` suppress
+        # its NO_ASSESSMENT notice — so a run whose assessment never ran read as
+        # fit-assessed, and the completion message never said "no fit assessment
+        # was made", which modes/apply.md requires it to say.
+        if rec.get("verdict") in ("pass", "recorded"):
             return True
     return False
 
