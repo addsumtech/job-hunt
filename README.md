@@ -9,7 +9,8 @@
   <img alt="Claude Code" src="https://img.shields.io/badge/Claude_Code-supported-5b5bd6">
   <img alt="Codex" src="https://img.shields.io/badge/Codex-verified-111827">
   <img alt="Modes" src="https://img.shields.io/badge/modes-discover_·_assess_·_apply_·_interview-0f766e">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-3237-2f6feb">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-3248-2f6feb">
+  <a href="https://github.com/dong845/job-hunt/releases"><img alt="Release" src="https://img.shields.io/badge/release-v1.0.0-1f883d"></a>
 </p>
 
 <p align="center">
@@ -121,7 +122,7 @@ with no folder to go hunting for.
 
 Two numbers, answering different questions.
 
-**`make check`: 3237 tests green.** The code does what its tests say. That is all it
+**`make check`: 3248 tests green.** The code does what its tests say. That is all it
 means. Passing gates are not correct output, and this repository has caught itself
 green-on-wrong often enough to say so on the tin.
 
@@ -145,13 +146,50 @@ grading files rather than typed, is in
 
 ---
 
-## Quick start
+## Install
+
+Three paths. All of them need **Python 3.10+** and two packages; `doctor.py` at the
+end sorts the rest out.
+
+**One line, with [`npx skills`](https://github.com/vercel-labs/skills)** — simplest:
+
+```bash
+npx skills add dong845/job-hunt
+```
+
+It asks which agent and which scope. Add `-g` for every project, `-a claude-code`
+or `-a codex` to skip the agent prompt, `-y` for a non-interactive run. The
+repository root *is* the skill, so the whole directory is copied into your skills
+folder.
+
+**As a Claude Code plugin** — managed updates, and the only path that reaches cloud
+sessions:
+
+```text
+/plugin marketplace add dong845/job-hunt
+/plugin install job-hunt@job-hunt
+/reload-plugins
+```
+
+Plugin skills are namespaced, so it is invoked as `/job-hunt:job-hunt`. Two things
+worth knowing: if you also keep a manual copy in `~/.claude/skills/` you will see
+the skill twice, because nothing de-duplicates them; and third-party marketplaces
+do not auto-update, so `/plugin marketplace update job-hunt` is how you pick up a
+new release.
+
+**Clone and symlink** — best if you intend to edit it, since changes take effect
+immediately and the plugin cache does not:
 
 ```bash
 git clone https://github.com/dong845/job-hunt.git
 ln -s "$(pwd)/job-hunt" ~/.claude/skills/job-hunt     # or ~/.codex/skills/job-hunt
-pip install -r job-hunt/requirements.txt              # PyYAML, python-docx
-python3 job-hunt/scripts/doctor.py --install          # checks this machine, installs what pip can
+```
+
+Then, whichever path you took:
+
+```bash
+pip install -r requirements.txt              # PyYAML, python-docx
+python3 scripts/doctor.py --install          # checks this machine, installs what pip can
 ```
 
 `doctor.py` checks capabilities rather than binary names: it renders an actual PDF
@@ -160,7 +198,7 @@ the `tectonic` that was installed, and reported PDF output as broken while every
 rendered fine. It installs Python packages and never system binaries; for a LaTeX
 engine it prints the one command for your platform and lets you run it.
 
-Then say what you want:
+## Then say what you want
 
 ```text
 Use job-hunt. Find me MRI reconstruction roles in the Netherlands.

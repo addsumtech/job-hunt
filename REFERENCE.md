@@ -65,6 +65,9 @@ job-hunt/
 ├── requirements.txt
 ├── Makefile                        # make check = tests + losslessness + conventions
 ├── .github/workflows/checks.yml    # the same three checks in CI
+├── .claude-plugin/                 # the two install paths that are not a clone
+│   ├── plugin.json                  # the manifest /plugin install reads
+│   └── marketplace.json             # generated FROM plugin.json — never retype the version
 ├── modes/                          # Layer 1.5 — exactly one is loaded, on mode entry
 │   ├── discover.md                  # Layer 1.5 — find roles (read-only)
 │   ├── assess.md                    # Layer 1.5 — judge one posting

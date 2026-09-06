@@ -9,7 +9,8 @@
   <img alt="Claude Code" src="https://img.shields.io/badge/Claude_Code-supported-5b5bd6">
   <img alt="Codex" src="https://img.shields.io/badge/Codex-已实测-111827">
   <img alt="Modes" src="https://img.shields.io/badge/四模式-找岗_·_判断_·_申请_·_面试-0f766e">
-  <img alt="Tests" src="https://img.shields.io/badge/测试-3237-2f6feb">
+  <img alt="Tests" src="https://img.shields.io/badge/测试-3248-2f6feb">
+  <a href="https://github.com/dong845/job-hunt/releases"><img alt="Release" src="https://img.shields.io/badge/release-v1.0.0-1f883d"></a>
 </p>
 
 <p align="center">
@@ -123,7 +124,7 @@ BOSS 上真正被筛的是在线资料而不是简历附件；三方协议不等
 
 两个数字，回答的是两个不同的问题。
 
-**`make check`：3237 个测试全绿。** 它只说明代码的行为和它自己的测试一致，仅此而已。
+**`make check`：3248 个测试全绿。** 它只说明代码的行为和它自己的测试一致，仅此而已。
 闸门通过不等于产物正确。这个仓库自己被「全绿但产物是错的」坑过太多次，所以把这句话写在明处。
 
 **`evals/`：20 个场景，两条臂。** 有意义的是两臂对比，因为**两条臂都有的行为，
@@ -140,13 +141,45 @@ BOSS 上真正被筛的是在线资料而不是简历附件；三方协议不等
 
 ---
 
-## 快速开始
+## 安装
+
+三条路，任选一条。都需要 **Python 3.10+** 和两个包，剩下的交给最后那句 `doctor.py`。
+
+**一行搞定，用 [`npx skills`](https://github.com/vercel-labs/skills)** —— 最省事：
+
+```bash
+npx skills add dong845/job-hunt
+```
+
+它会问你装到哪个 agent、什么范围。`-g` 是全局装，`-a claude-code` 或 `-a codex`
+可以跳过 agent 那一问，`-y` 全程不交互。这个仓库的根目录**就是** skill 本身，
+所以整个目录会被拷进你的 skills 文件夹。
+
+**作为 Claude Code 插件** —— 有托管更新，也是唯一能覆盖云端会话的路径：
+
+```text
+/plugin marketplace add dong845/job-hunt
+/plugin install job-hunt@job-hunt
+/reload-plugins
+```
+
+插件里的 skill 带命名空间，所以调用时是 `/job-hunt:job-hunt`。两件事值得知道：
+如果你**同时**在 `~/.claude/skills/` 里留了一份手动拷贝，会看到这个 skill 出现两次，
+没有任何去重机制；另外第三方 marketplace 不会自动更新，要拿新版本得跑
+`/plugin marketplace update job-hunt`。
+
+**clone + 软链** —— 如果你打算改它，选这条：改完立刻生效，插件缓存做不到这点：
 
 ```bash
 git clone https://github.com/dong845/job-hunt.git
 ln -s "$(pwd)/job-hunt" ~/.claude/skills/job-hunt     # 或 ~/.codex/skills/job-hunt
-pip install -r job-hunt/requirements.txt              # PyYAML, python-docx
-python3 job-hunt/scripts/doctor.py --install          # 体检这台机器，pip 能装的自动装
+```
+
+不管走哪条路，装完都跑一次：
+
+```bash
+pip install -r requirements.txt              # PyYAML, python-docx
+python3 scripts/doctor.py --install          # 体检这台机器，pip 能装的自动装
 ```
 
 `doctor.py` 检查的是**能力**而不是二进制文件名：它直接渲染一份 PDF，而不是去找 `xelatex`。
@@ -154,7 +187,7 @@ python3 job-hunt/scripts/doctor.py --install          # 体检这台机器，pip
 每份 PDF 其实都好好的。它只装 Python 包，从不动系统级二进制；
 需要 LaTeX 引擎时，它把你这个平台该跑的那一条命令打出来，交给你自己执行。
 
-然后直接说你要什么：
+## 然后直接说你要什么
 
 ```text
 用 job-hunt 帮我找上海的算法工程师岗位，我想看国企和外企。
