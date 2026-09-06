@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/hero.jpg" alt="桌上一份简历，被三盏独立的台灯照着，光圈互相重叠">
+  <img src="docs/assets/hero.jpg" alt="一份简历，五条线从它的条目牵向各自的来源：论文、笔记本、证书、键帽、学位证">
 </p>
 
 > **一个会读你真实经历、拒绝替你美化、把猎头只在私下说的话直接讲给你听，

@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/hero.jpg" alt="One CV on a desk, read under three separate lamps whose light pools overlap">
+  <img src="docs/assets/hero.jpg" alt="A CV with five threads running from its lines out to the sources behind them — a paper, a notebook, a certificate, a keyboard key, a diploma">
 </p>
 
 > **A career coach that reads your real history, refuses to embellish it, tells you the
