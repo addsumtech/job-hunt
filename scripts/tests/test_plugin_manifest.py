@@ -1,7 +1,7 @@
 """The two install paths key off manifests nothing else reads.
 
-`npx skills add dong845/job-hunt` copies the repository root and reads
-`SKILL.md`'s frontmatter. `/plugin marketplace add dong845/job-hunt` reads
+`npx skills add addsumtech/job-hunt` copies the repository root and reads
+`SKILL.md`'s frontmatter. `/plugin marketplace add addsumtech/job-hunt` reads
 `.claude-plugin/marketplace.json`, which points at `.claude-plugin/plugin.json`.
 Neither file is exercised by any other test, and a typo in either one fails at
 the user's terminal rather than here.
@@ -94,17 +94,17 @@ def test_the_readme_advertises_the_manifest_version(readme):
 def test_both_install_paths_are_documented(readme):
     """A manifest nobody is told about installs nothing."""
     text = readme.read_text(encoding="utf-8")
-    assert "npx skills add dong845/job-hunt" in text, f"{readme.name} omits the npx path"
-    assert "/plugin marketplace add dong845/job-hunt" in text, (
+    assert "npx skills add addsumtech/job-hunt" in text, f"{readme.name} omits the npx path"
+    assert "/plugin marketplace add addsumtech/job-hunt" in text, (
         f"{readme.name} omits the plugin path")
     assert "/plugin install job-hunt@job-hunt" in text, (
         f"{readme.name} omits the install line; the marketplace add alone does nothing")
 
 
 def test_the_repository_url_matches_the_documented_install_target():
-    """`npx skills add dong845/job-hunt` and the repository field have to name
+    """`npx skills add addsumtech/job-hunt` and the repository field have to name
     the same repo, or one of the two install paths reaches a different tree."""
     repo = _json(PLUGIN)["repository"]
-    assert repo.endswith("/dong845/job-hunt"), repo
+    assert repo.endswith("/addsumtech/job-hunt"), repo
     for readme in READMES:
-        assert "dong845/job-hunt" in readme.read_text(encoding="utf-8")
+        assert "addsumtech/job-hunt" in readme.read_text(encoding="utf-8")

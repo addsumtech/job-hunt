@@ -9,7 +9,7 @@
   <img alt="Claude Code" src="https://img.shields.io/badge/Claude_Code-supported-5b5bd6">
   <img alt="Codex" src="https://img.shields.io/badge/Codex-verified-111827">
   <img alt="Modes" src="https://img.shields.io/badge/modes-discover_·_assess_·_apply_·_interview-0f766e">
-  <a href="https://github.com/dong845/job-hunt/releases"><img alt="Release" src="https://img.shields.io/badge/release-v1.0.0-1f883d"></a>
+  <a href="https://github.com/addsumtech/job-hunt/releases"><img alt="Release" src="https://img.shields.io/badge/release-v1.0.0-1f883d"></a>
 </p>
 
 <p align="center">
@@ -153,7 +153,7 @@ end sorts the rest out.
 **One line, with [`npx skills`](https://github.com/vercel-labs/skills)** — simplest:
 
 ```bash
-npx skills add dong845/job-hunt
+npx skills add addsumtech/job-hunt
 ```
 
 It asks which agent and which scope. Add `-g` for every project, `-a claude-code`
@@ -165,7 +165,7 @@ folder.
 sessions:
 
 ```text
-/plugin marketplace add dong845/job-hunt
+/plugin marketplace add addsumtech/job-hunt
 /plugin install job-hunt@job-hunt
 /reload-plugins
 ```
@@ -180,7 +180,7 @@ new release.
 immediately and the plugin cache does not:
 
 ```bash
-git clone https://github.com/dong845/job-hunt.git
+git clone https://github.com/addsumtech/job-hunt.git
 ln -s "$(pwd)/job-hunt" ~/.claude/skills/job-hunt     # or ~/.codex/skills/job-hunt
 ```
 

@@ -9,7 +9,7 @@
   <img alt="Claude Code" src="https://img.shields.io/badge/Claude_Code-supported-5b5bd6">
   <img alt="Codex" src="https://img.shields.io/badge/Codex-已实测-111827">
   <img alt="Modes" src="https://img.shields.io/badge/四模式-找岗_·_判断_·_申请_·_面试-0f766e">
-  <a href="https://github.com/dong845/job-hunt/releases"><img alt="Release" src="https://img.shields.io/badge/release-v1.0.0-1f883d"></a>
+  <a href="https://github.com/addsumtech/job-hunt/releases"><img alt="Release" src="https://img.shields.io/badge/release-v1.0.0-1f883d"></a>
 </p>
 
 <p align="center">
@@ -147,7 +147,7 @@ BOSS 上真正被筛的是在线资料而不是简历附件；三方协议不等
 **一行搞定，用 [`npx skills`](https://github.com/vercel-labs/skills)** —— 最省事：
 
 ```bash
-npx skills add dong845/job-hunt
+npx skills add addsumtech/job-hunt
 ```
 
 它会问你装到哪个 agent、什么范围。`-g` 是全局装，`-a claude-code` 或 `-a codex`
@@ -157,7 +157,7 @@ npx skills add dong845/job-hunt
 **作为 Claude Code 插件** —— 有托管更新，也是唯一能覆盖云端会话的路径：
 
 ```text
-/plugin marketplace add dong845/job-hunt
+/plugin marketplace add addsumtech/job-hunt
 /plugin install job-hunt@job-hunt
 /reload-plugins
 ```
@@ -170,7 +170,7 @@ npx skills add dong845/job-hunt
 **clone + 软链** —— 如果你打算改它，选这条：改完立刻生效，插件缓存做不到这点：
 
 ```bash
-git clone https://github.com/dong845/job-hunt.git
+git clone https://github.com/addsumtech/job-hunt.git
 ln -s "$(pwd)/job-hunt" ~/.claude/skills/job-hunt     # 或 ~/.codex/skills/job-hunt
 ```
 
