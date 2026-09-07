@@ -273,6 +273,24 @@ must-have 强证据：   8 of 11   （partial 2，gap 1，无证据 0）
 投递建议：           大概率被筛掉
 ```
 
+The block follows the **user's** language, not the market's, and `count_coverage.py`
+renders both shapes. The English one carries the same five lines under English
+labels:
+
+```
+must-haves strongly evidenced:  8 of 11   (partial 2, gap 1, no evidence 0)
+core responsibilities shown:    4 of 6
+seniority fit:                  lateral
+effort to close the gap:        an evening
+apply verdict:                  likely_screen_out
+```
+
+Both markers are load-bearing: `check_assessment.py` locates the verdict by
+searching the card for 「投递建议：」 **or** `apply verdict:`, so an English card
+that writes the line any other way has no verdict as far as the gate is
+concerned. Paste whichever shape `count_coverage.py` produced; do not translate
+the label by hand.
+
 `强证据` counts `strong` only. `partial` and `gap` are never merged into a covered
 number. Evidence that is only `dated` counts as `partial`.
 

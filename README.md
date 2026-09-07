@@ -121,7 +121,7 @@ with no folder to go hunting for.
 
 Two numbers, answering different questions.
 
-**`make check`: 3248 tests green.** The code does what its tests say. That is all it
+**`make check`: 3321 tests green.** The code does what its tests say. That is all it
 means. Passing gates are not correct output, and this repository has caught itself
 green-on-wrong often enough to say so on the tin.
 
