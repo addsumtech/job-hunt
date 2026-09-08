@@ -56,7 +56,10 @@ def test_explicit_live_install_audit(record_property):
     state = 'requested' if requested else 'not-requested; isolated fixtures checked'
     record_property('live_install_checks', state)
     if not requested:
-        return
+        # Skip rather than return: this audit is opt-in, and a run that did not
+        # perform it must say so in the summary line instead of adding a green
+        # tick that looks like the live install was verified.
+        pytest.skip('set JOBHUNT_CHECK_INSTALL=1 to audit the real install')
     for runtime in ('.claude', '.codex'):
         assert_install(pathlib.Path.home() / runtime / 'skills' / 'job-hunt')
     if os.environ.get('JOBHUNT_CHECK_MIGRATION_ARCHIVE') == '1':

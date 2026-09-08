@@ -119,7 +119,13 @@ def test_the_advertised_test_count_is_the_real_one(readme):
                for n in re.findall(r"([\d][\d,_]{2,})\s*(?:tests?|个测试|测试|件のテスト|개 테스트|pruebas)", _text(readme))}
     claimed |= {int(n) for n in re.findall(r"badge/(?:tests|测试)-(\d+)-", _text(readme))}
     if not claimed:
-        return
+        # SKIP, never a bare return. A README with no count is a legitimate
+        # choice; a guard that reports PASS while checking nothing is not.
+        # Measured 2026-09-08: after the five-language rewrite dropped every
+        # count, this test reported 5 passed and inspected 0 files. The repo has
+        # now hit that shape three times (mutants.py's survives(), the
+        # opt-in motif check, this), so the suite states its own emptiness.
+        pytest.skip(f"{readme.name} states no test count; nothing to verify")
     out = subprocess.run([sys.executable, "-m", "pytest", str(ROOT / "scripts" / "tests"),
                           "-q", "--collect-only"], capture_output=True, text=True).stdout
     m = re.search(r"(\d+) tests? collected", out)

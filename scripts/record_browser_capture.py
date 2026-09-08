@@ -89,17 +89,108 @@ def validate_snapshot(snapshot, rows):
     return "ok"
 
 
+def _host(record):
+    """The registrable-ish host this record read, lowercased, or "".
+
+    Only browser records carry a URL; an `adapter_call` names its adapter and
+    nothing else, because the command line *is* the adapter name and opencli
+    would not run an invented one.
+    """
+    url = record.get("url")
+    if not isinstance(url, str):
+        return ""
+    try:
+        host = (urlsplit(url).hostname or "").lower()
+    except ValueError:
+        return ""
+    return host[4:] if host.startswith("www.") else host
+
+
+def _labels(value):
+    """The comparable parts of a site name or a host: `www.51job.com` -> {51job}.
+
+    Applied to NAMES as well as hosts, because a name is how the two backends
+    are joined and `51job` / `51job.com` / `www.51job` are one site written
+    three ways. Labels of two characters or fewer are dropped: they carry no
+    identity and would link unrelated sites.
+    """
+    value = (value or "").strip().lower()
+    if value.startswith("www."):
+        value = value[4:]
+    return {l for l in value.split(".") if len(l) > 2}
+
+
+def _linked(a, b):
+    """Do these two site identifiers plainly name the same site?
+
+    A shared LABEL, compared whole: `51job` links to `we.51job.com`, to
+    `51job.com` and to `www.51job`; `qiancheng` links to none of them.
+
+    Substring containment was tried and removed. Measured, it bought exactly one
+    hypothetical pairing (`boss` to `bossjobs.com`) and cost three plausible
+    wrong ones -- `job` would have linked to `51job.com` and to `jobsdb.com`,
+    `ind` to `indeed.com` -- and a stop lock that fires on a site which never
+    refused is the cry-wolf this repo treats as the worse failure. Speculative
+    generality is not worth a false stop.
+
+    Deliberately no alias table either: BOSS直聘 serves `zhipin.com` and a
+    hand-maintained map would have to be right about every adapter in every
+    market before this function could be trusted at all. The journal supplies
+    those pairings instead, from hosts the run actually read.
+    """
+    x, y = _labels(a), _labels(b)
+    return bool(x & y)
+
+
 def check_stop_order(records):
-    stopped = set()
+    """A refusal stops the site for the round, across BOTH backends.
+
+    Locked on three keys, not one. `site` alone was evadable, and not only by an
+    adversary: measured 2026-09-08, a refusal on `51job` did not stop a later
+    read declaring `51job.com` or `www.51job`, and an agent that names the same
+    site two ways across two calls defeats the lock without ever intending to.
+
+    `51-job` is deliberately NOT joined to `51job`: nothing but a guess connects
+    them, and the guess that would — substring matching — also joins `job` to
+    `51job.com`. See `_linked`.
+
+    So a refusal records the declared name, the host actually read, and the
+    hosts that name has been seen using; a later read matches on any of them.
+    What this CANNOT do is connect a rename with no shared text and no shared
+    host -- `qiancheng` after `51job` -- and `references/browser-fallback.md`
+    says that in those words rather than promising the whole property.
+    """
+    stopped_names, stopped_hosts = set(), set()
+    seen_hosts = {}
     findings = []
     for record in records:
         if record.get("action") not in ("adapter_call", ACTION):
             continue
-        site = str(record.get("site") or "").strip().lower()
-        if site in stopped:
-            findings.append(f"READ_AFTER_STOP: {site} was read after a site refusal; changing tools does not reset the round")
+        name = str(record.get("site") or "").strip().lower()
+        host = _host(record)
+        if host:
+            seen_hosts.setdefault(name, set()).add(host)
+        # `host in stopped_hosts` used to sit here and was removed as dead: this
+        # record's own host has already been added to seen_hosts above, so the
+        # last clause subsumes it exactly. Mutation testing found it — deleting
+        # it changed no test — and a redundant clause inside a safety check is
+        # worse than none, because the next reader may weaken the live one while
+        # believing the dead one still covers the case.
+        hit = (name in stopped_names
+               or any(_linked(n, name) for n in stopped_names)
+               or (host and any(_linked(n, host) for n in stopped_names))
+               or (host and any(_linked(h, host) for h in stopped_hosts))
+               or any(h in stopped_hosts for h in seen_hosts.get(name, ())))
+        if hit:
+            findings.append(
+                f"READ_AFTER_STOP: {name or '<unnamed>'} was read after a site "
+                f"refusal; changing tools or renaming the source does not reset "
+                f"the round")
         if record.get("classification") in STOP_CLASSES:
-            stopped.add(site)
+            stopped_names.add(name)
+            if host:
+                stopped_hosts.add(host)
+            stopped_hosts.update(seen_hosts.get(name, ()))
     return findings
 
 

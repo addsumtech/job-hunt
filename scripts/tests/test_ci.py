@@ -1,5 +1,7 @@
 import pathlib
 
+import pytest
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 MAKEFILE = ROOT / "Makefile"
 WORKFLOW = ROOT / ".github" / "workflows" / "checks.yml"
@@ -32,7 +34,7 @@ def test_the_conventions_guard_disappears_when_the_script_lands():
     a CI step that is not there, and spec §10 requires an expired market table to
     fail the build."""
     if not (ROOT / "scripts" / "check_conventions.py").exists():
-        return
+        pytest.skip("check_conventions.py has not landed yet; nothing to unguard")
     for f in (MAKEFILE, WORKFLOW):
         assert "-f scripts/check_conventions.py" not in f.read_text(encoding="utf-8"), (
             f"{f.name} still guards check_conventions.py behind a file test — the "

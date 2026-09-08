@@ -46,16 +46,18 @@ def test_apply_does_not_state_the_unconditional_industry_rule():
     the contradiction that sent a relevant doctorate to page two."""
     bullet = _section_order_bullet()
     phrase = "leads with Experience even for a PhD"
-    if phrase not in bullet:
-        return                                   # removed outright is also fine
-    # It may stay ONLY with its exception attached. Checked by looking at what
-    # follows it, not at the punctuation: the first draft of this test demanded a
-    # comma and failed on a correct fix that used "*only when*".
-    tail = bullet.split(phrase, 1)[1][:160].lower()
-    assert re.search(r"\bonly when\b|\bunless\b|\bexcept\b", tail), (
-        f"apply.md states the unconditional rule. A PhD in the target role's own "
-        f"field is a credential, not background — the sentence needs its "
-        f"exception attached. What follows it: {tail[:80]!r}")
+    # Removing the sentence outright is also a correct fix, so the check is
+    # conditional -- but inverted rather than returned early, so the function
+    # never exits having asserted nothing.
+    if phrase in bullet:
+        # It may stay ONLY with its exception attached. Checked by looking at
+        # what follows it, not at the punctuation: the first draft of this test
+        # demanded a comma and failed on a correct fix that used "*only when*".
+        tail = bullet.split(phrase, 1)[1][:160].lower()
+        assert re.search(r"\bonly when\b|\bunless\b|\bexcept\b", tail), (
+            f"apply.md states the unconditional rule. A PhD in the target role's "
+            f"own field is a credential, not background — the sentence needs its "
+            f"exception attached. What follows it: {tail[:80]!r}")
 
 
 def test_apply_names_relevance_as_the_deciding_factor():

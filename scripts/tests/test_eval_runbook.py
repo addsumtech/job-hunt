@@ -235,9 +235,11 @@ def test_the_runbook_does_not_call_the_stage1_list_the_guard_evals():
                       if a.get("role") == "discriminating")
     stage1 = RUNBOOK[RUNBOOK.index("## Stage 1"):RUNBOOK.index("## Stage 2")]
     named = len(re.findall(r"^\s*-\s+eval-\d+\s+`", stage1, re.M))
-    if named == guard_count:
-        return  # they genuinely coincide; nothing to misdescribe
-    assert not re.search(
-        r"FIFTEEN evals that carry a\s+discriminating assertion", stage1), (
-        f"stage 1 names {named} evals but only {guard_count} assertions are "
-        "discriminating; do not describe the list as the guard-carrying evals")
+    # Inverted rather than returned early: when the two counts coincide there
+    # is nothing to misdescribe and the property holds, but a bare return would
+    # exit having asserted nothing and pytest prints the same dot either way.
+    if named != guard_count:
+        assert not re.search(
+            r"FIFTEEN evals that carry a\s+discriminating assertion", stage1), (
+            f"stage 1 names {named} evals but only {guard_count} assertions are "
+            "discriminating; do not describe the list as the guard-carrying evals")

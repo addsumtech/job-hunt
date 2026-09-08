@@ -21,7 +21,17 @@ A generic timeout, blank fields or unclassified transport error does not establi
 one of these reasons. Diagnose first; existing detail recovery still applies.
 A site refusal (captcha, login wall, 401/403/429, platform limit) stops this site
 for this round across **both** tools. Use the same stable `site` name for both
-backends, e.g. `51job`; renaming the source does not reset a refusal. Let the user
+backends, e.g. `51job`.
+
+The stop is keyed on three things, so a rename does not quietly reset it: the
+declared name, the host actually read, and the hosts that name was already seen
+using in this journal. `51job`, `51job.com` and `www.51job` are one site; so is a
+differently-named read whose URL resolves to a host the refused site had already
+used, which is how `boss` and `zhipin.com` are joined without anyone maintaining
+a table of adapters to domains. **A rename that shares no text with the refused
+name and no host the run has actually seen cannot be joined to it** — the check
+says so rather than pretending otherwise, and the stable name is what keeps that
+edge from mattering. Let the user
 resolve a login/captcha themselves, then start a separately requested new round.
 Never switch backends after a refusal. If no approved browser capability exists,
 request a pasted JD/export and disclose that live discovery was unavailable.
