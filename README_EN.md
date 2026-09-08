@@ -116,6 +116,22 @@ The activation command above is for macOS/Linux; on Windows, use the activation 
 
 `doctor.py` attempts to generate an actual PDF and reports missing capabilities. Its `--install` option installs Python packages only; follow the report to install system tools.
 
+### Set up the OpenCLI Chrome extension
+
+For browser-based live retrieval, **the OpenCLI CLI also needs the OpenCLI Browser Bridge extension**.
+
+```bash
+npm install -g @jackwener/opencli
+opencli doctor
+```
+
+Download the Browser Bridge extension archive from [official OpenCLI Releases](https://github.com/jackwener/opencli/releases) and extract it into a permanent folder. Enter `chrome://extensions/` in Chrome, enable **Developer mode**, click **Load unpacked**, and select the folder directly containing `manifest.json`. Review the permissions Chrome displays before installing.
+
+Run `opencli doctor` again and confirm **Extension: connected** and **Connectivity: connected**. A working CLI or daemon alone does not mean the browser is connected. Keep the extension folder in place. On macOS, press `Command + Shift + G` in the file picker to paste its full path; folders beginning with `.` are hidden by default.
+
+Sign in to job platforms yourself in the browser. A connected Browser Bridge does not establish a platform login or guarantee that every site is readable.
+
+
 ## Markets, platforms, and languages
 
 Discovery reads postings through `opencli` adapters. The repository's source catalogue includes 51job, Indeed, LinkedIn, and BOSS Zhipin, with distinctions between login requirements, job listings, and interview-experience sources. Availability is checked at runtime. The currently documented Indeed adapter targets the US site; changing the city alone is not enough to establish a correct search in another market. See the [source catalogue](references/discovery-sources.md) and [source policy](references/source-policy.md).
