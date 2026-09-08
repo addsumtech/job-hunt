@@ -1,48 +1,64 @@
+"""Portable install layout tests; live machine audits are explicit opt-ins."""
+import os
 import pathlib
+import shutil
 
 import pytest
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
-LINKS = [pathlib.Path.home() / ".claude" / "skills" / "job-hunt",
-         pathlib.Path.home() / ".codex" / "skills" / "job-hunt"]
+ROOT = pathlib.Path(__file__).resolve().parents[2]
+REQUIRED = ('SKILL.md', 'modes/apply.md', 'scripts/check_apply.py')
 
 
-@pytest.mark.parametrize("link", LINKS, ids=lambda p: p.parent.parent.name)
-def test_the_runtime_resolves_the_skill(link):
-    if not link.parent.is_dir():
-        pytest.skip(f"{link.parent} does not exist on this machine")
-    assert link.is_symlink(), f"{link} is not a symlink — a copy would drift"
-    assert link.resolve() == ROOT
-    assert (link / "SKILL.md").is_file()
-    assert (link / "modes" / "apply.md").is_file()
-    assert (link / "scripts" / "check_apply.py").is_file()
+def assert_install(path):
+    # Both skills CLI copies and manual symlinks are supported installations.
+    assert path.is_dir(), f'{path} is missing or a broken symlink'
+    for relative in REQUIRED:
+        installed = path / relative
+        assert installed.is_file(), f'{installed} is missing'
+        assert installed.read_bytes() == (ROOT / relative).read_bytes(), f'{installed} is stale'
 
 
-def test_the_old_skill_is_archived_but_not_symlinked():
-    """Two skills with overlapping descriptions fight for the trigger and the
-    user has to know which to invoke.
-
-    Machine-local, like the test above: it inspects an install, not the repo. It skips
-    where there is no skills directory at all — a fresh CI runner — because there is
-    then no install to protect. It does NOT skip merely because the archive is missing:
-    a machine that has the skills directory and has lost job-application has lost the
-    lossless baseline, and that is the whole thing this is here to catch."""
-    skills = pathlib.Path.home() / ".claude" / "skills"
-    if not skills.is_dir():
-        pytest.skip(f"{skills} does not exist on this machine — nothing is installed here")
-    old = skills / "job-application"
-    assert old.is_dir(), "the archive was removed; it is the migration's baseline"
-    assert not old.is_symlink()
+@pytest.mark.parametrize('kind', ['copy', 'symlink'])
+def test_runtime_layout_in_an_isolated_install(tmp_path, kind):
+    installed = tmp_path / 'skills' / 'job-hunt'
+    installed.parent.mkdir()
+    if kind == 'symlink':
+        installed.symlink_to(ROOT, target_is_directory=True)
+    else:
+        for relative in REQUIRED:
+            target = installed / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ROOT / relative, target)
+    assert_install(installed)
 
 
-def test_this_module_says_out_loud_when_it_checked_nothing(record_property):
-    """Every test in this file skips on a machine with no install — which on CI is all
-    of them. Three green-looking skips and a green build is how 'we never checked the
-    install' comes to look identical to 'the install is fine'. This records the state
-    in the run's own output so the answer is visible rather than inferred from a count
-    of dots."""
-    skills = pathlib.Path.home() / ".claude" / "skills"
-    state = "checked" if skills.is_dir() else "not-installed-here"
-    record_property("install_checks", state)
-    print(f"\nINSTALL CHECKS: {state} ({skills})")
-    assert state in ("checked", "not-installed-here")
+@pytest.mark.parametrize('broken', ['missing', 'broken-link', 'incomplete', 'stale'])
+def test_a_broken_install_is_rejected(tmp_path, broken):
+    installed = tmp_path / 'job-hunt'
+    if broken == 'broken-link':
+        installed.symlink_to(tmp_path / 'absent')
+    elif broken == 'incomplete':
+        installed.mkdir()
+        (installed / 'SKILL.md').write_text('incomplete')
+    elif broken == 'stale':
+        for relative in REQUIRED:
+            target = installed / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text('outdated contents')
+    with pytest.raises(AssertionError):
+        assert_install(installed)
+
+
+def test_explicit_live_install_audit(record_property):
+    # A fresh checkout must never infer an installation or migration merely from
+    # the existence of ~/.claude/skills (which may contain unrelated skills).
+    requested = os.environ.get('JOBHUNT_CHECK_INSTALL') == '1'
+    state = 'requested' if requested else 'not-requested; isolated fixtures checked'
+    record_property('live_install_checks', state)
+    if not requested:
+        return
+    for runtime in ('.claude', '.codex'):
+        assert_install(pathlib.Path.home() / runtime / 'skills' / 'job-hunt')
+    if os.environ.get('JOBHUNT_CHECK_MIGRATION_ARCHIVE') == '1':
+        archive = pathlib.Path.home() / '.claude/skills/job-application'
+        assert archive.is_dir() and not archive.is_symlink(), 'migration archive is missing'

@@ -8,6 +8,7 @@ import pytest
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import check_mock
+import deliver
 import mock_blocks as MB
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -96,6 +97,51 @@ def test_the_pack_split_names_what_pass_1_is_not_given():
     table = text.split("## 4.")[1].split("## 5.")[0]
     assert "interview-brief.md" in table and "claims.yaml" in table
     assert "NOT" in table or "not given" in table
+
+
+def _recovery_section():
+    text = MODE.read_text(encoding="utf-8")
+    marker = "### Recover an invalid assessor block"
+    assert marker in text, "an invalid quote must have a bounded recovery path"
+    return _flat(text.split(marker, 1)[1].split("<!-- example:", 1)[0])
+
+
+def test_invalid_quote_recovery_selects_only_the_failed_pass():
+    section = _recovery_section()
+    for code in ("PARSE_FAIL", "MISSING_BLOCK", "QUOTE_NOT_IN_TRANSCRIPT"):
+        assert code in section
+    assert "block name in the diagnostic" in section
+    assert "Re-dispatch only the failed pass" in section
+    assert "Keep any valid pass's block byte-identical" in section
+    assert "candidate's answer under that same heading" in section
+
+
+def test_recovery_preserves_evidence_and_the_original_input_split():
+    section = _recovery_section()
+    assert "original failed assessment" in section
+    assert "stdout/stderr" in section and "journal receipt" in section
+    assert "fresh context" in section
+    assert "same agent prompt and byte-identical source files" in section
+    assert "only that pass's gate diagnostics" in section
+    assert "Never supply the other pass's output" in section
+    assert "Never hand-edit a block" in section
+    assert "Never change the transcript or candidate facts" in section
+
+
+def test_recovery_has_one_attempt_and_requires_an_honest_stop():
+    section = _recovery_section()
+    assert "at most one corrective reassessment per failed pass per round" in section
+    assert "re-run the full gate" in section
+    assert "If it still fails, stop" in section
+    assert "both gate receipts" in section
+    assert "Do not loop until green" in section
+
+
+def test_documented_recovery_archive_is_excluded_from_delivery(tmp_path):
+    section = _recovery_section()
+    assert "mock/raw/recovery-<n>/" in section
+    archived = tmp_path / "mock" / "raw" / "recovery-1" / "failed-assessment.md"
+    assert not deliver.is_deliverable(archived, tmp_path)
 
 
 def test_the_published_rubric_exception_is_bounded():

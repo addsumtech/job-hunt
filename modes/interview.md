@@ -226,9 +226,36 @@ Two passes fed different inputs is what turns the honesty tripwire from an inten
 mechanism. Do not "helpfully" hand pass 1 the brief.
 
 Then assemble `mock/assessment-<n>.md`: **both output blocks copied in verbatim**, plus a
-short human-readable summary above them. Never hand-edit an assessor's block. If
-`scripts/check_mock.py` reports `PARSE_FAIL` or `MISSING_BLOCK`, that pass did not produce a
-readable assessment — re-dispatch it.
+short human-readable summary above them. Never hand-edit an assessor's block.
+
+### Recover an invalid assessor block
+
+If `scripts/check_mock.py` reports `PARSE_FAIL`, `MISSING_BLOCK`, or
+`QUOTE_NOT_IN_TRANSCRIPT`, use this bounded recovery:
+
+1. Identify the failed pass from the block name in the diagnostic:
+   `MOCK-ASSESSMENT-V1` is transcript; `MOCK-PROVENANCE-V1` is provenance. A quote can
+   exist elsewhere in the transcript and still be invalid: `ref=Q1` must quote the
+   candidate's answer under that same heading, not Q2 or the interviewer.
+2. Preserve the original failed assessment, raw assessor output, gate stdout/stderr,
+   and journal receipt under `mock/raw/recovery-<n>/` before replacing anything. The
+   `raw/` directory keeps failed drafts and audit logs out of `deliver.py` exports.
+   Keep the original receipt in `journal.jsonl`; the recovery adds evidence, never
+   erases it.
+3. Re-dispatch only the failed pass, in a fresh context, with the same agent prompt and
+   byte-identical source files from its row above. Add only that pass's gate diagnostics
+   and an instruction to produce a complete block whose quotes belong to their cited
+   candidate answers. Never supply the other pass's output, diagnostics, or input pack.
+   Keep any valid pass's block byte-identical. If both failed, reassess each separately
+   with its own permitted pack. Allow **at most one corrective reassessment per failed
+   pass per round**, including parse, missing-block, and quote failures together.
+4. Preserve the corrective dispatch inputs and raw output alongside the failure. Copy
+   its new block verbatim, update session artifacts under §5–6 where required, and
+   re-run the full gate. Never hand-edit a block, including its `ref=` or `quote=`.
+   Never change the transcript or candidate facts to make a quote validate.
+5. If it still fails, stop and report the remaining findings and both gate receipts.
+   Do not loop until green or call the round complete. A new assessor finding is handled
+   honestly under §5–6; it is not a reason to erase the finding or reroll the assessor.
 
 <!-- example: assessment-<n>.md -->
 ```markdown

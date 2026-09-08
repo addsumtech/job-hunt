@@ -131,6 +131,23 @@ def install_hint(binary: str) -> str:
     return (brew if mac else apt).get(binary, f"install {binary}")
 
 
+def can_reach_browser() -> tuple[bool, str]:
+    """A present adapter executable does not prove its browser bridge works."""
+    if not shutil.which("opencli"):
+        return False, "opencli is not installed"
+    try:
+        result = subprocess.run(["opencli", "doctor"], capture_output=True,
+                                text=True, timeout=15, check=False)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return False, f"browser health check could not complete: {exc}"
+    output = re.sub(r"\x1b\[[0-9;]*m", "", (result.stdout or "") + (result.stderr or ""))
+    if re.search(r"\[(?:MISSING|FAIL)\]", output, re.I):
+        return False, "Browser Bridge is disconnected or its connectivity check failed"
+    if result.returncode == 0 and re.search(r"\[OK\]\s*Connectivity:", output, re.I):
+        return True, "opencli doctor confirmed browser connectivity"
+    return False, "opencli doctor did not confirm browser connectivity; inspect its output"
+
+
 def checks() -> list[dict]:
     """Every capability, what it costs when absent, and how to get it."""
     out = []
@@ -165,6 +182,14 @@ def checks() -> list[dict]:
                 "interview still work from a posting you paste",
         "fix": install_hint("opencli"), "auto": False,
     })
+    if shutil.which("opencli"):
+        connected, detail = can_reach_browser()
+        out.append({
+            "what": "browser-backed job adapters (Browser Bridge)", "ok": connected,
+            "cost": detail + "; browser-backed searches are unverified, not empty results",
+            "fix": "run opencli doctor and follow its extension connection instructions",
+            "auto": False, "detail": detail,
+        })
     return out
 
 

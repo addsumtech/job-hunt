@@ -55,11 +55,10 @@ _WORD = re.compile(r"[^\W\d_]+", re.UNICODE)
 def _words(text: str) -> int:
     """Latin words plus CJK characters — a criterion answered in Chinese or
     Japanese must be counted, not measured as one enormous word."""
-    n = 0
-    for token in _WORD.findall(text):
-        cjk = sum(1 for ch in token if "぀" <= ch <= "鿿")
-        n += cjk if cjk else 1
-    return n
+    # Count each Han/kana/Hangul character, plus each remaining Latin word.
+    # Splitting also preserves Latin words attached to CJK without whitespace.
+    cjk = r"[㐀-鿿぀-ヿ가-힣ᄀ-ᇿ㄰-㆏]"
+    return len(re.findall(cjk, text)) + len(_WORD.findall(re.sub(cjk, " ", text)))
 
 
 def sections(text: str) -> list:
