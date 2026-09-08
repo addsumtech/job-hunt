@@ -116,7 +116,7 @@ def test_a_pdf_that_dropped_characters_is_deleted_not_delivered(tmp_path, monkey
     """
     ws = build(tmp_path, md="# 岗位候选\n\n这是中文内容。\n")
     dest = tmp_path / "out"
-    monkeypatch.setattr(deliver, "pick_cjk_font", lambda: "SomeFont")
+    monkeypatch.setattr(deliver, "pick_cjk_font", lambda *args: "SomeFont")
     monkeypatch.setattr(deliver, "_pandoc",
                         lambda md, pdf, font: (pdf.write_bytes(b"%PDF"), True)[1])
     monkeypatch.setattr(deliver, "pdf_text", lambda pdf: "boxes only, no CJK")
@@ -128,7 +128,7 @@ def test_a_pdf_that_dropped_characters_is_deleted_not_delivered(tmp_path, monkey
 def test_no_cjk_font_refuses_the_pdf_and_still_ships_the_markdown(tmp_path, monkeypatch):
     ws = build(tmp_path, md="# 岗位候选\n\n这是中文内容。\n")
     dest = tmp_path / "out"
-    monkeypatch.setattr(deliver, "pick_cjk_font", lambda: None)
+    monkeypatch.setattr(deliver, "pick_cjk_font", lambda *args: None)
     assert run(ws, dest) == 0
     assert not (dest / "2026-09-06-round-shortlist.pdf").exists()
     assert (dest / "2026-09-06-round-shortlist.md").is_file()
@@ -303,7 +303,7 @@ def test_a_refused_pdf_is_named_in_the_record(tmp_path, monkeypatch):
     """
     import json
     ws = build(tmp_path, md="# 岗位候选\n\n中文内容。\n")
-    monkeypatch.setattr(deliver, "pick_cjk_font", lambda: None)
+    monkeypatch.setattr(deliver, "pick_cjk_font", lambda *args: None)
     assert run(ws, tmp_path / "out") == 0
     rec = [json.loads(l) for l in
            (ws / "journal.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]

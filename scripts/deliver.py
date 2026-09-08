@@ -36,6 +36,7 @@ Exit codes follow the gate contract even though this is not a gate: 0 delivered,
 """
 from __future__ import annotations
 
+from collections import Counter
 import argparse
 import datetime
 import pathlib
@@ -117,10 +118,17 @@ def writable(directory: pathlib.Path) -> tuple[bool, str]:
         return False, str(exc)
 
 
-def _pandoc(md: pathlib.Path, pdf: pathlib.Path, font: str | None) -> bool:
-    cmd = ["pandoc", str(md), "-o", str(pdf), "--pdf-engine=tectonic"]
+def _pandoc(md: pathlib.Path, pdf: pathlib.Path, font: str | dict | None) -> bool:
+    pdf.unlink(missing_ok=True)
+    cmd = ["pandoc", str(md), "-o", str(pdf), "--pdf-engine=tectonic",
+           "--lua-filter", str(pathlib.Path(__file__).with_name("pdf_symbols.lua"))]
     if font:
-        cmd += ["-V", f"CJKmainfont={font}", "-V", f"mainfont={font}"]
+        main = font["main"] if isinstance(font, dict) else font
+        cmd += ["-V", f"CJKmainfont={main}", "-V", f"mainfont={main}"]
+        if isinstance(font, dict):
+            fallback = ",".join(font["fallbacks"])
+            cmd += ["-V", "header-includes=" +
+                    r"\xeCJKsetup{AutoFallBack=true}\setCJKfallbackfamilyfont{\CJKrmdefault}{" + fallback + "}"]
     try:
         subprocess.run(cmd, capture_output=True, timeout=180, check=False)
     except (OSError, subprocess.SubprocessError):
@@ -137,23 +145,56 @@ def pdf_text(pdf: pathlib.Path) -> str:
         return ""
 
 
-def pick_cjk_font() -> str | None:
+def visible_markdown(md: pathlib.Path) -> str:
+    """Use the same Markdown parser as the renderer; link targets are not ink.
+
+    On parser failure keep the original text, so loss detection fails closed.
+    """
+    source = md.read_text(encoding="utf-8", errors="replace")
+    try:
+        result = subprocess.run(["pandoc", str(md), "-t", "plain", "--wrap=none"],
+                                capture_output=True, text=True, timeout=60,
+                                check=False)
+        if result.returncode == 0:
+            return result.stdout
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return source
+
+
+def pick_cjk_font(source: str = "测试中文渲染") -> str | dict | None:
     """The first candidate that survives a render-and-read-back round trip."""
     with tempfile.TemporaryDirectory() as tmp:
         d = pathlib.Path(tmp)
         probe_md = d / "probe.md"
-        probe_md.write_text("测试中文渲染\n", encoding="utf-8")
-        for font in CJK_FONTS:
+        glyphs = set(_CJK.findall(source))
+        probe_md.write_text("".join(sorted(glyphs)) + "\n", encoding="utf-8")
+        preferred = []
+        if re.search(r"[가-힯]", source):
+            preferred += ["Noto Sans CJK KR", "Apple SD Gothic Neo", "Malgun Gothic"]
+        if re.search(r"[぀-ヿ]", source):
+            preferred += ["Noto Sans CJK JP", "Hiragino Sans W3", "Yu Gothic"]
+        for font in dict.fromkeys(preferred + list(CJK_FONTS)) :
             out = d / f"probe-{abs(hash(font))}.pdf"
-            if _pandoc(probe_md, out, font) and cjk_chars(pdf_text(out)) >= 4:
+            if _pandoc(probe_md, out, font) and glyphs <= set(_CJK.findall(pdf_text(out))):
                 return font
+        # Mixed reports can quote a posting in another script. No single macOS
+        # face necessarily covers all of them; probe an explicit fallback chain.
+        for main, fallbacks in [
+                ("Apple SD Gothic Neo", ["Hiragino Sans W3", "PingFang SC"]),
+                ("Noto Sans CJK KR", ["Noto Sans CJK JP", "Noto Sans CJK SC"])]:
+            selection = {"main": main, "fallbacks": fallbacks}
+            out = d / "probe-fallback.pdf"
+            out.unlink(missing_ok=True)
+            if _pandoc(probe_md, out, selection) and glyphs <= set(_CJK.findall(pdf_text(out))):
+                return selection
     return None
 
 
 def render_pdf(md: pathlib.Path, pdf: pathlib.Path,
-               font: str | None) -> tuple[bool, str]:
+               font: str | dict | None) -> tuple[bool, str]:
     """Render, then READ IT BACK. A PDF that dropped characters is not a PDF."""
-    source = md.read_text(encoding="utf-8", errors="replace")
+    source = visible_markdown(md)
     needs_cjk = has_cjk(source)
     if needs_cjk and font is None:
         return False, ("no CJK font on this machine that survives a render "
@@ -168,7 +209,10 @@ def render_pdf(md: pathlib.Path, pdf: pathlib.Path,
         pdf.unlink(missing_ok=True)
         return False, "the rendered PDF has no extractable text"
     if needs_cjk:
-        want, got = cjk_chars(source), cjk_chars(back)
+        wanted = Counter(_CJK.findall(source))
+        observed = Counter(_CJK.findall(back))
+        want = sum(wanted.values())
+        got = sum((wanted & observed).values())
         # A PDF that silently dropped its CJK reads back as zero, so any large
         # shortfall is the failure this check exists for. Some loss is normal --
         # pandoc drops table furniture and code fences.
@@ -183,12 +227,9 @@ def render_pdf(md: pathlib.Path, pdf: pathlib.Path,
 def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
             make_pdf: bool = True) -> tuple[list[pathlib.Path], list[str]]:
     written, notes = [], []
-    font = None
+    fonts = {}
     sources = [p for p in sorted(workspace.rglob("*"))
                if p.is_file() and is_deliverable(p, workspace)]
-    if make_pdf and any(p.suffix == ".md" and has_cjk(
-            p.read_text(encoding="utf-8", errors="replace")) for p in sources):
-        font = pick_cjk_font()
 
     claimed: dict = {}
     for src in sources:
@@ -218,7 +259,11 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
         if make_pdf and src.suffix == ".md":
             pdf = target.with_suffix(".pdf")
             try:
-                ok, why = render_pdf(src, pdf, font)
+                source = visible_markdown(src)
+                glyphs = frozenset(_CJK.findall(source))
+                if glyphs and glyphs not in fonts:
+                    fonts[glyphs] = pick_cjk_font(source)
+                ok, why = render_pdf(src, pdf, fonts.get(glyphs))
             except OSError as exc:
                 ok, why = False, str(exc)
             if ok:

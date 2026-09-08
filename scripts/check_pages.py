@@ -27,6 +27,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import unicodedata
 import zlib
 
@@ -401,11 +402,57 @@ def findings_for(cv_pdf, profile, today_year: int, letter_pdf=None) -> list:
     return out
 
 
+def docx_findings(cv_docx, profile, today_year, letter_docx=None):
+    """Measure an independent Office render, never infer DOCX pages from LaTeX.
+
+    A private LibreOffice profile prevents a running GUI instance from swallowing
+    the conversion request. Temporary PDFs and settings are deleted on exit.
+    """
+    documents = [(pathlib.Path(p), letter) for p, letter in
+                 [(cv_docx, False), (letter_docx, True)] if p and pathlib.Path(p).exists()]
+    if not documents:
+        return []
+    office = shutil.which("soffice") or shutil.which("libreoffice")
+    if not office:
+        return ["DOCX_NOT_MEASURED: install LibreOffice to check the delivered Word "
+                "files; the LaTeX PDF page count does not validate DOCX"]
+    out = []
+    with tempfile.TemporaryDirectory(prefix="jobhunt-office-") as temp:
+        root = pathlib.Path(temp)
+        for index, (docx, is_letter) in enumerate(documents):
+            folder = root / str(index)
+            folder.mkdir()
+            try:
+                result = subprocess.run(
+                    [office, "-env:UserInstallation=" + (root / "profile").as_uri(),
+                     "--headless", "--convert-to", "pdf", "--outdir", str(folder),
+                     str(docx.resolve())], capture_output=True, text=True,
+                    timeout=60, check=False)
+                pdf = folder / (docx.stem + ".pdf")
+                if result.returncode or not pdf.is_file():
+                    out.append(f"DOCX_NOT_MEASURED: {docx.name} could not be exported by LibreOffice")
+                    continue
+                if is_letter:
+                    pages = page_count(pdf)
+                    problems = (["UNREADABLE_PDF: no readable page tree"] if pages is None
+                                else [f"LETTER_TOO_LONG: {pages} pages; maximum is 1"]
+                                if pages > 1 else [])
+                else:
+                    problems = findings_for(pdf, profile, today_year)
+                out.extend(f"{problem.split(':', 1)[0]}: Word file {docx.name}: "
+                           f"{problem.split(':', 1)[-1].strip()}" for problem in problems)
+            except (OSError, subprocess.SubprocessError) as exc:
+                out.append(f"DOCX_NOT_MEASURED: {docx.name}: {exc}")
+    return out
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--workspace", required=True)
     ap.add_argument("--cv", default=None, help="default: <workspace>/cv.pdf")
     ap.add_argument("--letter", default=None, help="default: <workspace>/letter.pdf")
+    ap.add_argument("--cv-docx", default=None, help="default: <workspace>/cv.docx, if present")
+    ap.add_argument("--letter-docx", default=None, help="default: <workspace>/letter.docx, if present")
     ap.add_argument("--profile", default=None,
                     help="default: <workspace>/tailored-profile.yaml")
     ap.add_argument("--today", default=None, help="YYYY-MM-DD; default: today")
@@ -435,9 +482,17 @@ def main(argv=None) -> int:
         print(f"cannot run {GATE}: {exc}", file=sys.stderr)
         return 2
     findings = findings_for(cv, profile, today_year, letter)
+    cv_docx = pathlib.Path(args.cv_docx) if args.cv_docx else ws / "cv.docx"
+    letter_docx = pathlib.Path(args.letter_docx) if args.letter_docx else ws / "letter.docx"
+    for requested in (args.cv_docx, args.letter_docx):
+        if requested and not pathlib.Path(requested).is_file():
+            findings.append(f"DOCX_NOT_MEASURED: explicitly requested file {requested} is missing")
+    findings += docx_findings(cv_docx, profile, today_year, letter_docx)
     for f in findings:
         print(f)
-    journal.receipt(ws, GATE, {cv.name: journal.sha256_file(cv)},
+    inputs = {p.name: journal.sha256_file(p) for p in
+              (cv, letter, cv_docx, letter_docx, prof) if p.is_file()}
+    journal.receipt(ws, GATE, inputs,
                     "fail" if findings else "pass", findings)
     return 1 if findings else 0
 
