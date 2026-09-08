@@ -116,6 +116,24 @@ python3 scripts/doctor.py
 
 `doctor.py` 会尝试实际生成 PDF，并说明缺少的能力。它的 `--install` 只安装 Python 包，系统工具按报告中的指引安装。
 
+### 配置 OpenCLI 的 Chrome 扩展
+
+**这一步需要你在 Chrome 中手动完成。** `npm install` 和 `doctor.py --install` 都不会替你安装浏览器扩展。选择的是解压后的文件夹，不是 ZIP 文件，也不是 `manifest.json` 文件本身。若提示找不到清单文件，说明选错了目录层级；若扩展已加载但仍显示未连接，确认它在当前使用的 Chrome 个人资料中处于启用状态，再运行 `opencli doctor` 检查。
+
+实时检索使用浏览器适配器时，**仅安装 OpenCLI 命令行还不够，还需要 OpenCLI Browser Bridge 扩展**。
+
+```bash
+npm install -g @jackwener/opencli
+opencli doctor
+```
+
+从 [OpenCLI 官方 Releases](https://github.com/jackwener/opencli/releases) 下载 Browser Bridge 扩展压缩包，解压到一个长期保留的目录。打开 Chrome 地址栏中的 `chrome://extensions/`，开启「开发者模式」，点击「加载已解压的扩展程序」，选择直接包含 `manifest.json` 的文件夹。安装前检查 Chrome 显示的扩展权限。
+
+再次运行 `opencli doctor`，确认 **Extension: connected** 和 **Connectivity: connected**。只看到 CLI 或 daemon 正常并不表示浏览器已连接。扩展目录不要移动或删除。macOS 文件选择窗口中，按 `Command + Shift + G` 可以粘贴完整目录路径；以 `.` 开头的文件夹默认隐藏。
+
+平台账号登录由你在浏览器中完成。Browser Bridge 已连接不等于招聘网站已经登录，也不保证所有平台都能读取。
+
+
 ## 地区、平台与语言
 
 找岗流程通过 `opencli` 适配器读取岗位。仓库的来源目录包含 51job、Indeed、LinkedIn 和 BOSS 直聘等平台，并区分登录要求、岗位来源与面经来源。平台能否读取，以运行时状态为准。当前记录的 Indeed 适配器面向美国站，其他市场不能仅改城市名就假定检索正确。详见[来源目录](references/discovery-sources.md)和[来源使用规则](references/source-policy.md)（英文）。

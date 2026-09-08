@@ -116,6 +116,24 @@ El comando de activación anterior es para macOS/Linux; en Windows, utiliza el s
 
 `doctor.py` intenta generar un PDF real e informa de las capacidades que faltan. Su opción `--install` solo instala paquetes de Python; sigue las indicaciones del informe para instalar herramientas del sistema.
 
+### Configura la extensión de Chrome de OpenCLI
+
+**Este paso se completa manualmente en Chrome.** Ni `npm install` ni `doctor.py --install` instalan la extensión. Selecciona la carpeta descomprimida, no el ZIP ni el archivo `manifest.json`. Si no se encuentra el manifiesto, revisa el nivel de carpeta seleccionado. Si la extensión está cargada pero desconectada, comprueba que esté activada en el perfil de Chrome que utilizas y vuelve a ejecutar `opencli doctor`.
+
+Para obtener ofertas mediante el navegador, **la CLI de OpenCLI también necesita la extensión OpenCLI Browser Bridge**.
+
+```bash
+npm install -g @jackwener/opencli
+opencli doctor
+```
+
+Descarga el archivo de la extensión Browser Bridge desde las [versiones oficiales de OpenCLI](https://github.com/jackwener/opencli/releases) y descomprímelo en una carpeta permanente. Introduce `chrome://extensions/` en Chrome, activa el **Modo de desarrollador**, pulsa **Cargar descomprimida** y selecciona la carpeta que contiene directamente `manifest.json`. Revisa los permisos que muestra Chrome antes de instalarla.
+
+Ejecuta de nuevo `opencli doctor` y confirma **Extension: connected** y **Connectivity: connected**. Que funcionen la CLI o el daemon no significa que el navegador esté conectado. No muevas ni borres la carpeta de la extensión. En el selector de archivos de macOS, pulsa `Command + Shift + G` para pegar la ruta completa; las carpetas que empiezan por `.` están ocultas de forma predeterminada.
+
+Inicia sesión en las plataformas de empleo personalmente desde el navegador. Una conexión con Browser Bridge no confirma la sesión de cada plataforma ni garantiza el acceso a todos los sitios.
+
+
 ## Mercados, plataformas e idiomas
 
 La búsqueda obtiene ofertas mediante adaptadores de `opencli`. El catálogo del repositorio incluye 51job, Indeed, LinkedIn y BOSS Zhipin, y distingue entre requisitos de acceso, ofertas de empleo y fuentes de experiencias de entrevistas. La disponibilidad se comprueba al ejecutar la búsqueda. El adaptador de Indeed documentado actualmente está orientado al sitio estadounidense; cambiar solo la ciudad no garantiza una búsqueda correcta en otro mercado. Consulta el [catálogo de fuentes](references/discovery-sources.md) y la [política de uso](references/source-policy.md), en inglés.

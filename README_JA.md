@@ -116,6 +116,24 @@ python3 scripts/doctor.py
 
 `doctor.py` は実際に PDF を生成して、不足する機能を報告します。`--install` がインストールするのは Python パッケージだけです。システムツールはレポートの案内に従って導入してください。
 
+### OpenCLI の Chrome 拡張機能を設定する
+
+**この手順は Chrome で手動で行ってください。** `npm install` や `doctor.py --install` は拡張機能をインストールしません。ZIP や `manifest.json` 自体ではなく、展開したフォルダーを選びます。マニフェストが見つからない場合はフォルダーの階層を確認してください。読み込み済みでも未接続の場合は、使用中の Chrome プロファイルで拡張機能が有効か確認し、`opencli doctor` を再実行します。
+
+ブラウザーを使った求人取得には、**OpenCLI CLI に加えて OpenCLI Browser Bridge 拡張機能が必要**です。
+
+```bash
+npm install -g @jackwener/opencli
+opencli doctor
+```
+
+[OpenCLI 公式 Releases](https://github.com/jackwener/opencli/releases) から Browser Bridge の拡張機能アーカイブをダウンロードし、保存し続けるフォルダーに展開します。Chrome のアドレスバーに `chrome://extensions/` と入力し、「デベロッパー モード」を有効にして「パッケージ化されていない拡張機能を読み込む」から `manifest.json` が直接入っているフォルダーを選びます。インストール前に Chrome が表示する権限を確認してください。
+
+再度 `opencli doctor` を実行し、**Extension: connected** と **Connectivity: connected** を確認します。CLI や daemon が動くだけでは、ブラウザーの接続は確認できません。拡張機能のフォルダーは移動・削除しないでください。macOS のファイル選択画面では `Command + Shift + G` でフルパスを入力できます。`.` で始まるフォルダーは通常非表示です。
+
+求人サイトへのログインはブラウザー上でご自身で行ってください。Browser Bridge の接続は、求人サイトのログインや全サイトの読み取り成功を保証しません。
+
+
 ## 地域・プラットフォーム・言語
 
 求人検索は `opencli` のアダプターを通じて行います。リポジトリの出典一覧には 51job、Indeed、LinkedIn、BOSS 直聘などが含まれ、ログインの要否、求人情報、面接体験談を区別しています。実際に取得できるかは実行時に確認します。現在記録されている Indeed アダプターは米国サイト向けなので、都市名を変えるだけでは他国を正しく検索できるとは限りません。[出典一覧](references/discovery-sources.md)と[利用ルール](references/source-policy.md)（英語）を参照してください。

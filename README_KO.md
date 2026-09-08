@@ -116,6 +116,24 @@ python3 scripts/doctor.py
 
 `doctor.py`는 실제 PDF 생성을 시도하고 부족한 기능을 알려 줍니다. `--install`은 Python 패키지만 설치하며, 시스템 도구는 보고서의 안내에 따라 설치합니다.
 
+### OpenCLI Chrome 확장 프로그램 설정
+
+**이 단계는 Chrome에서 직접 진행해야 합니다.** `npm install`이나 `doctor.py --install`은 확장 프로그램을 설치하지 않습니다. ZIP 파일이나 `manifest.json` 파일 자체가 아닌 압축을 푼 폴더를 선택하세요. 매니페스트를 찾을 수 없다면 폴더의 단계가 잘못된 것입니다. 로드했는데도 연결되지 않으면 현재 사용하는 Chrome 프로필에서 확장 프로그램이 활성화되어 있는지 확인한 뒤 `opencli doctor`를 다시 실행하세요.
+
+브라우저를 통한 실시간 채용 정보 수집에는 **OpenCLI CLI뿐 아니라 OpenCLI Browser Bridge 확장 프로그램도 필요**합니다.
+
+```bash
+npm install -g @jackwener/opencli
+opencli doctor
+```
+
+[OpenCLI 공식 Releases](https://github.com/jackwener/opencli/releases)에서 Browser Bridge 확장 프로그램 압축 파일을 다운로드하고 계속 보관할 폴더에 압축을 풉니다. Chrome 주소창에 `chrome://extensions/`를 입력하고 **개발자 모드**를 켠 뒤 **압축해제된 확장 프로그램을 로드합니다**를 눌러 `manifest.json`이 바로 들어 있는 폴더를 선택합니다. 설치 전에 Chrome에 표시되는 권한을 확인하세요.
+
+`opencli doctor`를 다시 실행해 **Extension: connected**와 **Connectivity: connected**를 확인합니다. CLI나 daemon이 실행 중이라는 것만으로 브라우저 연결이 확인되지는 않습니다. 확장 프로그램 폴더를 이동하거나 삭제하지 마세요. macOS 파일 선택 창에서 `Command + Shift + G`를 누르면 전체 경로를 붙여넣을 수 있습니다. `.`으로 시작하는 폴더는 기본적으로 숨겨져 있습니다.
+
+채용 사이트 로그인은 브라우저에서 직접 진행하세요. Browser Bridge 연결이 사이트 로그인 상태나 모든 사이트의 정상 수집을 보장하지는 않습니다.
+
+
 ## 지역, 플랫폼, 언어
 
 공고 탐색은 `opencli` 어댑터를 통해 이루어집니다. 저장소의 출처 목록에는 51job, Indeed, LinkedIn, BOSS 直聘 등이 있으며 로그인 요건, 채용 공고, 면접 후기 출처를 구분합니다. 실제 접근 가능 여부는 실행 시점에 확인합니다. 현재 기록된 Indeed 어댑터는 미국 사이트용이므로 도시명만 바꿔 다른 국가의 검색이 올바르게 이루어졌다고 판단하면 안 됩니다. [출처 목록](references/discovery-sources.md)과 [출처 이용 규칙](references/source-policy.md)(영어)을 참고하세요.
