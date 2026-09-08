@@ -23,6 +23,7 @@ import os
 import pathlib
 import re
 import subprocess
+import sys
 
 import pytest
 import yaml
@@ -98,7 +99,8 @@ def run_stub(fixture, *args, fixture_path=None):
         env.pop("JOBHUNT_EVAL_FIXTURE", None)
     else:
         env["JOBHUNT_EVAL_FIXTURE"] = str(path)
-    return subprocess.run([str(STUB), *args], capture_output=True, text=True,
+    return subprocess.run([sys.executable, str(STUB), *args], capture_output=True,
+                          text=True, encoding="utf-8",
                           env=env)
 
 

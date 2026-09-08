@@ -42,7 +42,7 @@ import consistency
 import count_coverage
 import journal
 
-# The four shapes. `unreadable` is applied by chmod, not by content.
+# The four shapes. `unreadable` raises PermissionError at the file read.
 UNPARSEABLE = 'verdict: "unclosed\neffort: quick\n'
 TOP_LEVEL_LIST = "- verdict: strong_apply\n- effort: quick\n"
 TOP_LEVEL_STRING = "just a sentence somebody pasted instead of a document\n"
@@ -62,12 +62,6 @@ GOOD_PROFILE = """personal:
   name: Test User
   email: test@example.com
 """
-
-root_only = pytest.mark.skipif(
-    hasattr(os, "geteuid") and os.geteuid() == 0,
-    reason="chmod 000 does not stop root, so the unreadable shape cannot be staged",
-)
-
 
 def workspace(tmp_path):
     """A workspace shaped like the real one — profile_dir_of() has to resolve."""
@@ -183,17 +177,13 @@ def test_a_malformed_file_is_exit_2_with_a_receipt(tmp_path, capsys, module,
     assert not finding.startswith("NO_INPUT")
 
 
-@root_only
 @pytest.mark.parametrize("module,filename,good,extra,quiet_exit", GATES)
 def test_an_unreadable_file_is_exit_2_with_a_receipt(tmp_path, capsys, module,
                                                      filename, good, extra,
-                                                     quiet_exit):
+                                                     quiet_exit, deny_file_reads):
     ws = stage(tmp_path, filename, good, extra, None)
-    (ws / filename).chmod(0o000)
-    try:
-        code = module.main(["--workspace", str(ws)])
-    finally:
-        (ws / filename).chmod(0o644)
+    deny_file_reads(ws / filename)
+    code = module.main(["--workspace", str(ws)])
     assert code == 2, capsys.readouterr()
     found = receipts(ws, module.GATE)
     assert len(found) == 1

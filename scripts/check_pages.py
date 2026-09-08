@@ -197,7 +197,7 @@ def _pdftotext(path) -> str:
         return ""
     try:
         proc = subprocess.run([exe, "-q", str(path), "-"], capture_output=True,
-                              text=True, errors="replace", timeout=60)
+                              text=True, encoding="utf-8", errors="replace", timeout=60)
     except (OSError, subprocess.SubprocessError):
         return ""
     return proc.stdout if proc.returncode == 0 else ""
@@ -426,7 +426,7 @@ def docx_findings(cv_docx, profile, today_year, letter_docx=None):
                 result = subprocess.run(
                     [office, "-env:UserInstallation=" + (root / "profile").as_uri(),
                      "--headless", "--convert-to", "pdf", "--outdir", str(folder),
-                     str(docx.resolve())], capture_output=True, text=True,
+                     str(docx.resolve())], capture_output=True, text=True, encoding="utf-8",
                     timeout=60, check=False)
                 pdf = folder / (docx.stem + ".pdf")
                 if result.returncode or not pdf.is_file():
@@ -441,7 +441,7 @@ def docx_findings(cv_docx, profile, today_year, letter_docx=None):
                     problems = findings_for(pdf, profile, today_year)
                 out.extend(f"{problem.split(':', 1)[0]}: Word file {docx.name}: "
                            f"{problem.split(':', 1)[-1].strip()}" for problem in problems)
-            except (OSError, subprocess.SubprocessError) as exc:
+            except (OSError, UnicodeError, subprocess.SubprocessError) as exc:
                 out.append(f"DOCX_NOT_MEASURED: {docx.name}: {exc}")
     return out
 
@@ -498,4 +498,7 @@ def main(argv=None) -> int:
 
 
 if __name__ == "__main__":
+    from cli_io import configure_output
+
+    configure_output()
     sys.exit(main())

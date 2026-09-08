@@ -269,4 +269,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from cli_io import configure_output
+
+    configure_output()
     raise SystemExit(main())

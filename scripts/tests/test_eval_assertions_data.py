@@ -397,6 +397,6 @@ def test_the_real_file_passes_the_script_as_ci_invokes_it():
     import subprocess
     proc = subprocess.run(
         [sys.executable, str(EVALS / "lint_assertions.py")],
-        capture_output=True, text=True, cwd=str(REPO))
+        capture_output=True, text=True, encoding="utf-8", cwd=str(REPO))
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert proc.stdout == ""

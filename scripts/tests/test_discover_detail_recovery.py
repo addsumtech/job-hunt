@@ -16,7 +16,7 @@ def classify(workspace, command, path):
                              '--workspace', str(workspace), '--site', 'indeed',
                              '--command', command, '--exit-code', '0', '--stdout-file', str(path),
                              '--command-line', f'opencli indeed {command} synthetic-recovery-001 -f json'],
-                            text=True, capture_output=True)
+                            text=True, encoding="utf-8", capture_output=True)
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout)
 

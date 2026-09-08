@@ -45,7 +45,7 @@ def documented_invocations():
 def accepted_flags(script):
     """Long flags this script's argparse actually accepts."""
     help_text = subprocess.run([sys.executable, str(SCRIPTS / f"{script}.py"), "--help"],
-                               capture_output=True, text=True).stdout
+                               capture_output=True, text=True, encoding="utf-8").stdout
     return set(re.findall(r"(--[a-z][a-z-]*)", help_text))
 
 
@@ -75,9 +75,9 @@ def test_following_the_documented_mode_entry_does_not_trip_the_gate(tmp_path):
     subprocess.run([sys.executable, str(SCRIPTS / "enter_mode.py"),
                     "--workspace", str(tmp_path), "--mode", "apply",
                     "--because", "user pasted a posting and asked for a CV"],
-                   capture_output=True, text=True, check=True)
+                   capture_output=True, text=True, encoding="utf-8", check=True)
     r = subprocess.run([sys.executable, str(SCRIPTS / "check_apply.py"),
-                        "--workspace", str(tmp_path)], capture_output=True, text=True)
+                        "--workspace", str(tmp_path)], capture_output=True, text=True, encoding="utf-8")
     assert "MODE_UNEXPLAINED" not in r.stdout + r.stderr
 
 
@@ -98,7 +98,7 @@ def test_the_ci_convention_command_is_the_one_ci_runs():
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
     assert "check_conventions.py --ci" in makefile
     r = subprocess.run([sys.executable, str(SCRIPTS / "check_conventions.py"), "--all"],
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, encoding="utf-8")
     assert r.returncode == 2, "if --all starts working, the doc may name it again"
 
 

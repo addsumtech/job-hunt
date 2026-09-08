@@ -305,7 +305,7 @@ def _statement_gate(text, tmp_path):
     (tmp_path / "supporting-statement.md").write_text(text, encoding="utf-8")
     (tmp_path / "posting.yaml").write_text("application_type: structured\n", encoding="utf-8")
     r = subprocess.run([sys.executable, str(ROOT / "scripts" / "check_word_limits.py"),
-                        "--workspace", str(tmp_path)], capture_output=True, text=True)
+                        "--workspace", str(tmp_path)], capture_output=True, text=True, encoding="utf-8")
     return r.stdout
 
 

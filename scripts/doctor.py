@@ -137,8 +137,8 @@ def can_reach_browser() -> tuple[bool, str]:
         return False, "opencli is not installed"
     try:
         result = subprocess.run(["opencli", "doctor"], capture_output=True,
-                                text=True, timeout=15, check=False)
-    except (OSError, subprocess.SubprocessError) as exc:
+                                text=True, encoding="utf-8", timeout=15, check=False)
+    except (OSError, UnicodeError, subprocess.SubprocessError) as exc:
         return False, f"browser health check could not complete: {exc}"
     output = re.sub(r"\x1b\[[0-9;]*m", "", (result.stdout or "") + (result.stderr or ""))
     if re.search(r"\[(?:MISSING|FAIL)\]", output, re.I):
@@ -197,7 +197,7 @@ def install_python(missing: list[dict]) -> int:
     installed = 0
     for c in missing:
         print(f"installing: {c['fix']}")
-        r = subprocess.run(c["fix"].split(), capture_output=True, text=True)
+        r = subprocess.run(c["fix"].split(), capture_output=True, text=True, encoding="utf-8")
         if r.returncode == 0:
             installed += 1
             print(f"  ok: {c['what']}")
@@ -252,4 +252,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from cli_io import configure_output
+
+    configure_output()
     sys.exit(main())

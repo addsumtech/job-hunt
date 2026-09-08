@@ -195,7 +195,7 @@ def _pytest(cwd: pathlib.Path, targets: list) -> bool:
     for name in DESELECT:
         argv += ["--ignore", str(cwd / "scripts" / "tests" / name)]
     argv += [str(cwd / "scripts" / "tests" / t) for t in targets] if targets else [str(cwd / "scripts" / "tests")]
-    proc = subprocess.run(argv, cwd=str(cwd), capture_output=True, text=True)
+    proc = subprocess.run(argv, cwd=str(cwd), capture_output=True, text=True, encoding="utf-8")
     return proc.returncode == 0
 
 
@@ -363,4 +363,7 @@ def main(argv=None) -> int:
 
 
 if __name__ == "__main__":
+    from cli_io import configure_output
+
+    configure_output()
     sys.exit(main())

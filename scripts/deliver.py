@@ -47,6 +47,7 @@ import sys
 import tempfile
 
 import journal
+from render_cv import has_rtl
 
 SKIP_DIRS = {"raw"}
 SKIP_NAMES = {"journal.jsonl", ".DS_Store", "master-fingerprint.json"}
@@ -139,9 +140,9 @@ def _pandoc(md: pathlib.Path, pdf: pathlib.Path, font: str | dict | None) -> boo
 def pdf_text(pdf: pathlib.Path) -> str:
     try:
         r = subprocess.run(["pdftotext", str(pdf), "-"], capture_output=True,
-                           timeout=60, text=True, check=False)
+                           timeout=60, text=True, encoding="utf-8", check=False)
         return r.stdout or ""
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, UnicodeError, subprocess.SubprocessError):
         return ""
 
 
@@ -153,11 +154,11 @@ def visible_markdown(md: pathlib.Path) -> str:
     source = md.read_text(encoding="utf-8", errors="replace")
     try:
         result = subprocess.run(["pandoc", str(md), "-t", "plain", "--wrap=none"],
-                                capture_output=True, text=True, timeout=60,
+                                capture_output=True, text=True, encoding="utf-8", timeout=60,
                                 check=False)
         if result.returncode == 0:
             return result.stdout
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, UnicodeError, subprocess.SubprocessError):
         pass
     return source
 
@@ -195,6 +196,13 @@ def render_pdf(md: pathlib.Path, pdf: pathlib.Path,
                font: str | dict | None) -> tuple[bool, str]:
     """Render, then READ IT BACK. A PDF that dropped characters is not a PDF."""
     source = visible_markdown(md)
+    if has_rtl(source):
+        # Delivery must not rebuild a PDF that the CV renderer refused. A
+        # nonempty English header does not prove the RTL body survived.
+        pdf.unlink(missing_ok=True)
+        pdf.with_suffix(".tex").unlink(missing_ok=True)
+        return False, ("right-to-left text is not supported by this PDF path; "
+                       "Markdown and .docx still ship")
     needs_cjk = has_cjk(source)
     if needs_cjk and font is None:
         return False, ("no CJK font on this machine that survives a render "
@@ -336,4 +344,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from cli_io import configure_output
+
+    configure_output()
     sys.exit(main())

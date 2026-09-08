@@ -48,7 +48,7 @@ WRONG_SHAPES = ["a string", ["a", "list"], {"a": "dict"}, None, 42, True]
 def run_gate(gate, workspace):
     r = subprocess.run([sys.executable, str(SCRIPTS / f"{gate}.py"),
                         "--workspace", str(workspace)],
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, encoding="utf-8")
     journal = workspace / "journal.jsonl"
     receipts = (len([l for l in journal.read_text(encoding="utf-8").splitlines() if l.strip()])
                 if journal.exists() else 0)
@@ -126,7 +126,7 @@ def test_a_malformed_profile_is_exit_2_not_a_traceback(tmp_path, key, wrong):
     profile.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
     r = subprocess.run([sys.executable, str(SCRIPTS / "render_cv.py"), str(profile),
                         "--format", "md", "--out", str(tmp_path / "cv.md")],
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, encoding="utf-8")
     assert "Traceback" not in r.stderr, r.stderr[-400:]
     assert r.returncode in (0, 2), f"exit {r.returncode}: {r.stderr[-300:]}"
     if r.returncode == 2:

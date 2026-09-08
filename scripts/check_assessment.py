@@ -252,7 +252,7 @@ def check(workspace: pathlib.Path, market_dir: pathlib.Path,
     corpus = prediction.capture_corpus(workspace)
     for path in prediction.target_files(workspace):
         findings += prediction.scan_text(path.read_text(encoding="utf-8"),
-                                         str(path.relative_to(workspace)), corpus)
+                                         path.relative_to(workspace).as_posix(), corpus)
 
     # 4. Consistency notices must be attached where they fired.
     for notice in consistency.notices(assessment):
@@ -468,4 +468,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from cli_io import configure_output
+
+    configure_output()
     raise SystemExit(main())

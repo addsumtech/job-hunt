@@ -222,7 +222,7 @@ def artifacts(tmp_path):
 
 def test_every_profile_field_has_a_declared_cross_format_expectation():
     """A new field in the schema cannot skip parity by being forgotten here."""
-    raw = yaml.safe_load((FIXTURES / "parity_profile.yaml").read_text())
+    raw = yaml.safe_load((FIXTURES / "parity_profile.yaml").read_text(encoding="utf-8"))
     seen = {_pattern_key(p) for p, _ in walk(raw)}
     undeclared = sorted(seen - set(SURFACES))
     assert not undeclared, (
@@ -236,7 +236,7 @@ def test_the_parity_fixture_exercises_every_field_the_example_profile_declares()
     """The shipped example has six EMPTY list sections and no `summary`, so it
     cannot drive this test — it never reaches the `simple_list` branch at all."""
     example = yaml.safe_load(
-        (pathlib.Path(__file__).resolve().parents[2] / "assets/profile.example.yaml").read_text())
+        (pathlib.Path(__file__).resolve().parents[2] / "assets/profile.example.yaml").read_text(encoding="utf-8"))
     example_keys = {_pattern_key(p) for p, _ in walk(example)}
     fixture_keys = set(SURFACES)
     missing = sorted(example_keys - fixture_keys)

@@ -157,7 +157,7 @@ def test_it_runs_as_a_script(tmp_path):
     write(src, "en", "X")
     r = subprocess.run([sys.executable, str(REPO / "scripts" / "save_profile.py"),
                         "--name", "demo", "--profile", str(src), "--dry-run"],
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, encoding="utf-8")
     assert r.returncode == 0, r.stderr
 
 
@@ -239,7 +239,7 @@ def test_the_provenance_gate_reaches_opposite_verdicts_on_the_two_masters(store,
             r = subprocess.run(
                 [sys.executable, str(REPO / "scripts" / "check_claims.py"),
                  "--workspace", str(ws), "--master", str(master), *extra],
-                capture_output=True, text=True, env=env)
+                capture_output=True, text=True, encoding="utf-8", env=env)
         return r.returncode, r.stdout
 
     zh_cv = "meta: {name: 李维, language: zh}\nskills: {programming: [Python, CUDA]}\n"
@@ -271,7 +271,7 @@ def test_the_finding_names_the_master_it_actually_read(store, tmp_path):
         r = subprocess.run(
             [sys.executable, str(REPO / "scripts" / "check_claims.py"),
              "--workspace", str(ws), "--master", str(master), *extra],
-            capture_output=True, text=True, env=env)
+            capture_output=True, text=True, encoding="utf-8", env=env)
     assert "profile.zh.yaml" in r.stdout, r.stdout
 
 

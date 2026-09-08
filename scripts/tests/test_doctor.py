@@ -142,7 +142,7 @@ def test_install_never_shells_out_for_a_system_binary(monkeypatch):
 
 def test_it_runs_as_a_script():
     r = subprocess.run([sys.executable, str(REPO / "scripts" / "doctor.py")],
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, encoding="utf-8")
     assert r.returncode in (0, 1), r.stderr
     assert "job-hunt environment" in r.stdout
 

@@ -2143,8 +2143,9 @@ def _discard_pdf(out_path, tex_path=None):
 
     Deleting is right rather than leaving-and-warning: a warning on stderr is
     read by the agent, but the file is read by the employer, and only one of
-    those two is still around at submission time. The `.tex` always stays — it is
-    a deliverable in its own right and it is what the user recompiles.
+    those two is still around at submission time. The `.tex` stays unless the
+    RTL branch explicitly refuses it too; otherwise it is a deliverable in its
+    own right and it is what the user recompiles.
     """
     out_path = pathlib.Path(out_path)
     candidates = [out_path]
@@ -2181,7 +2182,7 @@ def compile_latex(engine, tex_path, out_path, reasons=None):
     tex_path, out_path = pathlib.Path(tex_path), pathlib.Path(out_path)
     cmd = _engine_cmd(engine, tex_path, out_path.parent)
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
+        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     except (OSError, subprocess.CalledProcessError):
         # OSError is the real one: find_latex_engine can return a path from
         # _ENGINE_DIRS that turns out not to be executable. CalledProcessError
@@ -2312,6 +2313,10 @@ def render_pdf(profile, out_path, reasons=None):
     _discard_pdf(out_path, tex_path)
 
     if profile_has_rtl(profile):
+        # A prior non-RTL render may have left a compilable source here. RTL
+        # refuses that artifact too; retaining it would also make the CLI claim
+        # it had just written a source for this profile.
+        tex_path.unlink(missing_ok=True)
         print("WARNING: this profile contains right-to-left text (Arabic, Hebrew "
               "or similar). The LaTeX template has no bidi support, so a PDF "
               "built from it would come out reversed and unshaped — a document "
@@ -2481,4 +2486,7 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    from cli_io import configure_output
+
+    configure_output()
     sys.exit(main())

@@ -669,7 +669,7 @@ def main(argv: list[str] | None = None) -> int:
     hashes: dict[str, str] = {}
     for path in files:
         try:
-            relative = str(path.relative_to(workspace))
+            relative = path.relative_to(workspace).as_posix()
         except ValueError:
             relative = path.name
         hashes[relative] = journal.sha256_file(path)
@@ -683,4 +683,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from cli_io import configure_output
+
+    configure_output()
     raise SystemExit(main())
