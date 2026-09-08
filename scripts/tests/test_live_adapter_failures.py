@@ -41,3 +41,18 @@ def test_invalid_stop_signal_configuration_cannot_silently_disable_detection(tmp
         p.write_text(text)
     with pytest.raises(journal.YamlUnreadable):
         classifier.load_signals(p)
+
+
+def test_actual_51job_machine_readable_anti_bot_response_stops_site():
+    raw = (pathlib.Path(__file__).parent / 'fixtures/51job-anti-bot.err').read_text()
+    result = classifier.classify('51job', 'search', 1, '', raw,
+                                 signals=classifier.load_signals(classifier.DEFAULT_SIGNALS_FILE))
+    assert result['classification'] == 'platform_limit'
+    assert result['signal_id'] == 'opencli-anti-bot'
+    assert 'do not retry' in result['remedy']
+
+
+def test_anti_bot_code_survives_json_output_and_different_wording():
+    result = classifier.classify('51job', 'search', 1, '',
+                                '{"error":{"code":"ANTI_BOT","message":"request refused"}}')
+    assert result['classification'] == 'platform_limit'

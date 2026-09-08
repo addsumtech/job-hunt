@@ -157,6 +157,15 @@ def _error_message(stderr_text):
     return text
 
 
+def _error_code(stderr_text):
+    try:
+        body = yaml.safe_load(stderr_text or "")
+    except yaml.YAMLError:
+        return None
+    error = body.get("error") if isinstance(body, dict) else None
+    return error.get("code") if isinstance(error, dict) else None
+
+
 def classify(site, command, exit_code, stdout_text, stderr_text,
              auth_rows=None, signals=()):
     """Classify one invocation. Returns a JSON-serialisable dict."""
@@ -181,6 +190,17 @@ def classify(site, command, exit_code, stdout_text, stderr_text,
     if exit_code != 0:
         message = _error_message(stderr_text)
         result["error_message"] = message
+
+        # A machine-readable refusal remains a refusal when its English wording
+        # changes. Measured on 51job 1.8.7: ANTI_BOT / Aliyun WAF slider, which
+        # matched none of the old Chinese-only slider patterns.
+        if _error_code(stderr_text) == "ANTI_BOT":
+            result["classification"] = "platform_limit"
+            result["signal_id"] = "opencli-anti-bot"
+            result["remedy"] = (
+                "OpenCLI reported ANTI_BOT. Stop this site for this round: "
+                "do not retry, refresh the session, or switch tools to route around it.")
+            return result
 
         # Matched against the WHOLE stderr of the failed call, not just the
         # message we extracted from it. `references/risk-control-signals.yaml`
