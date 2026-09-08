@@ -1,0 +1,38 @@
+name: fresh cross-platform audit
+on:
+  push:
+    branches: [audit/fresh-cross-platform-20260908]
+permissions:
+  contents: read
+jobs:
+  portable-suite:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.txt pytest
+      - name: Fresh full suite on this operating system
+        shell: bash
+        run: python -m pytest scripts/tests -q -ra --junitxml=fresh-results.xml > fresh-output.txt 2>&1
+      - name: Structural contracts
+        if: always()
+        shell: bash
+        run: |
+          python scripts/check_skill_lossless.py --baseline 864ad7f
+          python scripts/check_conventions.py --ci
+          python evals/lint_assertions.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fresh-${{ matrix.os }}
+          path: |
+            fresh-output.txt
+            fresh-results.xml
