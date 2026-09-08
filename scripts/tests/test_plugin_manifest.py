@@ -22,7 +22,9 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 PLUGIN = ROOT / ".claude-plugin" / "plugin.json"
 MARKET = ROOT / ".claude-plugin" / "marketplace.json"
 SKILL = ROOT / "SKILL.md"
-READMES = [ROOT / "README.md", ROOT / "README_CN.md"]
+READMES = [ROOT / "README.md"] + [
+    ROOT / f"README_{lang}.md" for lang in ("EN", "JA", "KO", "ES")
+]
 
 
 def _json(p):
