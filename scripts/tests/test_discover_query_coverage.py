@@ -56,7 +56,7 @@ def build(tmp_path, *, target_titles, ran, shortfall=None, rows=1):
 def findings(ws):
     proc = subprocess.run(
         [sys.executable, str(SCRIPTS / "check_shortlist.py"), "--workspace", str(ws)],
-        capture_output=True, text=True, cwd=str(REPO))
+        capture_output=True, text=True, encoding="utf-8", cwd=str(REPO))
     return proc.stdout
 
 

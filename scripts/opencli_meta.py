@@ -32,8 +32,8 @@ def _help_yaml(site, cache_dir, allow_fetch, timeout=60):
         raise MetadataUnavailable("opencli is not on PATH")
     try:
         proc = subprocess.run([binary, site, "--help", "-f", "yaml"],
-                              capture_output=True, text=True, timeout=timeout)
-    except (OSError, subprocess.SubprocessError) as exc:
+                              capture_output=True, text=True, encoding="utf-8", timeout=timeout)
+    except (OSError, UnicodeError, subprocess.SubprocessError) as exc:
         raise MetadataUnavailable(str(exc)) from exc
     if proc.returncode != 0 or not proc.stdout.strip():
         raise MetadataUnavailable(

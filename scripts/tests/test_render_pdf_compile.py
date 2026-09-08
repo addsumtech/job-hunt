@@ -135,7 +135,7 @@ def test_the_engine_log_scan_reads_this_engines_dialect(tmp_path):
                         encoding="utf-8")
     proc = render_cv.subprocess.run(
         render_cv._engine_cmd(engine, tex_path, tmp_path),
-        capture_output=True, text=True, errors="replace")
+        capture_output=True, text=True, encoding="utf-8", errors="replace")
     dropped = render_cv.missing_characters(render_cv._engine_log(proc))
     assert dropped, "the engine reported dropped glyphs and the scan saw none"
     assert any("Ł" in d for d in dropped), dropped[:5]

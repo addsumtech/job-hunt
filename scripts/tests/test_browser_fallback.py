@@ -39,7 +39,11 @@ def setup_capture(tmp_path, page=1, text=None, status=None):
 
 def record(ws, args):
     assert browser.main(args) == 0
-    return browser.read_retrieval_calls(ws)[-1]
+    call = browser.read_retrieval_calls(ws)[-1]
+    assert call["snapshot_file"] == "raw/51job-browser-1.json"
+    assert call["rows_file"] == "raw/51job-browser-1-rows.json"
+    assert set(call["input_hashes"]) == {call["snapshot_file"], call["rows_file"]}
+    return call
 
 
 def test_browser_only_full_shortlist_passes(tmp_path, capsys):

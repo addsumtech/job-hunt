@@ -218,3 +218,46 @@ def test_a_fully_dated_profile_writes_and_is_silent(jp_profile, tmp_path, capsys
     out = tmp_path / "rirekisho.md"
     assert rr.main([str(src), "--format", "md", "--out", str(out)]) == 0
     assert "WARNING" not in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("month", ["01", "12", "00", "13", "123", "000", "001"])
+@pytest.mark.parametrize("field", ["education", "certification"])
+@pytest.mark.parametrize("allow_blank", [False, True])
+def test_calendar_month_boundaries_are_enforced_even_with_blank_date_opt_in(
+        jp_profile, tmp_path, capsys, month, field, allow_blank):
+    import copy
+    import yaml
+
+    profile = copy.deepcopy(jp_profile)
+    profile["certifications"] = ["基本情報技術者試験 合格 (2021)"]
+    if field == "education":
+        profile["education"][0]["start"] = f"2014-{month}"
+    else:
+        profile["certifications"] = [f"基本情報技術者試験 合格 (2021-{month})"]
+    source = tmp_path / "fresh-profile.yaml"
+    source.write_text(yaml.safe_dump(profile, allow_unicode=True), encoding="utf-8")
+    out = tmp_path / "rirekisho.docx"
+    args = [str(source), "--format", "docx", "--out", str(out)]
+    if allow_blank:
+        args.append("--allow-blank-dates")
+    result = rr.main(args)
+    error = capsys.readouterr().err
+    if month in ("01", "12"):
+        assert result == 0 and out.is_file()
+        assert error == ""
+    else:
+        assert result == 1 and not out.exists()
+        assert "INVALID_MONTH" in error and "between 1 and 12" in error
+
+
+def test_history_and_qualification_tables_reserve_the_width_for_prose(jp_profile,
+                                                                    tmp_path):
+    from docx import Document
+
+    out = tmp_path / "rirekisho.docx"
+    rr.render_docx(jp_profile, out)
+    doc = Document(str(out))
+    for table in doc.tables[1:3]:
+        widths = [column.width for column in table.columns]
+        assert widths[2] > sum(widths[:2])
+        assert not table.autofit

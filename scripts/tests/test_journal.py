@@ -238,17 +238,12 @@ def test_a_top_level_mapping_where_a_list_is_expected_raises(tmp_path):
     assert "dict" in str(caught.value) and "list" in str(caught.value)
 
 
-@pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0,
-                    reason="chmod 000 does not stop root")
-def test_an_unreadable_file_raises_rather_than_escaping_as_an_oserror(tmp_path):
+def test_an_unreadable_file_raises_rather_than_escaping_as_an_oserror(tmp_path, deny_file_reads):
     p = tmp_path / "fit-assessment.yaml"
     p.write_text("verdict: worth_applying\n", encoding="utf-8")
-    p.chmod(0o000)
-    try:
-        with pytest.raises(journal.YamlUnreadable) as caught:
-            journal.load_yaml(p)
-    finally:
-        p.chmod(0o644)
+    deny_file_reads(p)
+    with pytest.raises(journal.YamlUnreadable) as caught:
+        journal.load_yaml(p)
     assert str(p) in str(caught.value)
 
 

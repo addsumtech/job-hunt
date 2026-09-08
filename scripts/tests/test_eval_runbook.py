@@ -138,7 +138,7 @@ def test_every_eval_module_runs_as_a_script(module):
     argv = [sys.executable, str(REPO / "evals" / f"{module}.py")]
     if module != "lint_assertions":
         argv += ["--iteration", "/tmp/job-hunt-no-such-iteration"]
-    proc = subprocess.run(argv, capture_output=True, text=True, cwd=str(REPO))
+    proc = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", cwd=str(REPO))
     assert "ModuleNotFoundError" not in proc.stderr, (
         f"{module}.py cannot run as a script:\n{proc.stderr}")
     assert "Traceback" not in proc.stderr, (

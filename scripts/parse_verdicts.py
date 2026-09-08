@@ -141,7 +141,7 @@ def _relative(path, ws) -> str:
     """
     path, ws = pathlib.Path(path), pathlib.Path(ws)
     try:
-        return str(path.resolve().relative_to(ws.resolve()))
+        return path.resolve().relative_to(ws.resolve()).as_posix()
     except ValueError:
         return str(path)
 
@@ -267,4 +267,7 @@ def main(argv=None) -> int:
 
 
 if __name__ == "__main__":
+    from cli_io import configure_output
+
+    configure_output()
     sys.exit(main())

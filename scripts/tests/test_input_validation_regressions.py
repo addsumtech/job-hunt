@@ -71,9 +71,9 @@ def test_ordinary_workspaces_still_pass(mode, tmp_path):
 def test_bad_collection_shape_is_not_iterated_or_silently_ignored(mode, file, key, bad, tmp_path):
     ws, fn, args = setup(mode, tmp_path)
     path = ws / file
-    data = yaml.safe_load(path.read_text())
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
     data[key] = bad
-    path.write_text(yaml.safe_dump(data))
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
     rejects_with_receipt(ws, fn, args)
 
 
@@ -101,7 +101,7 @@ def test_signed_receipt_with_invalid_shape_cannot_authorise_delivery(mode, gate,
 @pytest.mark.parametrize('gate', ['assess', 'refs'])
 def test_bad_evidence_json_is_reported_by_both_readers(bad, gate, tmp_path):
     ws, fn, args = setup('assess', tmp_path)
-    (ws / 'evidence-blocks.json').write_text(bad)
+    (ws / 'evidence-blocks.json').write_text(bad, encoding="utf-8")
     if gate == 'refs':
         fn, args = check_evidence_refs.main, ['--workspace', str(ws), '--check-only']
     rejects_with_receipt(ws, fn, args)
@@ -111,13 +111,13 @@ def test_bad_evidence_json_is_reported_by_both_readers(bad, gate, tmp_path):
 def test_nested_evidence_shape_is_not_a_traceback(bad, tmp_path):
     ws, fn, args = setup('assess', tmp_path)
     p = ws / 'fit-assessment.yaml'
-    data = yaml.safe_load(p.read_text())
+    data = yaml.safe_load(p.read_text(encoding="utf-8"))
     data['requirements'][0]['evidence'] = bad
-    p.write_text(yaml.safe_dump(data))
+    p.write_text(yaml.safe_dump(data), encoding="utf-8")
     rejects_with_receipt(ws, fn, args)
 
 
 def test_empty_interview_brief_is_not_a_finished_apply_package(tmp_path):
     ws, fn, args = setup('apply', tmp_path)
-    (ws / 'interview-brief.md').write_text(' \n')
+    (ws / 'interview-brief.md').write_text(' \n', encoding="utf-8")
     rejects_with_receipt(ws, fn, args)

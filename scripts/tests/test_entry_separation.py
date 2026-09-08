@@ -153,7 +153,7 @@ def test_a_long_heading_keeps_its_dates_with_the_heading(tmp_path):
     assert out.is_file(), "no PDF produced"
     lines = [l.rstrip() for l in subprocess.run(
         ["pdftotext", "-layout", str(out), "-"],
-        capture_output=True, text=True).stdout.split("\n")]
+        capture_output=True, text=True, encoding="utf-8").stdout.split("\n")]
 
     dated = [l for l in lines if "2021-09" in l]
     assert dated, "the MSc dates are not in the PDF text at all"
@@ -180,7 +180,7 @@ def test_every_entry_keeps_its_metadata_with_its_own_heading(tmp_path):
     render_cv.render_pdf(PROFILE, out)
     lines = [l.rstrip() for l in subprocess.run(
         ["pdftotext", "-layout", str(out), "-"],
-        capture_output=True, text=True).stdout.split("\n")]
+        capture_output=True, text=True, encoding="utf-8").stdout.split("\n")]
     for date, owner in (("2022-01", "Senior Engineer"),
                         ("2020-01", "Engineer, Second Company"),
                         ("2021-09", "MSc Computer Science"),

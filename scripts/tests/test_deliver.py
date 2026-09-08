@@ -190,7 +190,7 @@ def test_it_runs_as_a_script(tmp_path):
     dest = tmp_path / "out"
     r = subprocess.run([sys.executable, str(REPO / "scripts" / "deliver.py"),
                         "--workspace", str(ws), "--to", str(dest), "--no-pdf"],
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, encoding="utf-8")
     assert r.returncode == 0, r.stderr
     assert str(dest) in r.stdout, "the path to quote must be printed"
 

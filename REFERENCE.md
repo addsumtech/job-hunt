@@ -203,7 +203,8 @@ Reading one as the other is the mistake this section exists to prevent.
 
 ### `make check` — the code agrees with itself
 
-3223 unit tests, the migration-losslessness check, and the market-table lint.
+The full unit-test suite, the migration-losslessness check, and the market-table lint.
+Use the current run output for the test count; it changes as coverage grows.
 Green means the scripts do what their tests say, no line of the pre-migration
 skill was lost, and every convention entry carries a source and a review date.
 
