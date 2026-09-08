@@ -118,6 +118,8 @@ python3 scripts/doctor.py
 
 ### OpenCLI Chrome 확장 프로그램 설정
 
+**이 단계는 Chrome에서 직접 진행해야 합니다.** `npm install`이나 `doctor.py --install`은 확장 프로그램을 설치하지 않습니다. ZIP 파일이나 `manifest.json` 파일 자체가 아닌 압축을 푼 폴더를 선택하세요. 매니페스트를 찾을 수 없다면 폴더의 단계가 잘못된 것입니다. 로드했는데도 연결되지 않으면 현재 사용하는 Chrome 프로필에서 확장 프로그램이 활성화되어 있는지 확인한 뒤 `opencli doctor`를 다시 실행하세요.
+
 브라우저를 통한 실시간 채용 정보 수집에는 **OpenCLI CLI뿐 아니라 OpenCLI Browser Bridge 확장 프로그램도 필요**합니다.
 
 ```bash

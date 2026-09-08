@@ -118,6 +118,8 @@ python3 scripts/doctor.py
 
 ### OpenCLI の Chrome 拡張機能を設定する
 
+**この手順は Chrome で手動で行ってください。** `npm install` や `doctor.py --install` は拡張機能をインストールしません。ZIP や `manifest.json` 自体ではなく、展開したフォルダーを選びます。マニフェストが見つからない場合はフォルダーの階層を確認してください。読み込み済みでも未接続の場合は、使用中の Chrome プロファイルで拡張機能が有効か確認し、`opencli doctor` を再実行します。
+
 ブラウザーを使った求人取得には、**OpenCLI CLI に加えて OpenCLI Browser Bridge 拡張機能が必要**です。
 
 ```bash

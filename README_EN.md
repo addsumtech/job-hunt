@@ -118,6 +118,8 @@ The activation command above is for macOS/Linux; on Windows, use the activation 
 
 ### Set up the OpenCLI Chrome extension
 
+**Complete this step manually in Chrome.** Neither `npm install` nor `doctor.py --install` installs the extension for you. Select the extracted folder, not the ZIP or the `manifest.json` file itself. A missing-manifest error means the folder level is wrong. If the extension is loaded but disconnected, confirm it is enabled in the Chrome profile you are using, then run `opencli doctor` again.
+
 For browser-based live retrieval, **the OpenCLI CLI also needs the OpenCLI Browser Bridge extension**.
 
 ```bash

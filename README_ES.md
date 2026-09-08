@@ -118,6 +118,8 @@ El comando de activación anterior es para macOS/Linux; en Windows, utiliza el s
 
 ### Configura la extensión de Chrome de OpenCLI
 
+**Este paso se completa manualmente en Chrome.** Ni `npm install` ni `doctor.py --install` instalan la extensión. Selecciona la carpeta descomprimida, no el ZIP ni el archivo `manifest.json`. Si no se encuentra el manifiesto, revisa el nivel de carpeta seleccionado. Si la extensión está cargada pero desconectada, comprueba que esté activada en el perfil de Chrome que utilizas y vuelve a ejecutar `opencli doctor`.
+
 Para obtener ofertas mediante el navegador, **la CLI de OpenCLI también necesita la extensión OpenCLI Browser Bridge**.
 
 ```bash

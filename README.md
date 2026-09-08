@@ -118,6 +118,8 @@ python3 scripts/doctor.py
 
 ### 配置 OpenCLI 的 Chrome 扩展
 
+**这一步需要你在 Chrome 中手动完成。** `npm install` 和 `doctor.py --install` 都不会替你安装浏览器扩展。选择的是解压后的文件夹，不是 ZIP 文件，也不是 `manifest.json` 文件本身。若提示找不到清单文件，说明选错了目录层级；若扩展已加载但仍显示未连接，确认它在当前使用的 Chrome 个人资料中处于启用状态，再运行 `opencli doctor` 检查。
+
 实时检索使用浏览器适配器时，**仅安装 OpenCLI 命令行还不够，还需要 OpenCLI Browser Bridge 扩展**。
 
 ```bash
