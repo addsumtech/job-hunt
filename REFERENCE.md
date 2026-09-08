@@ -77,6 +77,7 @@ job-hunt/
 │   ├── candidate-situations.md      # Non-standard candidates (gap, switch, exec, military, intl)
 │   ├── cv-craft.md                  # CV writing conventions (markets, links, bullets, ordering)
 │   ├── browser-fallback.md          # Read-only web-access capture and fallback
+  user-recovery.md         # human login/verification hand-off and linked new round
 │   ├── discovery-sources.md         # Per-adapter catalogue for discover
 │   ├── gap-analysis.md              # Gap analysis, tailoring methodology, claim provenance
 │   ├── interview-prep.md            # Interview-readiness brief

@@ -31,8 +31,11 @@ used, which is how `boss` and `zhipin.com` are joined without anyone maintaining
 a table of adapters to domains. **A rename that shares no text with the refused
 name and no host the run has actually seen cannot be joined to it** — the check
 says so rather than pretending otherwise, and the stable name is what keeps that
-edge from mattering. Let the user
-resolve a login/captcha themselves, then start a separately requested new round.
+edge from mattering. Pause and follow [user recovery](user-recovery.md): explain
+what happened, ask the user to resolve login/verification themselves, and wait.
+Their explicit confirmation that they completed the action and want to continue
+is the request for a new bounded round; they need not restate the search brief.
+The new round keeps the same source/backend and preserves the old evidence.
 Never switch backends after a refusal. If no approved browser capability exists,
 request a pasted JD/export and disclose that live discovery was unavailable.
 

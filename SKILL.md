@@ -702,8 +702,15 @@ Never run a command whose published `access:` is `write` —
 
 A platform limit is any refusal the platform itself put up: a risk-control or
 captcha body, a rate-limit, or a refusal on a site `opencli auth status` says you
-are logged into. When one appears, all six of these apply at once, and the last
-two are what make the first four checkable:
+are logged into. When one appears, stop automatic reads and offer the user a
+recovery hand-off before ending the search. Follow
+[the pause-and-resume workflow](references/user-recovery.md): explain the actual
+login, verification or rate-limit obstacle and wait for explicit confirmation.
+“Done, continue” after that prompt requests one new bounded round with the same
+source/backend and a link to the old workspace; never erase the stopped journal.
+While paused, preserve already retrieved rows and offer partial results. The
+following rules govern the stopped round; use its degraded output when recovery
+is declined/unavailable, not as a silent substitute for waiting:
 
 1. **Stop that site for that round.**
 2. Do not retry.
@@ -814,6 +821,10 @@ believing you vetted it.
   employer's scale is reporting; applying it as a verdict is fabrication.
 
 ## Self-check — run through this before reporting the package as done
+
+- [ ] On a site refusal, follow `references/user-recovery.md`: explain the reason,
+      preserve partial results, wait for explicit user confirmation before a new
+      linked round; do not clear the stopped journal.
 
 - [ ] Browser fallback: read `references/browser-fallback.md` and record each
       actual snapshot with `scripts/record_browser_capture.py` before another read.

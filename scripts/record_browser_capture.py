@@ -15,7 +15,7 @@ import sys
 from urllib.parse import urlsplit
 
 import journal
-from check_opencli_result import read_journal
+from check_opencli_result import read_journal, recovery_guidance
 
 ACTION = "browser_call"
 REASONS = ("cli_missing", "bridge_disconnected", "unsupported_extraction")
@@ -302,6 +302,9 @@ def main(argv=None):
             "rows_file": str(paths[1].relative_to(root)),
             "input_hashes": {str(p.relative_to(root)): journal.sha256_file(p) for p in paths},
         }
+        if classification == "platform_limit":
+            kind = "rate_limit" if snapshot.get("http_status") == 429 else "platform"
+            record["remedy"] = recovery_guidance(kind)
         record = journal.sign_receipt(record)
         journal.append(root, record)
         print(json.dumps(record, ensure_ascii=False))

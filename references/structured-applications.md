@@ -32,6 +32,32 @@ The deliverable is **Markdown** (and the candidate pastes it into the portal's f
 
 **Whether to also produce a CV:** make it only when the posting actually asks for one — check for a CV/résumé upload field or wording like "attach your CV". NHS Jobs typically does *not* take a free CV (the form replaces it); many Civil Service and academic posts do want one alongside. When it's ambiguous, produce the supporting statement (always needed) and ask the user whether a CV upload is also required, rather than silently producing or skipping it. When a CV is produced, make clear the statement is what gets scored.
 
+**Record a confirmed statement-only route** in `<workspace>/application-plan.yaml`:
+
+```yaml
+application_type: structured
+cv_required: false
+source_ref: posting-source.md
+source_quote: "Submit supporting information only; no CV attachment is accepted."
+```
+
+Copy the actual wording from the posting or the user's answer; the quote above is
+an example, never evidence. `source_ref` must be a readable original input inside
+the workspace: `input.md`, `posting-source.md`, `posting-source.txt`, or a file under
+`raw/`, `inputs/`, or `source/`. Absolute paths, traversal and escaping symlinks are
+not accepted. Both the plan and posting must say `application_type: structured`;
+`cv_required` must be the YAML boolean `false`, not the string `"false"`.
+
+The quote makes the routing decision reviewable. Its presence proves only that
+the quoted text exists, not that its meaning justifies omitting the CV; read it
+and resolve ambiguous upload instructions with the user. A missing plan keeps the
+normal CV requirements. If any `cv.md`, `cv.docx`, `cv.pdf` or `cv.tex` is produced,
+the CV still requires the three judges even when the plan says no CV was needed.
+Keep the source and tailored profile for the ordinary provenance checks; omitting
+a CV deliverable does not remove those checks. Follow the statement-only gate
+sequence in `modes/apply.md` and record the criterion review there instead of
+inventing CV judge verdicts.
+
 ```
 # Supporting statement — <role>, <employer>
 

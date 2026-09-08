@@ -306,6 +306,9 @@ records and `extraction_method: browser_page`. They are not adapter responses.
 Both `check_no_write.py` and `check_shortlist.py` consume these records. A captcha,
 403, login wall or platform limit stops the site across tools for this round;
 never try web-access to route around an OpenCLI site refusal, or vice versa.
+A stop is a pause for [user recovery](../references/user-recovery.md), not a
+reason to abandon the requested search. Explain the actual obstacle and wait for
+the user's explicit completion/continue reply before a new linked round.
 
 ## Step 1 — probe the login state (three states, not two)
 
@@ -430,9 +433,9 @@ The wrapper returns one of five classifications, each with an action:
 | classification | what happened | what to do |
 |---|---|---|
 | `ok` | exit 0, JSON array parsed | continue to Step 5 |
-| `not_logged_in` | login wall, and auth says the session is absent or unknown | cross-check auth; hand `opencli <site> login` **to the user** — it is a write command. Do not retry: the refusal is deterministic while logged out. **Do not treat `strategy: public` as evidence that no login is needed** — 1point3acres' public-strategy `forum` still 403s. |
-| `no_auth_adapter` | login wall on a site with no login concept | the platform is refusing, not the session. Drop the site for this round and say so. |
-| `platform_limit` | a stop-signal from `references/risk-control-signals.yaml`, or a refusal while auth says logged in | **立即停止。不重试、不改参数重试、不绕过。** Emit the degraded output below. |
+| `not_logged_in` | login wall, and auth says the session is absent or unknown | cross-check auth; hand `opencli <site> login` **to the user** — it is a write command. Pause for [user recovery](../references/user-recovery.md); no read retry while logged out. **Do not treat `strategy: public` as evidence that no login is needed** — 1point3acres' public-strategy `forum` still 403s. |
+| `no_auth_adapter` | login wall on a site with no login concept | no CLI login command is available. Pause and ask the user to inspect the browser page; do not invent a login command or infer a missing session. |
+| `platform_limit` | a stop-signal from `references/risk-control-signals.yaml`, or a refusal while auth says logged in | **立即停止。不重试、不改参数重试、不绕过。** Pause this source, not the whole task. Explain whether it is verification, rate limiting or an unknown refusal; follow [user recovery](../references/user-recovery.md) before offering degraded output. |
 | `transport` | unrecognised failure, or exit 0 with unparsable stdout | run `opencli doctor` — a dead browser bridge takes out every `browser: true` command on every site at once, which distinguishes infrastructure failure from a single-site problem. |
 
 ## Step 5 — row integrity, before anything else
@@ -617,6 +620,13 @@ top three labelled **no detail fetched**. The `§n` markers are the same in both
 they are what the gate keys on, so they are never translated away.
 
 ## Degraded output — when no real postings could be retrieved
+
+First offer the recovery hand-off above. While waiting, preserve partial results
+and say the search is paused; do not present this fallback as the completed task.
+Use it when the user declines recovery, cannot regain access, or asks to proceed
+with the remaining sources. A user saying “done, continue” after the hand-off
+requests a new linked round; follow the recovery reference rather than retrying
+inside this stopped round.
 
 Emit a **direction-level shortlist** (3-5 directions), each with: 目标方向 ·
 检索词 · 建议筛选条件 · 为何比原 JD 更稳 · 要避开的标题与信号 · 手动收集优先序 —

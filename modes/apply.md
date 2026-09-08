@@ -287,6 +287,30 @@ python3 scripts/check_claims.py --workspace <workspace> \
 
 ## Gate commands, in the order they run
 
+**Confirmed statement-only structured applications:** first write the sourced
+`application-plan.yaml` described in `references/structured-applications.md`.
+Keep `profile.yaml`, `tailored-profile.yaml` and the claim ledger for provenance,
+but do not render a CV when the confirmed portal instructions exclude it.
+Run `check_personal_data` and the verifying `check_claims` pass as usual, then
+`check_word_limits`. Replace the CV dispatch block below with:
+
+```bash
+python3 scripts/check_render_freshness.py --workspace <ws> --round 1 \
+    --record <ws>/supporting-statement.md <ws>/posting.yaml \
+    <ws>/application-plan.yaml <ws>/<source_ref>
+# Read the statement against every Essential criterion; verify evidence and
+# STAR structure, record the criterion coverage and any honest gaps in the
+# completion report, and prepare interview-brief.md. No CV judge verdicts.
+python3 scripts/check_render_freshness.py --workspace <ws> --round 1
+python3 scripts/check_apply.py --workspace <ws>
+```
+
+The final gate still requires the statement, its word-limit check, provenance,
+and freshness of the statement, posting, plan and quoted source. A missing plan
+does not activate this exception; producing any CV restores the normal three-judge
+loop. For structured applications that also require a CV, use the full block below
+and separately review the supporting statement against its criteria.
+
 ```bash
 # after tailoring, before dispatching the judges
 python3 scripts/check_personal_data.py --workspace <ws>
