@@ -76,6 +76,7 @@ job-hunt/
 ├── references/                     # Layer 2 — read on demand
 │   ├── candidate-situations.md      # Non-standard candidates (gap, switch, exec, military, intl)
 │   ├── cv-craft.md                  # CV writing conventions (markets, links, bullets, ordering)
+│   ├── browser-fallback.md          # Read-only web-access capture and fallback
 │   ├── discovery-sources.md         # Per-adapter catalogue for discover
 │   ├── gap-analysis.md              # Gap analysis, tailoring methodology, claim provenance
 │   ├── interview-prep.md            # Interview-readiness brief
@@ -108,6 +109,7 @@ job-hunt/
     ├── check_letter.py              # letter body constraints
     ├── check_mock.py                # interview mode's gate: quotes, tags, promotions, question log
     ├── check_no_write.py            # discover is read-only — a journaled write command fails
+    ├── record_browser_capture.py    # Browser snapshot importer and evidence checks
     ├── check_opencli_result.py      # adapter result classifier (wrapper, not a gate)
     ├── check_pages.py               # page count + the text actually inside the delivered PDF
     ├── check_personal_data.py       # Cluster-1 personal-data interlock

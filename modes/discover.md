@@ -278,6 +278,21 @@ the second is the politeness cap from `references/source-policy.md`. Falling sho
 `target_count` requires a written `shortfall_reason` in `shortlist.yaml`
 (`SHORTFALL_NO_REASON`). **Never pad the count.**
 
+## Retrieval backend — OpenCLI first, web-access fallback
+
+Before Step 1, probe OpenCLI availability and its connection. If it is missing,
+the bridge is disconnected, or there is no suitable read extraction, read
+`references/browser-fallback.md` and use the available web-access skill. On this
+path skip OpenCLI-only auth/help commands and retain the same source selection,
+query, page, row, detail and disclosure rules. Do not stop merely because an
+optional adapter executable is absent. If neither path works, disclose the gap.
+
+Browser captures use `scripts/record_browser_capture.py`, `browser_call` journal
+records and `extraction_method: browser_page`. They are not adapter responses.
+Both `check_no_write.py` and `check_shortlist.py` consume these records. A captcha,
+403, login wall or platform limit stops the site across tools for this round;
+never try web-access to route around an OpenCLI site refusal, or vice versa.
+
 ## Step 1 — probe the login state (three states, not two)
 
 ```bash

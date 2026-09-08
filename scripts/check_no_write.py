@@ -27,6 +27,8 @@ import journal  # noqa: E402  (Plan 1)
 import opencli_meta  # noqa: E402
 from check_opencli_result import ADAPTER_CALL_ACTION, read_journal  # noqa: E402
 
+from record_browser_capture import ACTION, validate_record, check_stop_order
+
 GATE = "check_no_write"
 
 # opencli's non-adapter namespaces (`opencli auth --help -f yaml` returns
@@ -80,8 +82,8 @@ def resolve_access(site, command, cache_dir, allow_fetch):
                                    allow_fetch=allow_fetch)
 
 
-def scan(records, cache_dir, allow_fetch):
-    findings = []
+def scan(records, cache_dir, allow_fetch, workspace=None):
+    findings = check_stop_order(records)
     for record in records:
         lineno = record.get("_lineno")
         if "_unparsable" in record:
@@ -89,6 +91,9 @@ def scan(records, cache_dir, allow_fetch):
                 f"UNPARSABLE_JOURNAL_LINE: journal.jsonl line {lineno} is not "
                 "JSON, so a command hidden in it cannot be checked")
             continue
+        if record.get("action") == ACTION:
+            findings.extend(validate_record(record, workspace) if workspace else
+                            ["INVALID_BROWSER_RECORD: workspace required to verify capture"])
         pairs = []
         if (record.get("action") == ADAPTER_CALL_ACTION
                 and record.get("site") and record.get("command")):
@@ -135,7 +140,7 @@ def main(argv=None):
         return 2
 
     cache_dir = args.metadata_cache or (workspace / "raw" / "opencli-help")
-    findings = scan(read_journal(workspace), cache_dir, not args.no_fetch)
+    findings = scan(read_journal(workspace), cache_dir, not args.no_fetch, workspace)
 
     input_hashes = {"journal.jsonl": journal.sha256_file(journal_path)}
     journal.receipt(workspace, GATE, input_hashes,

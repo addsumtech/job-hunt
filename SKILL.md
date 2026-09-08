@@ -640,7 +640,7 @@ a fabrication the candidate then repeats back), and the shortlist's `why_matched
 | Mock interview | `scripts/check_mock.py` | an invented tag or band; a tag with no quote, or a quote that is not in the transcript; a pass emitting the other pass's tags; a scraped question with no id, no date, or the wrong country; an answer-bank entry with no source; a collapsed claim with no walk-back; an unsourced fact neither promoted nor walked back |
 | Evidence blocks | `scripts/evidence_blocks.py` | the posting and CV cut into addressable `JD-nnn` / `CV-nnn`; the only chunker |
 | Evidence refs | `scripts/check_evidence_refs.py` | refs that resolve to no block; block ids left in reader-facing prose |
-| Prediction lint | `scripts/lint_no_prediction.py` | percentages (incl. fullwidth `％` and 「百分之七十」), `n/m` scores, scores worn as a NOUN rather than a symbol (`匹配度 85 分`, `overall score: 85`, `rated 8.5`, `4.5 stars`, `confidence: 0.85`, `grade: B+`, `Bewertung 8`, `점수 85점`), and prediction vocabulary in every language it writes in — EN + ZH (「成功率」「入围率」「七成」…) plus DE/NL/FR/ES/IT/JA/KO (`Chancen`, `kans`, `probabilité`, `可能性が高い`, `확률`) in the **judgement-facing** artifacts: `fit-assessment.md`, `shortlist.md`, `cheatsheet.md`, `mock/answer-guide.md`, `mock/assessment-*.md`. Numbers the round actually CAPTURED are exempt, but only from a file an `adapter_call` record names — a raw file nobody journaled is not a capture, it is a note the model wrote itself. Deliberately NOT the CV or letter — there a number is a measured past achievement, which the Quantification ladder above requires, not a claim about the future |
+| Prediction lint | `scripts/lint_no_prediction.py` | percentages (incl. fullwidth `％` and 「百分之七十」), `n/m` scores, scores worn as a NOUN rather than a symbol (`匹配度 85 分`, `overall score: 85`, `rated 8.5`, `4.5 stars`, `confidence: 0.85`, `grade: B+`, `Bewertung 8`, `점수 85점`), and prediction vocabulary in every language it writes in — EN + ZH (「成功率」「入围率」「七成」…) plus DE/NL/FR/ES/IT/JA/KO (`Chancen`, `kans`, `probabilité`, `可能性が高い`, `확률`) in the **judgement-facing** artifacts: `fit-assessment.md`, `shortlist.md`, `cheatsheet.md`, `mock/answer-guide.md`, `mock/assessment-*.md`. Numbers the round actually CAPTURED are exempt, but only from a file an `adapter_call` record names or an intact `browser_call` snapshot — a raw file nobody journaled is not a capture, it is a note the model wrote itself. Deliberately NOT the CV or letter — there a number is a measured past achievement, which the Quantification ladder above requires, not a claim about the future |
 | Contradictions | `scripts/consistency.py` | verdict vs effort, loose knockouts, gaps with no action, work-authorization conflicts — reports, never repairs |
 | Coverage counts | `scripts/count_coverage.py` | the only count-producing path **wherever a `fit-assessment.yaml` exists** — assess mode, and apply mode resumed from one. Apply mode without an assessment has no file for it to read and hand-counts its FIT SNAPSHOT instead; that is a second path, so it must apply the identical rule (below), and it is why the rule is written out in both places rather than trusted to memory. The card renders in **zh or en only**: it carries the required disclaimer verbatim and `check_assessment` finds it by an exact anchor in one of those two, so a third language needs a sourced translation of the disclaimer, not a flag. A German or Japanese assessment embeds an English or Chinese counts block inside otherwise localized prose — a known limit, not an oversight |
 | Market tables | `scripts/check_conventions.py` | digits/percent in prose, source provenance, protected traits, duplicate ids, expired `review_by` (CI-hard) |
@@ -657,6 +657,16 @@ a fabrication the candidate then repeats back), and the shortlist's `why_matched
 
 <!-- BEGIN discover-inserts (plan 3) -->
 ## Discovery: the read-only surface
+
+### Browser fallback for discovery
+
+Prefer OpenCLI when its read adapter and connection are available. When the CLI
+is missing, its bridge is disconnected, or extraction is unsupported, follow
+[the browser fallback](references/browser-fallback.md) with an available
+web-access skill. Keep browser evidence and gate receipts; do not treat a site
+refusal as a reason to switch tools. Neither backend submits applications.
+
+
 ### opencli: the four command pairs this skill actually uses
 
 | site | search | detail | login state (2026-08-09) | identity field |
@@ -804,6 +814,10 @@ believing you vetted it.
   employer's scale is reporting; applying it as a verdict is fabrication.
 
 ## Self-check — run through this before reporting the package as done
+
+- [ ] Browser fallback: read `references/browser-fallback.md` and record each
+      actual snapshot with `scripts/record_browser_capture.py` before another read.
+      Use `browser_page` evidence and stop across tools after a site refusal.
 
 Read-when:
 - [ ] Running on a host that is not Claude Code — codex, another agent, or as a
