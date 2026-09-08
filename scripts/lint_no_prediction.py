@@ -347,9 +347,15 @@ def journaled_captures(workspace: pathlib.Path) -> list:
     root = workspace.resolve()
     out, seen = [], set()
     for record in journal._records(workspace):
-        if record.get("action") != "adapter_call":
+        if record.get("action") == "browser_call":
+            from record_browser_capture import validate_record
+            if validate_record(record, workspace) or record.get("classification") != "ok":
+                continue
+            named = record.get("snapshot_file")
+        elif record.get("action") == "adapter_call":
+            named = record.get("stdout_file")
+        else:
             continue
-        named = record.get("stdout_file")
         if not named:
             continue
         path = (workspace / str(named)).resolve()

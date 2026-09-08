@@ -109,3 +109,14 @@ that is already recorded: `journal.jsonl` holds the site, command and classifica
 of every invocation, and `check_no_write.py` resolves each one against opencli's own
 `access:` metadata. A `source_tier` column on a row would be a self-assessment with
 nothing checking it.
+
+## Browser retrieval
+
+`references/browser-fallback.md` defines the OpenCLI-first, web-access fallback
+path. Public page reads follow Green; logged-in reads and pagination follow
+Yellow with the same caps. Browser snapshots use `browser_page` extraction and
+`browser_call` records, with original URLs from the page rather than an adapter.
+`check_no_write.py` verifies the fixed snapshot operation and capture hashes;
+`check_shortlist.py` verifies browser row provenance and shared limits. Stop
+signals apply to the site across tools. No arbitrary browser eval or write action
+can be declared safe merely by labelling it a read.

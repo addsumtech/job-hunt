@@ -32,6 +32,7 @@ case you are in.
 from __future__ import annotations
 
 import argparse
+import json
 import pathlib
 import re
 import sys
@@ -42,7 +43,8 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import journal  # noqa: E402  (Plan 1)
 import enter_mode  # noqa: E402  (Plan 1)
 import paths       # noqa: E402  (Plan 1)
-from check_opencli_result import read_adapter_calls  # noqa: E402
+from record_browser_capture import (read_retrieval_calls, validate_record,
+                                    check_stop_order, ACTION)  # noqa: E402
 from vocab import EFFORT, VERDICTS  # noqa: E402  (Plan 1 — the ONE vocabulary)
 import report_locales as locales  # noqa: E402
 
@@ -66,7 +68,7 @@ REQUIRED_ROW_FIELDS = (
 # could silently disagree with the other two.
 TOP_THREE = VERDICTS[:3]
 EXTRACTION_METHODS = ("adapter_search", "adapter_detail", "user_paste",
-                      "public_page")
+                      "public_page", "browser_page")
 QUALITIES = ("complete", "partial", "card_only")
 VERIFICATIONS = ("fresh_verified", "collected_unverified", "stale_possible")
 
@@ -830,6 +832,8 @@ def _check_md_rows(md_text, rows):
 # the honest fixture uses. `--start`/`--offset` are row offsets: each distinct
 # value is a distinct page of results, which is exactly what the cap counts.
 _PAGE_ARG = re.compile(r"--(?:page|start|offset|from)[= ]\s*(\d+)")
+_OFFSET_ARG = re.compile(r"--(?:start|offset|from)[= ]\s*(\d+)")
+_OFFSET_PAGE_SIZES = {"indeed": 10, "linkedin": 25}
 
 
 def _pages_per_site(calls):
@@ -846,9 +850,28 @@ def _pages_per_site(calls):
         if call.get("command") != "search" or call.get("exit_code") != 0:
             continue
         site = str(call.get("site") or "").strip().casefold()
+        if call.get("action") == ACTION:
+            page = call.get("page")
+            if type(page) is int and page > 0:
+                pages.setdefault(site, set()).add(page)
+            continue
         found = _PAGE_ARG.search(str(call.get("command_line") or ""))
         # A search with no --page is page 1: that is what the platform returns.
-        pages.setdefault(site, set()).add(int(found.group(1)) if found else 1)
+        value = int(found.group(1)) if found else 1
+        offset = _OFFSET_ARG.search(str(call.get("command_line") or ""))
+        if offset:
+            start = int(offset.group(1))
+            width = _OFFSET_PAGE_SIZES.get(site)
+            # Normalise known documented offsets to the same page numbers used
+            # by browser captures. Non-aligned offsets must remain DISTINCT,
+            # otherwise starts 0, 1, ... 9 all hide inside one counted page.
+            if width and start % width == 0:
+                value = start // width + 1
+            elif start == 0:
+                value = 1
+            else:
+                value = -(start + 1)
+        pages.setdefault(site, set()).add(value)
     return pages
 
 
@@ -869,17 +892,32 @@ def _check_caps_against_the_run(brief, shortlist, rows, calls):
             if len(pages) > max_pages:
                 findings.append(
                     f"PAGES_ABOVE_CAP: {site} was searched across {len(pages)} "
-                    f"pages ({', '.join(str(p) for p in sorted(pages))}) but "
+                    f"pages ({', '.join(str(p) if p > 0 else 'offset:' + str(-p - 1) for p in sorted(pages))}) but "
                     f"brief.yaml declares max_pages_per_site={max_pages}. Two "
                     "pages of a keyword search a human asked for is not a "
                     "scrape; an uncapped crawl is, and the cap is the "
                     "difference — see references/source-policy.md.")
     max_rows = brief.get("max_rows_per_round")
     if isinstance(max_rows, int) and not isinstance(max_rows, bool) and max_rows >= 1:
-        if len(rows) > max_rows:
-            findings.append(
-                f"ROWS_ABOVE_CAP: the shortlist carries {len(rows)} rows but "
-                f"brief.yaml declares max_rows_per_round={max_rows}")
+        returned = {}
+        retained = {}
+        for row in rows:
+            if isinstance(row, dict):
+                site = str(row.get("source_site") or "").strip().casefold()
+                retained[site] = retained.get(site, 0) + 1
+        for call in calls:
+            count = call.get("row_count")
+            if (call.get("command") == "search" and call.get("exit_code") == 0
+                    and type(count) is int and count >= 0):
+                site = str(call.get("site") or "").strip().casefold()
+                returned[site] = returned.get(site, 0) + count
+        for site in sorted(set(returned) | set(retained)):
+            count = max(returned.get(site, 0), retained.get(site, 0))
+            if count > max_rows:
+                findings.append(
+                    f"ROWS_ABOVE_CAP: {site or '<unknown source>'} returned/retained "
+                    f"{count} rows but its per-site max_rows_per_round={max_rows}. "
+                    "Dropping rows from the shortlist does not undo retrieval.")
     return findings
 
 
@@ -945,7 +983,8 @@ def _declared_queries_never_run(brief, shortlist, calls):
     # changed no result.)
     declared = [q for q in (brief.get("target_titles") or [])
                 if _normalise_query(q)]
-    ran = " \u0000 ".join(_normalise_query(c.get("command_line")) for c in calls)
+    ran = " \u0000 ".join(_normalise_query(c.get("query") if c.get("action") == ACTION
+                                         else c.get("command_line")) for c in calls)
     excused = _normalise_query(shortlist.get("shortfall_reason"))
     missing = [q for q in declared
                if _normalise_query(q) not in ran
@@ -963,18 +1002,61 @@ def _declared_queries_never_run(brief, shortlist, calls):
               "brief. Run them, or name them in shortfall_reason and say why."]
 
 
-def check_run(workspace, shortlist, brief, md_text, calls):
+def _check_browser_rows(workspace, rows, calls, brief, exceptions=()):
     findings = []
+    evidence = {}
+    browser_sites = {c.get("site") for c in calls if c.get("action") == ACTION}
+    adapter_sites = {c.get("site") for c in calls if c.get("action") == "adapter_call"}
+    detail_ids = set()
+    exempt = {str(e.get("id")) for e in exceptions if isinstance(e, dict)}
+    for call in calls:
+        if call.get("action") != ACTION or validate_record(call, workspace):
+            continue
+        data = json.loads((workspace / call["rows_file"]).read_text(encoding="utf-8"))
+        if call["command"] == "detail":
+            detail_ids.update((call["site"], r["source_id"]) for r in data)
+        evidence.setdefault(call["site"], []).extend(
+            dict(row, retrieved_at=call["retrieved_at"]) for row in data)
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if ((row.get("source_site"), row.get("source_id")) in detail_ids
+                and row.get("verdict") not in TOP_THREE and str(row.get("id")) not in exempt):
+            findings.append("DETAIL_FETCH_OUT_OF_BAND: browser detail fetch requires a top-three verdict or recorded exception")
+        if row.get("extraction_method") == "browser_page":
+            candidates = evidence.get(row.get("source_site"), [])
+            if not any(all(row.get(k) == captured.get(k) for k in
+                           ("source_id", "url", "title", "raw_text", "retrieved_at"))
+                       for captured in candidates):
+                findings.append("BROWSER_ROW_NOT_CAPTURED: browser_page row must match its imported snapshot evidence")
+        elif (row.get("source_site") in browser_sites
+              and (row.get("extraction_method") == "public_page"
+                   or row.get("source_site") not in adapter_sites)):
+            findings.append("BROWSER_METHOD_MISMATCH: web-access rows must use browser_page")
+    cap = brief.get("max_rows_per_round")
+    if type(cap) is int:
+        for site, captured in evidence.items():
+            if len({r["source_id"] for r in captured}) > cap:
+                findings.append(f"ROWS_ABOVE_CAP: {site} browser captures exceed the round row cap {cap}")
+    return findings
+
+
+def check_run(workspace, shortlist, brief, md_text, calls):
+    findings = check_stop_order(calls)
+    for call in calls:
+        if call.get("action") == ACTION:
+            findings.extend(validate_record(call, workspace))
     rows = shortlist.get("rows") or []
     ok_calls = [c for c in calls
                 if c.get("classification") == "ok" and c.get("exit_code") == 0]
 
     if not calls:
         findings.append(
-            "NO_ADAPTER_RECEIPTS: journal.jsonl records no adapter_call at all, "
+            "NO_ADAPTER_RECEIPTS: journal.jsonl records no adapter_call or browser_call at all, "
             "so nothing in this workspace can be traced to a live retrieval. "
             "Every adapter invocation goes through "
-            "scripts/check_opencli_result.py.")
+            "scripts/check_opencli_result.py; browser snapshots go through "
+            "scripts/record_browser_capture.py.")
 
     if not str(brief.get("trigger_reason") or "").strip():
         findings.append(
@@ -1024,6 +1106,8 @@ def check_run(workspace, shortlist, brief, md_text, calls):
     findings.extend(_check_md_rows(md_text, rows))
     findings.extend(_check_sources(workspace, shortlist, rows, calls))
     findings.extend(_check_detail_cap(shortlist, rows))
+    findings.extend(_check_browser_rows(workspace, rows, calls, brief,
+                                        shortlist.get("detail_fetch_exceptions") or []))
     findings.extend(_check_market_fit(brief, rows))
     return findings
 
@@ -1104,7 +1188,7 @@ def main(argv=None):
     findings = _check_mode_entry(workspace, args.skill_root)
     findings.extend(check_rows(shortlist, raw_texts))
     findings.extend(check_run(workspace, shortlist, brief, md_text,
-                              read_adapter_calls(workspace)))
+                              read_retrieval_calls(workspace)))
 
     input_hashes = {"shortlist.yaml": journal.sha256_file(shortlist_path),
                     "brief.yaml": journal.sha256_file(brief_path)}

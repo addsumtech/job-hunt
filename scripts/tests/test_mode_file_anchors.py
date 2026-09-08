@@ -48,7 +48,7 @@ ANCHORS = {
     "discover": (check_shortlist, [
         "DISCLOSURE_LABELS", "PROVISIONAL_STAMP",
         "REQUIRED_ROW_FIELDS", "VERDICTS", "EFFORT", "QUALITIES",
-        "EXTRACTION_METHODS", "VERIFICATIONS",
+        "EXTRACTION_METHODS", "VERIFICATIONS", "ACTION",
     ]),
 }
 
