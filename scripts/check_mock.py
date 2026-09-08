@@ -247,6 +247,7 @@ def _must_haves(workspace: pathlib.Path) -> tuple:
         ]
     try:
         posting = journal.load_yaml(path)
+        journal.require_lists(posting, path, must_haves=str)
     except journal.YamlUnreadable as exc:
         return [], [f"POSTING_UNPARSEABLE: {exc}"]
     rows = [str(m).strip() for m in (posting.get("must_haves") or []) if str(m).strip()]
@@ -401,6 +402,7 @@ def check_question_log(path: pathlib.Path, today: datetime.date,
     # reported, not a reason the gate could not run.
     try:
         data = journal.load_yaml(path)
+        journal.require_lists(data, path, rejected=dict)
     except journal.YamlUnreadable as exc:
         return [f"QUESTION_LOG_UNPARSEABLE: {exc}"]
 
@@ -1152,7 +1154,7 @@ def main(argv=None) -> int:
             vocab_scanner=_AUTO,
             skill_root=args.skill_root,
         )
-    except (InputMissing, MissingDependency) as exc:
+    except (InputMissing, MissingDependency, journal.YamlUnreadable, OSError, UnicodeError) as exc:
         print(str(exc), file=sys.stderr)
         try:
             _receipt(args.workspace, inputs, "could_not_run", [str(exc)])

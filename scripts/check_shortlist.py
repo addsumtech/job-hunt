@@ -696,6 +696,8 @@ def _check_upstream_receipts(workspace):
                 "clean one. Run the Step 10 block in order.")
             continue
         last = receipts[-1]
+        if not journal.receipt_intact(last):
+            continue  # Reported above; never promote an older passing receipt.
         if last.get("verdict") not in PASSING_VERDICTS:
             detail = "; ".join(last.get("findings") or []) or "no findings recorded"
             findings.append(
@@ -723,7 +725,7 @@ def _check_upstream_receipts(workspace):
                     f"which is not inside the workspace")
                 continue
             path = workspace / label
-            if not path.exists():
+            if not path.is_file():
                 findings.append(
                     f"RECEIPT_INPUT_MISSING: {gate} passed on {label}, which is no "
                     f"longer in the workspace — re-run {gate}")
@@ -1168,6 +1170,8 @@ def main(argv=None):
         return _fail_to_run(workspace, f"missing input: {shortlist_path}")
     try:
         shortlist = journal.load_yaml(shortlist_path)
+        journal.require_lists(shortlist, shortlist_path, rows=None, sources=dict,
+                              detail_fetch_exceptions=dict)
     except journal.YamlUnreadable as exc:
         return _fail_to_run(workspace, exc.finding)
 
@@ -1176,6 +1180,7 @@ def main(argv=None):
         return _fail_to_run(workspace, f"missing input: {brief_path}")
     try:
         brief = journal.load_yaml(brief_path)
+        journal.require_lists(brief, brief_path, target_titles=str, markets=str)
     except journal.YamlUnreadable as exc:
         return _fail_to_run(workspace, exc.finding)
 
