@@ -167,9 +167,15 @@ def overall_authorization_alignment(conditions: list[dict] | None,
     return None
 
 
-def _notice(code: str, text_zh: str, text_en: str, anchor_zh: str, anchor_en: str) -> dict:
-    return {"code": code, "text_zh": text_zh, "text_en": text_en,
-            "anchor_zh": anchor_zh, "anchor_en": anchor_en}
+def _notice(code: str, text_zh: str, text_en: str, anchor_zh: str, anchor_en: str,
+            **values) -> dict:
+    from report_locales import NOTICE_TEXT
+    result = {"code": code, "text_zh": text_zh, "text_en": text_en,
+              "anchor_zh": anchor_zh, "anchor_en": anchor_en}
+    for lang, (anchor, text) in NOTICE_TEXT[code].items():
+        result[f"anchor_{lang}"] = anchor
+        result[f"text_{lang}"] = text.format(**values)
+    return result
 
 
 def notices(assessment: dict | None) -> list[dict]:
@@ -219,7 +225,7 @@ def notices(assessment: dict | None) -> list[dict]:
             f"{count} requirements are marked hard filters. Most postings have at most "
             f"one, so read the order below as approximate rather than as what actually "
             f"screens you out.",
-            "被标成了硬性筛选项", "are marked hard filters"))
+            "被标成了硬性筛选项", "are marked hard filters", count=count))
 
     uncovered = uncovered_gap_actions(rows, assessment.get("actions"))
     if uncovered:
@@ -230,13 +236,15 @@ def notices(assessment: dict | None) -> list[dict]:
             f"{uncovered['gaps']} gaps say they can be closed before applying, but the "
             f"plan lists {uncovered['actions']} actions — some of the advice above did "
             f"not make it into this list.",
-            "没有进入这份清单", "did not make it into this list"))
+            "没有进入这份清单", "did not make it into this list", **uncovered))
     return produced
 
 
 def main(argv: list[str] | None = None) -> int:
+    from report_locales import LANGUAGES
     parser = argparse.ArgumentParser(description="Report contradictions in an assessment.")
     parser.add_argument("--workspace", required=True, type=pathlib.Path)
+    parser.add_argument("--lang", choices=LANGUAGES, default="en")
     args = parser.parse_args(argv)
 
     path = args.workspace / "fit-assessment.yaml"
@@ -251,7 +259,7 @@ def main(argv: list[str] | None = None) -> int:
         assessment = journal.load_yaml(path)
     except journal.YamlUnreadable as exc:
         return cannot_run(args.workspace, str(exc), journal.UNREADABLE_INPUT)
-    findings = [f"{n['code']}: {n['text_en']}" for n in notices(assessment)]
+    findings = [f"{n['code']}: {n[f'text_{args.lang}']}" for n in notices(assessment)]
     for finding in findings:
         print(finding)
     journal.receipt(args.workspace, GATE,

@@ -209,17 +209,16 @@ def test_an_english_disclosure_block_missing_a_line_names_both_spellings(
     assert "收到限制信号后重试：" in captured.out
 
 
-def test_every_reader_facing_literal_the_gate_requires_is_a_pair(tmp_path):
-    # The structural pin. Un-pairing either constant re-opens the defect, and a
-    # string where a pair belongs is the shape that did it last time.
+def test_every_required_literal_has_all_five_report_languages(tmp_path):
     assert isinstance(cs.PROVISIONAL_STAMP, tuple)
-    assert len(cs.PROVISIONAL_STAMP) == 2
+    assert len(cs.PROVISIONAL_STAMP) == 5
     assert all(isinstance(s, str) and s for s in cs.PROVISIONAL_STAMP)
     assert len(cs.DISCLOSURE_LABELS) == 6
     for pair in cs.DISCLOSURE_LABELS:
-        assert isinstance(pair, tuple) and len(pair) == 2, pair
-        zh, en = pair
+        assert isinstance(pair, tuple) and len(pair) == 5, pair
+        zh, en, ja, ko, es = pair
         assert zh.endswith("：") and en.endswith(":"), pair
+        assert ja.endswith("：") and ko.endswith(":") and es.endswith(":"), pair
         assert zh != en
 
 

@@ -58,33 +58,29 @@ import journal  # noqa: E402
 import lint_no_prediction as prediction  # noqa: E402
 import paths  # noqa: E402
 import vocab  # noqa: E402
+import report_locales as locales  # noqa: E402
 
 GATE = "check_assessment"
 MODE = "assess"
 
-# Every heading and column name this gate keys on is a PAIR. An English card is a
-# first-class output here — count_coverage.py has --lang {zh,en} and render_block emits
-# "apply verdict:" — so a constant that knows only the Chinese spelling reports a defect
-# on a correct English assessment. A check that cries wolf on ordinary output is worse
-# than no check: the reader learns to skip the line, and it stops working on the run
-# that mattered. modes/assess.md §4 and §10 print both spellings for the same reason.
-DISCLAIMER_ANCHORS = ("不是对结果的预判", "not a forecast of the outcome")
-VERDICT_MARKERS = ("投递建议：", "apply verdict:")
-DISQUALIFIER_HEADINGS = ("## 硬性阻断项", "## Hard blockers")
+# Reader-facing anchors follow the report language; schema keys remain stable.
+DISCLAIMER_ANCHORS = locales.anchors("disclaimer")
+VERDICT_MARKERS = locales.anchors("verdict")
+DISQUALIFIER_HEADINGS = locales.anchors("blockers")
 # The last anchor here that knew only one language, and the one that could not be
 # caught by running the gate today: it cannot fire before the first `review_by`
 # passes (2026-11-09, twelve entries). Matched case-insensitively, because unlike
 # the anchors above it is a BANNER — sentence-initial by nature, so
 # "past its review date" has to match "Past its review date — …".
-STALE_BANNER = ("已过复核期", "past its review date")
+STALE_BANNER = locales.anchors("stale")
 
 # The closed set modes/assess.md §10 defines. Exactly one of these, inside the section
 # below, on exactly the two verdicts below; the two column headers are where the
-# section's whole value sits. One spelling of each pair is enough.
+# section's whole value sits. One supported translation of each is enough.
 STRATEGIES = ("apply_anyway", "reposition", "skill_sprint", "side_door", "change_track")
-STRATEGY_HEADINGS = ("## 那该怎么办", "## What to do instead")
+STRATEGY_HEADINGS = locales.anchors("strategy")
 OTHER_HALF_VERDICTS = ("likely_screen_out", "blocked")
-ACCEPTANCE_COLUMNS = (("验收标准", "Acceptance criterion"), ("输出物", "Deliverable"))
+ACCEPTANCE_COLUMNS = (locales.anchors("acceptance"), locales.anchors("deliverable"))
 
 # Composition: each of these must have run on THIS workspace and not failed.
 UPSTREAM_GATES = ("evidence_blocks", "count_coverage", "consistency",
@@ -117,7 +113,7 @@ def _squeeze(text: str) -> str:
 
 def _verdict_line_index(lines: list[str]) -> int | None:
     for index, line in enumerate(lines):
-        if any(marker in line for marker in VERDICT_MARKERS):
+        if any(marker.casefold() in line.casefold() for marker in VERDICT_MARKERS):
             return index
     return None
 
@@ -125,7 +121,7 @@ def _verdict_line_index(lines: list[str]) -> int | None:
 def _section_lines(lines: list[str], heading: str) -> tuple[int, list[str]] | None:
     """The lines of the first `heading` section, up to the next heading of any level."""
     for index, line in enumerate(lines):
-        if line.strip().startswith(heading):
+        if line.strip().casefold().startswith(heading.casefold()):
             body = []
             for later in lines[index + 1:]:
                 if _HEADING.match(later):
@@ -136,7 +132,7 @@ def _section_lines(lines: list[str], heading: str) -> tuple[int, list[str]] | No
 
 
 def _first_section(lines: list[str], headings) -> tuple[int, list[str]] | None:
-    """The first section matching any spelling of the heading. Both spellings are
+    """The first section matching any spelling of the heading. All translations are
     correct output, so trying only one turns a translation into a finding."""
     for heading in headings:
         found = _section_lines(lines, heading)
@@ -255,7 +251,8 @@ def check(workspace: pathlib.Path, market_dir: pathlib.Path,
 
     # 4. Consistency notices must be attached where they fired.
     for notice in consistency.notices(assessment):
-        if notice["anchor_zh"] not in markdown and notice["anchor_en"] not in markdown:
+        if not any(notice[f"anchor_{lang}"].casefold() in markdown.casefold()
+                   for lang in locales.LANGUAGES):
             findings.append(f"NOTICE_NOT_ATTACHED: {notice['code']} fired and its text "
                             f"is nowhere in fit-assessment.md; attach it beside the "
                             f"thing it qualifies")
@@ -313,19 +310,19 @@ def check(workspace: pathlib.Path, market_dir: pathlib.Path,
                     f"card prints this line, so leaving it unset ships "
                     f"「{coverage.NOT_ASSESSED_ZH}」/'{coverage.NOT_ASSESSED_EN}' where "
                     f"the reader expects a judgement — assess it or say why you cannot")
-        rendered = [coverage.render_block(assessment, counts, lang) for lang in ("zh", "en")]
+        rendered = [coverage.render_block(assessment, counts, lang) for lang in locales.LANGUAGES]
         if not any(block in markdown for block in rendered):
             findings.append("COUNT_MISMATCH: fit-assessment.md does not contain the "
                             "block count_coverage.py produces; a second number written "
                             "by hand cannot be reconciled with this one")
-        if not any(anchor in markdown for anchor in DISCLAIMER_ANCHORS):
+        if not any(anchor.casefold() in markdown.casefold() for anchor in DISCLAIMER_ANCHORS):
             findings.append("NO_DISCLAIMER: the required disclaimer is absent; a count "
                             "without it reads as a prediction")
 
     # 6. The refusal floor is a refusal, not a sixth level.
     if refusing:
         for marker in VERDICT_MARKERS:
-            if marker in markdown:
+            if marker.casefold() in markdown.casefold():
                 findings.append(f"REFUSAL_WITH_VERDICT: verdict is "
                                 f"{vocab.REFUSAL} but {marker!r} still renders a "
                                 f"conclusion")
@@ -345,8 +342,8 @@ def check(workspace: pathlib.Path, market_dir: pathlib.Path,
         if section is None:
             findings.append(
                 f"NO_DISQUALIFIER_SECTION: {len(blocking)} knockout requirement(s) are "
-                f"not met and there is no '{DISQUALIFIER_HEADINGS[0]}' / "
-                f"'{DISQUALIFIER_HEADINGS[1]}' section; a wall the reader is never "
+                f"not met and there is no {' / '.join(DISQUALIFIER_HEADINGS)!r} "
+                f"section; a wall the reader is never "
                 f"shown is a wall they walk into")
         else:
             heading_index, body = section
@@ -376,8 +373,8 @@ def check(workspace: pathlib.Path, market_dir: pathlib.Path,
         if not chosen:
             findings.append(
                 f"NO_STRATEGY_SECTION: verdict is {verdict} and no strategy from "
-                f"{STRATEGIES} appears under '{STRATEGY_HEADINGS[0]}' / "
-                f"'{STRATEGY_HEADINGS[1]}'; a verdict without the other half is a door "
+                f"{STRATEGIES} appears under {' / '.join(STRATEGY_HEADINGS)!r}; "
+                f"a verdict without the other half is a door "
                 f"closed with nothing behind it")
         elif len(chosen) > 1:
             findings.append(
@@ -387,8 +384,8 @@ def check(workspace: pathlib.Path, market_dir: pathlib.Path,
         for pair in ACCEPTANCE_COLUMNS:
             if not any(column in markdown for column in pair):
                 findings.append(
-                    f"NO_ACCEPTANCE_COLUMN: verdict is {verdict} and no '{pair[0]}' / "
-                    f"'{pair[1]}' column is present; that column is what turns advice "
+                    f"NO_ACCEPTANCE_COLUMN: verdict is {verdict} and no {' / '.join(pair)!r} "
+                    f"column is present; that column is what turns advice "
                     f"into something checkable, and it is the whole value of this "
                     f"section")
 

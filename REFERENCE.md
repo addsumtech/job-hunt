@@ -84,6 +84,7 @@ job-hunt/
 │   ├── motivation-letter.md         # Letter craft guide
 │   ├── rirekisho.md                 # Japanese 履歴書 form guide
 │   ├── portability.md               # running this skill on codex or another agent
+│   ├── report-localization.md       # five-language assess/discover report templates
 │   ├── risk-control-signals.yaml    # Platform stop-signals discover must obey
 │   ├── role-families.md             # Non-tech / regulated role conventions (clinical, sales, legal…)
 │   ├── source-policy.md             # What discover may and may not do to a platform
@@ -124,7 +125,7 @@ job-hunt/
     ├── evidence_blocks.py           # cuts posting and CV into addressable JD-nnn / CV-nnn blocks
     ├── journal.py                   # gate receipts in journal.jsonl (library)
     ├── lint_cv.py                   # clichés, weak openers, bullet length, repeated verbs
-    ├── lint_no_prediction.py        # no probabilities, no 0–100 scores — EN + ZH
+    ├── lint_no_prediction.py        # no probabilities, no 0–100 scores — nine CV languages
     ├── mock_blocks.py               # fail-closed parser for the assessor blocks (library)
     ├── mock_vocab.py                # the interview mode's closed vocabularies (library)
     ├── opencli_meta.py              # resolves an adapter command's published access: (library)
@@ -136,6 +137,7 @@ job-hunt/
     ├── render_cv.py                 # CV → md / docx / pdf(LaTeX)
     ├── render_letter.py             # motivation letter → md / docx / pdf
     ├── render_rirekisho.py          # Japanese 履歴書 form renderer
+    ├── report_locales.py            # shared native report labels and gate anchors
     ├── rounds.py                    # judge-round-<n>.json read/merge (library)
     ├── vocab.py                     # every closed vocabulary in the skill (library)
     ├── mutants.py                   # break the code on purpose; make mutants / --ci

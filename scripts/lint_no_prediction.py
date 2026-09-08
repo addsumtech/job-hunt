@@ -58,6 +58,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 import journal  # noqa: E402
 import vocab  # noqa: E402
+import report_locales as locales  # noqa: E402
 
 GATE = "lint_no_prediction"
 
@@ -66,7 +67,8 @@ GATE = "lint_no_prediction"
 # here would un-mask whichever label drifted. Longest first, so masking a short
 # label can never leave the tail of a longer one behind.
 VERDICT_LABELS = tuple(sorted(
-    tuple(vocab.VERDICT_ZH.values()) + tuple(vocab.VERDICTS) + (vocab.REFUSAL,),
+    tuple(vocab.VERDICT_ZH.values()) + tuple(vocab.VERDICTS) + (vocab.REFUSAL,)
+    + tuple(label for card in locales.CARD_TEXT.values() for label in card["verdicts"].values()),
     key=len, reverse=True))
 
 _URL = re.compile(r"https?://\S+")

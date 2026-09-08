@@ -44,6 +44,7 @@ import enter_mode  # noqa: E402  (Plan 1)
 import paths       # noqa: E402  (Plan 1)
 from check_opencli_result import read_adapter_calls  # noqa: E402
 from vocab import EFFORT, VERDICTS  # noqa: E402  (Plan 1 — the ONE vocabulary)
+import report_locales as locales  # noqa: E402
 
 GATE = "check_shortlist"
 MODE = "discover"
@@ -141,17 +142,11 @@ _US_STATE = re.compile(
 # Wording that asserts the run found nothing. Only consulted when the shortlist
 # has ZERO rows: with rows present, "没有匹配到 staff 级别的岗位" is a qualified
 # statement about a slice, not a claim that the run came back empty.
-EMPTINESS_PHRASES = ("没有匹配", "没有结果", "未找到", "无匹配", "零结果",
-                     "no results", "no matching", "nothing found", "found nothing")
+EMPTINESS_PHRASES = tuple(phrase for lang in locales.LANGUAGES
+                          for phrase in locales.GATE_TEXT[lang]["empty"])
 
-# Every literal this gate requires a reader-facing document to CONTAIN is a
-# PAIR, for the reason check_assessment.py:69 already gives about its own
-# anchors: the shortlist follows the USER's language, not the market's (spec §10,
-# 「shortlist 跟用户走」), and `indeed`/`linkedin` with target_market nl/de/uk/us
-# make an English round an ordinary case. A constant that knows only the Chinese
-# spelling leaves a monolingual English run two options — fail the gate, or
-# staple a Chinese sentence into an English document — and the second one passes
-# every check, which makes it the worse one.
+# Required reader-facing text follows the user's report language, not the
+# market. Shared translations let native reports pass without foreign labels.
 #
 # Matching is case-insensitive (see _says) because these strings are sentence- and
 # heading-initial in English and "Provisional" is the natural rendering of an
@@ -160,20 +155,14 @@ EMPTINESS_PHRASES = ("没有匹配", "没有结果", "未找到", "无匹配", "
 # The degraded-output disclosure block. The last four answers ship pre-filled as
 # 否 / no, so concealing a retry or a bypass has to be an active overwrite rather
 # than an omission.
-DISCLOSURE_LABELS = (
-    ("本次会话已登录：", "Logged in this session:"),
-    ("Adapter 返回：", "Adapter returned:"),
-    ("收到限制信号后重试：", "Retried after a stop signal:"),
-    ("绕过任何平台控制：", "Bypassed any platform control:"),
-    ("取得真实岗位：", "Obtained real postings:"),
-    ("降级输出类型：", "Degraded output type:"),
-)
+DISCLOSURE_LABELS = tuple(zip(*(locales.GATE_TEXT[lang]["disclosure"]
+                                for lang in locales.LANGUAGES)))
 
 # The reader-facing half of the provisional stamp (spec §5.1 step 6: a discover
 # verdict 不带这个戳就不许渲染). `provisional: true` in shortlist.yaml is the
 # machine half, and nobody reading the round ever sees it — shortlist.md is what
 # the user actually reads, so that is where the claim has to be qualified.
-PROVISIONAL_STAMP = ("基于卡片信息的初判", "provisional, from card data only")
+PROVISIONAL_STAMP = locales.anchors("provisional")
 
 # The yellow-tier round caps from references/source-policy.md, as numbers,
 # because a cap enforced by a paragraph is not a cap. brief.yaml must carry both
@@ -412,7 +401,7 @@ def check_rows(shortlist, raw_texts):
 def _says(md_text, *spellings):
     """Is any spelling of this anchor in the document? Case is not the claim.
 
-    Every anchor is a pair (zh, en) and the English half is usually
+    English anchors are usually
     sentence-initial, so `"provisional, from card data only"` has to match
     「Provisional, from card data only」 too. Casefold does not change the length
     of any spelling here, which is what lets _answer_after slice by offset.
@@ -422,7 +411,7 @@ def _says(md_text, *spellings):
 
 
 def _both(pair):
-    """A pair as the reader must see it in a finding: both spellings, always.
+    """Show every accepted translation in a finding.
 
     Printing only the Chinese one is how the English reader learns the gate does
     not know their language.

@@ -27,6 +27,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 import journal  # noqa: E402
 import vocab  # noqa: E402
+import report_locales as locales  # noqa: E402
 
 GATE = "count_coverage"
 
@@ -165,6 +166,27 @@ def _verdict_zh(verdict) -> str:
 
 def render_block(assessment: dict, counts: dict, lang: str = "zh") -> str:
     verdict = assessment.get("verdict", "insufficient_evidence")
+    if lang not in locales.LANGUAGES:
+        raise ValueError(f"Unsupported report language: {lang!r}")
+    if lang in locales.CARD_TEXT:
+        labels = locales.CARD_TEXT[lang]
+        direction_value = assessment.get("level_direction")
+        effort_value = assessment.get("effort")
+        direction = (labels["directions"][direction_value]
+                     if direction_value in vocab.LEVEL_DIRECTION else labels["not_assessed"])
+        effort = (labels["efforts"][effort_value]
+                  if effort_value in vocab.EFFORT else labels["not_assessed"])
+        verdict_label = labels["verdicts"][verdict if verdict in vocab.VERDICTS else vocab.REFUSAL]
+        must_count = labels["count"].format(count=counts["must_strong"], total=counts["must_total"])
+        resp_count = labels["count"].format(count=counts["resp_demonstrated"], total=counts["resp_total"])
+        return (
+            f"{labels['must']}: {must_count} "
+            f"({labels['partial']} {counts['must_partial']}, {labels['gap']} {counts['must_gap']}, "
+            f"{labels['no_evidence']} {counts['must_no_evidence']})\n"
+            f"{labels['responsibilities']}: {resp_count}\n"
+            f"{labels['level']}: {direction}\n"
+            f"{labels['effort']}: {effort}\n"
+            f"{locales.GATE_TEXT[lang]['verdict']} {verdict_label}")
     direction = _assessed(assessment.get("level_direction"), vocab.LEVEL_DIRECTION,
                           LEVEL_DIRECTION_ZH, lang)
     effort = _assessed(assessment.get("effort"), vocab.EFFORT, EFFORT_ZH, lang)
@@ -192,15 +214,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Count must-have and responsibility "
                                                  "coverage. The only counting path.")
     parser.add_argument("--workspace", required=True, type=pathlib.Path)
-    # zh and en ONLY, and that is a real limit rather than an oversight worth
-    # papering over. The card carries the required disclaimer verbatim, and
-    # check_assessment finds it by an exact anchor in one of those two
-    # languages — so a third language needs a SOURCED translation of the
-    # disclaimer and a matching anchor, not a rendering flag. A German or
-    # Japanese assessment therefore embeds an English (or Chinese) counts block
-    # inside otherwise localized prose. Stated here so the next reader knows it
-    # was decided, and see SKILL.md's gate table.
-    parser.add_argument("--lang", choices=("zh", "en"), default="zh")
+    # The matching disclaimer and report headings are in report_locales.py.
+    parser.add_argument("--lang", choices=locales.LANGUAGES, default="zh")
     args = parser.parse_args(argv)
 
     path = args.workspace / "fit-assessment.yaml"
@@ -220,8 +235,8 @@ def main(argv: list[str] | None = None) -> int:
     block = render_block(assessment, counts, args.lang)
 
     payload = dict(counts)
-    payload["block_zh"] = render_block(assessment, counts, "zh")
-    payload["block_en"] = render_block(assessment, counts, "en")
+    for lang in locales.LANGUAGES:
+        payload[f"block_{lang}"] = render_block(assessment, counts, lang)
     (args.workspace / "coverage.json").write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
