@@ -426,3 +426,7 @@ writing a real file. When it exits 2, say so and offer `--to` with somewhere
 else — do not silently leave the artifacts undelivered.
 
 When Word files are delivered, `check_pages.py` requires LibreOffice to measure them independently. A `DOCX_NOT_MEASURED` finding means Word pagination was not verified; install the dependency and rerun, or clearly report the remaining limitation. A passing LaTeX PDF does not establish Word pagination.
+
+For native Word/LibreOffice export, complete ordinary save and print dialogs directly with the host's available UI tools. Disabled document controls can mean a modal dialog is waiting, not that the application is frozen. Before asking the user to restart or take over, inspect the current app windows and accessibility state; if the dialog is absent from that view, inspect a screenshot and use the host's supported interaction method. Save a separately named output when checking another renderer so existing artifacts remain intact, then verify that the file exists and inspect its text and page layout before reporting success.
+
+Request user intervention only for an observed blocker the available tools cannot resolve or an action that requires human participation under the host's rules. State what is actually visible and what was attempted; do not diagnose a crash from grey controls or one unchanged tool response. This document-export guidance does not change the login, verification or refusal rules for job websites.
