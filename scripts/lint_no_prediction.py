@@ -177,8 +177,102 @@ _FORECAST_NL = (r"\bwaarschijnlijkheid\b"
 _FORECAST_FR = (r"\b(?:probabilité|probabilités|chances? d[eu']"
                 r"(?:\s|’)?(?:être|obtenir|décrocher))\b")
 _FORECAST_ES_IT = (r"\b(?:probabilidad|probabilidades|probabilità)\b")
-_FORECAST_JA = r"可能性が高い|見込みが高い|確率|受かる見込み|通る見込み"
-_FORECAST_KO = r"확률|가능성이 (?:높|큽)|합격할 것"
+_FORECAST_JA = (r"可能性が[^。！？]{0,10}高い|見込みが[^。！？]{0,10}高い|確率"
+                r"|受かる見込み|通る見込み")
+_FORECAST_KO = r"확률|가능성이\s*[^.!?]{0,10}?(?:높|큽)|합격할 것"
+
+# ---------------------------------------------------------------------------
+# The ADVERB and ADJECTIVE forms. Measured 2026-09-08: the patterns above cover
+# the NOUN of probability in every language -- `Wahrscheinlichkeit`,
+# `probabilidad`, `확률`, `確率` all fire -- and 13 of 15 natural predictions
+# still sailed through, English and Chinese included:
+#
+#   You will very likely be invited to interview.        not caught
+#   你很可能会拿到面试。                                  not caught
+#   Es muy probable que te inviten a una entrevista.     not caught
+#   면접에 초대될 가능성이 매우 높습니다.                  not caught  (adverb split 가능성이…높)
+#
+# So this was never a localisation gap: the check had the wrong SHAPE in all
+# nine languages, and README_EN's "checks predefined expressions in all nine CV
+# languages" was true only of the nouns.
+#
+# The adverb alone is NOT the offence and must never fire on its own. `This role
+# likely involves travel`, `Die Stelle erfordert wahrscheinlich Reisebereitschaft`
+# and `이 직무는 아마 출장이 잦을 것입니다` are ordinary, correct sentences, and a
+# gate that fires on them is the cry-wolf this file already paid for once with
+# bare `chances?`. What is banned is a probability word attached to THIS
+# candidate RECEIVING an outcome, so both halves are required inside one
+# sentence.
+#
+# The outcome list is deliberately narrow: `interview`, `offer`, `callback`,
+# `shortlisted`, `hired`, `invited`. `job`, `role` and `position` are left OUT --
+# `this role likely involves travel` would otherwise fire, and the posting's own
+# noun is the most common word on the page.
+# `most likely` has two jobs in English and only one of them is a forecast.
+# Adverbial — `you will most likely get an interview` — is the ban. Attributive —
+# `the most likely technical probe in the interview`, `most likely cause of a
+# "please confirm" email` — names which of several options is likeliest and is
+# ordinary analysis. Both of those are REAL sentences, found in the iteration-2
+# baseline outputs when this pattern was measured against every markdown file in
+# the repo and the results tree; they were the only two lines the widening would
+# have newly fired on, and both would have been cry-wolf.
+# The guard belongs on `likely` ITSELF, not on the `most likely` alternative: a
+# bare `likely` matches inside `most likely` too, so excluding the longer form
+# alone changed nothing (measured — both real sentences still fired).
+#
+# Two signals separate the two uses, and a determiner is the stronger one:
+# attributive `likely` follows one (`the most likely probe`, `a likely cause`),
+# adverbial `likely` follows an auxiliary (`you will likely get`). The noun
+# lookahead catches the rest, where the line began mid-sentence.
+_LIKELY = (r"(?<!the most )(?<!a most )(?<!the )(?<!a )(?<!an )(?<!this )(?<!that )"
+           r"(?<!its )(?<!their )(?<!our )likely"
+           r"(?!\s+(?:\w+\s+)?(?:cause|reason|explanation|probe|question|topic|"
+           r"source|culprit|outcome|scenario|route|path|next step)\b)")
+_HEDGE_EN = (r"very likely|almost certainly|quite likely|highly likely"
+             r"|most " + _LIKELY + r"|" + _LIKELY +
+             r"|probably|certainly|surely|doubtless")
+_OUTCOME_EN = (r"interview|offer|callback|call back|short-?list(?:ed|ing)?|hired"
+               r"|invited|invitation|accepted|through to the next round")
+_HEDGE_ZH = r"很可能|多半|大概率|八成|十有八九|极有可能|极可能|应该能|多半会"
+_OUTCOME_ZH = r"面试|录取|入围|offer|通过初筛|拿到|进面"
+_HEDGE_DE = r"h[o\u00f6]chstwahrscheinlich|wahrscheinlich|vermutlich|sicherlich"
+_OUTCOME_DE = (r"vorstellungsgespr[a\u00e4]ch|einladung|eingeladen|zusage|angebot"
+               r"|interview")
+_HEDGE_NL = r"hoogstwaarschijnlijk|waarschijnlijk|vermoedelijk|zeker"
+_OUTCOME_NL = r"gesprek|uitnodiging|uitgenodigd|aanbod|interview"
+_HEDGE_FR = r"tr[e\u00e8]s probablement|probablement|vraisemblablement|s[u\u00fb]rement"
+_OUTCOME_FR = r"entretien|offre|invit[e\u00e9]|retenu|convoqu[e\u00e9]"
+_HEDGE_ES = r"muy probable|probablemente|probable|seguramente|casi seguro"
+_OUTCOME_ES = r"entrevista|oferta|inviten|invitar[a\u00e1]n|contraten|seleccionen|admitan"
+_HEDGE_IT = r"molto probabilmente|probabilmente|probabile|sicuramente"
+_OUTCOME_IT = r"colloquio|offerta|invitato|assunto|selezionato"
+_HEDGE_JA = r"おそらく|恐らく|十中八九|まず間違いなく|ほぼ確実"
+_OUTCOME_JA = r"面接|内定|採用|合格|選考通過"
+_HEDGE_KO = r"아마|십중팔구|거의 확실|틀림없이"
+_OUTCOME_KO = r"면접|합격|채용|제안|서류 통과"
+
+
+def _hedged(hedge: str, outcome: str, latin: bool = True) -> str:
+    """A probability word and an outcome in ONE sentence, in either order.
+
+    Bounded by sentence punctuation rather than by a character count alone, so
+    the two halves cannot be borrowed from neighbouring sentences -- `The role
+    likely involves travel. An offer was made to someone else.` is two facts,
+    not a forecast.
+    """
+    b = r"\b" if latin else ""
+    gap = r"[^.!?\n。！？]{0,60}"
+    return (rf"{b}(?:{hedge}){b}{gap}{b}(?:{outcome}){b}"
+            rf"|{b}(?:{outcome}){b}{gap}{b}(?:{hedge}){b}")
+
+
+_HEDGED_FORECAST = "|".join([
+    _hedged(_HEDGE_EN, _OUTCOME_EN), _hedged(_HEDGE_ZH, _OUTCOME_ZH, latin=False),
+    _hedged(_HEDGE_DE, _OUTCOME_DE), _hedged(_HEDGE_NL, _OUTCOME_NL),
+    _hedged(_HEDGE_FR, _OUTCOME_FR), _hedged(_HEDGE_ES, _OUTCOME_ES),
+    _hedged(_HEDGE_IT, _OUTCOME_IT), _hedged(_HEDGE_JA, _OUTCOME_JA, latin=False),
+    _hedged(_HEDGE_KO, _OUTCOME_KO, latin=False),
+])
 
 _WORDS = re.compile(
     # `chances?` used to be bare. That was tolerable while this file only ever
@@ -214,7 +308,8 @@ _WORDS = re.compile(
     r"|" + _ZH_RATE + r"|" + _ZH_TENTHS + r"|" + _ZH_PERCENT_SPELLED
     + r"|" + _FORECAST_DE + r"|" + _FORECAST_NL + r"|" + _FORECAST_FR
     + r"|" + _FORECAST_ES_IT + r"|" + _FORECAST_JA + r"|" + _FORECAST_KO
-    + r"|" + _JA_TENTHS,
+    + r"|" + _JA_TENTHS
+    + r"|" + _HEDGED_FORECAST,
     re.IGNORECASE)
 _ATTRIBUTION = re.compile(r"^\s*>?\s*(?:—|--|-|Source:|来源[:：])\s+.*https?://\S+")
 
