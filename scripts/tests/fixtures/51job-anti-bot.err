@@ -1,0 +1,5 @@
+ok: false
+error:
+  code: ANTI_BOT
+  message: 51job returned HTML (likely Aliyun WAF slider). Refresh browser session.
+  exitCode: 1

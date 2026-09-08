@@ -23,9 +23,17 @@ measured_note: >-
   failed: HTTP 403 Forbidden from https://www.1point3acres.com/bbs/forum-145-1.html',
   exitCode: 1}". That 403 is a LOGIN WALL, and check_opencli_result.py
   resolves it in the login-wall branch against `opencli auth status`, not
-  here. No captcha, slider or rate-limit body has ever been observed.
+  here. On 2026-09-08, opencli 1.8.7 Indeed search returned exit 1 with
+  "Indeed served a Cloudflare challenge page"; the raw stderr is retained
+  in scripts/tests/fixtures/indeed-cloudflare.err. No further Indeed reads
+  were attempted in that round.
 
 signals:
+  - id: indeed-cloudflare-challenge
+    site: indeed
+    pattern: "Indeed served a Cloudflare challenge page"
+    verified: true
+    observed: "2026-09-08: opencli 1.8.7 indeed search Python --location New York, NY --limit 3; exit 1, empty stdout"
   - id: http-429-rate-limited
     site: "*"
     pattern: "HTTP 429"

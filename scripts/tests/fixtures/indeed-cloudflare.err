@@ -1,0 +1,6 @@
+ok: false
+error:
+  code: COMMAND_EXEC
+  message: Indeed served a Cloudflare challenge page
+  help: Open https://www.indeed.com in the connected browser and clear the challenge, then retry.
+  exitCode: 1
