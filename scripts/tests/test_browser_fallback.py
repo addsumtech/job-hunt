@@ -188,3 +188,50 @@ def test_prediction_lint_uses_only_intact_browser_snapshot(tmp_path):
     assert journaled_captures(ws) == [snapshot]
     snapshot.write_text('{"text":"invented fit 100%"}')
     assert journaled_captures(ws) == []
+
+
+def test_captcha_in_a_legitimate_job_is_not_a_wall(tmp_path):
+    ws, _, snap, rows, args = setup_capture(tmp_path)
+    rows[0]['title'] = 'CAPTCHA security engineer'
+    rows[0]['raw_text'] = 'CAPTCHA security engineer\nBuild CAPTCHA detection and abuse prevention.'
+    snap['text'] = '\n\n'.join(r['raw_text'] for r in rows)
+    dump(ws / 'raw/51job-browser-1.json', snap)
+    dump(ws / 'raw/51job-browser-1-rows.json', rows)
+    assert record(ws, args)['classification'] == 'ok'
+
+
+@pytest.mark.parametrize('site,offset,page', [('indeed',0,1), ('indeed',10,2),
+                                            ('linkedin',0,1), ('linkedin',25,2)])
+def test_same_page_across_backends_counts_once(site, offset, page):
+    calls = [{'site':site, 'command':'search', 'exit_code':0,
+              'command_line':f'opencli {site} search Python --start {offset}'},
+             {'site':site, 'action':'browser_call', 'command':'search', 'exit_code':0, 'page':page}]
+    assert cs._pages_per_site(calls) == {site:{page}}
+
+
+def test_non_aligned_offsets_cannot_hide_extra_reads():
+    calls = [{'site':'indeed', 'command':'search', 'exit_code':0,
+              'command_line':f'opencli indeed search Python --start {n}'} for n in [0,1,2]]
+    assert len(cs._pages_per_site(calls)['indeed']) == 3
+    assert cs._check_caps_against_the_run(fx.BRIEF, {}, [], calls)
+
+
+def test_capping_final_shortlist_does_not_hide_over_retrieval():
+    calls = [{'site':'51job', 'command':'search', 'exit_code':0, 'row_count':20},
+             {'site':'51job', 'action':'browser_call', 'command':'search', 'exit_code':0,
+              'row_count':20, 'page':1}]
+    assert any(f.startswith('ROWS_ABOVE_CAP') for f in
+               cs._check_caps_against_the_run(fx.BRIEF, {}, [], calls))
+
+
+def test_row_budget_is_per_site_not_global():
+    rows = [{'source_site':site} for site in ['51job','indeed'] for _ in range(20)]
+    calls = [{'site':site, 'command':'search', 'exit_code':0, 'row_count':20}
+             for site in ['51job','indeed']]
+    assert not cs._check_caps_against_the_run(fx.BRIEF, {}, rows, calls)
+
+
+def test_detail_read_does_not_spend_search_row_budget_again():
+    calls = [{'site':'51job', 'command':'search', 'exit_code':0, 'row_count':25},
+             {'site':'51job', 'command':'detail', 'exit_code':0, 'row_count':1}]
+    assert not cs._check_caps_against_the_run(fx.BRIEF, {}, [], calls)

@@ -843,6 +843,8 @@ def _check_md_rows(md_text, rows):
 # the honest fixture uses. `--start`/`--offset` are row offsets: each distinct
 # value is a distinct page of results, which is exactly what the cap counts.
 _PAGE_ARG = re.compile(r"--(?:page|start|offset|from)[= ]\s*(\d+)")
+_OFFSET_ARG = re.compile(r"--(?:start|offset|from)[= ]\s*(\d+)")
+_OFFSET_PAGE_SIZES = {"indeed": 10, "linkedin": 25}
 
 
 def _pages_per_site(calls):
@@ -866,7 +868,21 @@ def _pages_per_site(calls):
             continue
         found = _PAGE_ARG.search(str(call.get("command_line") or ""))
         # A search with no --page is page 1: that is what the platform returns.
-        pages.setdefault(site, set()).add(int(found.group(1)) if found else 1)
+        value = int(found.group(1)) if found else 1
+        offset = _OFFSET_ARG.search(str(call.get("command_line") or ""))
+        if offset:
+            start = int(offset.group(1))
+            width = _OFFSET_PAGE_SIZES.get(site)
+            # Normalise known documented offsets to the same page numbers used
+            # by browser captures. Non-aligned offsets must remain DISTINCT,
+            # otherwise starts 0, 1, ... 9 all hide inside one counted page.
+            if width and start % width == 0:
+                value = start // width + 1
+            elif start == 0:
+                value = 1
+            else:
+                value = -(start + 1)
+        pages.setdefault(site, set()).add(value)
     return pages
 
 
@@ -887,17 +903,32 @@ def _check_caps_against_the_run(brief, shortlist, rows, calls):
             if len(pages) > max_pages:
                 findings.append(
                     f"PAGES_ABOVE_CAP: {site} was searched across {len(pages)} "
-                    f"pages ({', '.join(str(p) for p in sorted(pages))}) but "
+                    f"pages ({', '.join(str(p) if p > 0 else 'offset:' + str(-p - 1) for p in sorted(pages))}) but "
                     f"brief.yaml declares max_pages_per_site={max_pages}. Two "
                     "pages of a keyword search a human asked for is not a "
                     "scrape; an uncapped crawl is, and the cap is the "
                     "difference — see references/source-policy.md.")
     max_rows = brief.get("max_rows_per_round")
     if isinstance(max_rows, int) and not isinstance(max_rows, bool) and max_rows >= 1:
-        if len(rows) > max_rows:
-            findings.append(
-                f"ROWS_ABOVE_CAP: the shortlist carries {len(rows)} rows but "
-                f"brief.yaml declares max_rows_per_round={max_rows}")
+        returned = {}
+        retained = {}
+        for row in rows:
+            if isinstance(row, dict):
+                site = str(row.get("source_site") or "").strip().casefold()
+                retained[site] = retained.get(site, 0) + 1
+        for call in calls:
+            count = call.get("row_count")
+            if (call.get("command") == "search" and call.get("exit_code") == 0
+                    and type(count) is int and count >= 0):
+                site = str(call.get("site") or "").strip().casefold()
+                returned[site] = returned.get(site, 0) + count
+        for site in sorted(set(returned) | set(retained)):
+            count = max(returned.get(site, 0), retained.get(site, 0))
+            if count > max_rows:
+                findings.append(
+                    f"ROWS_ABOVE_CAP: {site or '<unknown source>'} returned/retained "
+                    f"{count} rows but its per-site max_rows_per_round={max_rows}. "
+                    "Dropping rows from the shortlist does not undo retrieval.")
     return findings
 
 

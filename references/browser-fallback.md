@@ -83,7 +83,9 @@ In `shortlist.yaml`, browser rows use `extraction_method: browser_page`, copied
 verification fields. `sources` uses the same site, `command: search` (or `detail`),
 actual classification, counts and both `raw_files`. If a site used multiple
 commands, omit `sources.command` to aggregate them; do not hide failed calls.
-All existing page, query, count, detail and disclosure rules apply. Browser
+All existing page, query, count, detail and disclosure rules apply. The row
+budget counts search rows returned across both backends per site, before
+shortlisting or de-duplication; discarding a row does not undo the read. Browser
 `--page` is the page actually visited, not a counter reset on every query.
 
 Run `check_no_write.py` and `check_shortlist.py` normally. They read both types of

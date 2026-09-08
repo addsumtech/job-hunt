@@ -22,9 +22,9 @@ REASONS = ("cli_missing", "bridge_disconnected", "unsupported_extraction")
 STOP_CLASSES = {"platform_limit", "not_logged_in", "no_auth_adapter"}
 # Look for actual wall language, not an ordinary navigation link saying Login.
 WALL = re.compile(
-    r"captcha|verify (?:that )?you are human|access denied|too many requests|"
+    r"(?:enter|complete|solve) (?:the |this |a )?captcha|verify (?:that )?you are (?:a )?human|access denied|too many requests|"
     r"please (?:sign|log) in|(?:sign|log) in (?:required|to continue|to view)|"
-    r"验证码|验证您是人类|访问受限|访问过于频繁|请先登[录入]|"
+    r"(?:请输入|请完成|请填写).{0,12}验证码|验证您是人类|访问受限|访问过于频繁|请先登[录入]|"
     r"認証が必要|ログインが必要|로그인이 필요|접근이 제한", re.I)
 
 
