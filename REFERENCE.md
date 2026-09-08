@@ -127,6 +127,7 @@ job-hunt/
     ├── enter_mode.py                # mode entry + the mode file's content hash
     ├── evidence_blocks.py           # cuts posting and CV into addressable JD-nnn / CV-nnn blocks
     ├── journal.py                   # gate receipts in journal.jsonl (library)
+    ├── cli_io.py                    # UTF-8 command-line output (library)
     ├── lint_cv.py                   # clichés, weak openers, bullet length, repeated verbs
     ├── lint_no_prediction.py        # no probabilities, no 0–100 scores — nine CV languages
     ├── mock_blocks.py               # fail-closed parser for the assessor blocks (library)

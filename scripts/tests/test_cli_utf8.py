@@ -98,8 +98,12 @@ def test_external_utf8_output_is_not_decoded_as_the_windows_locale(tmp_path, mon
     assert output == TEXT
 
 
+@pytest.mark.filterwarnings("error::pytest.PytestUnhandledThreadExceptionWarning")
 def test_invalid_utf8_tool_output_is_unavailable_not_a_successful_read(tmp_path, monkeypatch):
     utf8_tool(monkeypatch, b"\xffnot-utf8")
     assert deliver.pdf_text(tmp_path / "document.pdf") == ""
+    md = tmp_path / "document.md"
+    md.write_text(TEXT, encoding="utf-8")
+    assert deliver.visible_markdown(md) == TEXT
     with pytest.raises(opencli_meta.MetadataUnavailable):
         opencli_meta._help_yaml("51job", None, True)

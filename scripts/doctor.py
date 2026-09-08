@@ -160,6 +160,7 @@ def checks() -> list[dict]:
                      f".docx output is unavailable ({module})"),
             "fix": f"{sys.executable} -m pip install {pkg}",
             "auto": True,
+            "install_argv": [sys.executable, "-m", "pip", "install", pkg],
         })
     ok, detail = can_render_pdf()
     out.append({
@@ -197,7 +198,7 @@ def install_python(missing: list[dict]) -> int:
     installed = 0
     for c in missing:
         print(f"installing: {c['fix']}")
-        r = subprocess.run(c["fix"].split(), capture_output=True, text=True, encoding="utf-8")
+        r = subprocess.run(c["install_argv"], capture_output=True, text=True, encoding="utf-8")
         if r.returncode == 0:
             installed += 1
             print(f"  ok: {c['what']}")

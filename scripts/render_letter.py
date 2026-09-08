@@ -27,6 +27,11 @@ def load(path):
     return journal.load_yaml(path)
 
 
+def body_paragraphs(d):
+    body = d.get("body") or []
+    return [body] if isinstance(body, str) else body
+
+
 def render_markdown(d):
     s = d.get("sender", {}) or {}
     r = d.get("recipient", {}) or {}
@@ -36,7 +41,7 @@ def render_markdown(d):
     lines += [r.get("name", ""), r.get("company", ""), r.get("location", ""), ""]
     if salutation_for(d):
         lines += [salutation_for(d), ""]
-    for para in (d.get("body") or []):
+    for para in body_paragraphs(d):
         lines += [para, ""]
     lines += [x for x in (closing_for(d), s.get("name", "")) if x]
     return "\n".join([ln for ln in lines]) + "\n"
@@ -57,7 +62,7 @@ def render_docx(d, out_path):
             doc.add_paragraph(line)
     if salutation_for(d):
         doc.add_paragraph(salutation_for(d))
-    for para in (d.get("body") or []):
+    for para in body_paragraphs(d):
         doc.add_paragraph(para)
     if closing_for(d):
         doc.add_paragraph(closing_for(d))
@@ -160,7 +165,7 @@ def build_latex(d, engine=None, cjk=False):
         e(r.get("name", "")), e(r.get("company", "")), e(r.get("location", ""))))
     if salutation_for(d):
         parts.append(e(salutation_for(d)) + r"\\[1em]")
-    for para in (d.get("body") or []):
+    for para in body_paragraphs(d):
         parts.append(e(para) + r"\\[1em]")
     if closing_for(d):
         parts.append(e(closing_for(d)) + r"\\")
