@@ -120,7 +120,8 @@ def writable(directory: pathlib.Path) -> tuple[bool, str]:
 
 def _pandoc(md: pathlib.Path, pdf: pathlib.Path, font: str | dict | None) -> bool:
     pdf.unlink(missing_ok=True)
-    cmd = ["pandoc", str(md), "-o", str(pdf), "--pdf-engine=tectonic"]
+    cmd = ["pandoc", str(md), "-o", str(pdf), "--pdf-engine=tectonic",
+           "--lua-filter", str(pathlib.Path(__file__).with_name("pdf_symbols.lua"))]
     if font:
         main = font["main"] if isinstance(font, dict) else font
         cmd += ["-V", f"CJKmainfont={main}", "-V", f"mainfont={main}"]

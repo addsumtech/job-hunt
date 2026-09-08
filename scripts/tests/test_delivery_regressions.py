@@ -82,3 +82,16 @@ def test_native_and_mixed_reports_really_round_trip(tmp_path, text):
     ok, reason = deliver.render_pdf(md, pdf, font)
     assert ok, reason
     assert set(deliver._CJK.findall(text)) <= set(deliver._CJK.findall(deliver.pdf_text(pdf)))
+
+
+@pytest.mark.skipif(not all(shutil.which(t) for t in ('pandoc', 'tectonic', 'pdftotext')),
+                    reason='requires PDF toolchain')
+def test_warning_symbol_has_a_readable_pdf_fallback_without_editing_source(tmp_path):
+    md, pdf = tmp_path / 'notice.md', tmp_path / 'notice.pdf'
+    source = '> ⚠️ Evidence count, not an outcome prediction.\n'
+    md.write_text(source, encoding='utf-8')
+    ok, reason = deliver.render_pdf(md, pdf, None)
+    assert ok, reason
+    text = deliver.pdf_text(pdf)
+    assert '[!]' in text and 'Evidence count' in text
+    assert md.read_text(encoding='utf-8') == source
