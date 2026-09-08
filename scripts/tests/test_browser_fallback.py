@@ -1,6 +1,7 @@
 """Synthetic browser captures: do not mistake these for live site evidence."""
 import copy
 import json
+from pathlib import Path
 
 import pytest
 import yaml
@@ -40,8 +41,10 @@ def setup_capture(tmp_path, page=1, text=None, status=None):
 def record(ws, args):
     assert browser.main(args) == 0
     call = browser.read_retrieval_calls(ws)[-1]
-    assert call["snapshot_file"] == "raw/51job-browser-1.json"
-    assert call["rows_file"] == "raw/51job-browser-1-rows.json"
+    for field, flag in (("snapshot_file", "--snapshot-file"), ("rows_file", "--rows-file")):
+        expected = Path(args[args.index(flag) + 1]).relative_to(ws).as_posix()
+        assert call[field] == expected
+        assert "\\" not in call[field]
     assert set(call["input_hashes"]) == {call["snapshot_file"], call["rows_file"]}
     return call
 

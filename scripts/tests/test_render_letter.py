@@ -188,3 +188,33 @@ def test_a_chinese_letter_renders_to_markdown_without_english_furniture():
     assert "Dear Hiring Manager" not in md
     assert "Sincerely" not in md
     assert "吕东航" in md
+
+
+@pytest.mark.parametrize("body", [
+    "I built regression tests for a reporting service.",
+    ["I built regression tests for a reporting service.",
+     "I documented the review steps for colleagues."],
+])
+@pytest.mark.parametrize("fmt", ["md", "docx", "pdf"])
+def test_body_strings_and_lists_preserve_complete_paragraphs(body, fmt, tmp_path,
+                                                             monkeypatch):
+    import yaml
+    from docx import Document
+
+    data = {"sender": {"name": "Lena Park"},
+            "recipient": {"company": "Fresh Harbor Lab"}, "body": body}
+    source = tmp_path / "letter.yaml"
+    source.write_text(yaml.safe_dump(data), encoding="utf-8")
+    out = tmp_path / f"letter.{fmt}"
+    # The PDF path emits the actual LaTeX paragraphs without requiring an engine.
+    monkeypatch.setattr(render_letter.render_cv, "find_latex_engine", lambda **kw: None)
+    assert render_letter.main([str(source), "--format", fmt, "--out", str(out)]) == 0
+    paragraphs = [body] if isinstance(body, str) else body
+    if fmt == "docx":
+        rendered = [p.text for p in Document(str(out)).paragraphs]
+        assert all(p in rendered for p in paragraphs)
+    else:
+        text = (out.with_suffix(".tex") if fmt == "pdf" else out).read_text(encoding="utf-8")
+        assert all(p in text for p in paragraphs)
+        if len(paragraphs) > 1:
+            assert text.index(paragraphs[0]) < text.index(paragraphs[-1])

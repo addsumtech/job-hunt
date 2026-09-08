@@ -140,8 +140,10 @@ def _pandoc(md: pathlib.Path, pdf: pathlib.Path, font: str | dict | None) -> boo
 def pdf_text(pdf: pathlib.Path) -> str:
     try:
         r = subprocess.run(["pdftotext", str(pdf), "-"], capture_output=True,
-                           timeout=60, text=True, encoding="utf-8", check=False)
-        return r.stdout or ""
+                           timeout=60, check=False)
+        # Decode in this thread: Windows subprocess text readers can lose a
+        # UnicodeDecodeError in a background thread and return stdout=None.
+        return r.stdout.decode("utf-8")
     except (OSError, UnicodeError, subprocess.SubprocessError):
         return ""
 
@@ -154,10 +156,10 @@ def visible_markdown(md: pathlib.Path) -> str:
     source = md.read_text(encoding="utf-8", errors="replace")
     try:
         result = subprocess.run(["pandoc", str(md), "-t", "plain", "--wrap=none"],
-                                capture_output=True, text=True, encoding="utf-8", timeout=60,
+                                capture_output=True, timeout=60,
                                 check=False)
         if result.returncode == 0:
-            return result.stdout
+            return result.stdout.decode("utf-8")
     except (OSError, UnicodeError, subprocess.SubprocessError):
         pass
     return source

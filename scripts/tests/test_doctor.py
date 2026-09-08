@@ -233,3 +233,22 @@ def test_the_skill_says_the_check_runs_automatically():
     src = (REPO / "scripts" / "enter_mode.py").read_text(encoding="utf-8")
     assert "fast_capabilities()" in src
     assert "NOTICE_MISSING_CAPABILITIES" in src
+
+
+def test_python_install_preserves_interpreter_path_with_spaces(monkeypatch):
+    executable = "/tmp/Fresh User/python env/bin/python"
+    monkeypatch.setattr(doctor.sys, "executable", executable)
+    monkeypatch.setattr(doctor, "requirements", lambda: [("PyYAML", "yaml")])
+    monkeypatch.setattr(doctor, "importable", lambda module: False)
+    monkeypatch.setattr(doctor, "can_render_pdf", lambda: (False, "unavailable"))
+    monkeypatch.setattr(doctor.shutil, "which", lambda name: None)
+    missing = [c for c in doctor.checks() if c.get("auto")]
+    calls = []
+
+    def installer(argv, **kwargs):
+        calls.append(argv)
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr(doctor.subprocess, "run", installer)
+    assert doctor.install_python(missing) == 1
+    assert calls == [[executable, "-m", "pip", "install", "PyYAML"]]

@@ -174,7 +174,7 @@ def test_three_paths_that_used_to_collide_all_arrive(tmp_path):
         {"FILE-A", "FILE-B", "FILE-C"}
 
 
-def test_one_unreadable_file_does_not_abandon_the_round(tmp_path, deny_file_reads):
+def test_one_unreadable_file_does_not_abandon_the_round(tmp_path, monkeypatch):
     """It raised, exited 1 — which this script's contract says is impossible and
     which in this repo means "ran and found problems" — and left no journal
     record, so a partial delivery could not be told from one that never ran."""
@@ -184,7 +184,16 @@ def test_one_unreadable_file_does_not_abandon_the_round(tmp_path, deny_file_read
     blocked = ws / "b-cv.docx"
     blocked.write_text("B\n", encoding="utf-8")
     (ws / "c-letter.md").write_text("C\n", encoding="utf-8")
-    deny_file_reads(blocked)
+    # Windows copy2 can use CopyFile2 without Python open(); stage the OS
+    # failure at the copy boundary while retaining real copies for other files.
+    copy2 = deliver.shutil.copy2
+
+    def guarded_copy(src, dst, *args, **kwargs):
+        if src == blocked:
+            raise PermissionError("Permission denied")
+        return copy2(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr(deliver.shutil, "copy2", guarded_copy)
     dest = tmp_path / "out"
     assert deliver.main(["--workspace", str(ws), "--to", str(dest),
                          "--no-pdf"]) == 0
