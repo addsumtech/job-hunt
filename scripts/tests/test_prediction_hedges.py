@@ -41,6 +41,8 @@ MUST_FIRE = [
     ("zh", "你很可能会拿到面试。"),
     ("zh", "你多半能进面试。"),
     ("zh", "大概率会给你发 offer。"),
+    # A comma between the two halves is still one forecast.
+    ("zh", "你很可能会通过初筛，拿到面试。"),
     ("de", "Sie werden höchstwahrscheinlich zum Vorstellungsgespräch eingeladen."),
     ("de", "Sie bekommen wahrscheinlich ein Vorstellungsgespräch."),
     ("nl", "Je wordt hoogstwaarschijnlijk uitgenodigd voor een gesprek."),
@@ -105,6 +107,16 @@ MUST_NOT = [
     ("zh", "准备好解释你会怎么处理 offer 谈判。"),
     ("ja", "面接では可能性のある設計案を二つ用意してください。"),
     ("ko", "면접에서 가능한 접근 방식을 설명하세요."),
+    # One long CJK clause holding both halves for unrelated reasons. A CJK
+    # character carries far more of a clause than a Latin one, so the window that
+    # is right for English spans a whole chain of them — a single 60-character
+    # gap fired on all three of these, in the language the skill's own default
+    # reports are written in.
+    ("zh", "这个岗位很可能需要经常出差，团队分布在三个城市，日常沟通以英文为主，而面试环节安排在下午"),
+    ("ja", "この職種はおそらく出張が多く、チームは三都市に分かれており、面接は午後に行われます"),
+    ("ko", "이 직무는 아마 출장이 잦고 팀은 세 도시에 나뉘어 있으며 면접은 오후에 진행됩니다"),
+    # `；` ends a clause in CJK the way `.` does in English.
+    ("zh", "岗位很可能需要出差；面试安排在下午。"),
 ]
 
 
@@ -128,6 +140,15 @@ def test_every_cv_language_has_both_halves(lang):
     assert any(l == lang for l, _ in MUST_FIRE), f"{lang} has no caught example"
     if lang != "fr":       # fr's honest-prose case is covered by the shared list
         assert any(l == lang for l, _ in MUST_NOT), f"{lang} has no cry-wolf guard"
+
+
+def test_the_cjk_window_sits_between_the_two_measurements():
+    """Not a taste number. Across every real prediction in the corpus the hedge
+    and the outcome sit at most 6 characters apart; the closest false positive
+    was 21. A window inside that band separates them; one outside it either
+    misses forecasts or fires on correct sentences."""
+    assert 6 < lnp._GAP_CJK < 21, lnp._GAP_CJK
+    assert lnp._GAP_CJK < lnp._GAP_LATIN, "a CJK character carries more clause"
 
 
 def test_the_two_halves_are_the_same_shape():

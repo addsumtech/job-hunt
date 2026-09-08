@@ -45,10 +45,23 @@ def _early_returns(tree):
 
     A `return` carrying a value is a different thing (pytest warns about it
     separately), so only bare ones are considered.
+
+    KNOWN LIMIT, stated rather than hidden: "already verified" is judged by line
+    order, not by which branch actually runs. A function whose only assertion
+    sits inside an `if` that did not fire, and which then returns from a later
+    branch, exits having checked nothing and is not reported. Catching that needs
+    path analysis; naming it here is the honest alternative to implying this
+    check is complete.
     """
     out = []
     for node in ast.walk(tree):
-        if not isinstance(node, ast.FunctionDef) or not node.name.startswith("test_"):
+        # AsyncFunctionDef too: the repo has no async tests today, and a guard
+        # that silently ignores a whole syntax form is the same defect it exists
+        # to catch. Measured — an `async def test_x` with a silent return went
+        # unreported until this line named it.
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if not node.name.startswith("test_"):
             continue
         nested = {n for d in ast.walk(node)
                   if isinstance(d, (ast.FunctionDef, ast.AsyncFunctionDef)) and d is not node
@@ -110,3 +123,16 @@ def test_this_check_can_actually_see_the_defect():
         "    assert reasons == [NO_ENGINE]\n"
         "    return\n")
     assert _early_returns(checked_first) == []
+
+    # Every syntax form a test can be written in, because a detector blind to one
+    # of them is exactly the silent no-op it is here to prevent.
+    for src, expected in [
+        ("async def test_a():\n    if x:\n        return\n    assert x\n", 3),
+        ("@deco\ndef test_b(a):\n    if not a:\n        return\n    assert a\n", 4),
+        ("class TestX:\n    def test_c(self):\n        if not x:\n"
+         "            return\n        assert x\n", 4),
+        ("def test_d():\n    try:\n        if x:\n            return\n"
+         "    finally:\n        pass\n    assert x\n", 4),
+    ]:
+        found = _early_returns(ast.parse(src))
+        assert [line for _, line in found] == [expected], (src, found)

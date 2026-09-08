@@ -96,7 +96,7 @@ def _host(record):
     nothing else, because the command line *is* the adapter name and opencli
     would not run an invented one.
     """
-    url = record.get("url")
+    url = journal.as_mapping(record).get("url")
     if not isinstance(url, str):
         return ""
     try:
@@ -163,7 +163,20 @@ def check_stop_order(records):
     stopped_names, stopped_hosts = set(), set()
     seen_hosts = {}
     findings = []
-    for record in records:
+    # `journal.as_mapping` and the hashable guard below are not decoration. This
+    # reads journal.jsonl, which is a file on disk that a person can edit and a
+    # corrupt run can half-write, and the gate contract is 0 clean / 1 findings /
+    # 2 could-not-run with exactly one receipt. An exception escaping here is
+    # exit 1 with NO receipt -- indistinguishable from a gate nobody ran, which
+    # is the failure `journal.as_mapping`'s own docstring records from
+    # 2026-09-05. Fuzzed 2026-09-08: a non-mapping row and an unhashable
+    # `classification` each raised, in this function and in the one it replaced.
+    # `records` itself is a caller's argument, and one caller reads it from the
+    # journal. A string is iterable and would be walked character by character;
+    # everything non-iterable would raise. `as_mapping` is the row-level twin of
+    # this guard and journal has no list-level one, so it is inline.
+    for entry in (records if isinstance(records, (list, tuple)) else ()):
+        record = journal.as_mapping(entry)
         if record.get("action") not in ("adapter_call", ACTION):
             continue
         name = str(record.get("site") or "").strip().lower()
@@ -186,7 +199,8 @@ def check_stop_order(records):
                 f"READ_AFTER_STOP: {name or '<unnamed>'} was read after a site "
                 f"refusal; changing tools or renaming the source does not reset "
                 f"the round")
-        if record.get("classification") in STOP_CLASSES:
+        classification = record.get("classification")
+        if isinstance(classification, str) and classification in STOP_CLASSES:
             stopped_names.add(name)
             if host:
                 stopped_hosts.add(host)

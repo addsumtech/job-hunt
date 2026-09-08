@@ -252,16 +252,34 @@ _HEDGE_KO = r"아마|십중팔구|거의 확실|틀림없이"
 _OUTCOME_KO = r"면접|합격|채용|제안|서류 통과"
 
 
-def _hedged(hedge: str, outcome: str, latin: bool = True) -> str:
-    """A probability word and an outcome in ONE sentence, in either order.
+# How far apart the two halves may sit. Bounded by sentence punctuation as well,
+# so they cannot be borrowed from neighbouring sentences -- `The role likely
+# involves travel. An offer was made to someone else.` is two facts, not a
+# forecast.
+#
+# The CJK window is a QUARTER of the Latin one, and that is not a guess. A
+# Chinese, Japanese or Korean character carries far more of a clause than a Latin
+# one, and 60 of them span a whole chain of them: measured 2026-09-08, a single
+# window of 60 fired on all three of
+#
+#   这个岗位很可能需要经常出差，团队分布在三个城市，……而面试环节安排在下午
+#   この職種はおそらく出張が多く、チームは三都市に分かれており、面接は午後に行われます
+#   이 직무는 아마 출장이 잦고 팀은 세 도시에 나뉘어 있으며 면접은 오후에 진행됩니다
+#
+# — three correct sentences, in the language the skill's own default reports are
+# written in. Across every real prediction in the corpus the two halves sit at
+# most 6 characters apart; the closest false positive was 21. 14 is above double
+# the first and well under the second.
+_GAP_LATIN, _GAP_CJK = 60, 14
+# `；;` are clause terminators in CJK the way `.` is in English, and a forecast
+# does not survive one.
+_SENTENCE_END = r".!?\n。！？；;"
 
-    Bounded by sentence punctuation rather than by a character count alone, so
-    the two halves cannot be borrowed from neighbouring sentences -- `The role
-    likely involves travel. An offer was made to someone else.` is two facts,
-    not a forecast.
-    """
+
+def _hedged(hedge: str, outcome: str, latin: bool = True) -> str:
+    """A probability word and an outcome close together in ONE sentence."""
     b = r"\b" if latin else ""
-    gap = r"[^.!?\n。！？]{0,60}"
+    gap = rf"[^{_SENTENCE_END}]{{0,{_GAP_LATIN if latin else _GAP_CJK}}}"
     return (rf"{b}(?:{hedge}){b}{gap}{b}(?:{outcome}){b}"
             rf"|{b}(?:{outcome}){b}{gap}{b}(?:{hedge}){b}")
 

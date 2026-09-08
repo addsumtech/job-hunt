@@ -144,3 +144,59 @@ def test_the_reference_states_the_limit_rather_than_the_promise():
     doc = (ROOT / "references" / "browser-fallback.md").read_text(encoding="utf-8")
     assert "shares no text" in doc or "no shared text" in doc, (
         "browser-fallback.md does not state what the stop lock cannot join")
+
+
+# ---- the gate contract: a malformed journal must not crash the lock ---------
+
+WRONG = ["a string", ["a", "list"], {"a": "dict"}, None, 42, True, b"bytes", 3.14]
+
+
+@pytest.mark.parametrize("field", ["action", "site", "classification", "url"])
+@pytest.mark.parametrize("wrong", WRONG, ids=lambda v: type(v).__name__)
+def test_a_wrongly_typed_field_does_not_crash_the_lock(field, wrong):
+    """journal.jsonl is a file on disk. A person can edit it and a killed run can
+    half-write it, and three gates call this function while reading it.
+
+    An exception escaping here is exit 1 with NO receipt, which a composer reads
+    as a gate that never ran — the failure `journal.as_mapping`'s own docstring
+    records from 2026-09-05. Fuzzed 2026-09-08: an unhashable `classification`
+    and a non-mapping row each raised, in this function and in the one it
+    replaced.
+    """
+    record = {"action": "browser_call", "site": "51job",
+              "classification": "platform_limit", "url": "https://we.51job.com/x"}
+    record[field] = wrong
+    rb.check_stop_order([record, dict(record, classification="ok")])
+
+
+@pytest.mark.parametrize("wrong", WRONG + [{}, {"action": "browser_call"}],
+                         ids=lambda v: str(type(v).__name__) + str(v)[:12])
+def test_a_malformed_row_does_not_crash_the_lock(wrong):
+    rb.check_stop_order([wrong])
+
+
+@pytest.mark.parametrize("wrong", ["a string", 42, None, {"a": 1}],
+                         ids=lambda v: type(v).__name__)
+def test_a_non_list_argument_does_not_crash_the_lock(wrong):
+    """A string is iterable and would be walked character by character."""
+    assert rb.check_stop_order(wrong) == []
+
+
+@pytest.mark.parametrize("url", [
+    "", "not a url", "http://", "https://[", "ftp://x", "https://" + "a" * 3000,
+    "https://user:pw@host/x", "https://例え.テスト/x",
+])
+def test_a_malformed_url_does_not_crash_the_lock(url):
+    rb.check_stop_order([{"action": "browser_call", "site": "s", "url": url,
+                          "classification": "platform_limit"}])
+
+
+def test_a_refusal_still_stops_when_a_neighbouring_row_is_corrupt():
+    """The guard must skip the bad row, not the whole journal. Swallowing the
+    refusal because the line next to it was malformed would turn a corrupt file
+    into a way through the lock."""
+    records = ["garbage", {"action": "adapter_call", "site": "51job",
+                           "classification": "platform_limit"},
+               None, {"action": "browser_call", "site": "51job"}]
+    assert rb.check_stop_order(records)
+
