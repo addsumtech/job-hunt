@@ -1078,7 +1078,7 @@ def render_markdown(profile):
             if not out:
                 out += ["", f"## {h['experience']}"]
             header = f"**{e.get('title','')}**, {e.get('org','')}"
-            dates = _dates(e)
+            dates = _dates(e, meta.get("language", "en"))
             meta_bits = " · ".join(
                 b for b in [scalar_field(e.get("location"), "experience[].location"), dates] if b)
             # The leading "" is load-bearing, not cosmetic: without it this
@@ -1098,7 +1098,7 @@ def render_markdown(profile):
         for ed in (profile.get("education") or []):
             if not out:
                 out += ["", f"## {h['education']}"]
-            dates = _dates(ed)
+            dates = _dates(ed, meta.get("language", "en"))
             # `location` mirrors experience: the schema advertises it (assets/profile.example.yaml)
             # and until now no renderer read it, so it was a field the docs promised and the
             # product silently discarded.
@@ -1196,6 +1196,23 @@ def render_docx(profile, out_path):
 
     h = headings(profile)
     doc = Document()
+    from docx.shared import Mm, Pt
+    section = doc.sections[0]
+    section.page_width, section.page_height = (
+        (Mm(215.9), Mm(279.4)) if paper_for(profile.get("meta")) == "letterpaper"
+        else (Mm(210), Mm(297)))
+    section.top_margin = section.bottom_margin = Mm(16)
+    section.left_margin = section.right_margin = Mm(18)
+    normal = doc.styles["Normal"]
+    normal.font.size = Pt(10)
+    normal.paragraph_format.space_after = Pt(3)
+    normal.paragraph_format.line_spacing = 1.0
+    for name, size, before, after in [("Title", 20, 0, 5), ("Heading 1", 12, 8, 3),
+                                       ("List Bullet", 10, 0, 2)]:
+        style = doc.styles[name]
+        style.font.size = Pt(size)
+        style.paragraph_format.space_before = Pt(before)
+        style.paragraph_format.space_after = Pt(after)
     meta = profile.get("meta", {}) or {}
     doc.add_heading(meta.get("name", ""), level=0)
     if meta.get("headline"):
@@ -1251,7 +1268,7 @@ def render_docx(profile, out_path):
         for e in exp:
             doc.add_paragraph().add_run(
                 f"{e.get('title','')}, {e.get('org','')}").bold = True
-            dates = _dates(e)
+            dates = _dates(e, meta.get("language", "en"))
             meta_bits = " · ".join(
                 b for b in [scalar_field(e.get("location"), "experience[].location"), dates] if b)
             if meta_bits:
@@ -1267,7 +1284,7 @@ def render_docx(profile, out_path):
         for ed in edu:
             doc.add_paragraph().add_run(
                 f"{ed.get('degree','')}, {ed.get('institution','')}").bold = True
-            dates = _dates(ed)
+            dates = _dates(ed, meta.get("language", "en"))
             meta_bits = " · ".join(b for b in
                                    [scalar_field(ed.get("location"), "education[].location"), dates] if b)
             if meta_bits:
@@ -1325,6 +1342,12 @@ def render_docx(profile, out_path):
     for key in section_order(profile):
         builders.get(key, lambda: None)()
 
+    # An entry label and its date line must not be left at the page foot.
+    for index, paragraph in enumerate(doc.paragraphs[:-1]):
+        if paragraph.runs and all(run.bold for run in paragraph.runs):
+            paragraph.paragraph_format.keep_with_next = True
+            if index + 2 < len(doc.paragraphs):
+                doc.paragraphs[index + 1].paragraph_format.keep_with_next = True
     doc.save(str(out_path))
 
 
@@ -1401,7 +1424,19 @@ def scalar_field(value, where: str) -> str:
     return ""
 
 
-def _dates(item) -> str:
+_PRESENT = {"en": "Present", "zh": "至今", "ja": "現在", "ko": "현재",
+            "es": "Actualidad", "de": "heute", "nl": "heden", "fr": "présent",
+            "it": "presente"}
+
+
+def _date_end(item, language):
+    end = str(item.get("end") or "").strip()
+    if end.casefold() in {"present", "current", "now", "ongoing"}:
+        return _PRESENT.get(str(language).lower().replace("_", "-").split("-")[0], end)
+    return end
+
+
+def _dates(item, language="en") -> str:
     """`start – end`, with a missing half omitted rather than printed.
 
     `f"{item.get('start','')} - {item.get('end','')}"` renders an explicit
@@ -1411,14 +1446,14 @@ def _dates(item) -> str:
     model-authored YAML where `end: null` is the natural way to write "current".
     """
     start = str(item.get("start") or "").strip()
-    end = str(item.get("end") or "").strip()
+    end = _date_end(item, language)
     return " – ".join(b for b in (start, end) if b)
 
 
-def _dates_tex(item) -> str:
+def _dates_tex(item, language="en") -> str:
     """The same, with LaTeX's en dash."""
     start = str(item.get("start") or "").strip()
-    end = str(item.get("end") or "").strip()
+    end = _date_end(item, language)
     return " -- ".join(b for b in (start, end) if b)
 
 
@@ -1696,7 +1731,8 @@ def overfull_boxes(log):
 _CJK_FONTS_BY_LANG = {
     "zh": ["Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC",
            "Hiragino Sans GB", "Microsoft YaHei", "SimSun"],
-    "ja": ["Noto Sans CJK JP", "Source Han Sans JP", "Hiragino Sans",
+    "ja": ["Noto Sans CJK JP", "Source Han Sans JP", "Hiragino Sans W3",
+           "Hiragino Kaku Gothic ProN", "Hiragino Sans",
            "Yu Gothic", "MS Gothic"],
     "ko": ["Noto Sans CJK KR", "Source Han Sans KR", "Apple SD Gothic Neo",
            "Malgun Gothic", "NanumGothic"],
@@ -1973,7 +2009,7 @@ def build_latex(profile, cjk=None, engine=None, asset_dir=None, asset_stem="cv")
             return
         parts.append(r"\section*{%s}" % h["experience"])
         for ex in exp:
-            dates = _dates_tex(ex)
+            dates = _dates_tex(ex, meta.get("language", "en"))
             # `location` is on the right with the dates, matching the `location ·
             # dates` line render_markdown and render_docx already emit. It used
             # to be dropped here and only here, so a candidate whose two jobs
@@ -2000,7 +2036,7 @@ def build_latex(profile, cjk=None, engine=None, asset_dir=None, asset_stem="cv")
             return
         parts.append(r"\section*{%s}" % h["education"])
         for ed in edu:
-            dates = _dates_tex(ed)
+            dates = _dates_tex(ed, meta.get("language", "en"))
             bits = [b for b in (scalar_field(ed.get("location"), "education[].location"), dates) if b]
             right = r" \textbullet{} ".join(e(b) for b in bits)
             parts.append(_tex_entry_heading(

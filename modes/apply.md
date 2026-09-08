@@ -294,6 +294,7 @@ python3 scripts/check_claims.py --workspace <ws>
 python3 scripts/lint_cv.py --workspace <ws>
 python3 scripts/check_letter.py --workspace <ws>          # required once letter.yaml exists
 python3 scripts/check_pages.py --workspace <ws>           # required once cv.pdf exists
+# Also exports any cv.docx / letter.docx through LibreOffice and checks their pages.
 python3 scripts/check_word_limits.py --workspace <ws>     # required once supporting-statement.md
                                                           # exists — and for a structured
                                                           # posting that has none, which is
@@ -399,3 +400,5 @@ finding. Exit 2 with `DELIVER_DEST_UNWRITABLE` is the macOS case worth knowing:
 session, and `os.access` says yes while the write fails. The script probes by
 writing a real file. When it exits 2, say so and offer `--to` with somewhere
 else — do not silently leave the artifacts undelivered.
+
+When Word files are delivered, `check_pages.py` requires LibreOffice to measure them independently. A `DOCX_NOT_MEASURED` finding means Word pagination was not verified; install the dependency and rerun, or clearly report the remaining limitation. A passing LaTeX PDF does not establish Word pagination.

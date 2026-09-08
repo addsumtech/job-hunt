@@ -214,12 +214,26 @@ def _box(doc, title, text):
 def render_docx(profile, out_path):
     from docx import Document
     from docx.enum.text import WD_ALIGN_PARAGRAPH
-    from docx.shared import Mm
+    from docx.shared import Mm, Pt
 
     jp = profile.get("jp") or {}
     meta = profile.get("meta") or {}
     c = profile.get("contact") or {}
     doc = Document()
+    section = doc.sections[0]
+    section.page_width, section.page_height = Mm(210), Mm(297)
+    section.top_margin = section.bottom_margin = Mm(15)
+    section.left_margin = section.right_margin = Mm(18)
+    normal = doc.styles["Normal"]
+    normal.font.size = Pt(10)
+    normal.paragraph_format.space_after = Pt(2)
+    normal.paragraph_format.line_spacing = 1.0
+    for name, size in [("Title", 20), ("Heading 1", 12)]:
+        style = doc.styles[name]
+        style.font.size = Pt(size)
+        style.paragraph_format.space_before = Pt(6)
+        style.paragraph_format.space_after = Pt(3)
+        style.paragraph_format.keep_with_next = True
     doc.add_heading("履歴書", level=0)
     if jp.get("date"):
         p = doc.add_paragraph(f"{jp['date']}　現在")
