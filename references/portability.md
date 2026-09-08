@@ -131,3 +131,7 @@ python3 -m pytest scripts/tests/ -q  # the enforcement layer, on this machine
 The test suite is the real portability check: it exercises every gate against
 fixtures and needs no agent at all. A host where it passes can run the gates; a
 host where it fails has a Python or dependency problem, not a skill problem.
+
+### Optional audit of this machine
+
+The test suite checks supported copy and symlink installations in temporary directories. To audit the actual installed skill against the current checkout, run `JOBHUNT_CHECK_INSTALL=1 python -m pytest scripts/tests/test_install.py -q`. Only a machine that migrated from `job-application` should additionally set `JOBHUNT_CHECK_MIGRATION_ARCHIVE=1`; a fresh installation has no legacy archive to preserve. These checks never create or change the user's runtime skill directories.

@@ -1,0 +1,7 @@
+{
+  "measured": false,
+  "source": "Synthetic detail response for deterministic recovery testing; not a live Indeed posting.",
+  "exit_code": 0,
+  "stderr": "",
+  "stdout": [{"id": "synthetic-recovery-001", "title": "Backend Engineer", "company": "Example Test Company", "location": "Remote", "salary": "", "url": "https://www.indeed.com/viewjob?jk=synthetic-recovery-001", "description": "Build Python services and maintain PostgreSQL databases."}]
+}
