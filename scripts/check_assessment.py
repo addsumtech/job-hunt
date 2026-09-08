@@ -165,6 +165,9 @@ def check(workspace: pathlib.Path, market_dir: pathlib.Path,
     # not caught here: check() returns findings, and a findings list is exactly what
     # "the gate could not read its input" must NOT be reported as.
     assessment = journal.load_yaml(workspace / "fit-assessment.yaml")
+    journal.require_lists(assessment, workspace / "fit-assessment.yaml",
+                          requirements=dict, stated_conditions=dict, actions=dict,
+                          conventions_rendered=str)
     markdown = (workspace / "fit-assessment.md").read_text(encoding="utf-8")
     lines = markdown.splitlines()
     squeezed = _squeeze(markdown)
@@ -215,6 +218,8 @@ def check(workspace: pathlib.Path, market_dir: pathlib.Path,
                             f"like a clean one")
             continue
         last = receipts[-1]
+        if not journal.receipt_intact(last):
+            continue  # The malformed/latest receipt is already a finding.
         if last.get("verdict") not in PASSING_VERDICTS:
             detail = "; ".join(last.get("findings") or []) or "no findings recorded"
             findings.append(f"UPSTREAM_FAILED: {gate} verdict={last.get('verdict')} "
@@ -454,7 +459,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         findings = check(workspace, market_dir, today, skill_root)
-    except journal.YamlUnreadable as exc:
+    except (journal.YamlUnreadable, OSError, UnicodeError) as exc:
         return cannot_run(workspace, str(exc), journal.UNREADABLE_INPUT)
     hard = [f for f in findings if not f.startswith("WARN_")]
     for finding in findings:

@@ -123,7 +123,7 @@ def _stale_inputs(ws: pathlib.Path, gate: str, receipt: dict) -> list:
                 f"file in the package being delivered")
             continue
         path = ws / label
-        if not path.exists():
+        if not path.is_file():
             findings.append(
                 f"RECEIPT_INPUT_MISSING: {gate} passed on {label}, which is no "
                 f"longer in the workspace — the gate's pass is about a file that "
@@ -293,6 +293,8 @@ def main(argv=None) -> int:
                             f"skipped gate looks exactly like a clean one")
             continue
         last = receipts[-1]
+        if not journal.receipt_intact(last):
+            continue  # Invalid latest receipt was reported; do not use an older one.
         verdict = last.get("verdict")
         if verdict in SETUP_VERDICTS:
             # A distinct code, and deliberately not UPSTREAM_FAILED: nothing
@@ -327,9 +329,11 @@ def main(argv=None) -> int:
     other_modes = tuple(m for m in enter_mode.MODES if m != MODE)
     latest = {}
     for rec in journal.read_receipts(ws):
-        if rec.get("gate"):
+        if isinstance(rec.get("gate"), str):
             latest[rec["gate"]] = rec
     for gate, last in latest.items():
+        if not journal.receipt_intact(last):
+            continue
         verdict = last.get("verdict")
         if gate == GATE or gate in required or verdict != "fail":
             continue
@@ -409,6 +413,14 @@ def main(argv=None) -> int:
         findings.append("NO_BRIEF: interview-brief.md is missing — it is the last "
                         "honesty checkpoint and the only one that can still walk a "
                         "claim back after every gate has already fired")
+
+    else:
+        try:
+            brief_text = (ws / "interview-brief.md").read_text(encoding="utf-8")
+            if not brief_text.strip():
+                findings.append("NO_BRIEF: interview-brief.md is empty")
+        except (OSError, UnicodeError) as exc:
+            findings.append(f"UNREADABLE_INPUT: interview-brief.md: {exc}")
 
     # ── notices: true statements about this run that are not findings ────
     #

@@ -63,12 +63,25 @@ def cannot_run(workspace: pathlib.Path, reason: str, code: str = "NO_INPUT") -> 
 
 
 def load_block_ids(path: pathlib.Path) -> set[str]:
-    data = json.loads(path.read_text(encoding="utf-8"))
-    return {block["id"] for block in data.get("blocks", [])}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise journal.YamlUnreadable(path, f"cannot read evidence JSON: {exc}") from exc
+    if not isinstance(data, dict):
+        raise journal.YamlUnreadable(path, "evidence JSON must be an object")
+    journal.require_lists(data, path, blocks=dict)
+    blocks = data.get("blocks") or []
+    if any(not isinstance(b.get("id"), str) or not b["id"].strip() for b in blocks):
+        raise journal.YamlUnreadable(path, "each evidence block requires a non-empty string id")
+    return {block["id"] for block in blocks}
 
 
 def drop_unresolvable_refs(assessment: dict, ids: set[str]) -> tuple[dict, list[str]]:
     findings: list[str] = []
+    journal.require_lists(assessment, "fit-assessment.yaml", requirements=dict, stated_conditions=dict)
+    for collection in ("requirements", "stated_conditions"):
+        for index, entry in enumerate(assessment.get(collection) or []):
+            journal.require_lists(entry, f"fit-assessment.yaml {collection}[{index}]", evidence=dict)
     for row in assessment.get("requirements") or []:
         kept = []
         for item in row.get("evidence") or []:
@@ -137,7 +150,10 @@ def main(argv: list[str] | None = None) -> int:
         if not path.exists():
             return cannot_run(workspace, f"{path.name} not found at {path}")
 
-    ids = load_block_ids(blocks_path)
+    try:
+        ids = load_block_ids(blocks_path)
+    except journal.YamlUnreadable as exc:
+        return cannot_run(workspace, str(exc), journal.UNREADABLE_INPUT)
     findings: list[str] = []
     if not ids:
         findings.append("NO_BLOCKS: evidence-blocks.json holds no blocks; "
@@ -145,12 +161,15 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         assessment = journal.load_yaml(yaml_path)
+        assessment, ref_findings = drop_unresolvable_refs(assessment, ids)
     except journal.YamlUnreadable as exc:
         return cannot_run(workspace, str(exc), journal.UNREADABLE_INPUT)
-    assessment, ref_findings = drop_unresolvable_refs(assessment, ids)
     findings += ref_findings
 
-    markdown = md_path.read_text(encoding="utf-8") if md_path.exists() else ""
+    try:
+        markdown = md_path.read_text(encoding="utf-8") if md_path.exists() else ""
+    except (OSError, UnicodeError) as exc:
+        return cannot_run(workspace, str(exc), journal.UNREADABLE_INPUT)
     cleaned_md, md_findings = strip_block_ids(markdown)
     findings += md_findings
 

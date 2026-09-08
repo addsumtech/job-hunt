@@ -235,6 +235,15 @@ def receipt_intact(record: dict) -> bool:
     """
     if not isinstance(record, dict):
         return False
+    hashes = record.get("input_hashes", {})
+    findings = record.get("findings", [])
+    if (not isinstance(hashes, dict)
+            or any(not isinstance(k, str) or not isinstance(v, str) for k, v in hashes.items())
+            or not isinstance(findings, list)
+            or any(not isinstance(f, str) for f in findings)):
+        return False
+    if record.get("action") == "gate" and not isinstance(record.get("gate"), str):
+        return False
     recorded = record.get("receipt_hash")
     return isinstance(recorded, str) and recorded == _receipt_hash(record)
 
@@ -366,3 +375,23 @@ def load_yaml(path, expect: type = dict):
             f"parses to a {type(data).__name__}, not a {_EMPTY[expect]} — "
             f"the gate reads named fields off it and cannot read them off this")
     return data
+
+
+def require_lists(data: dict, path, **fields) -> None:
+    """Validate collection shape before iterating model-authored input.
+
+    Missing/null fields remain the domain gate's decision. A supplied scalar or
+    mapping is never an empty list, and iterating a string character by character
+    is never a valid interpretation. Values in fields specify an optional item
+    type (dict/str), or None when the caller diagnoses individual bad rows.
+    """
+    for name, item_type in fields.items():
+        value = data.get(name)
+        if value is None:
+            continue
+        if not isinstance(value, list):
+            raise YamlUnreadable(path, f"{name} must be a list, not {type(value).__name__}")
+        if item_type is not None:
+            for index, item in enumerate(value):
+                if not isinstance(item, item_type):
+                    raise YamlUnreadable(path, f"{name}[{index}] must be {item_type.__name__}")
