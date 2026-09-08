@@ -163,6 +163,7 @@ verification wall.
 
 | id | pattern | verified |
 |---|---|---|
+| `indeed-cloudflare-challenge` | `Indeed served a Cloudflare challenge page` | yes, 2026-09-08 |
 | `http-429-rate-limited` | `HTTP 429` | no |
 | `verify-human-en` | `(?i)verify (that )?you are (a )?human` | no |
 | `unusual-traffic-en` | `(?i)unusual traffic` | no |
@@ -173,11 +174,19 @@ verification wall.
 | `too-frequent-cn` | `操作过于频繁` | no |
 | `access-restricted-cn` | `访问受限` | no |
 
-**None of these has been observed.** The only failure body ever captured from this
-toolset is the HTTP 403 login wall, which `check_opencli_result.py` resolves in its
-login-wall branch against `opencli auth status`, not here. The first time a real
-risk-control body is captured, save the raw stderr, replace the guessed pattern
-with the verbatim string, and flip `verified` to `true`.
+**2026-09-08 runtime check (OpenCLI 1.8.7):** an Indeed search for Python in
+New York returned exit 1, empty stdout and `Indeed served a Cloudflare challenge
+page`. The raw stderr is retained in `scripts/tests/fixtures/indeed-cloudflare.err`.
+The site was stopped, so searches for London/Berlin and live job details were
+**not completed**. Other patterns remain unverified unless explicitly marked.
+
+The installed adapter's help labels search as `US site`; its `INDEED_ORIGIN`
+constant is `https://www.indeed.com` and it has no country/domain option. Calling
+its URL builder locally with New York, London, Berlin and Amsterdam changes only
+`l=`, not the origin. That confirms the adapter's configured origin; it does not
+prove which jobs the live site would return for those locations. The older London
+→ Ohio result elsewhere in this repo remains a dated observation, not a result
+reproduced by this check.
 
 **When one fires: stop that site for that round.** Do not retry. Do not change
 parameters and retry. Do not route around it. Emit the degraded output below.

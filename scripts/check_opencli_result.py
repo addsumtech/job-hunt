@@ -101,19 +101,26 @@ def load_signals(path):
     every risk-control signal would stop matching and the classifier would report
     `ok` on a login wall.
     """
-    if path is None or not pathlib.Path(path).is_file():
-        return []
+    if path is None:
+        raise journal.YamlUnreadable(DEFAULT_SIGNALS_FILE, "stop-signal file was not supplied")
     data = journal.load_yaml(path)
+    entries = data.get("signals")
+    if not isinstance(entries, list) or not entries:
+        raise journal.YamlUnreadable(path, "signals must be a non-empty list")
     out = []
-    for entry in data.get("signals") or []:
-        pattern = entry.get("pattern")
-        if not pattern:
-            continue
+    for entry in entries:
+        if not isinstance(entry, dict) or not isinstance(entry.get("pattern"), str) or not entry["pattern"]:
+            raise journal.YamlUnreadable(path, "each signal requires a non-empty pattern string")
+        pattern = entry["pattern"]
+        try:
+            matcher = re.compile(pattern)
+        except re.error as exc:
+            raise journal.YamlUnreadable(path, f"invalid stop-signal pattern: {exc}") from exc
         out.append({
             "id": entry.get("id") or pattern,
             "site": entry.get("site") or "*",
             "verified": bool(entry.get("verified")),
-            "regex": re.compile(pattern),
+            "regex": matcher,
         })
     return out
 
@@ -175,6 +182,29 @@ def classify(site, command, exit_code, stdout_text, stderr_text,
         message = _error_message(stderr_text)
         result["error_message"] = message
 
+        # Matched against the WHOLE stderr of the failed call, not just the
+        # message we extracted from it. `references/risk-control-signals.yaml`
+        # states the rule that way for a reason: a real risk-control body puts
+        # the wall in a `body:`/`detail:` field while `message:` stays generic,
+        # and a search over `message` alone would classify that as `transport`
+        # and let the round carry on. Searching stderr cannot cry wolf either —
+        # a successful call has EMPTY stderr, and we are already inside the
+        # `exit_code != 0` branch.
+        haystack = f"{message}\n{stderr_text or ''}"
+        for signal in signals:
+            if signal["site"] in ("*", site) and signal["regex"].search(haystack):
+                result["classification"] = "platform_limit"
+                result["signal_id"] = signal["id"]
+                result["remedy"] = (
+                    f"platform stop-signal {signal['id']!r} matched. Stop this "
+                    "site for this round: do not retry, do not change "
+                    "parameters and retry, do not route around it. Output the "
+                    "direction-level degraded shortlist with its disclosure "
+                    "block."
+                )
+                return result
+
+
         if any(p.search(message) for p in LOGIN_WALL_PATTERNS):
             state = result["auth_state"]
             if state == "absent":
@@ -214,28 +244,6 @@ def classify(site, command, exit_code, stdout_text, stderr_text,
                         f"--site {site} --full -f json` first."
                     )
             return result
-
-        # Matched against the WHOLE stderr of the failed call, not just the
-        # message we extracted from it. `references/risk-control-signals.yaml`
-        # states the rule that way for a reason: a real risk-control body puts
-        # the wall in a `body:`/`detail:` field while `message:` stays generic,
-        # and a search over `message` alone would classify that as `transport`
-        # and let the round carry on. Searching stderr cannot cry wolf either —
-        # a successful call has EMPTY stderr, and we are already inside the
-        # `exit_code != 0` branch.
-        haystack = f"{message}\n{stderr_text or ''}"
-        for signal in signals:
-            if signal["site"] in ("*", site) and signal["regex"].search(haystack):
-                result["classification"] = "platform_limit"
-                result["signal_id"] = signal["id"]
-                result["remedy"] = (
-                    f"platform stop-signal {signal['id']!r} matched. Stop this "
-                    "site for this round: do not retry, do not change "
-                    "parameters and retry, do not route around it. Output the "
-                    "direction-level degraded shortlist with its disclosure "
-                    "block."
-                )
-                return result
 
         result["classification"] = "transport"
         result["remedy"] = (
