@@ -538,11 +538,11 @@ emits them with `--lang zh` and `--lang en` and is the only path that produces t
     apply verdict:                   <strong_apply | worth_applying | stretch |
                                       likely_screen_out | blocked>
 
-**Immediately under the block, ship one of these two disclaimers unchanged.** The exact
-wording is load-bearing: `check_assessment.py` looks for the literal string
-「不是对结果的预判」 or "not a forecast of the outcome", so a disclaimer that means the
-same thing in different words fails the gate as `NO_DISCLAIMER` — and the failure reads
-as "you forgot the disclaimer" rather than "you paraphrased it".
+**Immediately under the block, ship the matching disclaimer unchanged.** Counts and
+required report text support zh, en, ja, ko and es. Read
+[report-localization.md](references/report-localization.md) for Japanese, Korean or
+Spanish headings, disclaimers, notices and discover disclosure templates. The gate
+checks the language's explicit anchor; a free paraphrase may still fail as `NO_DISCLAIMER`.
 
 > ⚠️ 以上是对证据的清点，不是对结果的预判。每一项都连同它的证据引用一起印出，分母可以逐条审计；
 > 本 skill 不给出面试或录用的可能性估计，也不给 0–100 分。要不要投，由你决定。
@@ -642,7 +642,7 @@ a fabrication the candidate then repeats back), and the shortlist's `why_matched
 | Evidence refs | `scripts/check_evidence_refs.py` | refs that resolve to no block; block ids left in reader-facing prose |
 | Prediction lint | `scripts/lint_no_prediction.py` | percentages (incl. fullwidth `％` and 「百分之七十」), `n/m` scores, scores worn as a NOUN rather than a symbol (`匹配度 85 分`, `overall score: 85`, `rated 8.5`, `4.5 stars`, `confidence: 0.85`, `grade: B+`, `Bewertung 8`, `점수 85점`), and prediction vocabulary in every language it writes in — EN + ZH (「成功率」「入围率」「七成」…) plus DE/NL/FR/ES/IT/JA/KO (`Chancen`, `kans`, `probabilité`, `可能性が高い`, `확률`) in the **judgement-facing** artifacts: `fit-assessment.md`, `shortlist.md`, `cheatsheet.md`, `mock/answer-guide.md`, `mock/assessment-*.md`. Numbers the round actually CAPTURED are exempt, but only from a file an `adapter_call` record names — a raw file nobody journaled is not a capture, it is a note the model wrote itself. Deliberately NOT the CV or letter — there a number is a measured past achievement, which the Quantification ladder above requires, not a claim about the future |
 | Contradictions | `scripts/consistency.py` | verdict vs effort, loose knockouts, gaps with no action, work-authorization conflicts — reports, never repairs |
-| Coverage counts | `scripts/count_coverage.py` | the only count-producing path **wherever a `fit-assessment.yaml` exists** — assess mode, and apply mode resumed from one. Apply mode without an assessment has no file for it to read and hand-counts its FIT SNAPSHOT instead; that is a second path, so it must apply the identical rule (below), and it is why the rule is written out in both places rather than trusted to memory. The card renders in **zh or en only**: it carries the required disclaimer verbatim and `check_assessment` finds it by an exact anchor in one of those two, so a third language needs a sourced translation of the disclaimer, not a flag. A German or Japanese assessment embeds an English or Chinese counts block inside otherwise localized prose — a known limit, not an oversight |
+| Coverage counts | `scripts/count_coverage.py` | the only count-producing path **wherever a `fit-assessment.yaml` exists** — assess mode, and apply mode resumed from one. Apply mode without an assessment has no file for it to read and hand-counts its FIT SNAPSHOT instead; that is a second path, so it must apply the identical rule (below), and it is why the rule is written out in both places rather than trusted to memory. The card renders in **zh, en, ja, ko or es** using the same counts; pair it with the required text in [report-localization.md](references/report-localization.md). Other languages embed an English or Chinese card and required labels. Missing judgements, evidence and disclaimers remain failures in every supported language |
 | Market tables | `scripts/check_conventions.py` | digits/percent in prose, source provenance, protected traits, duplicate ids, expired `review_by` (CI-hard) |
 | Assess | `scripts/check_assessment.py` | composes the six above and requires their receipts; disclaimer, disqualifier section, the 「那该怎么办」 half, verbatim conventions, stale-review banner; a top-level `level_direction` or `effort` the card prints but nobody assessed, and a work-authorization token spelled outside its set |
 | Migration losslessness (CI only) | `scripts/check_skill_lossless.py` | a baseline line that exists nowhere in this tree |
@@ -904,6 +904,8 @@ that one of its lines is decorative, and the reader cannot tell which one.
 
 In assess mode:
 - [ ] Assessing a posting? `modes/assess.md`, entered with `scripts/enter_mode.py`.
+- [ ] Writing a Japanese, Korean or Spanish discover/assess report?
+      `references/report-localization.md` for native headings, counts and disclosures.
 - [ ] Rendering a market convention card? `references/market-conventions/README.md` is the
       rule for what may be in one; the tables are `references/market-conventions/cn.yaml`,
       `references/market-conventions/nl.yaml`, `references/market-conventions/de.yaml`,

@@ -130,9 +130,22 @@ row **by its id**:
 - **R5** — 岗位要求本地注册执业资格。
 ```
 
-Writing in English? The heading is `## Hard blockers`. Those two spellings are the only
-ones `check_assessment.py` recognises — the section is a heading it has to find, so it
-is the one place here where the exact string matters.
+Writing in English? The heading is `## Hard blockers`. For Japanese, Korean or
+Spanish, read [report-localization.md](../references/report-localization.md) and use
+the matching native heading. The exact heading identifies this required section.
+
+Native report anchors (the full templates and placement rules are in the language
+contract). Use one language throughout; the gate accepts these exact labels:
+
+| Element | ja | ko | es |
+|---|---|---|---|
+| Blockers heading | `## 応募を妨げる必須条件` | `## 지원을 막는 필수 조건` | `## Requisitos excluyentes` |
+| Next-action heading | `## 次に取る方針` | `## 다음 행동` | `## Qué hacer a continuación` |
+| Acceptance column | `確認基準` | `완료 기준` | `Criterio de aceptación` |
+| Deliverable column | `成果物` | `산출물` | `Entregable` |
+| Verdict marker, emitted by count_coverage | `応募の判断：` | `지원 판단:` | `recomendación de candidatura:` |
+| Required disclaimer anchor | `結果を予測するものではありません` | `결과를 예측하는 것이 아닙니다` | `no es una predicción del resultado` |
+| Stale-review banner | `再確認期限を過ぎています` | `재검토 기한이 지났습니다` | `ha vencido la fecha de revisión` |
 
 **Write the answer down, in the two §6 fields built for it.** What the posting demands
 goes in `stated_conditions` (a `type`, a `stance`, and an evidence ref to the JD block
@@ -273,23 +286,22 @@ must-have 强证据：   8 of 11   （partial 2，gap 1，无证据 0）
 投递建议：           大概率被筛掉
 ```
 
-The block follows the **user's** language, not the market's, and `count_coverage.py`
-renders both shapes. The English one carries the same five lines under English
+The block follows the **user's** language, not the market's. `count_coverage.py`
+supports `--lang zh|en|ja|ko|es`; the [language contract](../references/report-localization.md)
+provides the corresponding required report text. The English block uses English
 labels:
 
 ```
-must-haves strongly evidenced:  8 of 11   (partial 2, gap 1, no evidence 0)
-core responsibilities shown:    4 of 6
-seniority fit:                  lateral
-effort to close the gap:        an evening
-apply verdict:                  likely_screen_out
+must-haves strongly evidenced:   8 of 11   (partial 2, gap 1, no evidence 0)
+core responsibilities demonstrated: 4 of 6
+level match:                     lateral
+effort to close the gaps:        evening
+apply verdict:                   likely_screen_out
 ```
 
-Both markers are load-bearing: `check_assessment.py` locates the verdict by
-searching the card for 「投递建议：」 **or** `apply verdict:`, so an English card
-that writes the line any other way has no verdict as far as the gate is
-concerned. Paste whichever shape `count_coverage.py` produced; do not translate
-the label by hand.
+The verdict marker is load-bearing: `check_assessment.py` recognises the five
+language-specific labels produced by `count_coverage.py`. Paste its output unchanged;
+do not translate the label or recompute the numbers by hand.
 
 `强证据` counts `strong` only. `partial` and `gap` are never merged into a covered
 number. Evidence that is only `dated` counts as `partial`.
@@ -302,7 +314,9 @@ and the line reads 「未评估」 (`not assessed` on the English card) and
 `check_assessment.py` fails: that token means *nobody judged this*, and it is never a
 value you may write into the YAML.
 
-**Required disclaimer, immediately under the block. Ship one of these two, unchanged:**
+**Required disclaimer, immediately under the block. Use the matching language's
+template unchanged; Japanese, Korean and Spanish are in the
+[language contract](../references/report-localization.md):**
 
 > ⚠️ 以上是对证据的清点，不是对结果的预判。每一项都连同它的证据引用一起印出，分母可以逐条审计；
 > 本 skill 不给出面试或录用的可能性估计，也不给 0–100 分。要不要投，由你决定。
@@ -313,7 +327,8 @@ value you may write into the YAML.
 > is your call.
 
 The disclaimer is what stops a count being read as a prediction. `check_assessment.py`
-looks for 「不是对结果的预判」 or "not a forecast of the outcome".
+looks for 「不是对结果的预判」, "not a forecast of the outcome", or the corresponding
+Japanese, Korean or Spanish anchor in the language contract.
 
 ## 8. The refusal floor — 证据不足，不出结论
 
@@ -357,6 +372,8 @@ what stops an unciteable assertion moving a citeable conclusion.
 
 A verdict without this half is a door closed with nothing behind it. Produce all three,
 under a `## 那该怎么办` heading — `## What to do instead` if you are writing in English.
+For Japanese, Korean or Spanish, use the heading and table labels from the
+[language contract](../references/report-localization.md). Strategy tokens stay unchanged.
 
 **(a) Exactly one strategy**, from this closed set — not two, not a menu:
 

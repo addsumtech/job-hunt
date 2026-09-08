@@ -102,6 +102,7 @@ def test_the_self_check_names_every_script():
     # lands last silently deletes the earlier plans' entries and the deletion
     # shows up as an unrelated red test in someone else's task.
     skip = {"journal.py", "paths.py", "rounds.py", "vocab.py",
+            "report_locales.py",                 # shared text, imported by gates
             "opencli_meta.py",                    # Plan 3 — leave it
             "mock_vocab.py", "mock_blocks.py",    # imported, never invoked
             # A MAINTAINER tool, not a run-time gate: it mutates the repo in a

@@ -12,11 +12,25 @@ ranking a shortlist is to let a person choose.
 shortlist / 面试复盘**跟用户走**. A Dutch- or US-market round run by someone who
 writes to you in English produces an English `shortlist.md`, and that is ordinary
 output, not an edge case. Every literal `check_shortlist.py` requires the document
-to contain therefore has two spellings — the section names, the provisional stamp
-and the six disclosure lines are all given below in both, and the gate accepts
-either. **Pick one and stay in it.** A document with English prose and Chinese
+to contain follows that language: the English and Chinese examples are below,
+and Japanese, Korean and Spanish templates are in
+[report-localization.md](../references/report-localization.md). The gate accepts
+all five. **Pick one and stay in it.** A document with English prose and Chinese
 furniture is worse than either language alone: it reads to the user as a bug, and
 no gate can report it, because both halves are individually correct.
+
+Native report anchors (use the complete templates and real answers from the
+language contract; no invented retrieval or login state):
+
+| Element | ja | ko | es |
+|---|---|---|---|
+| Provisional stamp | 求人カードの情報だけに基づく暫定判断 | 채용 카드 정보만을 바탕으로 한 잠정 판단 | valoración provisional basada únicamente en las fichas |
+| Login disclosure | 今回のセッションでログイン済み： | 이번 세션에서 로그인함: | Sesión iniciada en esta ejecución: |
+| Adapter result | Adapter の返却結果： | Adapter 반환 결과: | Respuesta del adaptador: |
+| Retry after restriction | 制限通知後の再試行： | 제한 신호 이후 재시도: | Reintento tras una señal de restricción: |
+| Control bypass | プラットフォームの制御の回避： | 플랫폼 통제 우회: | Elusión de controles de la plataforma: |
+| Real postings obtained | 実際の求人の取得： | 실제 채용 공고 확보: | Ofertas reales obtenidas: |
+| Degraded output | 代替出力の種類： | 대체 출력 유형: | Tipo de salida alternativa: |
 
 ## On entering this mode — before anything else
 
@@ -499,7 +513,9 @@ it.** That is two obligations, and both are checked:
 - in `shortlist.yaml`, the field itself (`MISSING_PROVISIONAL`);
 - in `shortlist.md`, the words **「基于卡片信息的初判」** — English round:
   **"provisional, from card data only"** — on the section that renders the rows
-  (`MD_MISSING_PROVISIONAL_STAMP`; either spelling satisfies it, and case does
+  (Japanese, Korean and Spanish use the matching stamp from
+  [report-localization.md](../references/report-localization.md))
+  (`MD_MISSING_PROVISIONAL_STAMP`; any supported spelling satisfies it, and case does
   not matter). A YAML boolean is not a disclosure — nobody reading the round ever
   sees it, and `shortlist.md` is what they read.
 
@@ -618,7 +634,8 @@ The last four answers ship **pre-filled as 否 / no**, in both blocks. That is t
 design: concealing a retry or a bypass has to be an active overwrite, not an
 omission — which is why the pre-filled answer matters as much as the label, and why
 `check_shortlist.py` checks the answer of every spelling it finds, not just the
-Chinese one. It fires `DEGRADED_WITHOUT_DISCLOSURE` when the block is absent in both
+Chinese one, or the Japanese, Korean or Spanish template. It fires
+`DEGRADED_WITHOUT_DISCLOSURE` when the block is absent in all supported
 languages and `DISCLOSURE_INCOMPLETE` when a line is missing or an answer is blank.
 
 And the wording rule: **"没有匹配" is a claim, and it needs a receipt.** All-adapters-
@@ -655,7 +672,7 @@ exactly like a clean one.
 | `DUPLICATE_SOURCE_ID` | one retrieved posting appears as two rows | delete the duplicate; de-duplication removes rows, nothing adds them |
 | `SOURCE_REPORT_COUNT_MISMATCH` | the source report claims more than the receipts recorded | the receipts are right. Never reconcile by editing `raw/` or the journal. |
 | `EMPTY_RESULT_UNSUPPORTED` | "no results" wording with no adapter that exited 0 | rewrite as "every adapter failed", and emit the disclosure block |
-| `DEGRADED_WITHOUT_DISCLOSURE` | degraded run with no disclosure block in either language | add the block, answers pre-filled 否 / no |
+| `DEGRADED_WITHOUT_DISCLOSURE` | degraded run with no disclosure block in a supported report language | add the matching template, check and fill every answer |
 | `MD_MISSING_PROVISIONAL_STAMP` | `shortlist.md` renders rows without 「基于卡片信息的初判」 / "provisional, from card data only" | add the stamp, in the round's own language, to the section heading. The YAML flag is not a disclosure. |
 | `DETAIL_FETCH_OUT_OF_BAND` | a detail fetch below the top three verdicts | remove it, or record a named exception with a reason |
 | `CAP_MISSING` / `CAP_ABOVE_CEILING` | `brief.yaml`'s round caps are absent or raised | read `references/source-policy.md`; the caps are its enforceable half |
@@ -731,7 +748,8 @@ else — do not silently leave the artifacts undelivered.
       used, every returned `location` read against `brief.markets` before the row
       was kept — the US site answers a London search with Ohio.
 - [ ] Every row carries `provisional: true` **and** `shortlist.md` carries
-      「基于卡片信息的初判」 / "provisional, from card data only"; no verdict copied
+      「基于卡片信息的初判」 / "provisional, from card data only", or the native
+      Japanese, Korean or Spanish stamp in [report-localization.md](../references/report-localization.md); no verdict copied
       into an assessment.
 - [ ] `shortlist.md` is in **one** language — the user's — end to end: section
       names, the stamp, the 未取详情 / no detail fetched labels and the disclosure
