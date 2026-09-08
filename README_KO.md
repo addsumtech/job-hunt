@@ -97,6 +97,8 @@ Codex에서는 마지막 두 줄의 `~/.claude/skills`를 `~/.codex/skills`로 �
 
 설치된 **job-hunt 루트 디렉터리**(`SKILL.md`와 `requirements.txt`가 있는 위치)로 이동한 뒤 Python 3.10+ 환경에서 실행합니다.
 
+먼저 `python3 --version`으로 3.10 이상인지 확인하세요. 이전 버전이면 Python 3.10+를 설치하고 해당 명령(예: `python3.12`)으로 아래 가상 환경을 만드세요.
+
 ```bash
 python3 -m venv ~/.venvs/job-hunt
 source ~/.venvs/job-hunt/bin/activate
@@ -118,25 +120,33 @@ python3 scripts/doctor.py
 
 ### OpenCLI Chrome 확장 프로그램 설정
 
-**이 단계는 Chrome에서 직접 진행해야 합니다.** `npm install`이나 `doctor.py --install`은 확장 프로그램을 설치하지 않습니다. ZIP 파일이나 `manifest.json` 파일 자체가 아닌 압축을 푼 폴더를 선택하세요. 매니페스트를 찾을 수 없다면 폴더의 단계가 잘못된 것입니다. 로드했는데도 연결되지 않으면 현재 사용하는 Chrome 프로필에서 확장 프로그램이 활성화되어 있는지 확인한 뒤 `opencli doctor`를 다시 실행하세요.
+**실시간 공고 조회에는 OpenCLI CLI와 Browser Bridge 확장 프로그램이 모두 필요합니다. 확장 프로그램은 Chrome에서 직접 설치해야 합니다.** `npm install`이나 `doctor.py --install`로는 확장 프로그램이 설치되지 않습니다.
 
-브라우저를 통한 실시간 채용 정보 수집에는 **OpenCLI CLI뿐 아니라 OpenCLI Browser Bridge 확장 프로그램도 필요**합니다.
+1. **CLI를 설치합니다.** 터미널에서 실행하세요.
 
-```bash
-npm install -g @jackwener/opencli
-opencli doctor
-```
+   ```bash
+   npm install -g @jackwener/opencli
+   opencli doctor
+   ```
 
-[OpenCLI 공식 Releases](https://github.com/jackwener/opencli/releases)에서 Browser Bridge 확장 프로그램 압축 파일을 다운로드하고 계속 보관할 폴더에 압축을 풉니다. Chrome 주소창에 `chrome://extensions/`를 입력하고 **개발자 모드**를 켠 뒤 **압축해제된 확장 프로그램을 로드합니다**를 눌러 `manifest.json`이 바로 들어 있는 폴더를 선택합니다. 설치 전에 Chrome에 표시되는 권한을 확인하세요.
+   확장 프로그램 설치 전에는 연결되지 않았다고 표시되어도 정상입니다.
 
-`opencli doctor`를 다시 실행해 **Extension: connected**와 **Connectivity: connected**를 확인합니다. CLI나 daemon이 실행 중이라는 것만으로 브라우저 연결이 확인되지는 않습니다. 확장 프로그램 폴더를 이동하거나 삭제하지 마세요. macOS 파일 선택 창에서 `Command + Shift + G`를 누르면 전체 경로를 붙여넣을 수 있습니다. `.`으로 시작하는 폴더는 기본적으로 숨겨져 있습니다.
+2. **확장 프로그램을 다운로드하고 압축을 풉니다.** [OpenCLI 공식 Releases](https://github.com/jackwener/opencli/releases)의 Assets에서 `opencli-extension-v*.zip`을 받으세요. `Source code`는 아닙니다. 계속 보관할 위치에 압축을 풀고, `manifest.json`이 바로 들어 있는 폴더를 찾으세요.
+3. **Chrome에 로드합니다.** 주소창에 `chrome://extensions/`를 입력하고 **개발자 모드**를 켠 뒤 **압축해제된 확장 프로그램을 로드합니다**를 클릭하여 위 폴더를 선택하세요. ZIP이나 `manifest.json` 파일 자체가 아닌 폴더를 선택합니다. Chrome에 표시되는 권한도 확인하세요.
+4. **연결을 확인합니다.** Chrome을 열어 둔 채 `opencli doctor`를 다시 실행하세요. **Extension: connected**와 **Connectivity: connected**를 확인합니다. CLI나 daemon만 정상이면 아직 연결이 완료된 것이 아닙니다. 확장 프로그램 폴더는 옮기거나 삭제하지 마세요.
 
-채용 사이트 로그인은 브라우저에서 직접 진행하세요. Browser Bridge 연결이 사이트 로그인 상태나 모든 사이트의 정상 수집을 보장하지는 않습니다.
+| 문제 | 해결 방법 |
+|---|---|
+| 파일 선택 창에서 폴더가 보이지 않음 | macOS에서는 `Command + Shift + G`를 누르고 전체 경로를 붙여 넣으세요. `.`으로 시작하는 폴더는 기본적으로 숨겨집니다 |
+| 매니페스트 파일을 찾을 수 없음 | `manifest.json`이 바로 들어 있는 폴더를 다시 선택하세요. 압축 해제 폴더 안의 하위 폴더일 수 있습니다 |
+| 확장 프로그램을 로드했지만 연결되지 않음 | 현재 Chrome 프로필에서 활성화되어 있는지 확인한 뒤 `opencli doctor`를 다시 실행하세요 |
+
+채용 사이트 로그인이 필요하면 브라우저에서 직접 진행하세요. 확장 프로그램 연결은 브라우저와 연결되었다는 뜻이며, 각 사이트의 조회 가능 여부는 따로 확인해야 합니다.
 
 
 ## 지역, 플랫폼, 언어
 
-공고 탐색은 `opencli` 어댑터를 통해 이루어집니다. 저장소의 출처 목록에는 51job, Indeed, LinkedIn, BOSS 直聘 등이 있으며 로그인 요건, 채용 공고, 면접 후기 출처를 구분합니다. 실제 접근 가능 여부는 실행 시점에 확인합니다. 현재 기록된 Indeed 어댑터는 미국 사이트용이므로 도시명만 바꿔 다른 국가의 검색이 올바르게 이루어졌다고 판단하면 안 됩니다. [출처 목록](references/discovery-sources.md)과 [출처 이용 규칙](references/source-policy.md)(영어)을 참고하세요.
+공고 탐색은 `opencli` 어댑터를 통해 이루어집니다. 저장소의 출처 목록에는 51job, Indeed, LinkedIn, BOSS 直聘 등이 있으며 로그인 요건, 채용 공고, 면접 후기 출처를 구분합니다. 실제 접근 가능 여부는 실행 시점에 확인합니다. Indeed 어댑터는 미국 사이트에 연결되며 국가별 사이트 전환을 지원하지 않습니다. 다른 국가의 공고는 현지 출처를 우선 사용하세요. [출처 목록](references/discovery-sources.md)과 [출처 이용 규칙](references/source-policy.md)(영어)을 참고하세요.
 
 중국 시장에서는 대형 민간기업, 중소 민간기업, 국유기업, 외국계 기업 등의 선호도도 확인합니다. 이는 정렬에 반영되며 다른 유형을 몰래 제외하지 않습니다. 牛客와 一亩三分地는 면접 후기와 채용 절차 참고용이며, 게시판 글을 채용 공고 목록에 넣지 않습니다.
 

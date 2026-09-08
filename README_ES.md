@@ -97,6 +97,8 @@ Para Codex, sustituye `~/.claude/skills` por `~/.codex/skills` en las dos últim
 
 Entra en el **directorio raíz de job-hunt instalado**, donde están `SKILL.md` y `requirements.txt`, y ejecuta lo siguiente con Python 3.10+:
 
+Primero ejecuta `python3 --version` y comprueba que sea 3.10 o posterior. Si es anterior, instala Python 3.10+ y usa su comando (por ejemplo, `python3.12`) para crear el entorno virtual siguiente.
+
 ```bash
 python3 -m venv ~/.venvs/job-hunt
 source ~/.venvs/job-hunt/bin/activate
@@ -118,25 +120,33 @@ El comando de activación anterior es para macOS/Linux; en Windows, utiliza el s
 
 ### Configura la extensión de Chrome de OpenCLI
 
-**Este paso se completa manualmente en Chrome.** Ni `npm install` ni `doctor.py --install` instalan la extensión. Selecciona la carpeta descomprimida, no el ZIP ni el archivo `manifest.json`. Si no se encuentra el manifiesto, revisa el nivel de carpeta seleccionado. Si la extensión está cargada pero desconectada, comprueba que esté activada en el perfil de Chrome que utilizas y vuelve a ejecutar `opencli doctor`.
+**La búsqueda en vivo necesita tanto la CLI de OpenCLI como la extensión Browser Bridge. Instala la extensión manualmente en Chrome.** Ni `npm install` ni `doctor.py --install` la instalan por ti.
 
-Para obtener ofertas mediante el navegador, **la CLI de OpenCLI también necesita la extensión OpenCLI Browser Bridge**.
+1. **Instala la CLI.** Ejecuta en un terminal:
 
-```bash
-npm install -g @jackwener/opencli
-opencli doctor
-```
+   ```bash
+   npm install -g @jackwener/opencli
+   opencli doctor
+   ```
 
-Descarga el archivo de la extensión Browser Bridge desde las [versiones oficiales de OpenCLI](https://github.com/jackwener/opencli/releases) y descomprímelo en una carpeta permanente. Introduce `chrome://extensions/` en Chrome, activa el **Modo de desarrollador**, pulsa **Cargar descomprimida** y selecciona la carpeta que contiene directamente `manifest.json`. Revisa los permisos que muestra Chrome antes de instalarla.
+   Es normal que la extensión aparezca desconectada antes de instalarla.
 
-Ejecuta de nuevo `opencli doctor` y confirma **Extension: connected** y **Connectivity: connected**. Que funcionen la CLI o el daemon no significa que el navegador esté conectado. No muevas ni borres la carpeta de la extensión. En el selector de archivos de macOS, pulsa `Command + Shift + G` para pegar la ruta completa; las carpetas que empiezan por `.` están ocultas de forma predeterminada.
+2. **Descarga y extrae la extensión.** En Assets de las [Releases oficiales de OpenCLI](https://github.com/jackwener/opencli/releases), descarga `opencli-extension-v*.zip`, no `Source code`. Extrae el archivo en una ubicación permanente y localiza la carpeta que contiene directamente `manifest.json`.
+3. **Cárgala en Chrome.** Escribe `chrome://extensions/` en la barra de direcciones, activa el **Modo de desarrollador**, pulsa **Cargar descomprimida** y selecciona esa carpeta. Selecciona la carpeta, no el ZIP ni el archivo `manifest.json`. Revisa los permisos que muestra Chrome.
+4. **Comprueba la conexión.** Mantén Chrome abierto y vuelve a ejecutar `opencli doctor`. Confirma **Extension: connected** y **Connectivity: connected**; no basta con que funcionen la CLI o el daemon. No muevas ni borres la carpeta de la extensión.
 
-Inicia sesión en las plataformas de empleo personalmente desde el navegador. Una conexión con Browser Bridge no confirma la sesión de cada plataforma ni garantiza el acceso a todos los sitios.
+| Problema | Solución |
+|---|---|
+| No aparece la carpeta en el selector | En macOS, pulsa `Command + Shift + G` y pega la ruta completa; las carpetas que empiezan por `.` están ocultas por defecto |
+| Error de manifiesto no encontrado | Selecciona la carpeta que contiene directamente `manifest.json`; puede estar un nivel dentro del directorio extraído |
+| Extensión cargada pero desconectada | Comprueba que está activada en el perfil actual de Chrome y vuelve a ejecutar `opencli doctor` |
+
+Inicia sesión en las plataformas de empleo cuando sea necesario. La extensión conectada confirma la conexión con el navegador; el acceso a cada plataforma se comprueba por separado.
 
 
 ## Mercados, plataformas e idiomas
 
-La búsqueda obtiene ofertas mediante adaptadores de `opencli`. El catálogo del repositorio incluye 51job, Indeed, LinkedIn y BOSS Zhipin, y distingue entre requisitos de acceso, ofertas de empleo y fuentes de experiencias de entrevistas. La disponibilidad se comprueba al ejecutar la búsqueda. El adaptador de Indeed documentado actualmente está orientado al sitio estadounidense; cambiar solo la ciudad no garantiza una búsqueda correcta en otro mercado. Consulta el [catálogo de fuentes](references/discovery-sources.md) y la [política de uso](references/source-policy.md), en inglés.
+La búsqueda obtiene ofertas mediante adaptadores de `opencli`. El catálogo del repositorio incluye 51job, Indeed, LinkedIn y BOSS Zhipin, y distingue entre requisitos de acceso, ofertas de empleo y fuentes de experiencias de entrevistas. La disponibilidad se comprueba al ejecutar la búsqueda. El adaptador de Indeed se conecta al sitio de Estados Unidos y no permite cambiar de sitio nacional. Para otros mercados, prioriza las fuentes locales de empleo. Consulta el [catálogo de fuentes](references/discovery-sources.md) y la [política de uso](references/source-policy.md), en inglés.
 
 Para China, la skill también pregunta por preferencias de empresa: grandes empresas privadas, pequeñas y medianas empresas privadas, empresas estatales y empresas extranjeras. Estas preferencias afectan al orden sin excluir otras categorías de forma silenciosa. Nowcoder y 1point3acres aportan experiencias de entrevistas y contexto sobre el proceso; los hilos de foro no se convierten en ofertas.
 

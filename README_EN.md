@@ -97,6 +97,8 @@ For Codex, replace `~/.claude/skills` with `~/.codex/skills` in the last two lin
 
 Enter the installed **job-hunt root directory**, containing `SKILL.md` and `requirements.txt`, and run these commands with Python 3.10+:
 
+First run `python3 --version` and confirm it is 3.10 or newer. If it is older, install Python 3.10+ and use its command (for example, `python3.12`) to create the virtual environment below.
+
 ```bash
 python3 -m venv ~/.venvs/job-hunt
 source ~/.venvs/job-hunt/bin/activate
@@ -118,25 +120,33 @@ The activation command above is for macOS/Linux; on Windows, use the activation 
 
 ### Set up the OpenCLI Chrome extension
 
-**Complete this step manually in Chrome.** Neither `npm install` nor `doctor.py --install` installs the extension for you. Select the extracted folder, not the ZIP or the `manifest.json` file itself. A missing-manifest error means the folder level is wrong. If the extension is loaded but disconnected, confirm it is enabled in the Chrome profile you are using, then run `opencli doctor` again.
+**Live job retrieval needs both the OpenCLI CLI and Browser Bridge extension. Install the extension manually in Chrome.** Neither `npm install` nor `doctor.py --install` installs it for you.
 
-For browser-based live retrieval, **the OpenCLI CLI also needs the OpenCLI Browser Bridge extension**.
+1. **Install the CLI.** Run in a terminal:
 
-```bash
-npm install -g @jackwener/opencli
-opencli doctor
-```
+   ```bash
+   npm install -g @jackwener/opencli
+   opencli doctor
+   ```
 
-Download the Browser Bridge extension archive from [official OpenCLI Releases](https://github.com/jackwener/opencli/releases) and extract it into a permanent folder. Enter `chrome://extensions/` in Chrome, enable **Developer mode**, click **Load unpacked**, and select the folder directly containing `manifest.json`. Review the permissions Chrome displays before installing.
+   A disconnected extension is expected before you install it.
 
-Run `opencli doctor` again and confirm **Extension: connected** and **Connectivity: connected**. A working CLI or daemon alone does not mean the browser is connected. Keep the extension folder in place. On macOS, press `Command + Shift + G` in the file picker to paste its full path; folders beginning with `.` are hidden by default.
+2. **Download and extract the extension.** Under Assets in [official OpenCLI Releases](https://github.com/jackwener/opencli/releases), download `opencli-extension-v*.zip`, not `Source code`. Extract it into a permanent location and find the folder directly containing `manifest.json`.
+3. **Load it in Chrome.** Enter `chrome://extensions/` in the address bar, enable **Developer mode**, click **Load unpacked**, and select that folder. Select the folder, not the ZIP or `manifest.json` file. Review the extension permissions shown by Chrome.
+4. **Check the connection.** Keep Chrome open and run `opencli doctor` again. Confirm **Extension: connected** and **Connectivity: connected**; a working CLI or daemon alone is not enough. Keep the extension folder in place.
 
-Sign in to job platforms yourself in the browser. A connected Browser Bridge does not establish a platform login or guarantee that every site is readable.
+| Problem | What to do |
+|---|---|
+| Cannot find the folder in the file picker | On macOS, press `Command + Shift + G` and paste the full path; folders beginning with `.` are hidden by default |
+| Missing-manifest error | Select the folder directly containing `manifest.json`, which may be one level inside the extracted directory |
+| Extension loaded but still disconnected | Confirm it is enabled in the current Chrome profile, then run `opencli doctor` again |
+
+Sign in to job platforms yourself when needed. A connected extension confirms the browser connection; access to each platform still needs to be checked.
 
 
 ## Markets, platforms, and languages
 
-Discovery reads postings through `opencli` adapters. The repository's source catalogue includes 51job, Indeed, LinkedIn, and BOSS Zhipin, with distinctions between login requirements, job listings, and interview-experience sources. Availability is checked at runtime. The currently documented Indeed adapter targets the US site; changing the city alone is not enough to establish a correct search in another market. See the [source catalogue](references/discovery-sources.md) and [source policy](references/source-policy.md).
+Discovery reads postings through `opencli` adapters. The repository's source catalogue includes 51job, Indeed, LinkedIn, and BOSS Zhipin, with distinctions between login requirements, job listings, and interview-experience sources. Availability is checked at runtime. The Indeed adapter connects to the US site and cannot switch country sites. For other markets, prefer local job sources. See the [source catalogue](references/discovery-sources.md) and [source policy](references/source-policy.md).
 
 For China, the skill also asks about employer preferences: large private companies, small and medium private companies, state-owned enterprises, and foreign companies. These affect ranking without silently filtering other categories. Nowcoder and 1point3acres provide interview and process context; forum posts do not become job-listing rows.
 

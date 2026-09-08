@@ -97,6 +97,8 @@ Codex では最後の二行の `~/.claude/skills` を `~/.codex/skills` に置�
 
 インストールした **job-hunt のルートディレクトリ**（`SKILL.md` と `requirements.txt` がある場所）に移動し、Python 3.10+ の環境で実行します。
 
+先に `python3 --version` で 3.10 以上か確認してください。古い場合は Python 3.10+ をインストールし、そのコマンド（例：`python3.12`）で以下の仮想環境を作成します。
+
 ```bash
 python3 -m venv ~/.venvs/job-hunt
 source ~/.venvs/job-hunt/bin/activate
@@ -118,25 +120,33 @@ python3 scripts/doctor.py
 
 ### OpenCLI の Chrome 拡張機能を設定する
 
-**この手順は Chrome で手動で行ってください。** `npm install` や `doctor.py --install` は拡張機能をインストールしません。ZIP や `manifest.json` 自体ではなく、展開したフォルダーを選びます。マニフェストが見つからない場合はフォルダーの階層を確認してください。読み込み済みでも未接続の場合は、使用中の Chrome プロファイルで拡張機能が有効か確認し、`opencli doctor` を再実行します。
+**求人の取得には OpenCLI の CLI と Browser Bridge 拡張機能の両方が必要です。拡張機能は Chrome で手動インストールしてください。** `npm install` や `doctor.py --install` では拡張機能は入りません。
 
-ブラウザーを使った求人取得には、**OpenCLI CLI に加えて OpenCLI Browser Bridge 拡張機能が必要**です。
+1. **CLI をインストールします。** ターミナルで実行します。
 
-```bash
-npm install -g @jackwener/opencli
-opencli doctor
-```
+   ```bash
+   npm install -g @jackwener/opencli
+   opencli doctor
+   ```
 
-[OpenCLI 公式 Releases](https://github.com/jackwener/opencli/releases) から Browser Bridge の拡張機能アーカイブをダウンロードし、保存し続けるフォルダーに展開します。Chrome のアドレスバーに `chrome://extensions/` と入力し、「デベロッパー モード」を有効にして「パッケージ化されていない拡張機能を読み込む」から `manifest.json` が直接入っているフォルダーを選びます。インストール前に Chrome が表示する権限を確認してください。
+   拡張機能のインストール前は、未接続と表示されても正常です。
 
-再度 `opencli doctor` を実行し、**Extension: connected** と **Connectivity: connected** を確認します。CLI や daemon が動くだけでは、ブラウザーの接続は確認できません。拡張機能のフォルダーは移動・削除しないでください。macOS のファイル選択画面では `Command + Shift + G` でフルパスを入力できます。`.` で始まるフォルダーは通常非表示です。
+2. **拡張機能をダウンロードして展開します。** [OpenCLI 公式 Releases](https://github.com/jackwener/opencli/releases) の Assets から `opencli-extension-v*.zip` を選びます。`Source code` ではありません。保管用の場所に展開し、`manifest.json` が直接入っているフォルダーを探します。
+3. **Chrome に読み込みます。** アドレスバーに `chrome://extensions/` と入力し、「デベロッパー モード」を有効にします。「パッケージ化されていない拡張機能を読み込む」から上記のフォルダーを選択します。ZIP や `manifest.json` ファイル自体ではなく、フォルダーを選びます。Chrome に表示される権限も確認してください。
+4. **接続を確認します。** Chrome を開いたまま `opencli doctor` を再実行し、**Extension: connected** と **Connectivity: connected** を確認します。CLI や daemon だけが正常でも接続完了ではありません。拡張機能のフォルダーは移動・削除しないでください。
 
-求人サイトへのログインはブラウザー上でご自身で行ってください。Browser Bridge の接続は、求人サイトのログインや全サイトの読み取り成功を保証しません。
+| 困ったとき | 対処方法 |
+|---|---|
+| 選択画面でフォルダーが見つからない | macOS では `Command + Shift + G` でフルパスを貼り付けます。`.` で始まるフォルダーは通常非表示です |
+| マニフェストが見つからない | `manifest.json` が直接入っているフォルダーを選び直します。展開先の一つ下の階層にある場合があります |
+| 読み込み済みなのに未接続 | 現在の Chrome プロファイルで拡張機能が有効か確認し、`opencli doctor` を再実行します |
+
+求人サイトへのログインが必要な場合は、ブラウザーでご自身で行ってください。拡張機能の接続はブラウザーへの接続を示すもので、各サイトから取得できるかは別途確認します。
 
 
 ## 地域・プラットフォーム・言語
 
-求人検索は `opencli` のアダプターを通じて行います。リポジトリの出典一覧には 51job、Indeed、LinkedIn、BOSS 直聘などが含まれ、ログインの要否、求人情報、面接体験談を区別しています。実際に取得できるかは実行時に確認します。現在記録されている Indeed アダプターは米国サイト向けなので、都市名を変えるだけでは他国を正しく検索できるとは限りません。[出典一覧](references/discovery-sources.md)と[利用ルール](references/source-policy.md)（英語）を参照してください。
+求人検索は `opencli` のアダプターを通じて行います。リポジトリの出典一覧には 51job、Indeed、LinkedIn、BOSS 直聘などが含まれ、ログインの要否、求人情報、面接体験談を区別しています。実際に取得できるかは実行時に確認します。Indeed アダプターは米国サイトに接続し、国別サイトの切り替えには対応していません。他国の求人は、その地域の情報源を優先します。[出典一覧](references/discovery-sources.md)と[利用ルール](references/source-policy.md)（英語）を参照してください。
 
 中国市場では、大手民間企業、中小民間企業、国有企業、外資系企業などの希望も確認します。これは順位付けの条件であり、他の種類を黙って除外するものではありません。牛客と一亩三分地は面接体験や選考プロセスの参考に使い、掲示板の投稿を求人として一覧に追加しません。
 

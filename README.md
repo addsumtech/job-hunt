@@ -97,6 +97,8 @@ ln -s "$PWD" ~/.claude/skills/job-hunt
 
 进入安装后的 **job-hunt 根目录**（包含 `SKILL.md` 和 `requirements.txt` 的目录），在 Python 3.10+ 环境中运行：
 
+先运行 `python3 --version`，确认版本不低于 3.10。若版本较旧，请安装 Python 3.10+，并用对应命令（如 `python3.12`）创建下面的虚拟环境。
+
 ```bash
 python3 -m venv ~/.venvs/job-hunt
 source ~/.venvs/job-hunt/bin/activate
@@ -118,25 +120,33 @@ python3 scripts/doctor.py
 
 ### 配置 OpenCLI 的 Chrome 扩展
 
-**这一步需要你在 Chrome 中手动完成。** `npm install` 和 `doctor.py --install` 都不会替你安装浏览器扩展。选择的是解压后的文件夹，不是 ZIP 文件，也不是 `manifest.json` 文件本身。若提示找不到清单文件，说明选错了目录层级；若扩展已加载但仍显示未连接，确认它在当前使用的 Chrome 个人资料中处于启用状态，再运行 `opencli doctor` 检查。
+**实时岗位检索需要 OpenCLI 命令行和 Browser Bridge 扩展。扩展须在 Chrome 中手动安装。** `npm install` 和 `doctor.py --install` 都不会替你完成扩展安装。
 
-实时检索使用浏览器适配器时，**仅安装 OpenCLI 命令行还不够，还需要 OpenCLI Browser Bridge 扩展**。
+1. **安装命令行工具。** 在终端运行：
 
-```bash
-npm install -g @jackwener/opencli
-opencli doctor
-```
+   ```bash
+   npm install -g @jackwener/opencli
+   opencli doctor
+   ```
 
-从 [OpenCLI 官方 Releases](https://github.com/jackwener/opencli/releases) 下载 Browser Bridge 扩展压缩包，解压到一个长期保留的目录。打开 Chrome 地址栏中的 `chrome://extensions/`，开启「开发者模式」，点击「加载已解压的扩展程序」，选择直接包含 `manifest.json` 的文件夹。安装前检查 Chrome 显示的扩展权限。
+   扩展还没安装时，显示未连接是正常的。
 
-再次运行 `opencli doctor`，确认 **Extension: connected** 和 **Connectivity: connected**。只看到 CLI 或 daemon 正常并不表示浏览器已连接。扩展目录不要移动或删除。macOS 文件选择窗口中，按 `Command + Shift + G` 可以粘贴完整目录路径；以 `.` 开头的文件夹默认隐藏。
+2. **下载并解压扩展。** 在 [OpenCLI 官方 Releases](https://github.com/jackwener/opencli/releases) 的 Assets 中下载 `opencli-extension-v*.zip`，不要下载 `Source code`。解压到长期保留的目录，找到直接包含 `manifest.json` 的文件夹。
+3. **在 Chrome 中加载。** 地址栏输入 `chrome://extensions/`，开启「开发者模式」，点击「加载已解压的扩展程序」，选择上一步的文件夹。选择文件夹，不是 ZIP 或 `manifest.json` 文件。查看 Chrome 显示的扩展权限。
+4. **检查连接。** 保持 Chrome 打开，再运行 `opencli doctor`。确认 **Extension: connected** 和 **Connectivity: connected**；只有 CLI 或 daemon 正常还不够。之后不要移动或删除扩展目录。
 
-平台账号登录由你在浏览器中完成。Browser Bridge 已连接不等于招聘网站已经登录，也不保证所有平台都能读取。
+| 遇到的问题 | 处理方式 |
+|---|---|
+| 文件选择窗口找不到目录 | macOS 按 `Command + Shift + G`，粘贴完整目录路径；以 `.` 开头的目录默认隐藏 |
+| 提示找不到清单文件 | 重新选择直接包含 `manifest.json` 的文件夹，通常是解压目录内的一层子目录 |
+| 扩展已加载，但仍未连接 | 确认扩展在当前 Chrome 个人资料中已启用，再运行 `opencli doctor` |
+
+需要登录招聘网站时，由你在浏览器中完成。扩展连接成功只说明工具已连上浏览器，平台是否允许读取仍需实际检查。
 
 
 ## 地区、平台与语言
 
-找岗流程通过 `opencli` 适配器读取岗位。仓库的来源目录包含 51job、Indeed、LinkedIn 和 BOSS 直聘等平台，并区分登录要求、岗位来源与面经来源。平台能否读取，以运行时状态为准。当前记录的 Indeed 适配器面向美国站，其他市场不能仅改城市名就假定检索正确。详见[来源目录](references/discovery-sources.md)和[来源使用规则](references/source-policy.md)（英文）。
+找岗流程通过 `opencli` 适配器读取岗位。仓库的来源目录包含 51job、Indeed、LinkedIn 和 BOSS 直聘等平台，并区分登录要求、岗位来源与面经来源。平台能否读取，以运行时状态为准。Indeed 适配器连接美国站，暂不支持切换国家站。寻找其他市场的岗位时，优先选择当地来源。详见[来源目录](references/discovery-sources.md)和[来源使用规则](references/source-policy.md)（英文）。
 
 中国市场还会询问大型私企、中小型私企、国企、外企等雇主偏好。这些偏好影响排序，不会悄悄过滤其他类型。牛客和一亩三分地用于面经与流程参考，论坛内容不会当作真实岗位填入清单。
 
