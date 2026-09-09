@@ -1230,8 +1230,9 @@ def render_docx(profile, out_path):
     section.left_margin = section.right_margin = Mm(12.7)
     width = section.page_width - section.left_margin - section.right_margin
     east_asia = {"zh": "Songti SC" if sys.platform == "darwin" else "SimSun", "ja": "Yu Mincho", "ko": "Malgun Gothic"}.get(language)
-    for name, size, before, after in [("Normal", 11, 0, 2), ("Title", 16, 0, 4),
-                                      ("Heading 1", 11, 9, 3), ("List Bullet", 11, 0, 2)]:
+    body_size = 10 if language == "zh" else 11
+    for name, size, before, after in [("Normal", body_size, 0, 2), ("Title", 16, 0, 4),
+                                      ("Heading 1", 11, 9, 3), ("List Bullet", body_size, 0, 2)]:
         style = doc.styles[name]
         style.font.name = "Times New Roman"
         style.font.size = Pt(size)
