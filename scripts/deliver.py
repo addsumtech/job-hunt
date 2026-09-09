@@ -228,42 +228,7 @@ def _pandoc(md: pathlib.Path, pdf: pathlib.Path, font: str | dict | None) -> boo
     return result.returncode == 0 and pdf.is_file() and pdf.stat().st_size > 0
 
 
-def _reportlab_font() -> tuple[str | None, str]:
-    """Register a clean Chinese sans-serif face, with a PDF-native fallback."""
-    try:
-        from reportlab.pdfbase import pdfmetrics
-        from reportlab.pdfbase.cidfonts import UnicodeCIDFont
-        from reportlab.pdfbase.ttfonts import TTFError, TTFont
-    except ImportError:
-        return None, "ReportLab is unavailable"
-
-    candidates = ("Hiragino Sans GB", "PingFang SC", "Heiti SC", "Arial Unicode MS")
-    for index, family in enumerate(candidates):
-        try:
-            result = subprocess.run(
-                ["fc-match", "-f", "%{file}", family], capture_output=True,
-                text=True, timeout=5, check=False,
-            )
-            path = pathlib.Path(result.stdout.strip())
-            if not path.is_file():
-                continue
-            name = f"JobHuntCJK{index}"
-            if name not in pdfmetrics.getRegisteredFontNames():
-                pdfmetrics.registerFont(TTFont(name, str(path), subfontIndex=0))
-            return name, ""
-        except (OSError, TypeError, ValueError, TTFError, subprocess.SubprocessError):
-            continue
-
-    try:
-        name = "STSong-Light"
-        if name not in pdfmetrics.getRegisteredFontNames():
-            pdfmetrics.registerFont(UnicodeCIDFont(name))
-        return name, ""
-    except (OSError, ValueError):
-        return None, "no usable Chinese ReportLab font"
-
-
-def _reportlab_inline(text: str) -> str:
+def _inline_pdf_markup(text: str) -> str:
     """Preserve Markdown emphasis and links without exposing raw URLs."""
     value = html.escape(text)
 
@@ -291,182 +256,140 @@ def _is_table_rule(cells: list[str]) -> bool:
     return bool(cells) and all(re.fullmatch(r":?-{3,}:?", cell) for cell in cells)
 
 
-def _reportlab_table(lines: list[str], styles: dict, width: float):
-    """Render wide shortlist tables as scan-friendly Chinese job cards."""
-    from reportlab.lib import colors
-    from reportlab.platypus import KeepTogether, Paragraph, Spacer, Table, TableStyle
+def _render_cjk_report(md: pathlib.Path, pdf: pathlib.Path) -> tuple[bool, str]:
+    """Render Chinese reports with PyMuPDF's bundled Simplified Chinese font.
 
-    rows = [_table_cells(line) for line in lines]
-    if len(rows) < 3 or not _is_table_rule(rows[1]):
-        return [Paragraph(_reportlab_inline(line), styles["body"]) for line in lines]
-    header, data = rows[0], rows[2:]
-    if len(header) >= 5:
-        cards = []
-        for row in data:
+    Unlike a ReportLab CID fallback, PyMuPDF's `china-s` font does not depend on
+    a host-installed CJK font or emit unextractable replacement glyphs.
+    """
+    try:
+        import pymupdf
+    except ImportError:
+        return False, "PyMuPDF is unavailable"
+
+    page_width, page_height = 595.28, 841.89  # A4 in PDF points
+    left, right, top, bottom = 56, 539, 56, 770
+    body_color, heading_color, link_color = (0.14, 0.23, 0.33), (0.06, 0.16, 0.26), (0.11, 0.31, 0.85)
+    document = pymupdf.open()
+    page = None
+    cursor = top
+
+    def new_page():
+        nonlocal page, cursor
+        page = document.new_page(width=page_width, height=page_height)
+        page.draw_line(pymupdf.Point(left, 790), pymupdf.Point(right, 790),
+                       color=(0.85, 0.89, 0.93), width=0.5)
+        page.insert_text(pymupdf.Point(left, 811), "职业咨询报告", fontname="china-s",
+                         fontsize=8, color=(0.38, 0.49, 0.60))
+        cursor = top
+
+    def text_and_links(value: str) -> tuple[str, list[tuple[str, str]]]:
+        links: list[tuple[str, str]] = []
+
+        def markdown_link(match: re.Match) -> str:
+            label, url = match.group(1), html.unescape(match.group(2))
+            links.append((label, url))
+            return label
+
+        def raw_link(match: re.Match) -> str:
+            url = html.unescape(match.group(1))
+            label = urlsplit(url).netloc.removeprefix("www.") or url
+            links.append((label, url))
+            return label
+
+        value = _MD_LINK.sub(markdown_link, value)
+        value = _RAW_ANGLE_URL.sub(raw_link, value)
+        value = _MD_BOLD.sub(r"\1", value)
+        return _MD_CODE.sub(r"\1", value), links
+
+    def place(value: str, size: float, color: tuple[float, float, float], gap: float,
+              link: str | None = None) -> bool:
+        nonlocal cursor
+        if not value.strip():
+            return True
+        assert page is not None
+        rect = pymupdf.Rect(left, cursor, right, bottom)
+        spare = page.insert_textbox(rect, value, fontname="china-s", fontsize=size,
+                                    lineheight=1.45, color=color)
+        if spare < 0:
+            new_page()
+            rect = pymupdf.Rect(left, cursor, right, bottom)
+            spare = page.insert_textbox(rect, value, fontname="china-s", fontsize=size,
+                                        lineheight=1.45, color=color)
+        if spare < 0:
+            return False
+        used = rect.height - spare
+        written = pymupdf.Rect(left, cursor, right, cursor + max(used, size * 1.45))
+        if link:
+            page.insert_link({"kind": pymupdf.LINK_URI, "from": written, "uri": link})
+        cursor = written.y1 + gap
+        return True
+
+    def add_block(value: str, size: float, color: tuple[float, float, float], gap: float) -> bool:
+        display, links = text_and_links(value)
+        if not place(display, size, color, gap):
+            return False
+        for label, url in links:
+            if not place(f"链接：{label}", 9.2, link_color, 3, url):
+                return False
+        return True
+
+    def table_blocks(block: list[str]):
+        rows = [_table_cells(line) for line in block]
+        if len(rows) < 3 or not _is_table_rule(rows[1]):
+            return [(" | ".join(row), 9.6, body_color, 6) for row in rows]
+        header, rows = rows[0], rows[2:]
+        result = []
+        for row in rows:
             if len(row) != len(header):
                 continue
-            title = " ".join(part for part in (row[0], row[1]) if part)
-            fields = [
-                (header[index], value) for index, value in enumerate(row[2:], start=2)
-                if value
-            ]
-
-            def field(label: str, value: str) -> Paragraph:
-                return Paragraph(
-                    f"<b>{html.escape(label)}:</b> {_reportlab_inline(value)}",
-                    styles["card_body"],
-                )
-
-            # A long company/location line reads better on its own. Pair the
-            # remaining short metadata fields, then leave evidence/gaps full
-            # width. This saves vertical space without shrinking Chinese text.
-            details = [field(*fields[0])] if fields else []
-            remaining = fields[1:]
-            for start in range(0, len(remaining), 2):
-                pair = remaining[start:start + 2]
-                if len(pair) == 1:
-                    details.append(field(*pair[0]))
-                    continue
-                row_table = Table(
-                    [[field(*pair[0]), field(*pair[1])]],
-                    colWidths=[(width - 14) / 2, (width - 14) / 2],
-                    hAlign="LEFT",
-                )
-                row_table.setStyle(TableStyle([
-                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                    ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-                    ("TOPPADDING", (0, 0), (-1, -1), 0),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-                ]))
-                details.append(row_table)
-            card = Table(
-                [[Paragraph(_reportlab_inline(title), styles["card_title"])],
-                 [details]],
-                colWidths=[width], hAlign="LEFT",
+            title = " ".join(piece for piece in row[:2] if piece)
+            if title:
+                result.append((title, 11, heading_color, 4))
+            result.extend(
+                (f"{label}：{value}", 9.4, body_color, 3)
+                for label, value in zip(header[2:], row[2:]) if value
             )
-            card.setStyle(TableStyle([
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EAF1F8")),
-                ("BOX", (0, 0), (-1, -1), 0.4, colors.HexColor("#C9D5E3")),
-                ("LINEBELOW", (0, 0), (-1, 0), 0.35, colors.HexColor("#C9D5E3")),
-                ("LEFTPADDING", (0, 0), (-1, -1), 7),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 7),
-                ("TOPPADDING", (0, 0), (-1, -1), 5),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-            ]))
-            cards.append(KeepTogether([card, Spacer(1, 10)]))
-        return cards
-
-    rendered = [[Paragraph(_reportlab_inline(cell), styles["table"]) for cell in row]
-                for row in [header, *data] if len(row) == len(header)]
-    if not rendered:
-        return []
-    table = Table(rendered, colWidths=[width / len(header)] * len(header), repeatRows=1)
-    table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EAF1F8")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#16324F")),
-        ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#C9D5E3")),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 5),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
-        ("TOPPADDING", (0, 0), (-1, -1), 4),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-    ]))
-    return [table, Spacer(1, 10)]
-
-
-def _render_reportlab_cjk(md: pathlib.Path, pdf: pathlib.Path) -> tuple[bool, str]:
-    """Render Chinese reports without TeX font discovery or stretched glyphs."""
-    try:
-        from reportlab.lib import colors
-        from reportlab.lib.enums import TA_CENTER, TA_LEFT
-        from reportlab.lib.pagesizes import A4
-        from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-        from reportlab.lib.units import mm
-        from reportlab.platypus import KeepTogether, Paragraph, SimpleDocTemplate
-    except ImportError:
-        return False, "ReportLab is unavailable"
-
-    font, why = _reportlab_font()
-    if font is None:
-        return False, why
-    base = getSampleStyleSheet()
-    styles = {
-        "title": ParagraphStyle("title", parent=base["Title"], fontName=font,
-                                fontSize=18, leading=25, alignment=TA_CENTER,
-                                textColor=colors.HexColor("#102A43"), spaceAfter=7 * mm,
-                                keepWithNext=1),
-        "heading": ParagraphStyle("heading", parent=base["Heading2"], fontName=font,
-                                  fontSize=13, leading=19, alignment=TA_LEFT,
-                                  textColor=colors.HexColor("#16324F"), spaceBefore=5 * mm,
-                                  spaceAfter=2.5 * mm, keepWithNext=1),
-        "body": ParagraphStyle("body", parent=base["BodyText"], fontName=font,
-                               fontSize=9.6, leading=15.5, alignment=TA_LEFT,
-                               textColor=colors.HexColor("#243B53"), spaceAfter=2.4 * mm),
-        "list": ParagraphStyle("list", parent=base["BodyText"], fontName=font,
-                               fontSize=9.6, leading=15.5, alignment=TA_LEFT,
-                               leftIndent=5 * mm, firstLineIndent=-4 * mm,
-                               textColor=colors.HexColor("#243B53"), spaceAfter=1.5 * mm),
-        "card_title": ParagraphStyle("card_title", parent=base["BodyText"], fontName=font,
-                                     fontSize=11, leading=16, textColor=colors.HexColor("#102A43")),
-        "card_body": ParagraphStyle("card_body", parent=base["BodyText"], fontName=font,
-                                    fontSize=9.3, leading=15, textColor=colors.HexColor("#243B53")),
-        "table": ParagraphStyle("table", parent=base["BodyText"], fontName=font,
-                                fontSize=8.2, leading=12.5, textColor=colors.HexColor("#243B53")),
-    }
-    width = A4[0] - 40 * mm
-    story, lines, index = [], md.read_text(encoding="utf-8").splitlines(), 0
-    while index < len(lines):
-        line = lines[index].strip()
-        index += 1
-        if not line:
-            continue
-        if line.startswith("|"):
-            block = [line]
-            while index < len(lines) and lines[index].strip().startswith("|"):
-                block.append(lines[index].strip())
-                index += 1
-            story.extend(_reportlab_table(block, styles, width))
-        elif line.startswith("# "):
-            story.append(Paragraph(_reportlab_inline(line[2:]), styles["title"]))
-        elif line.startswith("## "):
-            story.append(Paragraph(_reportlab_inline(line[3:]), styles["heading"]))
-        elif line.startswith("### "):
-            story.append(Paragraph(_reportlab_inline(line[4:]), styles["heading"]))
-        elif line.startswith(("- ", "* ")):
-            story.append(KeepTogether([
-                Paragraph("- " + _reportlab_inline(line[2:]), styles["list"])
-            ]))
-        elif re.match(r"\d+\.\s+", line):
-            story.append(KeepTogether([
-                Paragraph(_reportlab_inline(line), styles["list"])
-            ]))
-        elif line.startswith("> "):
-            story.append(KeepTogether([
-                Paragraph(_reportlab_inline(line[2:]), styles["list"])
-            ]))
-        else:
-            story.append(Paragraph(_reportlab_inline(line), styles["body"]))
-
-    def footer(canvas, document):
-        canvas.saveState()
-        canvas.setStrokeColor(colors.HexColor("#D9E2EC"))
-        canvas.line(20 * mm, 14 * mm, A4[0] - 20 * mm, 14 * mm)
-        canvas.setFillColor(colors.HexColor("#627D98"))
-        canvas.setFont(font, 8)
-        canvas.drawString(20 * mm, 8 * mm, "职业咨询报告")
-        canvas.drawRightString(A4[0] - 20 * mm, 8 * mm, f"第 {document.page} 页")
-        canvas.restoreState()
+            result.append(("", 9.4, body_color, 6))
+        return result
 
     try:
         pdf.unlink(missing_ok=True)
-        SimpleDocTemplate(
-            str(pdf), pagesize=A4, leftMargin=20 * mm, rightMargin=20 * mm,
-            topMargin=18 * mm, bottomMargin=21 * mm,
-        ).build(story, onFirstPage=footer, onLaterPages=footer)
-    except (OSError, ValueError) as exc:
+        new_page()
+        lines, index = md.read_text(encoding="utf-8").splitlines(), 0
+        while index < len(lines):
+            line = lines[index].strip()
+            index += 1
+            if not line:
+                cursor += 4
+                continue
+            if line.startswith("|"):
+                table = [line]
+                while index < len(lines) and lines[index].strip().startswith("|"):
+                    table.append(lines[index].strip())
+                    index += 1
+                for value, size, color, gap in table_blocks(table):
+                    if not add_block(value, size, color, gap):
+                        return False, "Chinese report block does not fit on a page"
+                continue
+            if line.startswith("# "):
+                value, size, color, gap = line[2:], 18, heading_color, 15
+            elif line.startswith(("## ", "### ")):
+                value, size, color, gap = line.lstrip("# "), 13, heading_color, 9
+            elif line.startswith(("- ", "* ")):
+                value, size, color, gap = "- " + line[2:], 9.6, body_color, 5
+            elif line.startswith("> "):
+                value, size, color, gap = line[2:], 9.6, body_color, 5
+            else:
+                value, size, color, gap = line, 9.6, body_color, 7
+            if not add_block(value, size, color, gap):
+                return False, "Chinese report block does not fit on a page"
+        document.save(pdf, garbage=4, deflate=True)
+    except (OSError, RuntimeError, ValueError) as exc:
         pdf.unlink(missing_ok=True)
         return False, str(exc)
+    finally:
+        document.close()
     return pdf.is_file() and pdf.stat().st_size > 0, ""
 
 
@@ -577,26 +500,25 @@ def render_pdf(md: pathlib.Path, pdf: pathlib.Path,
                        "Markdown and .docx still ship")
     needs_cjk = has_cjk(source)
 
-    # Chinese reports use an in-process renderer first. It avoids Tectonic's
-    # platform-dependent font discovery and gives wide shortlist tables a
-    # readable card layout rather than six cramped columns. Japanese and Korean
-    # retain the existing CJK font-probe path because their scripts share Han.
+    # Chinese reports use PyMuPDF's bundled CJK font first. It avoids Tectonic's
+    # platform-dependent font discovery and host-specific CID fallbacks. Japanese
+    # and Korean retain the CJK font-probe path because their scripts share Han.
     if is_chinese_report(source):
-        ok, why = _render_reportlab_cjk(md, pdf)
+        ok, why = _render_cjk_report(md, pdf)
         if ok:
             return _verify_pdf(pdf, source, needs_cjk)
-        reportlab_problem = why
+        cjk_renderer_problem = why
     else:
-        reportlab_problem = ""
+        cjk_renderer_problem = ""
 
     if needs_cjk and font is None:
-        suffix = f"; ReportLab fallback: {reportlab_problem}" if reportlab_problem else ""
+        suffix = f"; bundled CJK renderer: {cjk_renderer_problem}" if cjk_renderer_problem else ""
         return False, ("no CJK font on this machine that survives a render "
                        f"round-trip (tried {len(CJK_FONTS)}); the Markdown ships, "
                        "the PDF is refused rather than handed over full of boxes" + suffix)
     if not _pandoc(md, pdf, font if needs_cjk else None):
         pdf.unlink(missing_ok=True)
-        suffix = f"; ReportLab fallback: {reportlab_problem}" if reportlab_problem else ""
+        suffix = f"; bundled CJK renderer: {cjk_renderer_problem}" if cjk_renderer_problem else ""
         return False, "pandoc/tectonic produced no PDF" + suffix
     return _verify_pdf(pdf, source, needs_cjk)
 
@@ -646,8 +568,8 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
             try:
                 source = visible_markdown(src)
                 glyphs = frozenset(_CJK.findall(source))
-                # Chinese sources take the ReportLab path in render_pdf(), so a
-                # Tectonic font-probe cannot delay or fail their delivery first.
+                # Chinese sources take the bundled CJK path in render_pdf(), so a
+                # Tectonic font probe cannot delay or fail their delivery first.
                 if glyphs and not is_chinese_report(source) and glyphs not in fonts:
                     fonts[glyphs] = pick_cjk_font(source)
                 ok, why = render_pdf(src, pdf, fonts.get(glyphs))

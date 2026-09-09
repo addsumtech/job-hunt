@@ -99,7 +99,7 @@ def test_a_pdf_that_dropped_characters_is_deleted_not_delivered(tmp_path, monkey
     """
     ws = build(tmp_path, md="# 岗位候选\n\n这是中文内容。\n")
     dest = tmp_path / "out"
-    monkeypatch.setattr(deliver, "_render_reportlab_cjk",
+    monkeypatch.setattr(deliver, "_render_cjk_report",
                         lambda *args: (False, "disabled for this regression"))
     monkeypatch.setattr(deliver, "pick_cjk_font", lambda *args: "SomeFont")
     monkeypatch.setattr(deliver, "_pandoc",
@@ -110,7 +110,7 @@ def test_a_pdf_that_dropped_characters_is_deleted_not_delivered(tmp_path, monkey
     assert (dest / "报告" / "求职建议报告.md").is_file(), "the Markdown still ships"
 
 
-def test_chinese_report_uses_reportlab_when_pandoc_has_no_cjk_font(tmp_path, monkeypatch):
+def test_chinese_report_uses_bundled_cjk_renderer_when_pandoc_has_no_cjk_font(tmp_path, monkeypatch):
     ws = build(tmp_path, md=(
         "# 岗位候选\n\n这是中文内容。\n\n"
         "| 优先级 | 岗位 | 公司与地点 | 展示薪资 | 初判与投入 | 依据 |\n"
@@ -134,7 +134,7 @@ def test_cjk_detection_and_counting():
 
 
 def test_raw_source_urls_become_short_clickable_links_in_chinese_pdfs():
-    rendered = deliver._reportlab_inline(
+    rendered = deliver._inline_pdf_markup(
         "来源：<https://www.zhipin.com/job_detail/abc.html?ka=search_list&foo=bar>、"
         "<https://jobs.51job.com/shanghai/123456.html>"
     )
@@ -177,7 +177,7 @@ def test_japanese_and_korean_keep_the_existing_cjk_renderer(tmp_path, monkeypatc
     md, pdf = tmp_path / "report.md", tmp_path / "report.pdf"
     md.write_text(source, encoding="utf-8")
     monkeypatch.setattr(deliver, "visible_markdown", lambda _: source)
-    monkeypatch.setattr(deliver, "_render_reportlab_cjk",
+    monkeypatch.setattr(deliver, "_render_cjk_report",
                         lambda *args: pytest.fail("Chinese renderer was selected"))
     monkeypatch.setattr(deliver, "_pandoc",
                         lambda _md, output, _font: (output.write_bytes(b"%PDF"), True)[1])
@@ -389,7 +389,7 @@ def test_a_refused_pdf_is_named_in_the_record(tmp_path, monkeypatch):
     """
     import json
     ws = build(tmp_path, md="# 岗位候选\n\n中文内容。\n")
-    monkeypatch.setattr(deliver, "_render_reportlab_cjk",
+    monkeypatch.setattr(deliver, "_render_cjk_report",
                         lambda *args: (False, "disabled for this regression"))
     monkeypatch.setattr(deliver, "pick_cjk_font", lambda *args: None)
     assert run(ws, tmp_path / "out") == 2
