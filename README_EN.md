@@ -149,6 +149,8 @@ Structured applications review the supporting statement against the employer's c
 
 Every consultation includes a PDF report answering the client’s question, kept with the CV and requested documents in one `~/Downloads/<workspace-name>/` folder. Reuse one delivery folder across stages. Reports contain career analysis, evidence and relevant facts to confirm; tool diagnostics stay internal. Cover letters are on demand and mock interviews never start automatically. Delivery is incomplete until the PDF is generated and verified. [Supplementary sources](references/supplementary-sources.md) support official web, news, GitHub and public discussion research when relevant; logged-in Xiaohongshu/Douyin searches require explicit authorization for the current consultation.
 
+Delivery uses `简历/` (resume) and `报告/` (report) subfolders, with names such as `简历.docx`, `简历.pdf` and `求职建议报告.pdf`; filenames exclude employer names and internal workspace identifiers.
+
 ## Where files live
 
 Source profiles, application workspaces, and check records default to `~/.claude/job-profiles/`, including when running on Codex. Set `JOBHUNT_PROFILES_ROOT` to use another root directory.

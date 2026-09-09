@@ -149,6 +149,8 @@ Las solicitudes estructuradas revisan el supporting statement según los criteri
 
 Cada consulta incluye un informe PDF que responde a la pregunta del cliente, junto con el CV y los documentos solicitados en una carpeta `~/Downloads/<workspace-name>/`. Se reutiliza la misma carpeta entre etapas. El informe contiene análisis profesional, evidencia y cuestiones por confirmar; los diagnósticos técnicos permanecen internos. Las cartas se ofrecen bajo demanda y las entrevistas simuladas no se inician automáticamente. La entrega no está completa hasta generar y verificar el PDF. Las [fuentes complementarias](references/supplementary-sources.md) permiten investigar sitios oficiales, noticias, GitHub y debates públicos cuando sean pertinentes; las búsquedas con sesión iniciada en Xiaohongshu/Douyin requieren autorización explícita para la consulta actual.
 
+La entrega se divide en `简历/` (CV) y `报告/` (informe), con nombres como `简历.docx`, `简历.pdf` y `求职建议报告.pdf`, sin nombres de empresas ni identificadores internos en los archivos.
+
 ## Dónde se guardan los archivos
 
 Los perfiles originales, los espacios de trabajo de cada candidatura y los registros de comprobación se guardan por defecto en `~/.claude/job-profiles/`, también al usar Codex. Puedes indicar otro directorio raíz con `JOBHUNT_PROFILES_ROOT`.

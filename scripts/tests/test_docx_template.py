@@ -28,6 +28,13 @@ def test_document_layout_keeps_content_and_editable_rules(tmp_path, language):
     path = tmp_path / 'cv.docx'
     render_cv.render_docx(profile, path)
     doc = Document(path)
+    for style_name in ['Normal', 'Title', 'Heading 1', 'List Bullet']:
+        style = doc.styles[style_name]
+        assert style.font.name == 'Times New Roman'
+        if language == 'zh':
+            fonts = style.element.find('.//' + qn('w:rFonts'))
+            assert fonts.get(qn('w:eastAsia')) == 'SimSun'
+            assert fonts.get(qn('w:eastAsiaTheme')) is None
     assert doc.styles['Title'].paragraph_format.alignment == WD_ALIGN_PARAGRAPH.CENTER
     assert doc.styles['Heading 1'].font.color.rgb == (0, 0, 0)
     rule = doc.styles['Heading 1'].element.find('.//' + qn('w:bottom'))

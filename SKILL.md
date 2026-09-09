@@ -33,6 +33,8 @@ formal posting evidence; they do not replace it or run automatically on every ta
 
 ## Client consultation delivery
 
+Delivery uses two child folders: `简历/` for `简历.docx`, `简历.pdf` and other requested application documents; `报告/` for `求职建议报告.pdf` and its editable text. Filenames never include the employer, role or internal workspace slug.
+
 Author `report.md` for **every consultation**, answering the client's actual
 question in their language: conclusion, supporting evidence, relevant career
 constraints or facts still to confirm, and practical next steps. Tool defects,
@@ -997,3 +999,9 @@ Told the user:
       this session:, and `modes/discover.md` carries both spellings of all seven
       literals the gate requires. One language per document — Chinese furniture in
       an English page passes every gate and still reads as a bug.
+
+Client typography: English uses Times New Roman and Chinese uses SimSun (宋体),
+including names and headings, unless the user explicitly requests otherwise.
+Verify embedded PDF fonts, not only DOCX settings. Preserve template font sizes
+and aim for a well-filled page; any added gap before a section heading is at
+most one blank line. Never invent content or shrink fonts just to fill a page.

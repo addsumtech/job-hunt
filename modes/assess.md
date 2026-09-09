@@ -452,6 +452,8 @@ every mode is a command, not a claim:
 python3 scripts/deliver.py --workspace <ws>
 ```
 
+Delivery uses two child folders: `简历/` for `简历.docx`, `简历.pdf` and other requested application documents; `报告/` for `求职建议报告.pdf` and its editable text. Filenames never include the employer, role or internal workspace slug.
+
 Author `report.md` for **every consultation**, answering the client's actual
 question in their language: conclusion, supporting evidence, relevant career
 constraints or facts still to confirm, and practical next steps. Tool defects,

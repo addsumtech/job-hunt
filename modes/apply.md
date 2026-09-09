@@ -395,6 +395,8 @@ every mode is a command, not a claim:
 python3 scripts/deliver.py --workspace <ws>
 ```
 
+Delivery uses two child folders: `简历/` for `简历.docx`, `简历.pdf` and other requested application documents; `报告/` for `求职建议报告.pdf` and its editable text. Filenames never include the employer, role or internal workspace slug.
+
 Author `report.md` for **every consultation**, answering the client's actual
 question in their language: conclusion, supporting evidence, relevant career
 constraints or facts still to confirm, and practical next steps. Tool defects,
@@ -423,3 +425,9 @@ When Word files are delivered, `check_pages.py` requires LibreOffice to measure 
 For native Word/LibreOffice export, complete ordinary save and print dialogs directly with the host's available UI tools. Disabled document controls can mean a modal dialog is waiting, not that the application is frozen. Before asking the user to restart or take over, inspect the current app windows and accessibility state; if the dialog is absent from that view, inspect a screenshot and use the host's supported interaction method. Save a separately named output when checking another renderer so existing artifacts remain intact, then verify that the file exists and inspect its text and page layout before reporting success.
 
 Request user intervention only for an observed blocker the available tools cannot resolve or an action that requires human participation under the host's rules. State what is actually visible and what was attempted; do not diagnose a crash from grey controls or one unchanged tool response. This document-export guidance does not change the login, verification or refusal rules for job websites.
+
+Client typography: English uses Times New Roman and Chinese uses SimSun (宋体),
+including names and headings, unless the user explicitly requests otherwise.
+Verify embedded PDF fonts, not only DOCX settings. Preserve template font sizes
+and aim for a well-filled page; any added gap before a section heading is at
+most one blank line. Never invent content or shrink fonts just to fill a page.

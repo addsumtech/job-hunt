@@ -37,18 +37,18 @@ def test_rtl_rerender_removes_stale_source_and_delivery_keeps_refusal(
 
     (ws / "report.md").write_text(text, encoding="utf-8")
     dest = tmp_path / "delivery"
-    dest.mkdir()
-    (dest / "round-cv.pdf").write_bytes(b"%PDF previous delivery")
-    (dest / "round-cv.tex").write_text("previous source", encoding="utf-8")
+    (dest / "简历").mkdir(parents=True)
+    (dest / "简历" / "简历.pdf").write_bytes(b"%PDF previous delivery")
+    (dest / "简历" / "简历.tex").write_text("previous source", encoding="utf-8")
     (dest / "unrelated.tex").write_text("keep this", encoding="utf-8")
     assert deliver.main(["--workspace", str(ws), "--to", str(dest)]) == 2
     output = capsys.readouterr()
     assert "NOTICE_PDF_REFUSED" in output.err
     assert "right-to-left" in output.err
-    assert (dest / "round-cv.md").is_file()
-    assert (dest / "round-cv.docx").is_file()
-    assert not list(dest.glob("*.pdf"))
-    assert not (dest / "round-cv.tex").exists()
+    assert (dest / "简历" / "简历.md").is_file()
+    assert (dest / "简历" / "简历.docx").is_file()
+    assert not list(dest.rglob("*.pdf"))
+    assert not (dest / "简历" / "简历.tex").exists()
     assert (dest / "unrelated.tex").read_text(encoding="utf-8") == "keep this"
     receipt = json.loads((ws / "journal.jsonl").read_text().splitlines()[-1])
     assert not any(f.endswith((".pdf", ".tex")) for f in receipt["files"])

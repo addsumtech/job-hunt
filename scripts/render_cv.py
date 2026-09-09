@@ -1229,8 +1229,8 @@ def render_docx(profile, out_path):
     section.top_margin, section.bottom_margin = Mm(10), Mm(12)
     section.left_margin = section.right_margin = Mm(12.7)
     width = section.page_width - section.left_margin - section.right_margin
-    east_asia = {"zh": "Songti SC" if sys.platform == "darwin" else "SimSun", "ja": "Yu Mincho", "ko": "Malgun Gothic"}.get(language)
-    body_size = 10 if language == "zh" else 11
+    east_asia = {"zh": "SimSun", "ja": "Yu Mincho", "ko": "Malgun Gothic"}.get(language)
+    body_size = 11
     for name, size, before, after in [("Normal", body_size, 0, 2), ("Title", 16, 0, 4),
                                       ("Heading 1", 11, 9, 3), ("List Bullet", body_size, 0, 2)]:
         style = doc.styles[name]
@@ -1239,7 +1239,10 @@ def render_docx(profile, out_path):
         style.font.color.rgb = RGBColor(0, 0, 0)
         style.font.bold = name in {"Title", "Heading 1"}
         if east_asia:
-            style.element.get_or_add_rPr().rFonts.set(qn("w:eastAsia"), east_asia)
+            fonts = style.element.get_or_add_rPr().rFonts
+            for attr in ("asciiTheme", "hAnsiTheme", "eastAsiaTheme", "cstheme"):
+                fonts.attrib.pop(qn("w:" + attr), None)
+            fonts.set(qn("w:eastAsia"), east_asia)
         fmt = style.paragraph_format
         fmt.space_before, fmt.space_after = Pt(before), Pt(after)
         fmt.line_spacing = 1.0
@@ -1797,8 +1800,8 @@ def overfull_boxes(log):
 # Japanese resolved to a Chinese face, which is subtler: the shared kanji differ
 # in stroke shape and a Japanese reader sees it immediately.
 _CJK_FONTS_BY_LANG = {
-    "zh": ["Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC",
-           "Hiragino Sans GB", "Microsoft YaHei", "SimSun"],
+    "zh": ["SimSun", "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC",
+           "Hiragino Sans GB", "Microsoft YaHei"],
     "ja": ["Noto Sans CJK JP", "Source Han Sans JP", "Hiragino Sans W3",
            "Hiragino Kaku Gothic ProN", "Hiragino Sans",
            "Yu Gothic", "MS Gothic"],
@@ -1845,17 +1848,8 @@ def _cjk_font_setup(meta):
 
 
 def _main_font_setup(meta):
-    """The Latin main-font chain for the fontspec path.
-
-    Deliberately empty by default: fontspec's own default under a Unicode engine
-    is Latin Modern Roman, which is the OpenType cut of the same typeface the
-    pdfLaTeX path uses (ec-lmr10), so the PDF looks unchanged — and, measured,
-    it covers Latin-1 and Latin Extended-A (Ł ą Š Ș all render). What it does not
-    cover — Cyrillic, Greek — is now caught loudly by the `Missing character`
-    scan in `render_pdf` rather than dropped, and `meta.main_font` is the answer
-    the scan's message points at.
-    """
-    fonts = [str(meta["main_font"])] if meta.get("main_font") else []
+    """Prefer the client English typeface; explicit profile fonts still win."""
+    fonts = [str(meta["main_font"])] if meta.get("main_font") else ["Times New Roman"]
     return _font_chain(fonts, "setmainfont")
 
 

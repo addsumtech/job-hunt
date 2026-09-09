@@ -337,7 +337,7 @@ def test_a_hostile_photo_path_is_staged_beside_the_tex(tmp_path):
 # ── 5. the CJK font chain ─────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("lang,first", [
-    ("ko", "Noto Sans CJK KR"), ("ja", "Noto Sans CJK JP"), ("zh", "Noto Sans CJK SC"),
+    ("ko", "Noto Sans CJK KR"), ("ja", "Noto Sans CJK JP"), ("zh", "SimSun"),
     ("ko-KR", "Noto Sans CJK KR"), ("KO", "Noto Sans CJK KR"),
 ])
 def test_the_cjk_font_chain_leads_with_the_profiles_own_language(lang, first):
