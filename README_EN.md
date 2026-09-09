@@ -95,23 +95,21 @@ For Codex, replace `~/.claude/skills` with `~/.codex/skills` in the last two lin
 
 ### First use: let the agent prepare the environment
 
-After installing the skill, tell the agent: **“Set up job-hunt and start my task; I will load the Chrome extension.”**
+After installing the skill, tell the agent: **“Set up job-hunt and start my task using my everyday browser.”**
 
-The agent reuses working tools, installs the Python dependencies, Node.js, OpenCLI and document tools needed for your task, and downloads and extracts the [official OpenCLI extension](https://github.com/jackwener/opencli/releases). You do not need to copy terminal commands.
+The agent reuses working tools and prepares Python dependencies, Node.js, OpenCLI, [AnySearch](https://github.com/anysearch-ai/anysearch-skill), [web-access](https://github.com/eze-is/web-access) and document tools as needed, verifies the connection and resumes your task. No terminal commands to copy or browser extension to install.
 
-**Normally, your only manual setup step is loading the Chrome extension:**
+**Browser reads prefer CDP connected to your everyday browser and its existing login state.** On first use, you may need to enable remote debugging at `chrome://inspect/#remote-debugging` and accept Chrome's connection prompt. A working authorized connection is reused. The agent checks actual support and never presents a separate new browser as your everyday profile.
 
-1. The agent opens `chrome://extensions/` and gives you the full extracted folder path.
-2. Enable **Developer mode**, click **Load unpacked**, and select the prepared folder directly containing `manifest.json`, not the ZIP. On macOS, `Command + Shift + G` lets you paste the path.
-3. Tell the agent it is loaded. The agent runs `opencli doctor`, verifies extension and connectivity, applies eligible compatibility patches, and resumes your task. A connected extension is reused.
+AnySearch supports anonymous use without an API key. Independent sources run concurrently where supported, with separate browser tabs and shared per-site limits; pagination and login handling remain sequential. Site login, CAPTCHA and permissions requiring your confirmation remain your steps.
 
-Keep the loaded extension directory in place. Site login, CAPTCHA or a system permission requiring your action still needs you; the agent completes the independent preparation first and explains only the remaining action.
+See [agent setup](references/agent-setup.md) and [daily browser and concurrent research](references/daily-browser.md) for installation and connection details.
 
 `doctor.py` checks actual capabilities; `doctor.py --install` installs Python packages only. The agent installs other tools through the [first-run setup workflow](references/agent-setup.md). Word-only output or assessment of a pasted posting does not require unrelated PDF/browser tools.
 
 ### Compatibility patches and browser fallback
 
-The patches ship with this skill and the agent applies them before the first relevant site read; importing the browser extension alone does not install them.
+The patches ship with this skill and the agent applies them before the first relevant site read. Direct browser reads do not require these patches.
 
 **You normally do not need to install patches manually.** Before reading Indeed or 51job, the skill checks known compatibility issues and automatically patches a local copy only when the OpenCLI version and source bytes match. The installed package stays unchanged. Current patches target 1.8.7; other versions and custom edits are not overwritten. You can tell the agent “check job-site compatibility patches” or “revert compatibility patches.” See [check, apply and revert instructions](references/opencli-compat.md).
 

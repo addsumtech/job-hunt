@@ -1034,7 +1034,7 @@ def _check_browser_rows(workspace, rows, calls, brief, exceptions=()):
         elif (row.get("source_site") in browser_sites
               and (row.get("extraction_method") == "public_page"
                    or row.get("source_site") not in adapter_sites)):
-            findings.append("BROWSER_METHOD_MISMATCH: web-access rows must use browser_page")
+            findings.append("BROWSER_METHOD_MISMATCH: browser capture rows must use browser_page")
     cap = brief.get("max_rows_per_round")
     if type(cap) is int:
         for site, captured in evidence.items():

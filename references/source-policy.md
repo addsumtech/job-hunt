@@ -115,8 +115,8 @@ nothing checking it.
 
 ## Browser retrieval
 
-`references/browser-fallback.md` defines the OpenCLI-first, web-access fallback
-path. Public page reads follow Green; logged-in reads and pagination follow
+`references/daily-browser.md` defines CDP-first daily-browser routing and shared
+concurrency budgets; `references/browser-fallback.md` defines its capture path. Public page reads follow Green; logged-in reads and pagination follow
 Yellow with the same caps. Browser snapshots use `browser_page` extraction and
 `browser_call` records, with original URLs from the page rather than an adapter.
 `check_no_write.py` verifies the fixed snapshot operation and capture hashes;

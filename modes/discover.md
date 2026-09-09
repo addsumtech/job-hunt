@@ -300,21 +300,22 @@ the second is the politeness cap from `references/source-policy.md`. Falling sho
 `target_count` requires a written `shortfall_reason` in `shortlist.yaml`
 (`SHORTFALL_NO_REASON`). **Never pad the count.**
 
-## Retrieval backend — OpenCLI first, web-access fallback
+## Retrieval backend — daily-browser CDP first
 
-Before the first Indeed or 51job read, follow `references/opencli-compat.md`:
+Before using OpenCLI for the first Indeed or 51job read, follow `references/opencli-compat.md`:
 check and automatically apply only the known version/hash-matched local repairs
 with `scripts/opencli_compat.py`. Do not overwrite custom edits or force a patch
 onto another version. This local preparation performs no site reads and cannot
 reset a site's refusal. Browser fallback can use the site's own search box;
 it is not limited to Google or other search engines.
 
-Before Step 1, probe OpenCLI availability and its connection. If it is missing,
-the bridge is disconnected, or there is no suitable read extraction, read
-`references/browser-fallback.md` and use the available web-access skill. On this
-path skip OpenCLI-only auth/help commands and retain the same source selection,
-query, page, row, detail and disclosure rules. Do not stop merely because an
-optional adapter executable is absent. If neither path works, disclose the gap.
+Before Step 1, select the daily browser and schedule independent sources under
+`references/daily-browser.md`. Prefer CDP; use OpenCLI only when its CDP adapter
+works, or use `references/browser-fallback.md` directly with web-access or a
+supported host browser. No extension or prior CLI failure is required. On the
+browser path skip OpenCLI-only auth/help commands and retain the same source,
+query, page, row, detail and disclosure rules. If neither path works, disclose
+the gap. Site login remains a user action when a real login wall is encountered.
 
 Browser captures use `scripts/record_browser_capture.py`, `browser_call` journal
 records and `extraction_method: browser_page`. They are not adapter responses.

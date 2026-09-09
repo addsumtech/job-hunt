@@ -11,13 +11,13 @@ run every source on every consultation.
 | Need | Preferred route | Boundary |
 |---|---|---|
 | Official sites, public web, company news | AnySearch public search | Open the original page; a search snippet is discovery, not full-page evidence. |
-| Several keywords or companies | AnySearch `batch_search` | Parallelize independent public queries only; deduplicate URLs and syndicated stories. |
+| Several keywords or companies | AnySearch `batch_search` | Batch independent queries within the shared concurrency budget; deduplicate URLs and syndicated stories. |
 | A specified website | AnySearch `site:target-domain` | Search public indexed pages; no private-page claims. |
 | Unspecified social discussion | AnySearch social-media vertical | Discover public candidates first; keep opinions separate from employer facts. |
 | Employer engineering work, open-source evidence | `gh search repos`, `gh search code`, `gh search issues`, `gh search prs` | Search public content only; inspect original repo/issue/PR. Never upload a candidate CV or private code as a query. |
 | WeChat public accounts | OpenCLI Sogou WeChat public search | Anonymous search only; follow the public article. No personal WeChat history or contacts. |
-| Xiaohongshu | OpenCLI site search using Chrome login | Requires explicit authorization for this platform in the current consultation before reading the login state; otherwise use public indexed candidates. |
-| Douyin | OpenCLI site search using Chrome login | Same current-consultation authorization; low-frequency reads and a small relevant sample. |
+| Xiaohongshu | Daily-browser CDP site search (OpenCLI when compatible) | Requires explicit authorization for this platform in the current consultation before reading the login state; otherwise use public indexed candidates. |
+| Douyin | Daily-browser CDP site search (OpenCLI when compatible) | Same current-consultation authorization; low-frequency reads and a small relevant sample. |
 | Toutiao | OpenCLI article/image-text search | Use a dedicated anonymous environment; do not attach a personal login. |
 | X/Twitter | Grok OAuth + `grok-consult` public X search | Only when configured; require original post URLs and dates. Do not treat generated commentary as a source. |
 | Bilibili | `bili search` | Anonymous public-video metadata and links; read content only when needed. |
@@ -26,6 +26,10 @@ run every source on every consultation.
 | A relevant legal, financial, academic or security question | Corresponding AnySearch vertical | On demand only, then verify primary law/regulator/paper/advisory sources and their dates/jurisdiction. |
 
 ## Availability and invocation
+
+Apply [daily-browser.md](daily-browser.md) to all independent sources, not only
+AnySearch: separate browser tabs, shared budgets and serial journal imports.
+Prepare OpenCLI, AnySearch and web-access via [agent-setup.md](agent-setup.md).
 
 This table is a routing policy, not a promise that every provider is installed.
 Inspect the current tool registry/help before invocation. AnySearch and

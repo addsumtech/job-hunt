@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Import an actual web-access snapshot; never execute arbitrary browser code.
+"""Import an actual read-only browser snapshot; never execute arbitrary browser code.
 
 Records are tamper-evident, not proof of origin or of unjournaled actions.
 Exit 0: recorded (including a site refusal); 2: invalid input, nothing recorded.
@@ -18,7 +18,8 @@ import journal
 from check_opencli_result import read_journal, recovery_guidance
 
 ACTION = "browser_call"
-REASONS = ("cli_missing", "bridge_disconnected", "unsupported_extraction")
+REASONS = ("preferred_browser", "cli_missing", "bridge_disconnected", "unsupported_extraction")
+BACKENDS = ("web-access", "chrome-devtools", "host-browser")
 STOP_CLASSES = {"platform_limit", "not_logged_in", "no_auth_adapter"}
 # Look for actual wall language, not an ordinary navigation link saying Login.
 WALL = re.compile(
@@ -211,7 +212,7 @@ def check_stop_order(records):
 def validate_record(record, workspace):
     """Fail closed on unknown actions, altered metadata or missing raw files."""
     findings = []
-    if (record.get("backend") != "web-access" or record.get("operation") != "snapshot"
+    if (record.get("backend") not in BACKENDS or record.get("operation") != "snapshot"
             or record.get("command") not in ("search", "detail")
             or record.get("fallback_reason") not in REASONS
             or record.get("command_line")
@@ -260,6 +261,7 @@ def main(argv=None):
     parser.add_argument("--command", choices=("search", "detail"), default="search")
     parser.add_argument("--snapshot-file", required=True, type=pathlib.Path)
     parser.add_argument("--rows-file", required=True, type=pathlib.Path)
+    parser.add_argument("--backend", choices=BACKENDS, default="web-access")
     parser.add_argument("--fallback-reason", choices=REASONS, required=True)
     parser.add_argument("--query", default="")
     parser.add_argument("--page", type=int, default=1)
@@ -287,7 +289,7 @@ def main(argv=None):
         if check_stop_order(records + [{"action": ACTION, "site": args.site}]):
             raise ValueError("READ_AFTER_STOP: site already stopped in this round")
         record = {
-            "action": ACTION, "backend": "web-access", "operation": "snapshot",
+            "action": ACTION, "backend": args.backend, "operation": "snapshot",
             "mode": journal.current_mode(root), "site": args.site,
             "command": args.command, "fallback_reason": args.fallback_reason,
             "query": args.query, "page": args.page,

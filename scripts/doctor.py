@@ -9,8 +9,8 @@ installed and every PDF rendered fine. So the PDF check renders a PDF.
 
 This diagnostic's --install option handles requirements.txt Python packages.
 The agent performs other needed setup using references/agent-setup.md, including
-system tools and extension download/extraction. The user loads the prepared
-extension in Chrome. A diagnostic run alone never installs system tools.
+system tools and daily-browser CDP. The user grants browser connection consent.
+A diagnostic run alone never installs system tools.
 
 Exit codes: 0 everything the skill needs is present, 1 something is missing
 (the report says what it costs), 2 the check itself could not run.
@@ -173,16 +173,16 @@ def checks() -> list[dict]:
     })
     out.append({
         "what": "job adapters (opencli)", "ok": bool(shutil.which("opencli")),
-        "cost": "discover mode cannot retrieve postings; assess, apply and "
-                "interview still work from a posting you paste",
+        "cost": "OpenCLI adapters are unavailable; verify daily-browser CDP separately "
+                "or use a pasted posting",
         "fix": install_hint("opencli"), "auto": False,
     })
     if shutil.which("opencli"):
         connected, detail = can_reach_browser()
         out.append({
             "what": "browser-backed job adapters (Browser Bridge)", "ok": connected,
-            "cost": detail + "; browser-backed searches are unverified, not empty results",
-            "fix": "run opencli doctor and follow its extension connection instructions",
+            "cost": detail + "; this OpenCLI route is unverified, not an empty result; check CDP separately",
+            "fix": "verify the daily-browser CDP route in references/daily-browser.md",
             "auto": False, "detail": detail,
         })
     return out
@@ -239,7 +239,7 @@ def main(argv: list[str] | None = None) -> int:
         print("\nRe-run with --install to install the missing Python packages.")
     print("\nAgent: resolve required missing capabilities using "
           "references/agent-setup.md, then re-run the checks. "
-          "Prepare the extension folder for the user to load in Chrome.")
+          "Prepare daily-browser CDP; no extension installation is required.")
     return 1
 
 

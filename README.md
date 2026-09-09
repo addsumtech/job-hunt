@@ -95,23 +95,21 @@ ln -s "$PWD" ~/.claude/skills/job-hunt
 
 ### 首次使用：让 Agent 完成环境配置
 
-安装 Skill 后，直接告诉 Agent：**“帮我配置 job-hunt 并开始使用，Chrome 扩展我来导入。”**
+安装 Skill 后，直接告诉 Agent：**“帮我配置 job-hunt，并使用我的日常浏览器开始任务。”**
 
-Agent 会检查并复用已有环境，自动安装当前任务所需的 Python 依赖、Node.js、OpenCLI 和文档工具，下载并解压 [OpenCLI 官方扩展](https://github.com/jackwener/opencli/releases)，准备好扩展文件夹。无需你复制终端命令。
+Agent 会复用已有环境，按需安装 Python 依赖、Node.js、OpenCLI、[AnySearch](https://github.com/anysearch-ai/anysearch-skill)、[web-access](https://github.com/eze-is/web-access) 和文档工具，检测连接后继续任务。无需你复制终端命令，也不要求安装浏览器扩展。
 
-**通常你只需要手动加载 Chrome 扩展：**
+**浏览器读取优先通过 CDP 连接你日常使用的浏览器，复用已有登录态。** 首次使用时，你可能需要在 `chrome://inspect/#remote-debugging` 开启远程调试，并接受 Chrome 的连接授权；已授权的可用连接会直接复用。支持情况由 Agent 实际检测，不能用单独新开的浏览器冒充日常浏览器。
 
-1. Agent 会打开 `chrome://extensions/`，并给出已解压文件夹的完整路径。
-2. 开启「开发者模式」，点击「加载已解压的扩展程序」，选择 Agent 准备的文件夹（直接包含 `manifest.json`），不是 ZIP 文件。macOS 可按 `Command + Shift + G` 粘贴路径。
-3. 告诉 Agent“已导入”。Agent 会运行 `opencli doctor`，确认扩展和连接正常，自动处理适用的兼容补丁，然后继续原任务。已连接的扩展会直接复用。
+AnySearch 默认可匿名使用，无需先申请 API Key。独立信息源尽可能并行检索，浏览器使用各自的标签页；同一网站的翻页、登录处理和读取预算统一管理。网站登录、验证码及必须本人确认的权限仍由你完成。
 
-扩展目录会保存在长期位置，加载后不要移动或删除。网站登录、验证码或系统要求本人确认的权限仍需你完成；Agent 会先处理能自动完成的步骤，只说明剩余的具体操作。
+安装、版本兼容与连接细节见 [Agent 配置流程](references/agent-setup.md) 和 [日常浏览器与并行检索](references/daily-browser.md)。
 
 `doctor.py` 用于检查真实能力，`doctor.py --install` 只补装 Python 包；其他工具由 Agent 按[首次配置流程](references/agent-setup.md)安装。只做 Word 输出或评估粘贴的岗位时，不会安装无关的 PDF／浏览器工具。
 
 ### 兼容补丁与浏览器兜底
 
-补丁随本 Skill 提供，由 Agent 在首次读取对应网站前自动应用；导入浏览器扩展本身不会安装补丁。
+补丁随本 Skill 提供，由 Agent 在首次读取对应网站前自动应用；直接浏览器读取不要求先安装补丁。
 
 **正常使用即可，不需要手动安装补丁或复制命令。** Skill 会自动修复已确认的 Indeed、51job 兼容问题，当前支持我们测试过的 OpenCLI 1.8.7。OpenCLI 更新后会先照常使用，不会把旧补丁强行套上去，也不会覆盖你自己改过的代码。需要时，可以直接告诉 Agent：“检查招聘网站兼容补丁”或“撤销兼容补丁”。[具体检查与回退方法](references/opencli-compat.md)（英文）。
 

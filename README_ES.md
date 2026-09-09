@@ -95,23 +95,21 @@ Para Codex, sustituye `~/.claude/skills` por `~/.codex/skills` en las dos últim
 
 ### Primer uso: deja la configuración al agente
 
-Tras instalar el skill, dile al agente: **«Configura job-hunt y empieza mi tarea; yo cargaré la extensión de Chrome».**
+Tras instalar el skill, dile al agente: **«Configura job-hunt y empieza mi tarea con mi navegador habitual».**
 
-El agente reutiliza las herramientas existentes, instala las dependencias de Python, Node.js, OpenCLI y las herramientas de documentos necesarias, y descarga y extrae la [extensión oficial de OpenCLI](https://github.com/jackwener/opencli/releases). No tienes que copiar comandos de terminal.
+El agente reutiliza el entorno existente y prepara las dependencias de Python, Node.js, OpenCLI, [AnySearch](https://github.com/anysearch-ai/anysearch-skill), [web-access](https://github.com/eze-is/web-access) y las herramientas de documentos necesarias. Verifica la conexión y continúa la tarea. No tienes que copiar comandos ni instalar una extensión del navegador.
 
-**Normalmente, el único paso manual de configuración es cargar la extensión de Chrome:**
+**Las lecturas del navegador priorizan CDP con tu navegador habitual y su sesión existente.** La primera vez puede ser necesario activar la depuración remota en `chrome://inspect/#remote-debugging` y aceptar la conexión en Chrome. Se reutilizan las conexiones autorizadas que funcionan. El agente comprueba la compatibilidad real y no presenta un navegador nuevo como tu perfil habitual.
 
-1. El agente abre `chrome://extensions/` y te indica la ruta completa de la carpeta extraída.
-2. Activa el **Modo de desarrollador**, pulsa **Cargar descomprimida** y selecciona la carpeta que contiene directamente `manifest.json`, no el ZIP. En macOS, puedes pegar la ruta con `Command + Shift + G`.
-3. Avisa al agente cuando esté cargada. Ejecutará `opencli doctor`, verificará la extensión y la conexión, aplicará los parches compatibles y continuará tu tarea. Si ya está conectada, se reutiliza.
+AnySearch permite acceso anónimo sin clave API. Las fuentes independientes se consultan en paralelo cuando sea posible, con pestañas separadas y límites compartidos por sitio. La paginación y la gestión del inicio de sesión siguen siendo secuenciales. El inicio de sesión, los CAPTCHA y los permisos que exigen tu confirmación siguen siendo pasos personales.
 
-No muevas ni borres la carpeta de la extensión cargada. El inicio de sesión, los CAPTCHA y los permisos del sistema que requieran tu intervención siguen siendo pasos personales; el agente completa primero toda la preparación independiente y te indica solo lo que falta.
+Consulta la [configuración del agente](references/agent-setup.md) y el [navegador habitual y consultas paralelas](references/daily-browser.md).
 
 `doctor.py` comprueba capacidades reales; `doctor.py --install` solo instala paquetes de Python. El agente instala otras herramientas siguiendo el [proceso de configuración inicial](references/agent-setup.md) (en inglés). La salida solo en Word o la evaluación de una oferta pegada no requiere herramientas de PDF o navegador innecesarias.
 
 ### Parches de compatibilidad y alternativa en el navegador
 
-Los parches se incluyen en este skill y el agente los aplica antes de la primera lectura del portal correspondiente; importar la extensión del navegador no los instala.
+Los parches se incluyen en este skill y el agente los aplica antes de la primera lectura del portal correspondiente. La lectura directa en el navegador no requiere estos parches.
 
 **Normalmente no necesitas instalar parches manualmente.** Antes de leer Indeed o 51job, el skill comprueba los problemas conocidos y aplica el parche a una copia local solo si coinciden la versión y el código de OpenCLI. El paquete instalado no cambia. Los parches actuales son para 1.8.7; no se sobrescriben otras versiones ni cambios personalizados. Puedes pedir al agente «comprueba los parches de compatibilidad» o «revierte los parches de compatibilidad». Consulta las [instrucciones para comprobar, aplicar y revertir](references/opencli-compat.md) (en inglés).
 
