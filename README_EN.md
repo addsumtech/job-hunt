@@ -93,60 +93,25 @@ ln -s "$PWD" ~/.claude/skills/job-hunt
 
 For Codex, replace `~/.claude/skills` with `~/.codex/skills` in the last two lines. If the destination already exists, inspect the existing installation first.
 
-### Install dependencies and check the environment
+### First use: let the agent prepare the environment
 
-Enter the installed **job-hunt root directory**, containing `SKILL.md` and `requirements.txt`, and run these commands with Python 3.10+:
+After installing the skill, tell the agent: **“Set up job-hunt and start my task; I will load the Chrome extension.”**
 
-First run `python3 --version` and confirm it is 3.10 or newer. If it is older, install Python 3.10+ and use its command (for example, `python3.12`) to create the virtual environment below.
+The agent reuses working tools, installs the Python dependencies, Node.js, OpenCLI and document tools needed for your task, and downloads and extracts the [official OpenCLI extension](https://github.com/jackwener/opencli/releases). You do not need to copy terminal commands.
 
-```bash
-python3 -m venv ~/.venvs/job-hunt
-source ~/.venvs/job-hunt/bin/activate
-python3 -m pip install -r requirements.txt
-python3 scripts/doctor.py
-```
+**Normally, your only manual setup step is loading the Chrome extension:**
 
-The activation command above is for macOS/Linux; on Windows, use the activation script under the environment's `Scripts` directory. Have the agent use this Python environment for the project scripts too. The base packages are `PyYAML` and `python-docx`. `doctor.py --install` can install missing packages into the current Python environment.
+1. The agent opens `chrome://extensions/` and gives you the full extracted folder path.
+2. Enable **Developer mode**, click **Load unpacked**, and select the prepared folder directly containing `manifest.json`, not the ZIP. On macOS, `Command + Shift + G` lets you paste the path.
+3. Tell the agent it is loaded. The agent runs `opencli doctor`, verifies extension and connectivity, applies eligible compatibility patches, and resumes your task. A connected extension is reused.
 
-| Capability | Additional dependency | What happens without it |
-|---|---|---|
-| CV and cover-letter PDFs | A LaTeX engine; `tectonic` is recommended | Markdown, Word, and `.tex` for later compilation remain available |
-| Markdown reports as PDFs | `pandoc` and a LaTeX engine | Reports in Downloads may be Markdown only |
-| PDF text extraction and checking | Poppler's `pdftotext` | PDF text integrity cannot be fully verified |
-| Live job search | `opencli` and its browser environment | Assess, apply, and interview can still use a pasted posting |
-| Chinese, Japanese, and Korean PDFs | Fonts for the output language | Install suitable fonts for reliable typesetting |
+Keep the loaded extension directory in place. Site login, CAPTCHA or a system permission requiring your action still needs you; the agent completes the independent preparation first and explains only the remaining action.
 
-`doctor.py` attempts to generate an actual PDF and reports missing capabilities. Its `--install` option installs Python packages only; follow the report to install system tools.
-
-### Set up the OpenCLI Chrome extension
-
-**Live job retrieval needs both the OpenCLI CLI and Browser Bridge extension. Install the extension manually in Chrome.** Neither `npm install` nor `doctor.py --install` installs it for you.
-
-1. **Install the CLI.** Run in a terminal:
-
-   ```bash
-   npm install -g @jackwener/opencli
-   opencli doctor
-   ```
-
-   A disconnected extension is expected before you install it.
-
-2. **Download and extract the extension.** Under Assets in [official OpenCLI Releases](https://github.com/jackwener/opencli/releases), download `opencli-extension-v*.zip`, not `Source code`. Extract it into a permanent location and find the folder directly containing `manifest.json`.
-3. **Load it in Chrome.** Enter `chrome://extensions/` in the address bar, enable **Developer mode**, click **Load unpacked**, and select that folder. Select the folder, not the ZIP or `manifest.json` file. Review the extension permissions shown by Chrome.
-4. **Check the connection.** Keep Chrome open and run `opencli doctor` again. Confirm **Extension: connected** and **Connectivity: connected**; a working CLI or daemon alone is not enough. Keep the extension folder in place.
-
-| Problem | What to do |
-|---|---|
-| Cannot find the folder in the file picker | On macOS, press `Command + Shift + G` and paste the full path; folders beginning with `.` are hidden by default |
-| Missing-manifest error | Select the folder directly containing `manifest.json`, which may be one level inside the extracted directory |
-| Extension loaded but still disconnected | Confirm it is enabled in the current Chrome profile, then run `opencli doctor` again |
-
-Sign in to job platforms yourself when needed. A connected extension confirms the browser connection; access to each platform still needs to be checked.
-
+`doctor.py` checks actual capabilities; `doctor.py --install` installs Python packages only. The agent installs other tools through the [first-run setup workflow](references/agent-setup.md). Word-only output or assessment of a pasted posting does not require unrelated PDF/browser tools.
 
 ### Compatibility patches and browser fallback
 
-The patches ship with this skill and the agent applies them before the first relevant site read; importing the browser extension alone does not install them. Complete the OpenCLI CLI and extension setup above first.
+The patches ship with this skill and the agent applies them before the first relevant site read; importing the browser extension alone does not install them.
 
 **You normally do not need to install patches manually.** Before reading Indeed or 51job, the skill checks known compatibility issues and automatically patches a local copy only when the OpenCLI version and source bytes match. The installed package stays unchanged. Current patches target 1.8.7; other versions and custom edits are not overwritten. You can tell the agent “check job-site compatibility patches” or “revert compatibility patches.” See [check, apply and revert instructions](references/opencli-compat.md).
 

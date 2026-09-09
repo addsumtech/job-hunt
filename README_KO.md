@@ -93,60 +93,25 @@ ln -s "$PWD" ~/.claude/skills/job-hunt
 
 Codex에서는 마지막 두 줄의 `~/.claude/skills`를 `~/.codex/skills`로 바꿉니다. 대상 경로가 이미 존재하면 기존 설치를 먼저 확인하세요.
 
-### 의존성 설치와 환경 점검
+### 처음 사용: 환경 설정은 Agent에게 맡기세요
 
-설치된 **job-hunt 루트 디렉터리**(`SKILL.md`와 `requirements.txt`가 있는 위치)로 이동한 뒤 Python 3.10+ 환경에서 실행합니다.
+Skill 설치 후 **“job-hunt를 설정하고 작업을 시작해 줘. Chrome 확장 프로그램은 내가 가져올게.”**라고 요청하세요.
 
-먼저 `python3 --version`으로 3.10 이상인지 확인하세요. 이전 버전이면 Python 3.10+를 설치하고 해당 명령(예: `python3.12`)으로 아래 가상 환경을 만드세요.
+Agent가 기존 환경을 재사용하고 작업에 필요한 Python 의존성, Node.js, OpenCLI와 문서 도구를 설치한 뒤 [OpenCLI 공식 확장 프로그램](https://github.com/jackwener/opencli/releases)을 다운로드하고 압축을 풉니다. 터미널 명령을 복사할 필요가 없습니다.
 
-```bash
-python3 -m venv ~/.venvs/job-hunt
-source ~/.venvs/job-hunt/bin/activate
-python3 -m pip install -r requirements.txt
-python3 scripts/doctor.py
-```
+**일반적으로 직접 할 설정은 Chrome 확장 프로그램을 가져오는 것뿐입니다.**
 
-위 활성화 명령은 macOS/Linux용입니다. Windows에서는 가상 환경의 `Scripts` 디렉터리에 있는 활성화 스크립트를 사용합니다. 에이전트도 프로젝트 스크립트를 실행할 때 이 Python 환경을 사용하도록 하세요. 기본 패키지는 `PyYAML`과 `python-docx`입니다. `doctor.py --install`은 현재 Python 환경에 없는 패키지를 설치할 수 있습니다.
+1. Agent가 `chrome://extensions/`를 열고 압축을 푼 폴더의 전체 경로를 알려 줍니다.
+2. **개발자 모드**를 켜고 **압축해제된 확장 프로그램을 로드합니다**를 눌러 `manifest.json`이 바로 들어 있는 폴더를 선택하세요. ZIP 파일은 선택하지 않습니다. macOS에서는 `Command + Shift + G`로 경로를 붙여 넣을 수 있습니다.
+3. 완료했다고 알려 주면 Agent가 `opencli doctor`로 확장 프로그램과 연결을 확인하고 적용 가능한 호환성 패치를 처리한 뒤 원래 작업을 계속합니다. 이미 연결되어 있으면 재사용합니다.
 
-| 기능 | 추가 의존성 | 없을 때의 영향 |
-|---|---|---|
-| 이력서와 지원 동기서 PDF | LaTeX 엔진. `tectonic` 권장 | Markdown, Word, 나중에 컴파일할 `.tex`는 생성 가능 |
-| Markdown 보고서의 PDF 변환 | `pandoc`와 LaTeX 엔진 | 다운로드 폴더의 보고서가 Markdown만 제공될 수 있음 |
-| PDF 텍스트 추출과 검사 | Poppler의 `pdftotext` | PDF에 텍스트가 온전히 보존됐는지 완전히 검증할 수 없음 |
-| 실시간 공고 검색 | `opencli`와 해당 브라우저 환경 | 붙여 넣은 공고로 평가, 서류 준비, 모의 면접을 계속할 수 있음 |
-| 중국어·일본어·한국어 PDF | 출력 언어에 맞는 글꼴 | 안정적인 조판을 위해 해당 글꼴 설치 필요 |
+불러온 확장 프로그램 폴더를 옮기거나 삭제하지 마세요. 사이트 로그인, CAPTCHA, 본인이 확인해야 하는 시스템 권한은 직접 처리해야 합니다. Agent는 자동으로 가능한 준비를 먼저 끝내고 남은 조작만 안내합니다.
 
-`doctor.py`는 실제 PDF 생성을 시도하고 부족한 기능을 알려 줍니다. `--install`은 Python 패키지만 설치하며, 시스템 도구는 보고서의 안내에 따라 설치합니다.
-
-### OpenCLI Chrome 확장 프로그램 설정
-
-**실시간 공고 조회에는 OpenCLI CLI와 Browser Bridge 확장 프로그램이 모두 필요합니다. 확장 프로그램은 Chrome에서 직접 설치해야 합니다.** `npm install`이나 `doctor.py --install`로는 확장 프로그램이 설치되지 않습니다.
-
-1. **CLI를 설치합니다.** 터미널에서 실행하세요.
-
-   ```bash
-   npm install -g @jackwener/opencli
-   opencli doctor
-   ```
-
-   확장 프로그램 설치 전에는 연결되지 않았다고 표시되어도 정상입니다.
-
-2. **확장 프로그램을 다운로드하고 압축을 풉니다.** [OpenCLI 공식 Releases](https://github.com/jackwener/opencli/releases)의 Assets에서 `opencli-extension-v*.zip`을 받으세요. `Source code`는 아닙니다. 계속 보관할 위치에 압축을 풀고, `manifest.json`이 바로 들어 있는 폴더를 찾으세요.
-3. **Chrome에 로드합니다.** 주소창에 `chrome://extensions/`를 입력하고 **개발자 모드**를 켠 뒤 **압축해제된 확장 프로그램을 로드합니다**를 클릭하여 위 폴더를 선택하세요. ZIP이나 `manifest.json` 파일 자체가 아닌 폴더를 선택합니다. Chrome에 표시되는 권한도 확인하세요.
-4. **연결을 확인합니다.** Chrome을 열어 둔 채 `opencli doctor`를 다시 실행하세요. **Extension: connected**와 **Connectivity: connected**를 확인합니다. CLI나 daemon만 정상이면 아직 연결이 완료된 것이 아닙니다. 확장 프로그램 폴더는 옮기거나 삭제하지 마세요.
-
-| 문제 | 해결 방법 |
-|---|---|
-| 파일 선택 창에서 폴더가 보이지 않음 | macOS에서는 `Command + Shift + G`를 누르고 전체 경로를 붙여 넣으세요. `.`으로 시작하는 폴더는 기본적으로 숨겨집니다 |
-| 매니페스트 파일을 찾을 수 없음 | `manifest.json`이 바로 들어 있는 폴더를 다시 선택하세요. 압축 해제 폴더 안의 하위 폴더일 수 있습니다 |
-| 확장 프로그램을 로드했지만 연결되지 않음 | 현재 Chrome 프로필에서 활성화되어 있는지 확인한 뒤 `opencli doctor`를 다시 실행하세요 |
-
-채용 사이트 로그인이 필요하면 브라우저에서 직접 진행하세요. 확장 프로그램 연결은 브라우저와 연결되었다는 뜻이며, 각 사이트의 조회 가능 여부는 따로 확인해야 합니다.
-
+`doctor.py`는 실제 기능을 확인하며 `doctor.py --install`은 Python 패키지만 설치합니다. 나머지 도구는 Agent가 [최초 설정 절차](references/agent-setup.md)(영어)에 따라 설치합니다. Word 출력만 하거나 붙여 넣은 공고를 평가할 때는 불필요한 PDF·브라우저 도구를 설치하지 않습니다.
 
 ### 호환성 패치와 브라우저 대체 경로
 
-패치는 이 Skill에 포함되며 Agent가 해당 사이트를 처음 읽기 전에 적용합니다. 브라우저 확장 프로그램을 가져오는 것만으로 설치되지는 않습니다. 먼저 위의 OpenCLI CLI와 확장 프로그램 설정을 완료하세요.
+패치는 이 Skill에 포함되며 Agent가 해당 사이트를 처음 읽기 전에 적용합니다. 브라우저 확장 프로그램을 가져오는 것만으로 설치되지는 않습니다.
 
 **보통 사용자가 패치를 직접 설치할 필요는 없습니다.** Indeed와 51job을 읽기 전에 알려진 문제를 확인하고, OpenCLI 버전과 소스가 일치할 때만 로컬 복사본에 자동 적용합니다. 설치된 본체는 변경하지 않습니다. 현재 대상은 1.8.7이며, 다른 버전이나 사용자 수정 사항을 덮어쓰지 않습니다. Agent에게 “채용 사이트 호환성 패치를 확인해 줘” 또는 “호환성 패치를 되돌려 줘”라고 요청할 수 있습니다. [확인·적용·복원 방법](references/opencli-compat.md)(영어).
 

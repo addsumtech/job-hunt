@@ -123,6 +123,9 @@ unwritable home, or a deliberate split.
 
 ## 5. What to check before trusting a run on a new host
 
+The agent prepares missing dependencies and the extension using
+[agent-setup.md](agent-setup.md), then runs the capability checks below.
+
 ```bash
 python3 scripts/doctor.py          # capabilities, and what each missing one costs
 python3 -m pytest scripts/tests/ -q  # the enforcement layer, on this machine

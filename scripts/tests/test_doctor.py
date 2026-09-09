@@ -85,9 +85,8 @@ def test_every_check_says_what_it_costs_and_how_to_fix_it():
 
 
 def test_only_python_packages_are_marked_auto_installable():
-    """System binaries are never installed for the user. A LaTeX engine is a
-    package-manager action of several hundred megabytes, and running one unasked
-    is the class of act source-policy.md keeps on its Red list."""
+    """The diagnostic's pip installer stays scoped; the agent provisions other
+    tools through the separate setup workflow."""
     for c in doctor.checks():
         if c.get("auto"):
             assert c["what"].startswith("python package"), c["what"]
@@ -105,6 +104,14 @@ def test_the_platform_specific_hint_is_actually_platform_specific(monkeypatch):
 def test_an_unknown_binary_still_gets_a_hint(monkeypatch):
     monkeypatch.setattr(doctor.platform, "system", lambda: "Linux")
     assert "wkhtmltopdf" in doctor.install_hint("wkhtmltopdf")
+
+
+def test_windows_setup_does_not_suggest_linux_package_commands(monkeypatch):
+    monkeypatch.setattr(doctor.platform, "system", lambda: "Windows")
+    for binary in ("opencli", "pandoc", "tectonic", "pdftotext"):
+        hint = doctor.install_hint(binary)
+        assert binary in hint and "references/agent-setup.md" in hint
+        assert "apt install" not in hint and "brew install" not in hint
 
 
 # ---- exit codes ------------------------------------------------------------
@@ -151,7 +158,7 @@ def test_the_skill_tells_a_new_user_to_run_it():
     t = (REPO / "SKILL.md").read_text(encoding="utf-8")
     assert "scripts/doctor.py" in t
     assert "--install" in t
-    assert "never installed for the user" in t or "never installed for you" in t
+    assert "references/agent-setup.md" in t
 
 
 # ---- the hook that makes any of this run ----------------------------------

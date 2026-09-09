@@ -469,7 +469,9 @@ python3 scripts/doctor.py            # what works, what does not, what each cost
 python3 scripts/doctor.py --install  # installs the missing PYTHON packages only
 ```
 
-Run it once for a new user. It reports capabilities rather than binary names —
+Before running it, read [references/agent-setup.md](references/agent-setup.md) and
+prepare a usable Python environment if needed. The agent runs it once for a new
+user and resolves required missing capabilities. It reports capabilities rather than binary names —
 the PDF check renders a PDF, because looking for `xelatex` alone once called this
 machine broken while `tectonic` was installed and every PDF rendered fine.
 
@@ -493,12 +495,13 @@ and .docx, and one with no `opencli` can still do assess, apply and interview fr
 a pasted posting. What the report buys is saying WHICH capability is missing
 before the user hits it, instead of discovering it when a PDF does not appear.
 
-**System binaries are never installed for the user.** A LaTeX engine is a
-package-manager action of several hundred megabytes; running one unasked is the
-same class of act as running `opencli <site> login` for them, which
-`references/source-policy.md` keeps on its Red list. Print the command, let them
-run it. Python packages are different — small, scoped to the interpreter already
-running, and listed in `requirements.txt` — so `--install` handles those.
+**The agent owns first-run setup.** Follow [references/agent-setup.md](references/agent-setup.md)
+when a required capability is missing: install the necessary dependencies,
+prepare the Chrome extension in a durable folder, and verify the result.
+The user normally only loads that folder in Chrome; site login and human
+verification still require their action. Reuse working tools and continue the
+original task after setup. `doctor.py --install` covers Python packages only;
+the agent handles other installation commands under the setup workflow.
 
 ## Mode entry
 
@@ -647,7 +650,7 @@ a fabrication the candidate then repeats back), and the shortlist's `why_matched
 | Assess | `scripts/check_assessment.py` | composes the six above and requires their receipts; disclaimer, disqualifier section, the 「那该怎么办」 half, verbatim conventions, stale-review banner; a top-level `level_direction` or `effort` the card prints but nobody assessed, and a work-authorization token spelled outside its set |
 | Migration losslessness (CI only) | `scripts/check_skill_lossless.py` | a baseline line that exists nowhere in this tree |
 | Adapter classification | `scripts/check_opencli_result.py` | *(wrapper, not a gate)* a non-zero exit, a login wall, a platform stop-signal, or an empty identity field |
-| First-run environment | `scripts/doctor.py` | *(precondition, not a gate)* every capability the skill needs, checked by USING it — the PDF check renders a PDF, because an earlier `command -v xelatex` check called a working machine broken while tectonic was installed. `--install` installs the Python packages; system binaries are never installed for the user, only their command printed |
+| First-run environment | `scripts/doctor.py` | *(precondition, not a gate)* every capability the skill needs, checked by USING it — the PDF check renders a PDF, because an earlier `command -v xelatex` check called a working machine broken while tectonic was installed. `--install` installs the Python packages; the agent prepares required system tools and the extension via `references/agent-setup.md` |
 | Saving a master | `scripts/save_profile.py` | *(guarded write, not a gate)* one master per language; a new language never overwrites another, a repeat language is backed up first, and a profile with no `meta.language` is refused |
 | Delivery | `scripts/deliver.py` | *(hand-off, not a gate)* copies the round's readable artifacts to `~/Downloads/` as `<slug>-<file>`, renders every Markdown to PDF as well, and prints the path to quote. Exits 0 or 2, never 1. `DELIVER_DEST_UNWRITABLE` is macOS TCC refusing `~/Downloads` mid-session — say so and offer `--to`, never leave the artifacts undelivered |
 | Read-only | `scripts/check_no_write.py` | a journaled command whose published `access:` is `write`, or whose access cannot be resolved at all |
@@ -909,7 +912,8 @@ Ran, leaving nothing in the journal (they render; they do not judge):
       `~/.claude/job-profiles/` is where the skill works, not where a person
       looks, and a path pasted into a chat message is gone once it scrolls.
 - [ ] `scripts/doctor.py` — once per machine, before the first mode. Reports
-      capabilities by using them; `--install` covers the Python packages only.
+      capabilities by using them; `--install` covers the Python packages only. Follow
+      `references/agent-setup.md` to install other required tools and prepare the extension.
 - [ ] `scripts/save_profile.py` — every master save goes through it. One CV per
       language, and a new language never overwrites another's file.
 

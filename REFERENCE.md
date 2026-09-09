@@ -77,6 +77,7 @@ job-hunt/
 │   ├── candidate-situations.md      # Non-standard candidates (gap, switch, exec, military, intl)
 │   ├── cv-craft.md                  # CV writing conventions (markets, links, bullets, ordering)
 │   ├── browser-fallback.md          # Read-only web-access capture and fallback
+│   ├── agent-setup.md              # Agent installs tools and prepares the Chrome extension
 │   ├── opencli-compat.md            # Optional version-checked adapter repairs
 │   ├── opencli-patches/             # Exact replacements and upstream license
   user-recovery.md         # human login/verification hand-off and linked new round

@@ -93,60 +93,25 @@ ln -s "$PWD" ~/.claude/skills/job-hunt
 
 Codex では最後の二行の `~/.claude/skills` を `~/.codex/skills` に置き換えます。リンク先が既に存在する場合は、既存のインストールを確認してください。
 
-### 依存関係のインストールと環境チェック
+### 初回利用：環境設定は Agent に任せる
 
-インストールした **job-hunt のルートディレクトリ**（`SKILL.md` と `requirements.txt` がある場所）に移動し、Python 3.10+ の環境で実行します。
+Skill の導入後、**「job-hunt の環境を設定して作業を始めて。Chrome 拡張機能の読み込みは自分で行います」**と伝えてください。
 
-先に `python3 --version` で 3.10 以上か確認してください。古い場合は Python 3.10+ をインストールし、そのコマンド（例：`python3.12`）で以下の仮想環境を作成します。
+Agent は既存の環境を再利用し、作業に必要な Python 依存関係、Node.js、OpenCLI、文書ツールを導入して、[OpenCLI 公式拡張機能](https://github.com/jackwener/opencli/releases)をダウンロード・展開します。ターミナルのコマンドをコピーする必要はありません。
 
-```bash
-python3 -m venv ~/.venvs/job-hunt
-source ~/.venvs/job-hunt/bin/activate
-python3 -m pip install -r requirements.txt
-python3 scripts/doctor.py
-```
+**通常、手動で行う設定は Chrome 拡張機能の読み込みだけです。**
 
-上の有効化コマンドは macOS/Linux 用です。Windows では仮想環境の `Scripts` 内の有効化スクリプトを使います。エージェントがプロジェクトのスクリプトを実行するときも、この Python 環境を使うようにしてください。基本パッケージは `PyYAML` と `python-docx` です。`doctor.py --install` で、現在の Python 環境に不足するパッケージを追加できます。
+1. Agent が `chrome://extensions/` を開き、展開済みフォルダーのフルパスを示します。
+2. 「デベロッパーモード」を有効にし、「パッケージ化されていない拡張機能を読み込む」で `manifest.json` が直接入っているフォルダーを選びます。ZIP は選びません。macOS では `Command + Shift + G` でパスを貼り付けられます。
+3. 読み込み完了を伝えると、Agent が `opencli doctor` で拡張機能と接続を確認し、適用可能な互換性パッチを処理して元の作業を続けます。接続済みなら再読み込みは不要です。
 
-| 機能 | 追加で必要なもの | 不足している場合 |
-|---|---|---|
-| CV とカバーレターの PDF | LaTeX エンジン。推奨は `tectonic` | Markdown、Word、後からコンパイルできる `.tex` は生成可能 |
-| Markdown レポートの PDF 化 | `pandoc` と LaTeX エンジン | ダウンロード先には Markdown のみが置かれる場合あり |
-| PDF の文字抽出と検証 | Poppler の `pdftotext` | PDF 内の文字が保たれたかを完全には検証できない |
-| 最新求人の取得 | `opencli` と対応するブラウザー環境 | 貼り付けた求人本文で評価、書類作成、模擬面接を続行可能 |
-| 中国語・日本語・韓国語の PDF | 出力言語に対応するフォント | 適切な組版のため、対応フォントの追加が必要 |
+読み込んだフォルダーは移動・削除しないでください。サイトへのログイン、CAPTCHA、本人によるシステム権限の確認が必要な場合は、その操作のみお願いします。Agent は先に自動で進められる準備を完了します。
 
-`doctor.py` は実際に PDF を生成して、不足する機能を報告します。`--install` がインストールするのは Python パッケージだけです。システムツールはレポートの案内に従って導入してください。
-
-### OpenCLI の Chrome 拡張機能を設定する
-
-**求人の取得には OpenCLI の CLI と Browser Bridge 拡張機能の両方が必要です。拡張機能は Chrome で手動インストールしてください。** `npm install` や `doctor.py --install` では拡張機能は入りません。
-
-1. **CLI をインストールします。** ターミナルで実行します。
-
-   ```bash
-   npm install -g @jackwener/opencli
-   opencli doctor
-   ```
-
-   拡張機能のインストール前は、未接続と表示されても正常です。
-
-2. **拡張機能をダウンロードして展開します。** [OpenCLI 公式 Releases](https://github.com/jackwener/opencli/releases) の Assets から `opencli-extension-v*.zip` を選びます。`Source code` ではありません。保管用の場所に展開し、`manifest.json` が直接入っているフォルダーを探します。
-3. **Chrome に読み込みます。** アドレスバーに `chrome://extensions/` と入力し、「デベロッパー モード」を有効にします。「パッケージ化されていない拡張機能を読み込む」から上記のフォルダーを選択します。ZIP や `manifest.json` ファイル自体ではなく、フォルダーを選びます。Chrome に表示される権限も確認してください。
-4. **接続を確認します。** Chrome を開いたまま `opencli doctor` を再実行し、**Extension: connected** と **Connectivity: connected** を確認します。CLI や daemon だけが正常でも接続完了ではありません。拡張機能のフォルダーは移動・削除しないでください。
-
-| 困ったとき | 対処方法 |
-|---|---|
-| 選択画面でフォルダーが見つからない | macOS では `Command + Shift + G` でフルパスを貼り付けます。`.` で始まるフォルダーは通常非表示です |
-| マニフェストが見つからない | `manifest.json` が直接入っているフォルダーを選び直します。展開先の一つ下の階層にある場合があります |
-| 読み込み済みなのに未接続 | 現在の Chrome プロファイルで拡張機能が有効か確認し、`opencli doctor` を再実行します |
-
-求人サイトへのログインが必要な場合は、ブラウザーでご自身で行ってください。拡張機能の接続はブラウザーへの接続を示すもので、各サイトから取得できるかは別途確認します。
-
+`doctor.py` は実際の機能を確認し、`doctor.py --install` は Python パッケージのみ導入します。他のツールは Agent が[初回設定手順](references/agent-setup.md)（英語）に従って導入します。Word のみの出力や貼り付けた求人の評価には、不要な PDF・ブラウザーツールを導入しません。
 
 ### 互換性パッチとブラウザーでの代替操作
 
-パッチは本 Skill に同梱され、対象サイトの初回読み取り前に Agent が適用します。ブラウザー拡張機能を読み込むだけでは適用されません。先に上記の OpenCLI CLI と拡張機能の設定を完了してください。
+パッチは本 Skill に同梱され、対象サイトの初回読み取り前に Agent が適用します。ブラウザー拡張機能を読み込むだけでは適用されません。
 
 **通常、パッチを手動で導入する必要はありません。** Indeed・51job の読み取り前に既知の問題を確認し、OpenCLI のバージョンとソースが一致する場合だけ、ローカルコピーに自動適用します。インストール済みの本体は変更しません。現在の対象は 1.8.7 で、別バージョンや独自の変更は上書きしません。「求人サイトの互換性パッチを確認して」「互換性パッチを元に戻して」と Agent に依頼できます。[確認・適用・復元の手順](references/opencli-compat.md)（英語）。
 
