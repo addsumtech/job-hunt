@@ -861,7 +861,9 @@ believing you vetted it.
       preserve partial results, wait for explicit user confirmation before a new
       linked round; do not clear the stopped journal.
 
-- [ ] Browser fallback: read `references/browser-fallback.md` and record each
+- [ ] Daily-browser CDP and parallel sources: follow `references/daily-browser.md`;
+      verify the selected profile, isolate tabs and share site budgets.
+- [ ] Browser capture: read `references/browser-fallback.md` and record each
       actual snapshot with `scripts/record_browser_capture.py` before another read.
       Use `browser_page` evidence and stop across tools after a site refusal.
 
