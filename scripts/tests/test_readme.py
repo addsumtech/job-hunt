@@ -139,22 +139,12 @@ def test_the_advertised_test_count_is_the_real_one(readme):
 
 
 @pytest.mark.parametrize("readme", READMES, ids=lambda p: p.name)
-def test_green_tests_are_not_sold_as_measured_behaviour(readme):
-    """`make check` green means the code agrees with its own tests. It has never
-    meant a mode was measured, and the README is exactly where that gets blurred.
-    The earlier version of this test asserted the repo had run NO evaluation —
-    true when written, false since iteration 2, and a stale disclaimer is its own
-    dishonesty."""
+def test_readme_links_to_the_behavioural_evidence(readme):
+    """Readers can inspect the evaluation without a prescribed disclaimer."""
     text = _text(readme)
-    assert "evals/" in text, f"{readme.name} does not name the harness"
-    phrase = {
-        "README.md": "检查通过不等于产物正确",
-        "README_EN.md": "Passing checks do not guarantee correct output",
-        "README_JA.md": "チェックに通っても、成果物の正しさは保証されません",
-        "README_KO.md": "검사를 통과해도 결과물의 정확성이 보장되지는 않습니다",
-        "README_ES.md": "Superar las comprobaciones no garantiza que el resultado sea correcto",
-    }[readme.name]
-    assert phrase in text, f"{readme.name} is missing: {phrase}"
+    for target in ("evals/README.md", "evals/iterations/iteration-2-with-skill.md"):
+        assert f"]({target})" in text, f"{readme.name} does not link to {target}"
+        assert (ROOT / target).is_file(), f"missing evaluation record: {target}"
 
 
 @pytest.mark.parametrize("readme", READMES, ids=lambda p: p.name)

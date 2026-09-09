@@ -1,4 +1,4 @@
-# job-hunt: build every application on real experience
+# job-hunt: find jobs, tailor your CV, practise interviews
 
 <p align="center">
   <a href="README.md">简体中文</a> ·
@@ -18,22 +18,20 @@
   <img src="docs/assets/hero.jpg" alt="CV entries connected to their sources: a paper, notes, certificates and project work">
 </p>
 
-**Find roles, decide where to apply, tailor your materials, and rehearse the interview. Make your experience clear, along with the requirements you do not yet meet.**
+job-hunt is a career skill for Claude Code and Codex. It helps you find roles, decide where to apply, prepare a CV and cover letter, and practise interviews.
 
-job-hunt is a career skill for Claude Code and Codex. You provide a goal, a CV, or a job posting. The agent reads the material, checks the evidence, edits, typesets, and reviews; Python scripts check provenance, file consistency, and delivery conditions. Guidance covers technical, research, and other career paths, including career changes, employment gaps, new graduates, and international applications.
-
-The aim is a CV whose every line you can explain in an interview from experience.
+Give the agent your goals, CV or a job link. It checks the requirements against your experience, edits and formats your documents, then reviews them. Guidance covers technical and research roles, career changes, employment gaps, new graduates and international applications.
 
 ## Start with the step you need
 
 | Mode | When to use it | Main output |
 |---|---|---|
-| **discover** | You have a direction and want roles worth exploring | A shortlist with real posting sources, retrieval status, and provisional assessments |
+| **discover** | You have a direction and want roles worth exploring | A shortlist with original posting links and initial advice |
 | **assess** | You have a posting and want to decide whether to invest time | Requirements mapped to evidence, hard barriers, gaps, and application advice |
 | **apply** | You have chosen a role and need targeted materials | A tailored CV, optional cover letter, review records, and an interview brief |
 | **interview** | You have a posting and CV and want to practise | One mock round, a transcript, two independent assessment passes, and open questions |
 
-Use each mode independently. At the end of a round, you choose whether to continue with a suggested next step. A shortlist does not automatically become a batch of CVs. You decide whether to submit the finished materials and handle submission yourself.
+Use each mode on its own. After a round, the agent suggests next steps and you choose whether to continue. You submit the finished application.
 
 After installation, try:
 
@@ -44,17 +42,17 @@ Use job-hunt. Tailor my CV to this role and write a cover letter.
 Use job-hunt. Run a technical mock interview based on this posting and my CV.
 ```
 
-The agent confirms the mode and target market, then asks for the preferences and material it needs. You confirm the market; it is not inferred from past work locations or the language of the conversation.
+The agent first confirms your task and target market, then asks for any missing materials or preferences.
 
-## How real experience becomes an application
+## Preparing your application
 
-**Claims carry sources.** A new skill, tool, responsibility, or result must trace to a specific part of your source profile, an answer you gave during the session, or your own paper or project that the agent actually read. Existing experience can be reordered, emphasised, and reworded. Unsupported additions stay on the gaps list. `claims.yaml` records the links, and tailoring uses a copy of your profile while preserving the master.
+The agent checks your experience against your profile, answers, papers and projects before editing the CV. It adjusts the order and wording, and lists claims that need more evidence. Edits use a copy of your profile; the original stays available.
 
-**Assessments show their evidence.** Each must-have is marked as strongly evidenced, partially supported, or missing. Hard barriers, such as work authorisation or licences, come first. Thin inputs produce `insufficient_evidence` and an explanation of what is missing. The project prohibits invented interview or offer probabilities and arbitrary 0–100 fit scores; its prediction lint checks predefined expressions in all nine CV languages. ATS keyword coverage measures text coverage, not hiring odds.
+For each role, the agent compares the requirements with your experience and shows which are met, partly met or missing evidence. Work authorisation, licences and other eligibility requirements come first, followed by application advice and any information you need to add.
 
-**Standard CV applications receive three independent AI reviews.** The ATS reviewer checks keywords and parseability, the recruiter reviewer checks readability and basic eligibility, and the hiring manager reviewer checks experience, scope, and credibility. Each uses a fresh context. All three must return `PASS` to clear this internal review. Fixable issues lead to edits and another review, up to three rounds. A remaining gap that no truthful edit can close ends the loop early, with an explanation.
+A standard CV receives three independent AI reviews. The ATS reviewer checks keywords and file parsing. The recruiter reviewer checks readability and basic eligibility. The hiring manager reviewer checks experience and responsibilities. The agent edits and reviews again for up to three rounds, listing any gaps that need additional experience or evidence.
 
-**Interview feedback checks what you actually said.** One assessment pass examines the answers; the other checks their factual sources. The skill helps you organise existing experience and clarify uncertain details. CV claims you cannot support go onto a correction list.
+After a mock interview, two independent assessments review the quality of your answers and their factual support. The feedback identifies details to add and CV wording to revise.
 
 ## Install
 
@@ -95,43 +93,39 @@ For Codex, replace `~/.claude/skills` with `~/.codex/skills` in the last two lin
 
 ### First use: let the agent prepare the environment
 
-After installing the skill, tell the agent: **“Set up job-hunt and start my task using my everyday browser.”**
+After installation, say: "Set up job-hunt and start my task using my everyday browser."
 
-The agent reuses working tools and prepares Python dependencies, Node.js, OpenCLI, [AnySearch](https://github.com/anysearch-ai/anysearch-skill), [web-access](https://github.com/eze-is/web-access) and document tools as needed, verifies the connection and resumes your task. No terminal commands to copy or browser extension to install.
+The agent checks your environment and installs the tools your task needs: Python dependencies, Node.js, OpenCLI, [AnySearch](https://github.com/anysearch-ai/anysearch-skill), [web-access](https://github.com/eze-is/web-access) and document tools. It then resumes the task. **The default browser connection uses CDP and needs no extension.**
 
-**Browser reads prefer CDP connected to your everyday browser and its existing login state.** On first use, you may need to enable remote debugging at `chrome://inspect/#remote-debugging` and accept Chrome's connection prompt. A working authorized connection is reused. The agent checks actual support and never presents a separate new browser as your everyday profile.
+The agent connects to your everyday browser where supported and reuses its login state. On first use, you may need to enable remote debugging at `chrome://inspect/#remote-debugging` and accept Chrome's connection request. The agent checks support and explains any steps you need to take.
 
-AnySearch supports anonymous use without an API key. Independent sources run concurrently where supported, with separate browser tabs and shared per-site limits; pagination and login handling remain sequential. Site login, CAPTCHA and permissions requiring your confirmation remain your steps.
+AnySearch works anonymously without an API key. Independent sources are searched concurrently where possible to reduce waiting. You handle site logins, verification challenges and browser consent.
 
-See [agent setup](references/agent-setup.md) and [daily browser and concurrent research](references/daily-browser.md) for installation and connection details.
+See [environment setup](references/agent-setup.md) and [browser connections and concurrent searches](references/daily-browser.md) for details.
 
-`doctor.py` checks actual capabilities; `doctor.py --install` installs Python packages only. The agent installs other tools through the [first-run setup workflow](references/agent-setup.md). Word-only output or assessment of a pasted posting does not require unrelated PDF/browser tools.
+### Trouble reading a job site
 
-### Compatibility patches and browser fallback
+For known Indeed and 51job compatibility issues, the agent checks and applies the appropriate fix. Current patches target OpenCLI 1.8.7; other versions are checked separately.
 
-The patches ship with this skill and the agent applies them before the first relevant site read. Direct browser reads do not require these patches.
-
-**You normally do not need to install patches manually.** Before reading Indeed or 51job, the skill checks known compatibility issues and automatically patches a local copy only when the OpenCLI version and source bytes match. The installed package stays unchanged. Current patches target 1.8.7; other versions and custom edits are not overwritten. You can tell the agent “check job-site compatibility patches” or “revert compatibility patches.” See [check, apply and revert instructions](references/opencli-compat.md).
-
-For a diagnosed adapter incompatibility, web-access can use **the job site's own search box** in Chrome or another supported browser and read the results. It is not limited to Google search and does not require a patch first. Login, CAPTCHA and permission barriers still require your action; switching tools cannot bypass them.
+You can also ask the agent to search through the job site's own search box. For troubleshooting, say "check job-site compatibility patches" or "revert compatibility patches". See the [check and revert instructions](references/opencli-compat.md).
 
 ## Markets, platforms, and languages
 
-Discovery reads postings through `opencli` adapters. The repository's source catalogue includes 51job, Indeed, LinkedIn, and BOSS Zhipin, with distinctions between login requirements, job listings, and interview-experience sources. Availability is checked at runtime. The Indeed adapter connects to the US site and cannot switch country sites. For other markets, prefer local job sources. See the [source catalogue](references/discovery-sources.md) and [source policy](references/source-policy.md).
+The agent selects sources for your target market and reads them through the browser or an available OpenCLI adapter. Sources include 51job, Indeed, LinkedIn and BOSS Zhipin. The Indeed adapter currently connects to the US site; searches in other markets use local sources first. The [source catalogue](references/discovery-sources.md) lists login requirements and uses; the [source policy](references/source-policy.md) explains access rules.
 
-For China, the skill also asks about employer preferences: large private companies, small and medium private companies, state-owned enterprises, and foreign companies. These affect ranking without silently filtering other categories. Nowcoder and 1point3acres provide interview and process context; forum posts do not become job-listing rows.
+For China, the agent asks whether you prefer large private companies, small and medium private companies, state-owned enterprises or foreign companies, then uses your preferences to rank results. Nowcoder and 1point3acres provide interview experiences and hiring-process context.
 
-If login or human verification is required, the skill explains the obstacle, asks you to handle it in the browser, and pauses that source. Reply “done, continue” to start a new bounded round that preserves the earlier record and checks whether access has recovered. Rate limits and permission problems are explained separately. If access remains unavailable, choose another source, paste a posting, or review the results already retrieved. Discovery is read-only: it does not send messages, edit online profiles, or submit applications.
+When a site requires login or verification, the agent pauses that source and asks you to complete the step. Reply "done, continue" to resume. If access is still unavailable, you can try later, paste the posting or review the results already collected.
 
-**Market rules and output language are separate.** The CV renderer includes section headings and personal-data labels in English, Dutch, German, French, Spanish, Italian, Chinese, Japanese, and Korean. `discover` and `assess` support counts cards, required headings and disclosures in Chinese, English, Japanese, Korean and Spanish using the [report language templates](references/report-localization.md). Some internal documents, diagnostics and sourced market-convention cards remain untranslated; PDFs also need fonts for the output language.
+CV headings and personal-data labels support English, Dutch, German, French, Spanish, Italian, Chinese, Japanese and Korean. Discovery and assessment reports support Chinese, English, Japanese, Korean and Spanish through the [report language templates](references/report-localization.md). Some internal references remain in English. The agent checks PDF fonts during setup.
 
-The project includes **5 market-convention tables with 38 entries** for the US, UK, Germany, the Netherlands, and China, with sources and review dates. Entries past their review date are flagged, and missing market data is disclosed. These tables provide sourced context to be read within each entry's stated scope.
+The project includes 5 market-convention tables with 38 entries for the US, UK, Germany, the Netherlands and China. Each entry includes its source, scope and review date. The agent flags outdated or missing information; the employer's requirements guide the application.
 
 <p align="center">
   <img src="docs/assets/personal-data.jpg" alt="Repository rendering examples: a US-targeted CV omits personal data; a Germany-targeted CV retains a supplied photo and date of birth">
 </p>
 
-Personal data follows the target-market rules. For standard CVs targeting the US, Canada, UK, Ireland, Australia, or New Zealand, the renderer suppresses photos and `contact.personal` fields, and the workflow explains the change. Unrecognised markets also default to omission. Other recognised markets can display supplied information according to the rules. The image demonstrates renderer behaviour; it does not imply that every employer in a country requires the same format.
+The target market determines how photos and personal details appear. Standard CVs for the US, Canada, UK, Ireland, Australia and New Zealand omit them by default. Other recognised markets follow their own rules using the information you provide. If the market is unknown, these fields are omitted.
 
 ## What you receive
 
@@ -145,9 +139,11 @@ Personal data follows the target-market rules. For standard CVs targeting the US
 
 Structured applications review the supporting statement against the employer's criteria. If a standard CV is also required, it receives the three-reviewer check separately. A Japanese rirekisho is checked for form completeness; its companion career-history document follows the standard CV review process.
 
-Every consultation includes a PDF report answering the client’s question, kept with the CV and requested documents in one `~/Downloads/<workspace-name>/` folder. Reuse one delivery folder across stages. Reports contain career analysis, evidence and relevant facts to confirm; tool diagnostics stay internal. Cover letters are on demand and mock interviews never start automatically. Delivery is incomplete until the PDF is generated and verified. [Supplementary sources](references/supplementary-sources.md) support official web, news, GitHub and public discussion research when relevant; logged-in Xiaohongshu/Douyin searches require explicit authorization for the current consultation.
+Every consultation produces a PDF report with career analysis, supporting sources and questions to resolve. It goes in `~/Downloads/<workspace-name>/` with your CV and other requested documents. Later stages use the same folder. Cover letters and mock interviews are available when you request them.
 
-Delivery uses `简历/` (resume) and `报告/` (report) subfolders, with names such as `简历.docx`, `简历.pdf` and `求职建议报告.pdf`; filenames exclude employer names and internal workspace identifiers.
+Delivery uses `简历/` (CV) and `报告/` (report) subfolders, with filenames such as `简历.docx`, `简历.pdf` and `求职建议报告.pdf`.
+
+For company or industry research, the agent can consult official sites, news, GitHub and public discussions through [supplementary sources](references/supplementary-sources.md). Logged-in Xiaohongshu or Douyin searches require your permission in the current consultation.
 
 ## Where files live
 
@@ -167,11 +163,11 @@ make check
 make eval-lint
 ```
 
-`make check` runs the Python tests, migration content-preservation check, and market-table checks. Some tests inspect the machine's skill installation and external tools, so read the results in that environment's context. **Passing checks do not guarantee correct output** or demonstrate job-search outcomes.
+`make check` runs Python tests, migration content-preservation checks and market-table checks. Tests that use external tools need those tools installed; local skill-installation checks are optional.
 
-[`evals/`](evals/README.md) contains 20 behavioural evaluation scenarios. The recorded second iteration, dated 2026-09-05/06, paired 15 scenarios with and without the skill. Ten checks designed to distinguish the two groups changed from baseline `FAIL` to with-skill `PASS`. **There was one run per scenario per group, n = 1**. This is not a stable success rate or a forecast of hiring results. The full record also includes unexercised checks and an invalid scenario result: see the [evaluation record](evals/iterations/iteration-2-with-skill.md).
+[`evals/`](evals/README.md) contains 20 behavioural scenarios. The second iteration (2026-09-05/06) ran 15 scenarios with and without the skill, once per group (n = 1). Ten behavioural checks changed from baseline `FAIL` to with-skill `PASS`. See the [evaluation record](evals/iterations/iteration-2-with-skill.md) for results, untested checks and the invalid scenario.
 
-The repository also records a 2026-09-06 verification of the three CV reviewers through `codex exec`. See [agent portability](references/portability.md) for host mechanisms and the scope of that verification. Untested hosts are not presented as verified integrations.
+The three CV reviewers were tested through `codex exec` on 2026-09-06. See [agent portability](references/portability.md) for setup on other hosts and the scope of testing.
 
 - [SKILL.md](SKILL.md): mode routing and core rules.
 - [REFERENCE.md](REFERENCE.md): architecture, workspaces, data structures, and script usage.
