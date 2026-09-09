@@ -78,7 +78,11 @@ job-hunt/
 │   ├── cv-craft.md                  # CV writing conventions (markets, links, bullets, ordering)
 │   ├── word-resume-layout.md        # Reviewed Word layout and fictional bilingual examples
 │   ├── browser-fallback.md          # Read-only web-access capture and fallback
+│   ├── agent-setup.md              # Agent installs tools and prepares the Chrome extension
+│   ├── opencli-compat.md            # Optional version-checked adapter repairs
+│   ├── opencli-patches/             # Exact replacements and upstream license
   user-recovery.md         # human login/verification hand-off and linked new round
+│   ├── supplementary-sources.md     # optional career background research
 │   ├── discovery-sources.md         # Per-adapter catalogue for discover
 │   ├── gap-analysis.md              # Gap analysis, tailoring methodology, claim provenance
 │   ├── interview-prep.md            # Interview-readiness brief
@@ -114,6 +118,7 @@ job-hunt/
     ├── check_no_write.py            # discover is read-only — a journaled write command fails
     ├── record_browser_capture.py    # Browser snapshot importer and evidence checks
     ├── check_opencli_result.py      # adapter result classifier (wrapper, not a gate)
+    ├── opencli_compat.py            # Check/apply/revert known local adapter fixes
     ├── check_pages.py               # page count + the text actually inside the delivered PDF
     ├── check_personal_data.py       # Cluster-1 personal-data interlock
     ├── check_render_freshness.py    # the judges read the files still on disk
@@ -123,8 +128,9 @@ job-hunt/
     ├── consistency.py               # contradictions between assessment fields — reports, never repairs
     ├── count_coverage.py            # the ONLY path that produces coverage counts
     ├── doctor.py                    # first-run environment check; --install for pip only
+    ├── pdf_glyphs.py                # inspect painted PDF glyph IDs, including missing CJK
     ├── deliver.py                   # hand-off: the round's readable artifacts land
-    │                                #   in ~/Downloads as <slug>-<file>, md + pdf (not a gate)
+    │                                #   in ~/Downloads/<workspace>/; requires a client report PDF
     ├── enter_mode.py                # mode entry + the mode file's content hash
     ├── evidence_blocks.py           # cuts posting and CV into addressable JD-nnn / CV-nnn blocks
     ├── journal.py                   # gate receipts in journal.jsonl (library)

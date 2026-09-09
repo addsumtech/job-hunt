@@ -26,7 +26,7 @@ adapters:
     runtime_verified: true
     identity_field: title
     search_command: 'opencli 51job search "<keyword>" --area <city> --sort 最新 --page 1 --limit 20 --window background -f json'
-    detail_command: "opencli 51job detail <jobId>"
+    detail_command: "opencli 51job detail <jobId> --url <captured-url>"
     pagination: "--page 1-based (default 1) + --limit (help: 1-50, default 20)"
     caps: {rows_per_round: 25, pages_per_round: 2}
     other_read_commands: [hot, company]

@@ -21,7 +21,7 @@ sys.path.insert(0, str(SCRIPTS))
 
 # ---- the enforcement layer is agent-agnostic, and that is testable ---------
 
-def test_the_scripts_import_nothing_beyond_the_standard_library_and_two_packages():
+def test_the_scripts_import_nothing_beyond_the_standard_library_and_declared_packages():
     """`requirements.txt` is the whole dependency surface. A third package would
     be a new install step on every host, and a host-specific import would make
     the gates unrunnable off Claude Code."""
@@ -34,7 +34,7 @@ def test_the_scripts_import_nothing_beyond_the_standard_library_and_two_packages
                 external.update(a.name.split(".")[0] for a in node.names)
             elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
                 external.add(node.module.split(".")[0])
-    assert external - std - local == {"docx", "yaml"}
+    assert external - std - local == {"docx", "yaml", "pymupdf"}
 
 
 def test_no_script_mentions_a_claude_only_tool():

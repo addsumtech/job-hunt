@@ -37,6 +37,7 @@ def test_wrong_cjk_glyphs_cannot_satisfy_coverage(tmp_path, monkeypatch):
     monkeypatch.setattr(deliver, 'visible_markdown', lambda p: '中文内容')
     monkeypatch.setattr(deliver, '_pandoc', lambda md, pdf, font: (pdf.write_bytes(b'PDF'), True)[1])
     monkeypatch.setattr(deliver, 'pdf_text', lambda p: '错误错误错误错误')
+    monkeypatch.setattr(deliver, 'glyph_findings', lambda p: [])  # isolate text coverage
     ok, reason = deliver.render_pdf(md, pdf, 'fake')
     assert not ok and 'lost CJK' in reason and not pdf.exists()
 

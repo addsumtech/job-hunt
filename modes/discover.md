@@ -32,6 +32,14 @@ language contract; no invented retrieval or login state):
 | Real postings obtained | 実際の求人の取得： | 실제 채용 공고 확보: | Ofertas reales obtenidas: |
 | Degraded output | 代替出力の種類： | 대체 출력 유형: | Tipo de salida alternativa: |
 
+## Supplementary public research
+
+Use `references/supplementary-sources.md` when official web/news, GitHub,
+public articles, social discussions, videos or podcasts can fill a concrete
+career evidence gap. It defines provider availability checks, source quality and
+current-consultation authorization for Xiaohongshu/Douyin. These sources supplement
+formal posting evidence; they do not replace it or run automatically on every task.
+
 ## On entering this mode — before anything else
 
 ```bash
@@ -293,6 +301,13 @@ the second is the politeness cap from `references/source-policy.md`. Falling sho
 (`SHORTFALL_NO_REASON`). **Never pad the count.**
 
 ## Retrieval backend — OpenCLI first, web-access fallback
+
+Before the first Indeed or 51job read, follow `references/opencli-compat.md`:
+check and automatically apply only the known version/hash-matched local repairs
+with `scripts/opencli_compat.py`. Do not overwrite custom edits or force a patch
+onto another version. This local preparation performs no site reads and cannot
+reset a site's refusal. Browser fallback can use the site's own search box;
+it is not limited to Google or other search engines.
 
 Before Step 1, probe OpenCLI availability and its connection. If it is missing,
 the bridge is disconnected, or there is no suitable read extraction, read
@@ -593,7 +608,7 @@ sources:                        # one entry per site used
     rows_returned: 25
     identity_field: title
     identity_field_empty_rows: 0
-    detail_command: "opencli 51job detail <jobId>"
+    detail_command: "opencli 51job detail <jobId> --url <captured-url>"
     raw_files: ["raw/51job-1.json"]
 rows: [...]
 ```
@@ -723,36 +738,26 @@ every mode is a command, not a claim:
 python3 scripts/deliver.py --workspace <ws>
 ```
 
-It copies this round's readable artifacts **straight into `~/Downloads`**, named
-`<slug>-<file>`, renders every Markdown to **PDF as well**, and prints the paths.
-Quote them in the completion message. The slug prefix is not a folder in
-disguise: two rounds both produce `shortlist.md`, and a bare name would have the
-second silently overwrite the first.
+Author `report.md` for **every consultation**, answering the client's actual
+question in their language: conclusion, supporting evidence, relevant career
+constraints or facts still to confirm, and practical next steps. Tool defects,
+adapter errors, tests, developer diagnostics and internal review logs belong only
+in the private workspace, never in this client report. Do not copy an internal
+`completion.md` into it. A general question still receives a PDF reply report.
 
-**The PDF is verified, not trusted.** `pandoc --pdf-engine=tectonic` on a Chinese
-document exits 0, prints a warning nobody reads, and writes a PDF whose every CJK
-glyph is a box — measured, 528 characters in and 0 read back. So a CJK document
-gets a CJK font chosen by probing what this machine actually has, and every PDF
-is read back with `pdftotext` and compared against its source before it counts as
-delivered. One that lost characters is deleted and reported; the Markdown still
-ships.
+Run `deliver.py` as the last step. It requires `report.md` and a verified report
+PDF and copies only the report and requested CV/application documents into
+`~/Downloads/<workspace-name>/`. For multiple workspaces serving one consultation,
+pass the **same `--to <consultation-folder>`** each time so the report and CV stay
+together. Quote that folder and its client files in the reply. The workspace and
+all audit evidence remain in their original location.
 
-**It is a copy, and the split is deliberate.** `raw/`, `journal.jsonl` and the
-adapter `.err` files stay in the workspace: they are the provenance chain, they
-are unreadable to a person, and an audit has to read them where they live rather
-than in an export that may have gone stale.
+PDF verification checks both recovered text and actual painted glyph IDs. A
+missing or refused PDF means incomplete delivery (exit 2); repair the cause and
+rerun before declaring completion. `--no-pdf` is only for an explicit user format
+exception. A cover letter is provided on demand; it is not the domestic default.
+Do not automatically start a mock interview or another mode.
 
-**Do not move the workspace itself.** `scripts/paths.py` owns that layout,
-`modes/apply.md`'s resume-an-unfinished-run lookup finds work BY the path shape,
-and `check_claims.py` fingerprints the master profile at that path. `~/Downloads`
-is also a directory the user's own housekeeping empties.
-
-`deliver.py` exits 0 or 2, never 1 — there is no such thing as a delivery
-finding. Exit 2 with `DELIVER_DEST_UNWRITABLE` is the macOS case worth knowing:
-`~/Downloads` sits behind TCC, it can start refusing writes part-way through a
-session, and `os.access` says yes while the write fails. The script probes by
-writing a real file. When it exits 2, say so and offer `--to` with somewhere
-else — do not silently leave the artifacts undelivered.
 
 ## Self-check before reporting the round
 

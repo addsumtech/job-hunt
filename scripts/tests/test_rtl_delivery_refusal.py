@@ -35,12 +35,13 @@ def test_rtl_rerender_removes_stale_source_and_delivery_keeps_refusal(
     assert not pdf.exists()
     assert not pdf.with_suffix(".tex").exists()
 
+    (ws / "report.md").write_text(text, encoding="utf-8")
     dest = tmp_path / "delivery"
     dest.mkdir()
     (dest / "round-cv.pdf").write_bytes(b"%PDF previous delivery")
     (dest / "round-cv.tex").write_text("previous source", encoding="utf-8")
     (dest / "unrelated.tex").write_text("keep this", encoding="utf-8")
-    assert deliver.main(["--workspace", str(ws), "--to", str(dest)]) == 0
+    assert deliver.main(["--workspace", str(ws), "--to", str(dest)]) == 2
     output = capsys.readouterr()
     assert "NOTICE_PDF_REFUSED" in output.err
     assert "right-to-left" in output.err
