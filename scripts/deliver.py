@@ -517,7 +517,13 @@ def pdf_text(pdf: pathlib.Path) -> str:
                            timeout=60, check=False)
         # Decode in this thread: Windows subprocess text readers can lose a
         # UnicodeDecodeError in a background thread and return stdout=None.
-        text = r.stdout.decode("utf-8")
+        output = r.stdout
+        if isinstance(output, bytes):
+            text = output.decode("utf-8")
+        elif isinstance(output, str):
+            text = output
+        else:
+            text = ""
         if text.strip():
             return text
     except (OSError, UnicodeError, subprocess.SubprocessError):

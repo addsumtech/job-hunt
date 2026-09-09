@@ -176,7 +176,8 @@ def test_pdf_text_falls_back_to_pymupdf_for_bundled_cjk_fonts(tmp_path, monkeypa
         document.save(pdf)
 
     def blank_poppler(*args, **kwargs):
-        return subprocess.CompletedProcess(args[0], 0, b"", b"")
+        # A failed subprocess commonly has stdout=None, not b"".
+        return subprocess.CompletedProcess(args[0], 1)
 
     monkeypatch.setattr(deliver.subprocess, "run", blank_poppler)
     assert "大模型工程师" in deliver.pdf_text(pdf)

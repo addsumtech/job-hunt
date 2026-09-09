@@ -123,6 +123,10 @@ def test_failed_report_compile_cannot_pass_on_partial_output(tmp_path, monkeypat
         pdf.write_bytes(b'%PDF partial')
         return subprocess.CompletedProcess(cmd, 1)
     monkeypatch.setattr(deliver.subprocess, 'run', fail)
+    # Portable report rendering deliberately avoids Pandoc. This regression
+    # exercises the remaining Pandoc fallback, where a nonzero result must not
+    # leave a partial output accepted as a finished PDF.
+    monkeypatch.setattr(deliver, '_portable_report_style', lambda _source: None)
     ok, _ = deliver.render_pdf(md, pdf, None)
     assert not ok and not pdf.exists()
 
