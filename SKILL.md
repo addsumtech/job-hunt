@@ -878,6 +878,7 @@ Read-when:
 - [ ] Writing a letter? Read `references/motivation-letter.md` (skip gate first).
 - [ ] Japan + traditional/domestic employer? Read `references/rirekisho.md`.
 - [ ] Building or reordering the CV? `references/cv-craft.md`.
+- [ ] Rendering a Word CV? Follow `references/word-resume-layout.md` and inspect the exported pages.
 - [ ] Doing gap analysis or tailoring? `references/gap-analysis.md`.
 - [ ] Extracting a posting? `references/job-posting-extraction.md`.
 - [ ] Writing the brief? `references/interview-prep.md`.
