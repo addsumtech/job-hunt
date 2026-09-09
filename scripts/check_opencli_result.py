@@ -315,6 +315,26 @@ def classify(site, command, exit_code, stdout_text, stderr_text,
         result["remedy"] = "exit 0 but stdout was not a JSON array"
         return result
 
+    # Measured 2026-09-09: Indeed's detail adapter returns exit 0 and the
+    # sign-in heading as a job title, with an empty company and description.
+    # Match the observed shape, not login words in legitimate job prose.
+    if site == "indeed" and command in {"job", "detail", "view"} and any(
+        isinstance(row, dict)
+        and str(row.get("title") or "").strip().casefold()
+            == "ready to take the next step?"
+        and not str(row.get("company") or "").strip()
+        and not str(row.get("description") or "").strip()
+        for row in rows
+    ):
+        result["classification"] = "not_logged_in"
+        result["signal_id"] = "indeed-sign-in-interstitial"
+        result["error_message"] = "Indeed returned its sign-in page instead of a job detail"
+        result["remedy"] = (
+            "Stop this site for this round. Do not count the sign-in page as a "
+            "job or retry the read. Indeed has no OpenCLI login command. "
+            + recovery_guidance("login"))
+        return result
+
     result["classification"] = "ok"
     result["row_count"] = len(rows)
     result["empty_result"] = not rows
