@@ -20,8 +20,6 @@ import sys
 import tempfile
 from urllib.parse import urlsplit
 
-import yaml
-
 import journal
 import lint_no_prediction
 from render_cv import has_rtl
@@ -188,12 +186,9 @@ def _discover_handoff_problem(workspace: pathlib.Path) -> str:
     if not journal.receipt_intact(last) or last.get("verdict") != "pass":
         return "discover requires the latest intact check_shortlist receipt to pass"
     try:
-        shortlist = yaml.safe_load((workspace / "shortlist.yaml").read_text(
-            encoding="utf-8")) or {}
-    except (OSError, yaml.YAMLError) as exc:
-        return f"discover shortlist.yaml cannot be read: {exc}"
-    if not isinstance(shortlist, dict):
-        return "discover shortlist.yaml must be a mapping"
+        shortlist = journal.load_yaml(workspace / "shortlist.yaml", dict)
+    except journal.YamlUnreadable as exc:
+        return f"discover shortlist.yaml cannot be read: {exc.reason}"
     required = {
         stem for row in (shortlist.get("rows") or []) if isinstance(row, dict)
         if (stem := _url_stem(str(row.get("url") or "")))
@@ -543,6 +538,12 @@ def _verify_pdf(pdf: pathlib.Path, source: str, needs_cjk: bool) -> tuple[bool, 
     if problems:
         pdf.unlink(missing_ok=True)
         return False, "; ".join(problems)
+    # A document with an authored URL must identify a missing PDF annotation
+    # even if the deliberately minimal regression fixture has no body text.
+    link_problem = _pdf_link_problem(pdf, source)
+    if link_problem:
+        pdf.unlink(missing_ok=True)
+        return False, link_problem
     back = pdf_text(pdf)
     if not back.strip():
         pdf.unlink(missing_ok=True)
@@ -560,10 +561,6 @@ def _verify_pdf(pdf: pathlib.Path, source: str, needs_cjk: bool) -> tuple[bool, 
             return False, (f"the PDF lost CJK characters: source has {want}, the "
                            f"rendered PDF reads back {got}. Deleted rather than "
                            "delivered.")
-    link_problem = _pdf_link_problem(pdf, source)
-    if link_problem:
-        pdf.unlink(missing_ok=True)
-        return False, link_problem
     return True, ""
 
 

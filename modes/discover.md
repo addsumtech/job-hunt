@@ -345,7 +345,7 @@ read a job site. Save both diagnostic outputs under `raw/`.
 
 This exception is only for a local bridge failure observed before the site returned
 a refusal. It never permits a different execution path to bypass captcha, login,
-403/429, or a platform limit.
+an HTTP refusal, or a platform limit.
 
 For another generic timeout, blank extraction, or unclassified transport error,
 follow `references/network-recovery.md` before recording an OpenCLI fallback

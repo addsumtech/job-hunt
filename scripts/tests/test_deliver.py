@@ -258,6 +258,19 @@ def test_discover_delivery_requires_every_shortlist_link_in_the_report(tmp_path)
     assert run(ws, dest, "--no-pdf") == 0
 
 
+def test_discover_delivery_refuses_an_unreadable_shortlist(tmp_path):
+    """Delivery must return its normal incomplete status, never parse-crash."""
+    ws = build(tmp_path)
+    (ws / "shortlist.yaml").write_text("rows: [unterminated", encoding="utf-8")
+    (ws / "shortlist.md").write_text("# Shortlist\n", encoding="utf-8")
+    deliver.journal.append(ws, {"action": "mode_entry", "mode": "discover"})
+    deliver.journal.receipt(ws, "check_shortlist", {}, "pass")
+
+    dest = tmp_path / "out"
+    assert run(ws, dest, "--no-pdf") == 2
+    assert not dest.exists()
+
+
 def test_it_runs_as_a_script(tmp_path):
     """The mode files tell the model to run a COMMAND. It has to work as one."""
     ws = build(tmp_path)
