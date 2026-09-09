@@ -370,7 +370,7 @@ _SCORE_NOUN_CJK = (r"匹配度|契合度|吻合度|评分|評分|打分|得分|�
 # The FIT nouns stay banned everywhere, including on the candidate's own pages:
 # 匹配度/契合度 and `fit score`/`match score`/`confidence` are about this
 # application and can only be invented, wherever they are written.
-_JUDGEMENT_SURFACES = ("fit-assessment.md", "shortlist.md", "assessment-")
+_JUDGEMENT_SURFACES = ("report.md", "fit-assessment.md", "shortlist.md", "assessment-")
 _FIT_NOUN = re.compile(
     r"(?:匹配度|契合度|吻合度)\s*[:：为是]?\s*"
     r"(?<![0-9０-９.．\-\u2013])[0-9０-９]+(?:[.．][0-9０-９]+)?"
@@ -659,7 +659,7 @@ def target_files(workspace: pathlib.Path) -> list[pathlib.Path]:
     # LOUD in the real room. It shipped unscanned by anything: a "70% chance" line
     # in it passed check_mock and every lint, on the one surface where an invented
     # number is spoken to a human rather than merely printed.
-    for relative in ("fit-assessment.md", "shortlist.md", "cheatsheet.md",
+    for relative in ("report.md", "fit-assessment.md", "shortlist.md", "cheatsheet.md",
                      "mock/cheatsheet.md", "mock/answer-guide.md"):
         path = workspace / relative
         if path.exists():

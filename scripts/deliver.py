@@ -19,6 +19,7 @@ import sys
 import tempfile
 
 import journal
+import lint_no_prediction
 from render_cv import has_rtl
 from pdf_glyphs import glyph_findings
 
@@ -311,6 +312,17 @@ def main(argv: list[str] | None = None) -> int:
 
     if not (ws / "report.md").is_file():
         print("DELIVER_REPORT_REQUIRED: author report.md answering the client question", file=sys.stderr)
+        return 2
+
+    try:
+        findings = lint_no_prediction.scan_text(
+            (ws / "report.md").read_text(encoding="utf-8"), "report.md",
+            lint_no_prediction.capture_corpus(ws))
+    except (OSError, UnicodeError) as exc:
+        print(f"DELIVER_REPORT_UNREADABLE: {exc}", file=sys.stderr)
+        return 2
+    if findings:
+        print("DELIVER_REPORT_PREDICTION: " + "\n".join(findings), file=sys.stderr)
         return 2
 
     ok, why = writable(dest)

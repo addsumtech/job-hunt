@@ -306,3 +306,12 @@ def test_an_unwritable_workspace_journal_does_not_fail_the_delivery(tmp_path, mo
     monkeypatch.setattr(deliver.journal, "append",
                         lambda *a, **k: (_ for _ in ()).throw(OSError("read-only")))
     assert run(ws, tmp_path / "out", "--no-pdf") == 0
+
+
+@pytest.mark.parametrize('text', ['You have an 80% chance of getting an interview.',
+                                  'You are likely to be hired.'])
+def test_delivery_refuses_predictions_in_client_report(tmp_path, text):
+    ws = build(tmp_path, md=text)
+    dest = tmp_path / 'out'
+    assert run(ws, dest, '--no-pdf') == 2
+    assert not dest.exists()

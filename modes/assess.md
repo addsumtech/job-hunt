@@ -461,6 +461,9 @@ adapter errors, tests, developer diagnostics and internal review logs belong onl
 in the private workspace, never in this client report. Do not copy an internal
 `completion.md` into it. A general question still receives a PDF reply report.
 
+After authoring `report.md`, run `lint_no_prediction.py --workspace <ws>`.
+Delivery also refuses prediction language in the report.
+
 Run `deliver.py` as the last step. It requires `report.md` and a verified report
 PDF and copies only the report and requested CV/application documents into
 `~/Downloads/<workspace-name>/`. For multiple workspaces serving one consultation,
