@@ -112,9 +112,10 @@ def test_the_no_fabrication_rule_is_restated_at_why_matched():
 def test_every_script_and_reference_this_mode_uses_is_named():
     body = text()
     for name in ("scripts/enter_mode.py", "scripts/check_opencli_result.py",
-                 "scripts/check_no_write.py", "scripts/check_shortlist.py",
+                 "scripts/check_no_write.py", "scripts/snapshot_profile.py",
+                 "scripts/check_candidate_match.py", "scripts/check_shortlist.py",
                  "scripts/paths.py", "references/discovery-sources.md",
-                 "references/source-policy.md",
+                 "references/source-policy.md", "references/candidate-matching.md",
                  "references/risk-control-signals.yaml"):
         assert name in body, f"{name} is not named in the self-check list"
 
@@ -218,10 +219,12 @@ def test_insufficient_evidence_is_never_a_shortlist_row():
     assert "the row is `insufficient_evidence`" not in body
 
 
-def test_the_card_based_stamp_is_required_in_the_rendered_markdown_too():
+def test_both_discover_stamps_are_required_in_the_rendered_markdown_too():
     body = text()
     for spelling in cs.PROVISIONAL_STAMP:
         assert spelling in body, f"provisional stamp {spelling!r} is defined nowhere"
+    for spelling in cs.DETAIL_PROVISIONAL_STAMP:
+        assert spelling in body, f"detail provisional stamp {spelling!r} is defined nowhere"
     assert "MD_MISSING_PROVISIONAL_STAMP" in body
 
 

@@ -9,6 +9,7 @@ import pathlib
 
 import yaml
 
+import candidate_match as matching
 import journal
 
 import hashlib
@@ -17,7 +18,7 @@ REPO = pathlib.Path(__file__).resolve().parents[2]
 MODE_FILE = REPO / "modes" / "discover.md"
 
 
-UPSTREAM_GATE_RECEIPTS = ("check_no_write", "lint_no_prediction")
+UPSTREAM_GATE_RECEIPTS = ("check_no_write", "check_candidate_match", "lint_no_prediction")
 
 
 def upstream_receipt(gate, verdict="pass"):
@@ -120,6 +121,7 @@ BRIEF = {
     "target_count": 2,
     "max_rows_per_round": 25,
     "max_pages_per_site": 2,
+    "max_match_reviews": 5,
     "max_age_days": 30,
 }
 
@@ -141,7 +143,7 @@ ROWS = [
      "why_matched": ("brief.target_titles 命中「算法工程师」；raw salaryMin 30000 在 brief "
                      "薪资区间内；raw city 西安 在 brief.locations 内。raw degree 为「博士」，"
                      "档案为硕士，已计入分档。仅卡片信息，未取详情。"),
-     "verdict": "worth_applying",
+     "verdict": "stretch",
      "provisional": True,
      "effort": "evening"},
     {"id": "51job-173199597",
@@ -184,10 +186,66 @@ SHORTLIST = {
          "detail_command": "opencli 51job detail <jobId>",
          "raw_files": ["raw/51job-1.json", "raw/51job-detail-173199597.json"]},
     ],
-    "rows": ROWS,
+    # Recommendation order is intentional: the detail-backed default comes
+    # before the card-only lead, even though ROWS retains source order for tests
+    # that mutate the two underlying examples independently.
+    "rows": [ROWS[1], ROWS[0]],
 }
 
-SHORTLIST_MD = """# Shortlist — 2026-08-09 · 算法工程师 · 上海/西安/海宁
+CANDIDATE_PROFILE = {
+    "meta": {"name": "示例候选人", "language": "zh"},
+    "experience": [{
+        "title": "AI算法工程师",
+        "bullets": ["负责数字孪生方向的 AI 算法研发和模型训练。"],
+    }],
+    "skills": {"编程": ["Python", "C++"]},
+}
+
+CANDIDATE_MATCH = {
+    "profile_snapshot": "candidate-profile.yaml",
+    "rows": [
+        {
+            "id": "51job-173199597",
+            "basis": "detail",
+            "recommendation": "recommend",
+            "requirements": [
+                {
+                    "id": "M1", "text": "熟悉 Python/C++", "kind": "must_have",
+                    "screening": "weighted", "match": "strong", "recency": "current",
+                    "effort": "quick",
+                    "job_evidence": [{"file": "raw/51job-detail-173199597.json",
+                                      "quote": "熟悉 Python/C++"}],
+                    "cv_evidence": [
+                        {"path": "/skills/编程/0", "quote": "Python"},
+                        {"path": "/skills/编程/1", "quote": "C++"},
+                    ],
+                },
+                {
+                    "id": "M2", "text": "负责数字孪生方向的 AI 算法研发",
+                    "kind": "responsibility", "screening": "weighted",
+                    "match": "strong", "recency": "current", "effort": "quick",
+                    "job_evidence": [{"file": "raw/51job-detail-173199597.json",
+                                      "quote": "负责数字孪生方向的 AI 算法研发"}],
+                    "cv_evidence": [{"path": "/experience/0/bullets/0",
+                                     "quote": "数字孪生方向的 AI 算法研发"}],
+                },
+            ],
+            "alignment": {
+                "level_direction": "lateral", "domain_fit": "same_domain",
+                "job_evidence": [{"file": "raw/51job-detail-173199597.json",
+                                  "quote": "算法工程师"}],
+                "cv_evidence": [{"path": "/experience/0/title", "quote": "AI算法工程师"}],
+            },
+        },
+        {"id": "51job-173198362", "basis": "card", "recommendation": "review",
+         "requirements": []},
+    ],
+}
+
+ZH_DETAIL_MATCH_SUMMARY = matching.render_summary(CANDIDATE_MATCH["rows"][0], "zh")
+ZH_CARD_MATCH_SUMMARY = matching.render_summary(CANDIDATE_MATCH["rows"][1], "zh")
+
+SHORTLIST_MD = f"""# Shortlist — 2026-08-09 · 算法工程师 · 上海/西安/海宁
 
 ## §0 来源与读取质量
 
@@ -203,12 +261,14 @@ SHORTLIST_MD = """# Shortlist — 2026-08-09 · 算法工程师 · 上海/西安
 上一份 JD 被 assess 判为 `likely_screen_out`（缺 C++ 生产经验），用户要求在同方向上
 找更稳的岗位。本轮候选必须肉眼可见地比它更稳，而不只是标题相似。
 
-## §1 候选（全部为基于卡片信息的初判 · provisional）
+## §1 候选（已获取职位信息后的初判，尚非完整投递评估 · provisional）
 
 1. **高级AI算法工程师(J10032)** — 拓荆键科（海宁）半导体设备 · 海宁 · 1.7-3.4万·15薪
    — `strong_apply`（初判）· [打开职位](https://jobs.51job.com/haining/173199597.html)
+   - {ZH_DETAIL_MATCH_SUMMARY}
 2. **高级算法工程师（视觉调试智能化、AI方向）** — 比亚迪汽车工业 · 西安 · 3-6万
-   — `worth_applying`（初判）· 未取详情 · [打开职位](https://jobs.51job.com/xian-gxjs/173198362.html)
+   — `stretch`（初判）· 未取详情 · [打开职位](https://jobs.51job.com/xian-gxjs/173198362.html)
+   - {ZH_CARD_MATCH_SUMMARY}
 """
 
 JOURNAL = [
@@ -252,6 +312,8 @@ def build_workspace(root):
         textwrap.dedent(HELP_51JOB), encoding="utf-8")
     _dump_yaml(workspace / "brief.yaml", BRIEF)
     _dump_yaml(workspace / "shortlist.yaml", SHORTLIST)
+    _dump_yaml(workspace / "candidate-profile.yaml", CANDIDATE_PROFILE)
+    _dump_yaml(workspace / "candidate-match.yaml", CANDIDATE_MATCH)
     (workspace / "shortlist.md").write_text(
         textwrap.dedent(SHORTLIST_MD), encoding="utf-8")
     write_journal(workspace, JOURNAL)
@@ -274,6 +336,12 @@ RAW_LINKEDIN_SEARCH = [
     {"rank": 2, "title": "Senior Image Reconstruction Engineer",
      "company": "Amsterdam UMC", "location": "Amsterdam, Noord-Holland",
      "listed": "1 week ago", "salary": "€5,800 - €7,200 per month",
+     "url": "https://www.linkedin.com/jobs/view/3912345678/"},
+]
+
+RAW_LINKEDIN_DETAIL = [
+    {"id": "3912345678", "title": "Senior Image Reconstruction Engineer",
+     "description": "Build and validate MRI reconstruction algorithms using PyTorch.",
      "url": "https://www.linkedin.com/jobs/view/3912345678/"},
 ]
 
@@ -314,6 +382,7 @@ BRIEF_EN = {
     "target_count": 2,
     "max_rows_per_round": 25,
     "max_pages_per_site": 2,
+    "max_match_reviews": 5,
     "max_age_days": 30,
 }
 
@@ -335,7 +404,7 @@ ROWS_EN = [
      "why_matched": ("brief.target_titles matches «MRI reconstruction»; raw location "
                      "Eindhoven is in brief.locations. Card only, no detail fetched, "
                      "so the salary field is empty in the capture too."),
-     "verdict": "worth_applying",
+     "verdict": "stretch",
      "provisional": True,
      "effort": "evening"},
     {"id": "linkedin-3912345678",
@@ -346,16 +415,16 @@ ROWS_EN = [
      "url": "https://www.linkedin.com/jobs/view/3912345678/",
      "source_site": "linkedin",
      "source_id": "3912345678",
-     "extraction_method": "adapter_search",
-     "retrieved_at": "2026-08-16T09:14:02Z",
-     "quality": "card_only",
-     "verification": "collected_unverified",
+     "extraction_method": "adapter_detail",
+     "retrieved_at": "2026-08-16T09:16:40Z",
+     "quality": "complete",
+     "verification": "fresh_verified",
      "raw_text": ("Senior Image Reconstruction Engineer | Amsterdam UMC | "
                   "Amsterdam, Noord-Holland | €5,800 - €7,200 per month | "
                   "1 week ago"),
      "why_matched": ("brief.target_titles matches «image reconstruction engineer»; "
-                     "raw location Amsterdam is in brief.locations; the card's "
-                     "monthly band clears brief salary_floor."),
+                     "the detail names MRI reconstruction and PyTorch, with matching "
+                     "evidence in the frozen profile."),
      "verdict": "strong_apply",
      "provisional": True,
      "effort": "quick"},
@@ -377,12 +446,62 @@ SHORTLIST_EN = {
          "identity_field": "title",
          "identity_field_empty_rows": 0,
          "detail_command": "opencli linkedin job-detail <job-url>",
-         "raw_files": ["raw/linkedin-1.json"]},
+         "raw_files": ["raw/linkedin-1.json", "raw/linkedin-detail-3912345678.json"]},
     ],
-    "rows": ROWS_EN,
+    "rows": [ROWS_EN[1], ROWS_EN[0]],
 }
 
-SHORTLIST_MD_EN = """# Shortlist — 2026-08-16 · MRI reconstruction · Netherlands
+CANDIDATE_PROFILE_EN = {
+    "meta": {"name": "Example Candidate", "language": "en"},
+    "experience": [{
+        "title": "Machine Learning Engineer",
+        "bullets": ["Built and validated MRI reconstruction algorithms using PyTorch."],
+    }],
+    "skills": {"Technical": ["Python", "PyTorch"]},
+}
+
+CANDIDATE_MATCH_EN = {
+    "profile_snapshot": "candidate-profile.yaml",
+    "rows": [
+        {
+            "id": "linkedin-3912345678", "basis": "detail",
+            "recommendation": "recommend",
+            "requirements": [
+                {
+                    "id": "M1", "text": "PyTorch", "kind": "must_have",
+                    "screening": "weighted", "match": "strong", "recency": "current",
+                    "effort": "quick",
+                    "job_evidence": [{"file": "raw/linkedin-detail-3912345678.json",
+                                      "quote": "PyTorch"}],
+                    "cv_evidence": [{"path": "/skills/Technical/1", "quote": "PyTorch"}],
+                },
+                {
+                    "id": "M2", "text": "Build and validate MRI reconstruction algorithms",
+                    "kind": "responsibility", "screening": "weighted",
+                    "match": "strong", "recency": "current", "effort": "quick",
+                    "job_evidence": [{"file": "raw/linkedin-detail-3912345678.json",
+                                      "quote": "Build and validate MRI reconstruction algorithms"}],
+                    "cv_evidence": [{"path": "/experience/0/bullets/0",
+                                     "quote": "Built and validated MRI reconstruction algorithms"}],
+                },
+            ],
+            "alignment": {
+                "level_direction": "lateral", "domain_fit": "same_domain",
+                "job_evidence": [{"file": "raw/linkedin-detail-3912345678.json",
+                                  "quote": "Senior Image Reconstruction Engineer"}],
+                "cv_evidence": [{"path": "/experience/0/bullets/0",
+                                 "quote": "MRI reconstruction algorithms"}],
+            },
+        },
+        {"id": "linkedin-3987654321", "basis": "card", "recommendation": "review",
+         "requirements": []},
+    ],
+}
+
+EN_DETAIL_MATCH_SUMMARY = matching.render_summary(CANDIDATE_MATCH_EN["rows"][0], "en")
+EN_CARD_MATCH_SUMMARY = matching.render_summary(CANDIDATE_MATCH_EN["rows"][1], "en")
+
+SHORTLIST_MD_EN = f"""# Shortlist — 2026-08-16 · MRI reconstruction · Netherlands
 
 ## §0 Sources and read quality
 
@@ -390,8 +509,8 @@ SHORTLIST_MD_EN = """# Shortlist — 2026-08-16 · MRI reconstruction · Netherl
 |---|---|---|---|---|---|---|---|---|---|
 | linkedin | search | read | logged in | 1 | 2 | `title` | 0 | `opencli linkedin job-detail <job-url>` | ok |
 
-Raw captures: `raw/linkedin-1.json`. Every row's provenance ends in that file, and
-it is never edited. `indeed` was skipped for this round: it serves the US site and
+Raw captures: `raw/linkedin-1.json`, `raw/linkedin-detail-3912345678.json`. Every
+row's provenance ends in those files, and they are never edited. `indeed` was skipped for this round: it serves the US site and
 resolves `--location` against a US gazetteer, so it cannot search the Netherlands.
 
 ## §0.1 Trigger
@@ -399,14 +518,16 @@ resolves `--location` against a US gazetteer, so it cannot search the Netherland
 The previous posting was assessed `likely_screen_out` for missing production C++,
 and the user asked for a Dutch-market round of visibly steadier roles.
 
-## §1 Candidates (all provisional, from card data only)
+## §1 Candidates (provisional; not a full application assessment)
 
 1. **Senior Image Reconstruction Engineer** — Amsterdam UMC · Amsterdam,
    Noord-Holland · €5,800 - €7,200 per month — `strong_apply` (provisional) ·
    effort: quick · [Open posting](https://www.linkedin.com/jobs/view/3912345678/)
+   - {EN_DETAIL_MATCH_SUMMARY}
 2. **MRI Reconstruction Scientist** — Philips Research · Eindhoven, North Brabant
-   — `worth_applying` (provisional) · effort: evening · no detail fetched ·
+   — `stretch` (provisional) · effort: evening · no detail fetched ·
    [Open posting](https://www.linkedin.com/jobs/view/3987654321/)
+   - {EN_CARD_MATCH_SUMMARY}
 """
 
 JOURNAL_EN = [
@@ -421,6 +542,18 @@ JOURNAL_EN = [
      "stderr_file": "raw/linkedin-1.err",
      "command_line": ('opencli linkedin search "MRI reconstruction" --location '
                       '"Netherlands" --date-posted week --start 0 --limit 10 '
+                      "--window background -f json")},
+    {"ts": "2026-08-16T09:16:40Z", "mode": "discover", "action": "adapter_call",
+     "site": "linkedin", "command": "job-detail", "exit_code": 0,
+     "classification": "ok", "row_count": 1, "empty_result": False,
+     "identity_field": "title", "empty_identity_rows": [],
+     "needs_detail_recovery": False,
+     "detail_command": "opencli linkedin job-detail <job-url>",
+     "auth_state": "logged_in", "signal_id": None, "error_message": None,
+     "remedy": None, "stdout_file": "raw/linkedin-detail-3912345678.json",
+     "stderr_file": None,
+     "command_line": ("opencli linkedin job-detail "
+                      "https://www.linkedin.com/jobs/view/3912345678/ "
                       "--window background -f json")},
 ]
 
@@ -460,11 +593,16 @@ def build_english_workspace(root):
     (workspace / "raw" / "linkedin-1.json").write_text(
         json.dumps(RAW_LINKEDIN_SEARCH, ensure_ascii=False, indent=2),
         encoding="utf-8")
+    (workspace / "raw" / "linkedin-detail-3912345678.json").write_text(
+        json.dumps(RAW_LINKEDIN_DETAIL, ensure_ascii=False, indent=2),
+        encoding="utf-8")
     (workspace / "raw" / "linkedin-1.err").write_text("", encoding="utf-8")
     (workspace / "raw" / "opencli-help" / "linkedin.yaml").write_text(
         textwrap.dedent(HELP_LINKEDIN), encoding="utf-8")
     _dump_yaml(workspace / "brief.yaml", BRIEF_EN)
     _dump_yaml(workspace / "shortlist.yaml", SHORTLIST_EN)
+    _dump_yaml(workspace / "candidate-profile.yaml", CANDIDATE_PROFILE_EN)
+    _dump_yaml(workspace / "candidate-match.yaml", CANDIDATE_MATCH_EN)
     (workspace / "shortlist.md").write_text(SHORTLIST_MD_EN, encoding="utf-8")
     write_journal(workspace, JOURNAL_EN)
     return workspace

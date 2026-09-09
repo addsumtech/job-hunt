@@ -89,6 +89,8 @@ feature finds work by this shape:
 ~/.claude/job-profiles/<name>/searches/<YYYY-MM-DD>-<slug>/
   brief.yaml                 this round's reproducible search basis
   shortlist.yaml             the structured shortlist
+  candidate-profile.yaml     frozen profile used for this round's match evidence
+  candidate-match.yaml       per-row JD ↔ frozen-profile evidence mapping
   shortlist.md               readable: §0 来源与读取质量, §0.1 触发原因, §0.2 披露
                              (English round: §0 Sources and read quality,
                               §0.1 Trigger, §0.2 Disclosure)
@@ -285,6 +287,7 @@ avoid: ["外包", "销售导向岗位"]
 target_count: 12                       # how many rows the user wants
 max_rows_per_round: 25                 # yellow-layer cap, per site per round
 max_pages_per_site: 2                  # yellow-layer cap
+max_match_reviews: 5                   # 1-5 full JDs eligible for CV matching
 max_age_days: 30                       # older than this ⇒ verification: stale_possible
 ```
 
@@ -299,6 +302,26 @@ brief, in the same pass as the trigger reason.
 the second is the politeness cap from `references/source-policy.md`. Falling short of
 `target_count` requires a written `shortfall_reason` in `shortlist.yaml`
 (`SHORTFALL_NO_REASON`). **Never pad the count.**
+
+### Freeze the profile before reading job details
+
+The recommendation is about the CV supplied for **this** round, not a master
+profile that might change tomorrow. Before the first detail fetch, create the
+round-local snapshot once:
+
+```bash
+python3 scripts/snapshot_profile.py --workspace . --profile <master-profile.yaml>
+```
+
+This writes `candidate-profile.yaml` without changing the master. If the source CV
+changes, start a new round rather than replacing the snapshot: changing it would
+silently alter the evidence behind an already-ranked shortlist. Read
+`references/candidate-matching.md` for the mapping rules and schema.
+
+`max_match_reviews` is a separate, bounded decision cap: ask for it with the brief
+and set an integer from 1 to 5. It is the maximum number of fetched full descriptions
+that can receive a CV-to-JD mapping in this round. It does not raise the source-policy
+page or row caps, and it is not a target count.
 
 ## Retrieval backend — OpenCLI first; one-way web-access fallback
 
@@ -566,35 +589,64 @@ that made the match — "brief.target_titles 命中「算法工程师」；raw s
 borrow a requirement from a JD you have not fetched. An invented `why_matched` is
 the most persuasive part of a fabricated row.
 
-## Step 7 — provisional verdicts
+## Step 7 — provisional triage and evidence-backed defaults
 
-First scan for hard disqualifiers (work authorisation, licence, mandatory language,
-hard location) — a hit is `blocked` immediately. Everything else takes an ordinal
-level from the same vocabulary `assess` uses:
+First scan cards for hard disqualifiers (work authorisation, licence, mandatory
+language, hard location) — a supported hit is `blocked` immediately. Cards can tell
+the user which leads are worth reading, but they cannot establish all job requirements.
+Therefore a card-only row is **never** a default recommendation: keep it as `stretch`,
+`likely_screen_out`, or `blocked` and write `recommendation: review` in
+`candidate-match.yaml`.
+
+The shared verdict vocabulary remains:
 
 `strong_apply` · `worth_applying` · `stretch` · `likely_screen_out` · `blocked`
 
-Within a level, **order by effort** — `quick` first, then `evening`, `multi_day`,
-`not_closable` — using each row's `effort` field. Ordering by effort-to-close is
-what turns a band into a plan: two `worth_applying` rows are not equally worth the
-user's next hour.
+Promote a row to `worth_applying` or `strong_apply` only after its complete detail
+was fetched and its requirements were mapped to the frozen CV as described in
+`references/candidate-matching.md`. The gate enforces these practical conditions:
+
+- Every stated knockout has strong CV evidence, and every weighted core requirement
+  has documented CV support; no core row is `gap` or `no_evidence`. A partial weighted
+  item is permitted only when it is genuinely small (`quick` or `evening`) and closable.
+- At least half of core requirements have strong evidence not marked `dated`, with at
+  least one strongly evidenced core must-have and one strongly evidenced core
+  responsibility when the posting states either category. Evidence that is only dated
+  is treated as partial.
+- Role domain is the same or adjacent and the level is assessed. `strong_apply`
+  additionally needs the same domain, no step-up, and strong evidence for every
+  core row.
+- Missing `nice_to_have` items are allowed. Do not force a candidate to meet every
+  preference, and never use a title keyword, skill inventory, or inference as a
+  substitute for quoted CV evidence.
+
+This is a conservative investment rule, not an estimate of an interview outcome.
+The top of `shortlist.yaml` and `shortlist.md` is ordered by an evidence-backed
+default recommendation first, then verdict, then effort (`quick`, `evening`,
+`multi_day`, `not_closable`). Within a band, **order by effort** for the next action.
 
 **Every discover verdict carries `provisional: true` and may not be rendered without
-it.** That is two obligations, and both are checked:
+the matching disclosure.** That is two obligations, and both are checked:
 
 - in `shortlist.yaml`, the field itself (`MISSING_PROVISIONAL`);
-- in `shortlist.md`, the words **「基于卡片信息的初判」** — English round:
-  **"provisional, from card data only"** — on the section that renders the rows
-  (Japanese, Korean and Spanish use the matching stamp from
-  [report-localization.md](../references/report-localization.md))
-  (`MD_MISSING_PROVISIONAL_STAMP`; any supported spelling satisfies it, and case does
-  not matter). A YAML boolean is not a disclosure — nobody reading the round ever
-  sees it, and `shortlist.md` is what they read.
+- for an all-card round, `shortlist.md` uses **「基于卡片信息的初判」** — English:
+  **"provisional, from card data only"** — on the row section;
+- when any row has a complete detail, use **「已获取职位信息后的初判，尚非完整投递评估」** —
+  English: **"provisional; not a full application assessment"** — instead. Japanese,
+  Korean and Spanish use these exact matching stamps:
 
-The stamp is load-bearing: discover has a card, `assess` has the full JD and
-evidence blocks. Using one vocabulary without marking the confidence source would be
-passing card data off as a completed assessment.
-**规则：discover 的档位永不被带进 assess——assess 一律重算。**
+  | language | detail-reviewed stamp |
+  |---|---|
+  | ja | 取得済みの求人情報に基づく暫定判断であり、完全な応募評価ではありません |
+  | ko | 확보된 채용 정보에 근거한 잠정 판단이며 완전한 지원 평가는 아닙니다 |
+  | es | valoración provisional basada en la información obtenida; no es una evaluación completa de candidatura |
+
+  See [report-localization.md](../references/report-localization.md) for both stamp
+  sets before writing a Japanese, Korean or Spanish report.
+
+A YAML boolean is not a disclosure — nobody reading the round sees it. The distinction
+is load-bearing: a bounded detail review is still not a tailored application
+assessment. **规则：discover 的档位永不被带进 assess——assess 一律重算。**
 
 If a card cannot support any level at all, the card is **dropped from the shortlist**
 and counted in `shortfall_reason` — name it there, with what was missing. It does
@@ -604,29 +656,33 @@ such a row with `BAD_VERDICT`. A shortlist row asserts "this posting exists and 
 is what I make of it"; a card you cannot read supports the first half and not the
 second, so it belongs in the shortfall, not in the list.
 
-## Step 8 — detail fetch, top three only
+## Step 8 — detail fetch and CV mapping, bounded
 
-Fetch detail pages **only** for `strong_apply`, `worth_applying` and `stretch`.
-`likely_screen_out` and `blocked` rows stay card-level and are labelled **未取详情**
-(English round: **no detail fetched**) in `shortlist.md`; the user can name one to
-fetch anyway, which is recorded in
-`shortlist.yaml.detail_fetch_exceptions` with a reason. `check_shortlist.py` enforces
-this as `DETAIL_FETCH_OUT_OF_BAND`. This cap is where detail fan-out stops being a
-crawl, and it is the mechanism that keeps this mode inside the yellow tier of
-`references/source-policy.md`.
-
-**A fetch that DEMOTES its own row is the normal case, and the gate cannot see
-it.** `DETAIL_FETCH_OUT_OF_BAND` compares the fetch against the row's FINAL
-verdict, while the decision to fetch was made on the verdict before it. Measured:
-a row was fetched as `worth_applying`, its description read "Fluent in English and
-Dutch", and it became `blocked` — the fetch was in band when it was made, and it
-is the only reason that row's language requirement is known rather than guessed.
-Record it in `detail_fetch_exceptions` with that as the reason. The gate's remedy
-text says "if the user named this row", which is the other cause; this one is
-yours to write down.
+Fetch detail pages **only** for rows in the top three verdict bands
+(`strong_apply`, `worth_applying`, `stretch`), and no more than
+`brief.max_match_reviews` rows may enter CV matching. Select the most promising card
+leads first; a `stretch` card is a valid detail candidate precisely because its
+requirements are still unknown. `likely_screen_out` and `blocked` rows stay card-level
+and are labelled **未取详情** (English round: **no detail fetched**) in `shortlist.md`.
+The user can name one to fetch anyway, which is recorded in
+`shortlist.yaml.detail_fetch_exceptions` with a reason, but it does not bypass the
+matching-review cap.
 
 Each detail call goes through `scripts/check_opencli_result.py` too, and its stdout
-lands in `raw/<site>-detail-<id>.json`.
+lands in `raw/<site>-detail-<id>.json`. For every fetched detail selected for mapping,
+write one `candidate-match.yaml` row with exact quoted job evidence, JSON-pointer CV
+evidence into `candidate-profile.yaml`, requirement type, screening role, match,
+recency, effort and role alignment. Do not create requirement rows from card text.
+Run the renderer before authoring the reader-facing summary:
+
+```bash
+python3 scripts/check_candidate_match.py --workspace . --render --lang <zh|en|ja|ko|es>
+```
+
+Copy each rendered line beside that posting's direct link in `shortlist.md`; do not
+paraphrase the count. A fetch that reveals a blocker or a material gap normally demotes
+the row. Record a below-band final row in `detail_fetch_exceptions` with the reason
+that the in-band fetch revealed it.
 
 ## Step 9 — write the outputs
 
@@ -652,6 +708,47 @@ sources:                        # one entry per site used
 rows: [...]
 ```
 
+`candidate-match.yaml` is the separate recommendation-evidence file. It names every
+shortlist row: a card entry is a `review`, while a default recommendation requires a
+complete detail entry and its evidence map. Keep requirement wording and both evidence
+quotes verbatim; the schema is deliberately compact so it can be audited:
+
+```yaml
+profile_snapshot: candidate-profile.yaml
+rows:
+  - id: 51job-173199597
+    basis: detail                    # detail | card
+    recommendation: recommend        # recommend | review
+    requirements:
+      - id: M1
+        text: "熟悉 Python/C++"       # verbatim requirement text
+        kind: must_have               # must_have | responsibility
+        screening: weighted           # knockout | weighted | nice_to_have
+        match: strong                 # strong | partial | gap | no_evidence
+        recency: current              # current | recent | dated | undated
+        effort: quick                 # quick | evening | multi_day | not_closable
+        job_evidence:
+          - file: raw/51job-detail-173199597.json
+            quote: "熟悉 Python/C++"
+        cv_evidence:
+          - path: /skills/Technical/0
+            quote: Python
+    alignment:
+      level_direction: lateral        # step_up | lateral | step_down | unclear
+      domain_fit: same_domain         # same_domain | adjacent | cross_over | unclear
+      job_evidence: [{file: raw/51job-detail-173199597.json, quote: "算法工程师"}]
+      cv_evidence: [{path: /experience/0/title, quote: "算法工程师"}]
+  - id: 51job-173198362
+    basis: card
+    recommendation: review
+    requirements: []
+```
+
+For `no_evidence`, use `cv_evidence: []`; every other match requires an exact pointer
+and quote. The quotation in `job_evidence` must come from a successful, journaled
+detail capture for that exact row. `candidate-match.yaml` never changes the source
+row's original `raw_text` or direct URL.
+
 `identity_field` and `detail_command` for any adapter outside the four inlined in
 SKILL.md come from `references/discovery-sources.md`. There is no other source for
 them, which is why `SOURCE_REPORT_MISSING` is that file's backstop.
@@ -662,18 +759,21 @@ resolves is a name that was captured; `SOURCE_REPORT_RAW_PATH` fires on the othe
 one rather than letting a correct file report as a missing capture.
 
 `shortlist.md` carries `## §0 来源与读取质量`, `## §0.1 触发原因`, and — when the run
-is degraded — `## §0.2 披露`. The section that lists the rows carries the stamp in
-its own heading, e.g. `## §1 候选（全部为基于卡片信息的初判 · provisional）`, and each
-row shows its band, its `effort`, and a Markdown link using that row's direct
-`url` (e.g. `[打开职位](https://...)`). A category, search, company, or source page
-is not a replacement for the posting link. Rows below the top three are labelled
-**未取详情**.
+is degraded — `## §0.2 披露`. Its row section uses the matching conditional stamp:
+`## §1 候选（全部为基于卡片信息的初判 · provisional）` for all-card output, or
+`## §1 候选（已获取职位信息后的初判，尚非完整投递评估 · provisional）` when a detail
+was read. Each row shows its band, effort, the exact localized CV-match summary from
+the renderer, and a Markdown link using that row's direct `url` (e.g.
+`[打开职位](https://...)`). A category, search, company, or source page is not a
+replacement for the posting link. Rows below the top three are labelled **未取详情**.
 
 An English round writes the same document with the same numbering: `## §0 Sources
 and read quality`, `## §0.1 Trigger`, `## §0.2 Disclosure`, a row section headed
-e.g. `## §1 Candidates (all provisional, from card data only)`, and rows below the
-top three labelled **no detail fetched**. The `§n` markers are the same in both —
-they are what the gate keys on, so they are never translated away.
+e.g. `## §1 Candidates (all provisional, from card data only)` for all-card output
+or `## §1 Candidates (provisional; not a full application assessment)` when a detail
+was read, and rows below the top three labelled **no detail fetched**. The `§n`
+markers are the same in both — they are what the gate keys on, so they are never
+translated away.
 
 ## Degraded output — when no real postings could be retrieved
 
@@ -728,11 +828,12 @@ adapter died, say *that*, not "there are no jobs".
 
 ```bash
 python3 scripts/check_no_write.py       --workspace .
+python3 scripts/check_candidate_match.py --workspace .
 python3 scripts/lint_no_prediction.py   --workspace .
 python3 scripts/check_shortlist.py      --workspace .
 ```
 
-All three must exit 0. **This mode may not claim success without a passing receipt for
+All four must exit 0. **This mode may not claim success without a passing receipt for
 each in `journal.jsonl`** — a skipped script produces no output, and that looks
 exactly like a clean one.
 
@@ -756,6 +857,9 @@ exactly like a clean one.
 | `EMPTY_RESULT_UNSUPPORTED` | "no results" wording with no adapter that exited 0 | rewrite as "every adapter failed", and emit the disclosure block |
 | `DEGRADED_WITHOUT_DISCLOSURE` | degraded run with no disclosure block in a supported report language | add the matching template, check and fill every answer |
 | `MD_MISSING_PROVISIONAL_STAMP` | `shortlist.md` renders rows without 「基于卡片信息的初判」 / "provisional, from card data only" | add the stamp, in the round's own language, to the section heading. The YAML flag is not a disclosure. |
+| `HIGH_VERDICT_UNVERIFIED` / `RECOMMENDATION_NOT_READY` | a high verdict or default recommendation lacks complete JD-to-CV evidence | keep the row as `review` / `stretch`, or repair the quoted evidence mapping. Do not claim an outcome. |
+| `JOB_EVIDENCE_NOT_DETAIL` / `CV_EVIDENCE_PATH_INVALID` | the match evidence is not a successful row-specific detail capture, or does not point into the frozen profile | fetch the actual detail within the cap, or cite the exact profile leaf. Never cite an inferred skill. |
+| `MATCH_REVIEWS_ABOVE_CAP` | more detail mappings than `brief.max_match_reviews` permits | keep only the highest-priority reviews this round; start a new bounded round for the rest. |
 | `DETAIL_FETCH_OUT_OF_BAND` | a detail fetch below the top three verdicts | remove it, or record a named exception with a reason |
 | `CAP_MISSING` / `CAP_ABOVE_CEILING` | `brief.yaml`'s round caps are absent or raised | read `references/source-policy.md`; the caps are its enforceable half |
 | `SHORTFALL_NO_REASON` | fewer rows than `target_count`, no reason written | write the reason. Never pad. |
@@ -813,7 +917,7 @@ Do not automatically start a mock interview or another mode.
       first run from answers the user gave, never from inference; confirmed once
       this session.
 - [ ] `brief.yaml` written **before** the first adapter call, with `trigger_reason`
-      and both round caps.
+      and all three round caps; `candidate-profile.yaml` frozen before any detail fetch.
 - [ ] `raw/opencli-help/<site>.yaml` saved for every site called.
 - [ ] `raw/auth-status.json` saved; `unknown` re-probed with `--full`.
 - [ ] Every adapter call classified by `scripts/check_opencli_result.py`.
@@ -824,25 +928,30 @@ Do not automatically start a mock interview or another mode.
 - [ ] `indeed` not used as the no-login default for a non-US market, and if it was
       used, every returned `location` read against `brief.markets` before the row
       was kept — the US site answers a London search with Ohio.
-- [ ] Every row carries `provisional: true` **and** `shortlist.md` carries
-      「基于卡片信息的初判」 / "provisional, from card data only", or the native
-      Japanese, Korean or Spanish stamp in [report-localization.md](../references/report-localization.md); no verdict copied
+- [ ] Every row carries `provisional: true` **and** `shortlist.md` carries the
+      card-only or detail-reviewed native stamp from
+      [report-localization.md](../references/report-localization.md); no verdict copied
       into an assessment.
 - [ ] `shortlist.md` is in **one** language — the user's — end to end: section
       names, the stamp, the 未取详情 / no detail fetched labels and the disclosure
       block, with no furniture left in the other one.
 - [ ] Every rendered candidate has a clickable direct posting link copied from
       its `url` field. A search/category/source page is not a job link.
-- [ ] Every row carries an `effort` value, and rows are ordered by it within a band.
+- [ ] Every row carries an `effort` value; evidence-backed defaults are first, then
+      verdict and effort within the remaining order.
 - [ ] Cards that could not support any level were dropped and named in
       `shortfall_reason` — not listed as `insufficient_evidence` rows.
-- [ ] Detail fetched only for `strong_apply` / `worth_applying` / `stretch`.
+- [ ] Detail fetched only for `strong_apply` / `worth_applying` / `stretch`, and no
+      more than `max_match_reviews` entries have CV mappings.
+- [ ] Every high verdict has a complete `candidate-match.yaml` entry, raw-detail
+      quotes, frozen-profile pointers, and its exact localized summary beside the link.
 - [ ] `references/source-policy.md` re-read if any action felt like it might be
       yellow or red; `references/risk-control-signals.yaml` consulted on any failure.
 - [ ] `references/discovery-sources.md` read before calling any adapter outside the
       four inlined in SKILL.md.
-- [ ] `scripts/check_no_write.py` and `scripts/check_shortlist.py` both exited 0, and
-      the completion message cites their `journal.jsonl` receipts.
+- [ ] `scripts/check_no_write.py`, `scripts/check_candidate_match.py`,
+      `scripts/lint_no_prediction.py`, and `scripts/check_shortlist.py` all exited 0,
+      and the completion message cites their `journal.jsonl` receipts.
 - [ ] No chaining into `apply`. The shortlist is handed back for a person to choose.
 
 **Voice.** The shortlist is a document the user reads, not a dump. `SKILL.md`, "How this skill writes to the user", governs its prose — every row's provenance visible, what was not searched said out loud, no closing offer to help further.

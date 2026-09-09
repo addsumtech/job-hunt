@@ -35,13 +35,15 @@ def test_the_self_check_names_this_plans_files_with_a_reason_to_open_them():
                  "references/source-policy.md",
                  "references/risk-control-signals.yaml",
                  "scripts/check_opencli_result.py", "scripts/check_no_write.py",
+                 "scripts/snapshot_profile.py", "scripts/check_candidate_match.py",
                  "scripts/check_shortlist.py"):
         assert path in text, f"{path} is registered nowhere in SKILL.md"
 
 
-def test_the_gate_table_lists_both_discover_gates():
+def test_the_gate_table_lists_discover_gates():
     text = SKILL.read_text(encoding="utf-8")
-    for gate in ("scripts/check_no_write.py", "scripts/check_shortlist.py"):
+    for gate in ("scripts/check_no_write.py", "scripts/check_candidate_match.py",
+                 "scripts/check_shortlist.py"):
         row = next((line for line in text.splitlines()
                     if line.startswith("|") and gate in line), None)
         assert row is not None, f"{gate} has no row in the gate table"

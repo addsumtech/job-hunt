@@ -54,15 +54,17 @@ still fails the assessment gate.
 
 ## Discover
 
-Use the language's provisional stamp on the section containing real rows:
+Use the card-only provisional stamp when every row is a search card. If any row has
+a complete detail retrieval, use the detail-reviewed provisional stamp instead. Both
+remain provisional discover output, not a tailored application assessment:
 
-| Language | Required stamp |
-|---|---|
-| zh | 基于卡片信息的初判 |
-| en | provisional, from card data only |
-| ja | 求人カードの情報だけに基づく暫定判断 |
-| ko | 채용 카드 정보만을 바탕으로 한 잠정 판단 |
-| es | valoración provisional basada únicamente en las fichas |
+| Language | All-card stamp | Detail-reviewed stamp |
+|---|---|---|
+| zh | 基于卡片信息的初判 | 已获取职位信息后的初判，尚非完整投递评估 |
+| en | provisional, from card data only | provisional; not a full application assessment |
+| ja | 求人カードの情報だけに基づく暫定判断 | 取得済みの求人情報に基づく暫定判断であり、完全な応募評価ではありません |
+| ko | 채용 카드 정보만을 바탕으로 한 잠정 판단 | 확보된 채용 정보에 근거한 잠정 판단이며 완전한 지원 평가는 아닙니다 |
+| es | valoración provisional basada únicamente en las fichas | valoración provisional basada en la información obtenida; no es una evaluación completa de candidatura |
 
 Keep `provisional: true` in YAML too. Neither stamp replaces provenance checks.
 An adapter failure is not a zero-result search. When every adapter fails, fill

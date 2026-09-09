@@ -18,13 +18,13 @@ from test_count_coverage import ASSESSMENT as COUNT_INPUT
 
 # Written as native-language specimens, independently of the production maps.
 SPECIMENS = {
-    "ja": ("求人カードの情報だけに基づく暫定判断", "これは根拠の集計であり、結果を予測するものではありません。",
+    "ja": ("取得済みの求人情報に基づく暫定判断であり、完全な応募評価ではありません", "これは根拠の集計であり、結果を予測するものではありません。",
            "## 応募を妨げる必須条件", "## 次に取る方針", "確認基準", "成果物",
            "必須条件の強い根拠: 全6項目中2項目 (部分的 2, 不足 1, 根拠なし 1)", "未評価"),
-    "ko": ("채용 카드 정보만을 바탕으로 한 잠정 판단", "이는 근거를 집계한 것이며 결과를 예측하는 것이 아닙니다.",
+    "ko": ("확보된 채용 정보에 근거한 잠정 판단이며 완전한 지원 평가는 아닙니다", "이는 근거를 집계한 것이며 결과를 예측하는 것이 아닙니다.",
            "## 지원을 막는 필수 조건", "## 다음 행동", "완료 기준", "산출물",
            "필수 요건의 강한 근거: 6개 중 2개 (부분 충족 2, 부족 1, 근거 없음 1)", "미평가"),
-    "es": ("valoración provisional basada únicamente en las fichas", "Este es un recuento de evidencias; no es una predicción del resultado.",
+    "es": ("valoración provisional basada en la información obtenida; no es una evaluación completa de candidatura", "Este es un recuento de evidencias; no es una predicción del resultado.",
            "## Requisitos excluyentes", "## Qué hacer a continuación", "Criterio de aceptación", "Entregable",
            "Requisitos obligatorios con evidencia sólida: 2 de 6 (parcial 2, carencia 1, sin evidencia 1)", "sin evaluar"),
 }
@@ -52,9 +52,9 @@ def test_native_shortlist_stamp_passes_and_its_removal_fails(tmp_path, lang):
     ws = fx.build_workspace(tmp_path)
     path = ws / "shortlist.md"
     original = path.read_text(encoding="utf-8")
-    path.write_text(original.replace("基于卡片信息的初判", SPECIMENS[lang][0]), encoding="utf-8")
+    path.write_text(original.replace("已获取职位信息后的初判，尚非完整投递评估", SPECIMENS[lang][0]), encoding="utf-8")
     assert cs.main(["--workspace", str(ws)]) == 0
-    path.write_text(original.replace("基于卡片信息的初判", ""), encoding="utf-8")
+    path.write_text(original.replace("已获取职位信息后的初判，尚非完整投递评估", ""), encoding="utf-8")
     assert cs.main(["--workspace", str(ws)]) == 1
 
 

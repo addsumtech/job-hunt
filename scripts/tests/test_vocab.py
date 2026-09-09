@@ -50,6 +50,7 @@ def test_the_top_level_assessment_enums():
     typo in `stance` silently switched a notice off with nothing to compare
     against."""
     assert vocab.LEVEL_DIRECTION == ("step_up", "lateral", "step_down", "unclear")
+    assert vocab.DOMAIN_FIT == ("same_domain", "adjacent", "cross_over", "unclear")
     assert vocab.WORK_STATUS == ("authorized", "needs_sponsorship",
                                  "student_or_graduate", "temporary_route", "unknown")
     assert vocab.CONDITION_TYPES == ("sponsorship", "work_authorization", "citizenship",
@@ -77,7 +78,7 @@ def test_every_closed_set_is_an_immutable_tuple():
     time, and the drift this module exists to stop would come back invisible."""
     for name in ("VERDICTS", "MARKET_KEYS", "LEVELS", "SCREENING", "MATCH",
                  "RECENCY", "EFFORT", "LEVEL_DIRECTION", "WORK_STATUS",
-                 "CONDITION_TYPES", "STANCE", "BANDS", "DEFECT_TAGS"):
+                 "DOMAIN_FIT", "CONDITION_TYPES", "STANCE", "BANDS", "DEFECT_TAGS"):
         assert isinstance(getattr(vocab, name), tuple), f"{name} must be a tuple"
     assert isinstance(vocab.VERDICT_ZH, dict)
 
@@ -104,6 +105,8 @@ def test_no_other_script_redeclares_a_closed_set():
             f"{f.name} re-declares MARKET_KEYS — import it from vocab.py"
         assert not re.search(r"^\s*DEFECT_TAGS\s*=", text, re.M), \
             f"{f.name} re-declares DEFECT_TAGS — import it from vocab.py"
+        assert not re.search(r"^\s*DOMAIN_FIT\s*=", text, re.M), \
+            f"{f.name} re-declares DOMAIN_FIT — import it from vocab.py"
 
 
 def test_the_alias_carve_out_does_not_admit_a_real_second_copy(tmp_path, monkeypatch):

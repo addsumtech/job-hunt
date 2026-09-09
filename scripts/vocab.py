@@ -63,6 +63,12 @@ EFFORT = ("quick", "evening", "multi_day", "not_closable")
 # unclear" — those are different claims and only one of them is honest.
 LEVEL_DIRECTION = ("step_up", "lateral", "step_down", "unclear")
 
+# The role family's relationship to the candidate's evidenced background.  This
+# is deliberately a qualitative classification, not a proxy probability: it
+# tells discovery whether a full-JD match may be a default recommendation or
+# should remain a user-reviewed stretch.
+DOMAIN_FIT = ("same_domain", "adjacent", "cross_over", "unclear")
+
 # The candidate's own statement about their right to work, self-reported and
 # never inferred. `unknown` is IN the set on purpose: consistency.py must be
 # able to read "we asked and could not establish it" without that reading as a

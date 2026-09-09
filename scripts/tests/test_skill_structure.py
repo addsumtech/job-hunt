@@ -115,7 +115,11 @@ def test_the_self_check_names_every_script():
             # The shared AI-tell library. `lint_cv`, `check_letter` and
             # `check_word_limits` import it; nothing runs it, so a checklist line
             # for it would be a line the reader can never tick.
-            "prose_tells.py"}
+            "prose_tells.py",
+            # Discovery matching is shared policy and rendering logic. The gate
+            # invokes it; a run must invoke `check_candidate_match.py`, not this
+            # import-only module.
+            "candidate_match.py"}
     section = _self_check_items()
     for f in sorted((ROOT / "scripts").glob("*.py")):
         if f.name in skip:

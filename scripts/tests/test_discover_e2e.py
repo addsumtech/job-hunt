@@ -52,6 +52,10 @@ def test_the_whole_chain_passes_on_a_real_capture(tmp_path):
     assert no_write.returncode == 0, no_write.stdout + no_write.stderr
     assert no_write.stdout == ""
 
+    matching = run("check_candidate_match.py", "--workspace", str(workspace))
+    assert matching.returncode == 0, matching.stdout + matching.stderr
+    assert matching.stdout == ""
+
     lint = run("lint_no_prediction.py", "--workspace", str(workspace))
     assert lint.returncode == 0, lint.stdout + lint.stderr
     assert lint.stdout == ""
@@ -64,7 +68,7 @@ def test_the_whole_chain_passes_on_a_real_capture(tmp_path):
     assert sum(1 for r in records if r.get("action") == "adapter_call") == 3
     gates = [r for r in records if r.get("action") == "gate"]
     assert {g["gate"] for g in gates} == {
-        "check_no_write", "lint_no_prediction", "check_shortlist"}
+        "check_no_write", "check_candidate_match", "lint_no_prediction", "check_shortlist"}
     assert all(g["verdict"] == "pass" for g in gates)
 
 
@@ -81,6 +85,7 @@ def test_skipping_a_step_10_gate_is_reported_not_silently_clean(tmp_path):
     codes = {line.split(":", 1)[0] for line in shortlist.stdout.splitlines() if line}
     assert "MISSING_RECEIPT" in codes
     assert "check_no_write" in shortlist.stdout
+    assert "check_candidate_match" in shortlist.stdout
     assert "lint_no_prediction" in shortlist.stdout
 
 
@@ -114,9 +119,16 @@ def test_an_english_shortlist_passes_the_whole_chain(tmp_path):
     because it reads to the user as a bug and no check reports it.
     """
     workspace = fx.build_english_workspace(tmp_path)
+    fx.write_journal(workspace, fx.JOURNAL_EN, gate_receipts=False)
 
     no_write = run("check_no_write.py", "--workspace", str(workspace), "--no-fetch")
     assert no_write.returncode == 0, no_write.stdout + no_write.stderr
+
+    matching = run("check_candidate_match.py", "--workspace", str(workspace))
+    assert matching.returncode == 0, matching.stdout + matching.stderr
+
+    lint = run("lint_no_prediction.py", "--workspace", str(workspace))
+    assert lint.returncode == 0, lint.stdout + lint.stderr
 
     shortlist = run("check_shortlist.py", "--workspace", str(workspace))
     assert shortlist.returncode == 0, shortlist.stdout + shortlist.stderr

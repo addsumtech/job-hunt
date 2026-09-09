@@ -146,12 +146,12 @@ def test_a_partially_missing_disclosure_block_names_the_missing_lines(
         assert label in captured.out
 
 
-def test_the_markdown_must_carry_the_card_based_stamp(tmp_path, capsys):
-    # spec §5.1 step 6: 不带这个戳就不许渲染. The YAML half is MISSING_PROVISIONAL;
-    # this is the half the reader actually sees.
+def test_the_markdown_must_carry_the_detail_reviewed_stamp(tmp_path, capsys):
+    # A complete row must not be described as card-only. The YAML half is
+    # MISSING_PROVISIONAL; this is the qualification the reader actually sees.
     workspace = fx.build_workspace(tmp_path)
     text = (workspace / "shortlist.md").read_text(encoding="utf-8")
-    fx.write_md(workspace, text.replace("基于卡片信息的初判", "候选"))
+    fx.write_md(workspace, text.replace("已获取职位信息后的初判，尚非完整投递评估", "候选"))
     code, captured = run(workspace, capsys)
     assert code == 1
     assert "MD_MISSING_PROVISIONAL_STAMP" in codes(captured.out)
@@ -162,13 +162,13 @@ def test_an_english_document_with_no_stamp_at_all_fires_and_names_both(
     workspace = fx.build_english_workspace(tmp_path)
     text = (workspace / "shortlist.md").read_text(encoding="utf-8")
     fx.write_md(workspace, text.replace(
-        "(all provisional, from card data only)", "(shortlist)"))
+        "(provisional; not a full application assessment)", "(shortlist)"))
     code, captured = run(workspace, capsys)
     assert code == 1
     assert "MD_MISSING_PROVISIONAL_STAMP" in codes(captured.out)
     # An English reader must not be told to write a Chinese string, and a Chinese
     # reader must not be told to write an English one. Print both, always.
-    for spelling in cs.PROVISIONAL_STAMP:
+    for spelling in cs.DETAIL_PROVISIONAL_STAMP:
         assert spelling in captured.out
 
 
@@ -178,9 +178,8 @@ def test_the_stamp_is_matched_case_insensitively(tmp_path, capsys):
     workspace = fx.build_english_workspace(tmp_path)
     text = (workspace / "shortlist.md").read_text(encoding="utf-8")
     fx.write_md(workspace, text.replace(
-        "## §1 Candidates (all provisional, from card data only)",
-        "## §1 Candidates\n\nProvisional, from card data only — every band below "
-        "is a first read of a search card."))
+        "## §1 Candidates (provisional; not a full application assessment)",
+        "## §1 Candidates\n\nProvisional; not a full application assessment."))
     code, captured = run(workspace, capsys)
     assert code == 0
     assert captured.out == ""
@@ -213,6 +212,9 @@ def test_every_required_literal_has_all_five_report_languages(tmp_path):
     assert isinstance(cs.PROVISIONAL_STAMP, tuple)
     assert len(cs.PROVISIONAL_STAMP) == 5
     assert all(isinstance(s, str) and s for s in cs.PROVISIONAL_STAMP)
+    assert isinstance(cs.DETAIL_PROVISIONAL_STAMP, tuple)
+    assert len(cs.DETAIL_PROVISIONAL_STAMP) == 5
+    assert all(isinstance(s, str) and s for s in cs.DETAIL_PROVISIONAL_STAMP)
     assert len(cs.DISCLOSURE_LABELS) == 6
     for pair in cs.DISCLOSURE_LABELS:
         assert isinstance(pair, tuple) and len(pair) == 5, pair
@@ -535,7 +537,8 @@ def test_a_brief_with_no_markets_or_market_other_says_nothing(tmp_path, capsys):
 def test_a_detail_fetch_on_a_screened_out_row_fires(tmp_path, capsys):
     workspace = fx.build_workspace(tmp_path)
     data = fx.load_shortlist(workspace)
-    data["rows"][1]["verdict"] = "likely_screen_out"   # still quality: complete
+    complete = next(row for row in data["rows"] if row["quality"] == "complete")
+    complete["verdict"] = "likely_screen_out"
     fx.save_shortlist(workspace, data)
     code, captured = run(workspace, capsys)
     assert code == 1

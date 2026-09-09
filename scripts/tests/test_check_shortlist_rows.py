@@ -207,7 +207,7 @@ def test_a_row_id_that_is_not_site_dash_source_id_fires(tmp_path, capsys):
     code, captured = run(workspace, capsys)
     assert code == 1
     assert "BAD_ROW_ID" in codes(captured.out)
-    assert "51job-173198362" in captured.out       # names the id it should be
+    assert f"51job-{data['rows'][0]['source_id']}" in captured.out
     # The provenance chain itself is untouched, so nothing else fires.
     assert "SOURCE_ID_NOT_IN_RAW" not in codes(captured.out)
 

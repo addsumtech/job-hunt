@@ -86,6 +86,7 @@ job-hunt/
   user-recovery.md         # human login/verification hand-off and linked new round
 │   ├── supplementary-sources.md     # optional career background research
 │   ├── discovery-sources.md         # Per-adapter catalogue for discover
+│   ├── candidate-matching.md         # Evidence-backed CV-to-detail matching for discovery
 │   ├── gap-analysis.md              # Gap analysis, tailoring methodology, claim provenance
 │   ├── interview-prep.md            # Interview-readiness brief
 │   ├── interview-shapes.md          # Round types, tags and bands for the mock interview
@@ -112,6 +113,7 @@ job-hunt/
 └── scripts/
     ├── check_apply.py               # the composing gate: every receipt present, and about current bytes
     ├── check_assessment.py          # assess mode's composing gate (requires six upstream receipts)
+    ├── check_candidate_match.py      # discover gate: evidence-backed CV-to-detail recommendation mapping
     ├── check_claims.py              # claim provenance + master-profile immutability
     ├── check_conventions.py         # CI — market-convention table lint
     ├── check_evidence_refs.py       # evidence refs resolve; no block ids in reader prose
@@ -147,6 +149,8 @@ job-hunt/
     ├── prose_tells.py               # what makes a CV, letter or supporting statement
     │                                #   read as machine-written (library)
     ├── save_profile.py              # guarded master save: one CV per language
+    ├── snapshot_profile.py          # freezes the candidate profile for one discover round
+    ├── candidate_match.py           # shared discovery matching policy and localized summaries (library)
     ├── render_cv.py                 # CV → md / docx / pdf(LaTeX)
     ├── render_letter.py             # motivation letter → md / docx / pdf
     ├── render_rirekisho.py          # Japanese 履歴書 form renderer
@@ -175,6 +179,14 @@ it is defined.
   profile.yaml                 master profile · never mutated by any mode
   search-preferences.yaml      target market/city/level/languages (written by discover)
   answer-bank.md               the one artifact that accumulates across applications
+
+  searches/<YYYY-MM-DD>-<slug>/
+    brief.yaml                  reproducible discovery constraints and review cap
+    candidate-profile.yaml      byte-for-byte profile snapshot for this search round
+    candidate-match.yaml        per-row quoted JD ↔ snapshot evidence mapping
+    shortlist.{yaml,md}         structured rows and the reader-facing shortlist
+    raw/                        verbatim adapter/detail captures
+    journal.jsonl               retrieval records and discover-gate receipts
 
   applications/<company>-<role>-<YYYY-MM-DD>/
     posting.yaml               extracted requirements

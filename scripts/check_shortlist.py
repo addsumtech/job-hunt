@@ -166,6 +166,10 @@ DISCLOSURE_LABELS = tuple(zip(*(locales.GATE_TEXT[lang]["disclosure"]
 # machine half, and nobody reading the round ever sees it — shortlist.md is what
 # the user actually reads, so that is where the claim has to be qualified.
 PROVISIONAL_STAMP = locales.anchors("provisional")
+# A discovery round can read a bounded set of full descriptions to support its
+# default recommendations. That is more evidence than a card, but still not the
+# complete, application-specific assessment assess mode performs.
+DETAIL_PROVISIONAL_STAMP = locales.anchors("detail_provisional")
 
 # The yellow-tier round caps from references/source-policy.md, as numbers,
 # because a cap enforced by a paragraph is not a cap. brief.yaml must carry both
@@ -687,7 +691,7 @@ def _check_caps(brief):
 # two load-bearing invariants (read-only, and no predicted numbers) resting on
 # scripts a run could simply not execute. check_assessment.py:181 does exactly
 # this for assess; this is the same mechanism, same reason.
-UPSTREAM_GATES = ("check_no_write", "lint_no_prediction")
+UPSTREAM_GATES = ("check_no_write", "check_candidate_match", "lint_no_prediction")
 PASSING_VERDICTS = ("pass", "recorded")
 
 
@@ -1108,10 +1112,13 @@ def check_run(workspace, shortlist, brief, md_text, calls):
 
     findings.extend(_check_caps(brief))
 
-    if rows and not _says(md_text, *PROVISIONAL_STAMP):
+    has_detail = any(isinstance(row, dict) and row.get("quality") == "complete"
+                     for row in rows)
+    required_stamp = DETAIL_PROVISIONAL_STAMP if has_detail else PROVISIONAL_STAMP
+    if rows and not _says(md_text, *required_stamp):
         findings.append(
             "MD_MISSING_PROVISIONAL_STAMP: shortlist.md renders rows without the "
-            f"「{_both(PROVISIONAL_STAMP)}」 label — use the spelling of the "
+            f"「{_both(required_stamp)}」 label — use the spelling of the "
             "language the round is written in. `provisional: true` in "
             "shortlist.yaml is the machine half of the stamp and no reader ever "
             "sees it; this is the half they do see, and a discover verdict may "

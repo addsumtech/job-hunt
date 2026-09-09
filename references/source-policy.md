@@ -44,7 +44,10 @@ Allowed, capped, and disclosed. Say plainly that account risk is not zero.
   rows stay card-level and are labelled 未取详情. The user may name an individual
   row to fetch anyway; that goes in `shortlist.yaml` `detail_fetch_exceptions` with
   a reason. `check_shortlist.py` enforces this with `DETAIL_FETCH_OUT_OF_BAND` —
-  the cap is a check, not a promise.
+  the cap is a check, not a promise. A separate `brief.yaml.max_match_reviews`
+  value from 1 to 5 caps how many fetched details can enter the CV-to-JD matching
+  review; `check_candidate_match.py` enforces it. A named fetch does not turn that
+  bounded review into an unbounded one.
 - Small-volume capture for the user's own analysis, with source, timestamp and
   read-quality retained on every row.
 - **Stop on any risk-control signal**, for that site, for that round. Do not retry.

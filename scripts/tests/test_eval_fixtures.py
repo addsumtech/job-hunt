@@ -396,13 +396,26 @@ def test_the_clean_workspace_has_every_row_in_raw():
         assert str(row["source_id"]) in raw
 
 
-def test_the_clean_workspace_rows_are_the_measured_capture():
+def test_the_clean_workspace_keeps_the_measured_capture_facts():
+    """Ranking and verdict policy may evolve; captured source facts may not.
+
+    The eval fixture intentionally remains a historical input to provenance
+    checks. It should track the measured 51job data, while a later discovery
+    policy may order or label the same source rows differently.
+    """
     ws = FIX / "workspaces" / "clean"
     raw = json.loads((ws / "raw" / "51job-1.json").read_text(encoding="utf-8"))
     assert raw == discover_fixtures.RAW_51JOB_SEARCH
     rows = yaml.safe_load((ws / "shortlist.yaml").read_text(
         encoding="utf-8"))["rows"]
-    assert rows == discover_fixtures.ROWS
+    by_id = {str(row["source_id"]): row for row in rows}
+    assert set(by_id) == {str(row["jobId"]) for row in raw}
+    for captured in raw:
+        row = by_id[str(captured["jobId"])]
+        assert row["source_site"] == "51job"
+        assert row["title"] == captured["title"]
+        assert row["company"] == captured["company"]
+        assert row["salary"] == captured["salary"]
 
 
 def test_the_workspace_source_report_uses_the_adapters_published_commands():

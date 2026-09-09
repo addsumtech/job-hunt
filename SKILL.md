@@ -689,7 +689,9 @@ a fabrication the candidate then repeats back), and the shortlist's `why_matched
 | Saving a master | `scripts/save_profile.py` | *(guarded write, not a gate)* one master per language; a new language never overwrites another, a repeat language is backed up first, and a profile with no `meta.language` is refused |
 | Delivery | `scripts/deliver.py` | *(hand-off, not a gate)* requires a client `report.md` and verified report PDF; puts requested client documents together in `~/Downloads/<workspace-name>/` (or shared `--to` folder) and prints the path. Exits 0 or 2, never 1. `DELIVER_DEST_UNWRITABLE` is macOS TCC refusing `~/Downloads` mid-session — say so and offer `--to`, never leave the artifacts undelivered |
 | Read-only | `scripts/check_no_write.py` | a journaled command whose published `access:` is `write`, or whose access cannot be resolved at all |
-| Shortlist | `scripts/check_shortlist.py` | a row whose `source_id` or `raw_text` is in no raw capture, whose `id` is not `<site>-<source_id>`, or whose direct posting URL is empty, malformed, or not returned by its source; a candidate missing that clickable URL in `shortlist.md`; a duplicated or over-counted source report; "no results" with no adapter that exited 0; a missing disclosure block or provisional stamp; a detail fetch outside the top three; an uncapped brief, or a run that exceeded the caps the brief declares; a posting URL rendered in `shortlist.md` that is in no `shortlist.yaml` row; a row whose company or salary contradicts its own capture; a missing or stale mode entry. Warns (does not fail) when a row's location names a country outside `brief.markets` |
+| Discovery profile snapshot | `scripts/snapshot_profile.py` | *(guarded helper, not a gate)* freezes `candidate-profile.yaml` for one search round and refuses to replace it with a changed master, so later CV edits cannot silently rewrite matching evidence |
+| Candidate match | `scripts/check_candidate_match.py` | a high verdict or default recommendation that lacks a complete row-specific detail, a frozen-profile evidence pointer, a valid requirement mapping, or its localized reader-facing summary; a card promoted without detail; a core gap hidden by optional preferences; a stale ordering or more detail mappings than `brief.max_match_reviews` permits |
+| Shortlist | `scripts/check_shortlist.py` | a row whose `source_id` or `raw_text` is in no raw capture, whose `id` is not `<site>-<source_id>`, or whose direct posting URL is empty, malformed, or not returned by its source; a candidate missing that clickable URL in `shortlist.md`; a duplicated or over-counted source report; "no results" with no adapter that exited 0; a missing disclosure block or the wrong provisional stamp for card-only versus detail-reviewed output; a detail fetch outside the top three; an uncapped brief, or a run that exceeded the caps the brief declares; a posting URL rendered in `shortlist.md` that is in no `shortlist.yaml` row; a row whose company or salary contradicts its own capture; a missing or stale mode entry. Warns (does not fail) when a row's location names a country outside `brief.markets` |
 
 **No mode may claim success while `journal.jsonl` lacks a receipt for its gates.** A skipped script produces no output, and no output is exactly what a clean run looks like. `scripts/check_skill_lossless.py` is the one exception and is marked as such: it is a repo-level CI check with no workspace and no receipt, so requiring one would be requiring evidence that cannot exist.
 
@@ -901,6 +903,9 @@ Read-when:
 - [ ] In interview mode? `modes/interview.md`, loaded on entry, not on demand — and
       `references/interview-shapes.md` in full before the first question.
 - [ ] In discover mode? `modes/discover.md`, loaded on entry, not on demand.
+- [ ] Matching a discovered role to a CV? Read `references/candidate-matching.md`,
+      then run `scripts/snapshot_profile.py` once to freeze
+      `candidate-profile.yaml` before mapping any detail.
 - [ ] About to make the first live retrieval of a run, or asked to page further,
       fetch more detail pages, or work while the user is away?
       `references/source-policy.md`.
@@ -971,6 +976,7 @@ In CI, not in a workspace (no receipt exists for these, by design):
 Ran, with a receipt in `journal.jsonl` — the discover gates. `scripts/check_apply.py`
 does not require these; a discover run is not reportable without them:
 - [ ] `scripts/check_no_write.py` (discover)
+- [ ] `scripts/check_candidate_match.py` (discover; after the profile snapshot and before the shortlist)
 - [ ] `scripts/check_shortlist.py` (discover)
 
 Ran, leaving an `adapter_call` record rather than a gate receipt:
