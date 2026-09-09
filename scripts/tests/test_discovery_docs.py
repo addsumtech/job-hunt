@@ -115,3 +115,32 @@ def test_skill_md_states_the_exit_code_rule_the_write_ban_and_the_stop_rule():
     assert "Do not route around it" in text
     assert "direction-level degraded output" in text
     assert "disclosure table" in text
+
+
+def test_discovery_backend_selection_is_opencli_first_and_one_way():
+    """A browser is a diagnosed fallback, never an equally preferred backend."""
+    mode = (REPO / "modes" / "discover.md").read_text(encoding="utf-8")
+    fallback = (REPO / "references" / "browser-fallback.md").read_text(
+        encoding="utf-8")
+    skill = SKILL.read_text(encoding="utf-8")
+
+    assert "OpenCLI first; one-way web-access fallback" in mode
+    assert "run `opencli doctor`" in mode
+    assert "web-access-to-OpenCLI fallback for the same round" in mode
+    assert "Use **OpenCLI** when the required read adapter" in fallback
+    assert re.search(r"Web-access is a one-way\s+fallback", fallback)
+    assert "Begin every discovery round with OpenCLI" in skill
+    assert "do not switch back to\nOpenCLI for the same round" in skill
+
+
+def test_sandbox_local_bridge_diagnosis_precedes_browser_fallback():
+    """A runner that cannot bind localhost is not evidence that the site refused."""
+    mode = (REPO / "modes" / "discover.md").read_text(encoding="utf-8")
+    fallback = (REPO / "references" / "browser-fallback.md").read_text(
+        encoding="utf-8")
+    for text in (mode, fallback):
+        assert "BROWSER_CONNECT" in text
+        assert "127.0.0.1:19825" in text
+        assert "host-local or unsandboxed" in text
+        assert "site refusal" in text
+        assert "EADDRINUSE" in text

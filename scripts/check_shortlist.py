@@ -36,6 +36,7 @@ import json
 import pathlib
 import re
 import sys
+from urllib.parse import urlsplit
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
@@ -279,12 +280,26 @@ def _check_provenance(label, row, site, raw_texts):
                 "retrieve. Your own words belong in why_matched.")
 
     url = str(row.get("url") or "").strip()
-    if url:
-        stem = url.split("?", 1)[0].split("#", 1)[0]
-        if not any(stem in text for text in captures.values()):
+    if not url:
+        findings.append(
+            f"MISSING_POSTING_URL: {label} has no direct posting URL. A search "
+            "result cannot become a user-facing shortlist row without a link the "
+            "reader can open.")
+    else:
+        try:
+            parsed = urlsplit(url)
+        except ValueError:
+            parsed = None
+        if parsed is None or parsed.scheme not in {"http", "https"} or not parsed.netloc:
             findings.append(
-                f"URL_NOT_FROM_ADAPTER: {label} url {url!r} was not returned by "
-                f"an adapter ({stem!r} appears in no {site}-*.json capture)")
+                f"BAD_POSTING_URL: {label} url {url!r} is not an absolute HTTP(S) "
+                "posting URL.")
+        else:
+            stem = url.split("?", 1)[0].split("#", 1)[0]
+            if not any(stem in text for text in captures.values()):
+                findings.append(
+                    f"URL_NOT_FROM_ADAPTER: {label} url {url!r} was not returned by "
+                    f"an adapter ({stem!r} appears in no {site}-*.json capture)")
 
     # The fields the reader acts on. 55e4f84 anchored the identifier and the card
     # text and stopped there, so `company`, `location` and `salary` stayed free
@@ -778,10 +793,8 @@ def _check_md_rows(md_text, rows):
     from the .md too, so the documented fix moved a fabricated row OUT of the
     checked file and LEFT it in the read one.
 
-    Matched on the rendered TITLE, not on URLs. The canonical rendering
-    (modes/discover.md §1, and both shipped fixtures) is a numbered list of
-    bold titles and carries no URLs at all — so a URL-only check had nothing to
-    grip on the very format the mode prescribes.
+    Every rendered row also exposes its direct posting URL. A URL in YAML is
+    evidence for a machine; the reader needs the same actionable link in §1.
     """
     section = _md_candidates_section(md_text)
     if not rows:
@@ -794,7 +807,9 @@ def _check_md_rows(md_text, rows):
         return []
     if not section:
         return []
-    known_urls = set()
+    known_urls, rendered_stems = set(), set()
+    for url in dict.fromkeys(_MD_URL.findall(section)):
+        rendered_stems.add(url.split("?", 1)[0].split("#", 1)[0].rstrip("/.,;"))
     for row in rows:
         if not isinstance(row, dict):
             continue
@@ -812,6 +827,18 @@ def _check_md_rows(md_text, rows):
         findings.append(
             f"MD_ROW_NOT_IN_SHORTLIST: shortlist.md §1 links {url!r}, which matches "
             "no row in shortlist.yaml.")
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        url = str(row.get("url") or "").strip()
+        if not url:
+            continue  # `check_rows` reports the missing structured URL.
+        stem = url.split("?", 1)[0].split("#", 1)[0].rstrip("/.,;")
+        if stem not in rendered_stems:
+            findings.append(
+                f"MD_POSTING_URL_MISSING: shortlist.md §1 does not render the "
+                f"direct URL for {row.get('id')!r}. Every candidate must show a "
+                "clickable posting link, not only a source or search page.")
     # The COUNT is the anchor, not the title. Step 6 legitimately normalises a
     # row's title (de-duplication compares on a normalised form), which is why
     # `title` is not an anchored field anywhere else in this file and why

@@ -99,6 +99,8 @@ def test_a_pdf_that_dropped_characters_is_deleted_not_delivered(tmp_path, monkey
     """
     ws = build(tmp_path, md="# 岗位候选\n\n这是中文内容。\n")
     dest = tmp_path / "out"
+    monkeypatch.setattr(deliver, "_render_reportlab_cjk",
+                        lambda *args: (False, "disabled for this regression"))
     monkeypatch.setattr(deliver, "pick_cjk_font", lambda *args: "SomeFont")
     monkeypatch.setattr(deliver, "_pandoc",
                         lambda md, pdf, font: (pdf.write_bytes(b"%PDF"), True)[1])
@@ -108,13 +110,19 @@ def test_a_pdf_that_dropped_characters_is_deleted_not_delivered(tmp_path, monkey
     assert (dest / "报告" / "求职建议报告.md").is_file(), "the Markdown still ships"
 
 
-def test_no_cjk_font_refuses_the_pdf_and_still_ships_the_markdown(tmp_path, monkeypatch):
-    ws = build(tmp_path, md="# 岗位候选\n\n这是中文内容。\n")
+def test_chinese_report_uses_reportlab_when_pandoc_has_no_cjk_font(tmp_path, monkeypatch):
+    ws = build(tmp_path, md=(
+        "# 岗位候选\n\n这是中文内容。\n\n"
+        "| 优先级 | 岗位 | 公司与地点 | 展示薪资 | 初判与投入 | 依据 |\n"
+        "| --- | --- | --- | --- | --- | --- |\n"
+        "| 1 | 大模型工程师 | 示例公司，上海 | 25-40K | worth_applying | 多模态模型经验 |\n"
+    ))
     dest = tmp_path / "out"
     monkeypatch.setattr(deliver, "pick_cjk_font", lambda *args: None)
-    assert run(ws, dest) == 2
-    assert not (dest / "报告" / "求职建议报告.pdf").exists()
-    assert (dest / "报告" / "求职建议报告.md").is_file()
+    assert run(ws, dest) == 0
+    pdf = dest / "报告" / "求职建议报告.pdf"
+    assert pdf.is_file()
+    assert "大模型工程师" in deliver.pdf_text(pdf)
 
 
 def test_cjk_detection_and_counting():
@@ -123,6 +131,59 @@ def test_cjk_detection_and_counting():
     assert deliver.has_cjk("소프트웨어")
     assert not deliver.has_cjk("Senior ATD Engineer - System (Open)")
     assert deliver.cjk_chars("岗位候选 x3") == 4
+
+
+def test_raw_source_urls_become_short_clickable_links_in_chinese_pdfs():
+    rendered = deliver._reportlab_inline(
+        "来源：<https://www.zhipin.com/job_detail/abc.html?ka=search_list&foo=bar>、"
+        "<https://jobs.51job.com/shanghai/123456.html>"
+    )
+    assert ">zhipin.com</link>" in rendered
+    assert "href=\"https://www.zhipin.com/job_detail/abc.html?ka=search_list&amp;foo=bar\"" in rendered
+    assert ">jobs.51job.com</link>" in rendered
+    assert "href=\"https://jobs.51job.com/shanghai/123456.html\"" in rendered
+    assert "&lt;https" not in rendered
+
+
+def test_chinese_pdf_contains_distinct_clickable_urls(tmp_path):
+    first = "https://www.zhipin.com/job_detail/abc.html?ka=search_list&foo=bar"
+    second = "https://jobs.51job.com/shanghai/123456.html"
+    ws = build(tmp_path, md=f"# 岗位候选\n\n- <{first}>、<{second}>\n")
+    dest = tmp_path / "out"
+    assert run(ws, dest) == 0
+    import pymupdf
+    with pymupdf.open(dest / "报告" / "求职建议报告.pdf") as pdf:
+        urls = {link.get("uri") for page in pdf for link in page.get_links()}
+    assert {first, second} <= urls
+
+
+def test_pdf_with_an_authored_link_but_no_link_annotation_is_refused(tmp_path):
+    """Blue-looking text is not an actionable link unless the PDF annotates it."""
+    import pymupdf
+    pdf = tmp_path / "unlinked.pdf"
+    with pymupdf.open() as document:
+        document.new_page().insert_text((72, 72), "Open posting")
+        document.save(pdf)
+
+    ok, why = deliver._verify_pdf(
+        pdf, "[Open posting](https://jobs.example.test/roles/123)", False)
+    assert not ok
+    assert "PDF_LINKS_MISSING" in why
+    assert not pdf.exists(), "an unclickable report PDF must not be delivered"
+
+
+@pytest.mark.parametrize("source", ["研究エンジニアと機械学習", "AI 연구개발 엔지니어"])
+def test_japanese_and_korean_keep_the_existing_cjk_renderer(tmp_path, monkeypatch, source):
+    md, pdf = tmp_path / "report.md", tmp_path / "report.pdf"
+    md.write_text(source, encoding="utf-8")
+    monkeypatch.setattr(deliver, "visible_markdown", lambda _: source)
+    monkeypatch.setattr(deliver, "_render_reportlab_cjk",
+                        lambda *args: pytest.fail("Chinese renderer was selected"))
+    monkeypatch.setattr(deliver, "_pandoc",
+                        lambda _md, output, _font: (output.write_bytes(b"%PDF"), True)[1])
+    monkeypatch.setattr(deliver, "glyph_findings", lambda _: [])
+    monkeypatch.setattr(deliver, "pdf_text", lambda _: source)
+    assert deliver.render_pdf(md, pdf, "CJK test font") == (True, "")
 
 
 @pytest.mark.skipif(not HAVE_PDF, reason="needs pandoc + tectonic + pdftotext")
@@ -165,6 +226,36 @@ def test_a_workspace_with_only_provenance_exits_2(tmp_path):
     (ws / "raw" / "x.json").write_text("[]", encoding="utf-8")
     (ws / "journal.jsonl").write_text("{}\n", encoding="utf-8")
     assert deliver.main(["--workspace", str(ws), "--to", str(tmp_path / "out")]) == 2
+
+
+def test_discover_delivery_requires_a_checked_shortlist(tmp_path):
+    ws = build(tmp_path)
+    deliver.journal.append(ws, {"action": "mode_entry", "mode": "discover"})
+    dest = tmp_path / "out"
+    assert run(ws, dest, "--no-pdf") == 2
+    assert not dest.exists()
+
+    (ws / "shortlist.md").write_text("# Shortlist\n", encoding="utf-8")
+    deliver.journal.receipt(ws, "check_shortlist", {}, "pass")
+    assert run(ws, dest, "--no-pdf") == 0
+
+
+def test_discover_delivery_requires_every_shortlist_link_in_the_report(tmp_path):
+    ws = build(tmp_path, md="# Client report\n")
+    url = "https://jobs.example.test/roles/123?tracking=source"
+    (ws / "shortlist.yaml").write_text(
+        f"rows:\n  - url: {url}\n", encoding="utf-8")
+    (ws / "shortlist.md").write_text("# Shortlist\n", encoding="utf-8")
+    deliver.journal.append(ws, {"action": "mode_entry", "mode": "discover"})
+    deliver.journal.receipt(ws, "check_shortlist", {}, "pass")
+
+    dest = tmp_path / "out"
+    assert run(ws, dest, "--no-pdf") == 2
+    assert not dest.exists()
+
+    (ws / "report.md").write_text(
+        f"# Client report\n\n[Open posting]({url})\n", encoding="utf-8")
+    assert run(ws, dest, "--no-pdf") == 0
 
 
 def test_it_runs_as_a_script(tmp_path):
@@ -285,6 +376,8 @@ def test_a_refused_pdf_is_named_in_the_record(tmp_path, monkeypatch):
     """
     import json
     ws = build(tmp_path, md="# 岗位候选\n\n中文内容。\n")
+    monkeypatch.setattr(deliver, "_render_reportlab_cjk",
+                        lambda *args: (False, "disabled for this regression"))
     monkeypatch.setattr(deliver, "pick_cjk_font", lambda *args: None)
     assert run(ws, tmp_path / "out") == 2
     rec = [json.loads(l) for l in

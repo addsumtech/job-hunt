@@ -689,20 +689,26 @@ a fabrication the candidate then repeats back), and the shortlist's `why_matched
 | Saving a master | `scripts/save_profile.py` | *(guarded write, not a gate)* one master per language; a new language never overwrites another, a repeat language is backed up first, and a profile with no `meta.language` is refused |
 | Delivery | `scripts/deliver.py` | *(hand-off, not a gate)* requires a client `report.md` and verified report PDF; puts requested client documents together in `~/Downloads/<workspace-name>/` (or shared `--to` folder) and prints the path. Exits 0 or 2, never 1. `DELIVER_DEST_UNWRITABLE` is macOS TCC refusing `~/Downloads` mid-session — say so and offer `--to`, never leave the artifacts undelivered |
 | Read-only | `scripts/check_no_write.py` | a journaled command whose published `access:` is `write`, or whose access cannot be resolved at all |
-| Shortlist | `scripts/check_shortlist.py` | a row whose `source_id` or `raw_text` is in no raw capture, or whose `id` is not `<site>-<source_id>`; a duplicated or over-counted source report; "no results" with no adapter that exited 0; a missing disclosure block or provisional stamp; a detail fetch outside the top three; an uncapped brief, or a run that exceeded the caps the brief declares; a posting URL rendered in `shortlist.md` that is in no `shortlist.yaml` row; a row whose company or salary contradicts its own capture; a missing or stale mode entry. Warns (does not fail) when a row's location names a country outside `brief.markets` |
+| Shortlist | `scripts/check_shortlist.py` | a row whose `source_id` or `raw_text` is in no raw capture, whose `id` is not `<site>-<source_id>`, or whose direct posting URL is empty, malformed, or not returned by its source; a candidate missing that clickable URL in `shortlist.md`; a duplicated or over-counted source report; "no results" with no adapter that exited 0; a missing disclosure block or provisional stamp; a detail fetch outside the top three; an uncapped brief, or a run that exceeded the caps the brief declares; a posting URL rendered in `shortlist.md` that is in no `shortlist.yaml` row; a row whose company or salary contradicts its own capture; a missing or stale mode entry. Warns (does not fail) when a row's location names a country outside `brief.markets` |
 
 **No mode may claim success while `journal.jsonl` lacks a receipt for its gates.** A skipped script produces no output, and no output is exactly what a clean run looks like. `scripts/check_skill_lossless.py` is the one exception and is marked as such: it is a repo-level CI check with no workspace and no receipt, so requiring one would be requiring evidence that cannot exist.
 
 <!-- BEGIN discover-inserts (plan 3) -->
 ## Discovery: the read-only surface
 
-### Browser fallback for discovery
+### OpenCLI-first fallback for discovery
 
-Prefer daily-browser CDP and parallel independent sources under
-[the browser routing rules](references/daily-browser.md). Use OpenCLI when its
-CDP adapter works, or directly use [browser capture](references/browser-fallback.md)
-with web-access or a supported host browser; no prior CLI failure is required. Keep browser evidence and gate receipts; do not treat a site
-refusal as a reason to switch tools. Neither backend submits applications.
+Begin every discovery round with OpenCLI's read adapter and connection probe.
+Use OpenCLI when it works. Only when it diagnoses a missing CLI, disconnected
+bridge, or unsupported extraction, follow [the one-way browser
+fallback](references/browser-fallback.md) with an available web-access skill.
+If that fallback is unavailable too, disclose the gap; do not switch back to
+OpenCLI for the same round. Keep browser evidence and gate receipts; a site
+refusal is not a fallback reason and stops reads across both tools. Neither
+backend submits applications.
+Use [daily-browser routing](references/daily-browser.md) only on that fallback
+path, and use [network recovery](references/network-recovery.md) for a generic
+transport failure that has not yet established a fallback reason.
 
 
 ### opencli: the four command pairs this skill actually uses

@@ -73,6 +73,20 @@ def test_an_invented_url_fires(tmp_path, capsys):
     assert "URL_NOT_FROM_ADAPTER" in codes(captured.out)
 
 
+@pytest.mark.parametrize("url, code", [
+    ("", "MISSING_POSTING_URL"),
+    ("jobs.51job.com/xian-gxjs/173198362.html", "BAD_POSTING_URL"),
+])
+def test_a_row_without_an_absolute_posting_url_fires(tmp_path, capsys, url, code):
+    workspace = fx.build_workspace(tmp_path)
+    data = fx.load_shortlist(workspace)
+    data["rows"][0]["url"] = url
+    fx.save_shortlist(workspace, data)
+    result, captured = run(workspace, capsys)
+    assert result == 1
+    assert code in codes(captured.out)
+
+
 def test_the_full_url_with_tracking_params_is_quiet(tmp_path, capsys):
     # Storing either the trimmed url or the adapter's full one must pass;
     # stripping tracking parameters is not evidence of fabrication.

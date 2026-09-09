@@ -300,7 +300,7 @@ the second is the politeness cap from `references/source-policy.md`. Falling sho
 `target_count` requires a written `shortfall_reason` in `shortlist.yaml`
 (`SHORTFALL_NO_REASON`). **Never pad the count.**
 
-## Retrieval backend — daily-browser CDP first
+## Retrieval backend — OpenCLI first; one-way web-access fallback
 
 Before using OpenCLI for the first Indeed or 51job read, follow `references/opencli-compat.md`:
 check and automatically apply only the known version/hash-matched local repairs
@@ -309,19 +309,57 @@ onto another version. This local preparation performs no site reads and cannot
 reset a site's refusal. Browser fallback can use the site's own search box;
 it is not limited to Google or other search engines.
 
-Before Step 1, select the daily browser and schedule independent sources under
-`references/daily-browser.md`. Prefer CDP; use OpenCLI only when its CDP adapter
-works, or use `references/browser-fallback.md` directly with web-access or a
-supported host browser. No extension or prior CLI failure is required. On the
-browser path skip OpenCLI-only auth/help commands and retain the same source,
-query, page, row, detail and disclosure rules. If neither path works, disclose
-the gap. Site login remains a user action when a real login wall is encountered.
+Before Step 1, run `opencli doctor` with a bounded timeout and inspect the
+adapter's documented read help. **OpenCLI is the initial backend:** when its
+read adapter and connection are usable, perform the round through OpenCLI; do
+not choose web-access for convenience or richer-looking results. Only a
+diagnosed `cli_missing`, `bridge_disconnected`, or `unsupported_extraction`
+permits the one-way fallback in `references/browser-fallback.md` to an available
+web-access skill. On that path skip OpenCLI-only auth/help commands and retain
+the same source selection, query, page, row, detail and disclosure rules. There
+is no web-access-to-OpenCLI fallback for the same round: if web-access is also
+unavailable after the initial OpenCLI capability diagnosis, disclose the gap.
+Do not stop merely because an optional adapter executable is absent.
+
+### Local browser bridge versus a sandbox boundary
+
+`BROWSER_CONNECT`, `Failed to start opencli daemon`, or an `EPERM` listener error
+on `127.0.0.1:19825` can mean the **agent runner** cannot reach the user's local
+OpenCLI bridge, not that OpenCLI or the site is unavailable. Before selecting
+web-access, preserve the failed transport output and run one bounded `opencli
+doctor` through the platform's approved host-local or unsandboxed execution path
+(ask for the required permission). This is a local capability probe; it does not
+read a job site. Save both diagnostic outputs under `raw/`.
+
+- If that host-level doctor reports both daemon and extension connected, repeat
+  the same single bounded, read-only OpenCLI call through that path. Keep the
+  earlier `transport` record; this is recovery from an execution boundary, not a
+  retry after a site refusal.
+- If the host-level doctor still cannot connect, diagnose `bridge_disconnected`
+  and take the one-way web-access fallback. Do not infer the cause from the
+  extension's visual “running” indicator alone.
+- `EADDRINUSE` while starting a daemon means a process already owns the port:
+  inspect with `opencli doctor` through the host path. Do not kill a process,
+  change the port, reinstall, update, or restart the user's browser as a search
+  workaround.
+
+This exception is only for a local bridge failure observed before the site returned
+a refusal. It never permits a different execution path to bypass captcha, login,
+403/429, or a platform limit.
+
+For another generic timeout, blank extraction, or unclassified transport error,
+follow `references/network-recovery.md` before recording an OpenCLI fallback
+reason. Use `references/daily-browser.md` only after the documented OpenCLI
+diagnosis permits web-access; it selects the browser route and preserves the
+same source, query, page, row, detail, and disclosure rules. Site login remains
+a user action when a real login wall is encountered.
 
 Browser captures use `scripts/record_browser_capture.py`, `browser_call` journal
 records and `extraction_method: browser_page`. They are not adapter responses.
 Both `check_no_write.py` and `check_shortlist.py` consume these records. A captcha,
-403, login wall or platform limit stops the site across tools for this round;
-never try web-access to route around an OpenCLI site refusal, or vice versa.
+403, login wall or platform limit is a **site refusal**, not a backend-capability
+failure: it stops the site across tools for this round. Never try web-access to
+route around an OpenCLI site refusal, or vice versa.
 A stop is a pause for [user recovery](../references/user-recovery.md), not a
 reason to abandon the requested search. Explain the actual obstacle and wait for
 the user's explicit completion/continue reply before a new linked round.
@@ -477,7 +515,7 @@ nowhere else; `check_shortlist.py` requires all seventeen fields.
   company: 比亚迪汽车工业
   location: 西安 · 高新技术产业开发区
   salary: 3-6万                     # verbatim display string from the adapter
-  url: https://jobs.51job.com/xian-gxjs/173198362.html   # tracking params stripped
+  url: https://jobs.51job.com/xian-gxjs/173198362.html   # non-empty direct posting URL returned by the source; tracking params stripped
   source_site: 51job
   source_id: "173198362"           # MUST appear verbatim in raw/51job-*.json
   extraction_method: adapter_search # adapter_search|adapter_detail|user_paste|public_page
@@ -626,7 +664,9 @@ one rather than letting a correct file report as a missing capture.
 `shortlist.md` carries `## §0 来源与读取质量`, `## §0.1 触发原因`, and — when the run
 is degraded — `## §0.2 披露`. The section that lists the rows carries the stamp in
 its own heading, e.g. `## §1 候选（全部为基于卡片信息的初判 · provisional）`, and each
-row shows its band and its `effort`. Rows below the top three are labelled
+row shows its band, its `effort`, and a Markdown link using that row's direct
+`url` (e.g. `[打开职位](https://...)`). A category, search, company, or source page
+is not a replacement for the posting link. Rows below the top three are labelled
 **未取详情**.
 
 An English round writes the same document with the same numbering: `## §0 Sources
@@ -708,6 +748,7 @@ exactly like a clean one.
 | `WARN_ROW_OUTSIDE_BRIEF_MARKET` | *(warning, does not fail)* a row's location names a country outside `brief.markets` | check the adapter's geography — see `indeed` in Step 2. Drop the row, or keep it and say why the warning is a false alarm. |
 | `URL_NOT_FROM_ADAPTER` | the URL was assembled, not returned | replace it with the adapter's URL or drop the field. If you delete the row, delete it **from both files**. |
 | `MD_ROW_NOT_IN_SHORTLIST` | `shortlist.md` renders a posting URL that is in no `shortlist.yaml` row | the .md is what the user acts on. Either the row belongs in the yaml and was traced, or it was retrieved by nothing — delete it from the .md. |
+| `MISSING_POSTING_URL` / `BAD_POSTING_URL` / `MD_POSTING_URL_MISSING` | a row has no usable direct URL, or the user-facing list omits it | retain only rows whose captured posting URL is absolute HTTP(S), and render that same URL as a Markdown link in §1. |
 | `COMPANY_NOT_IN_RAW` / `SALARY_NOT_IN_RAW` | a row's employer or pay contradicts the capture it cites | copy what the adapter returned, or leave the field empty. Salary is the field a reader acts on hardest and the one most easily invented from a blank. |
 | `PAGES_ABOVE_CAP` / `ROWS_ABOVE_CAP` | the round actually exceeded a cap `brief.yaml` declares | the cap is compared to the run, not only to the ceiling. Both-language queries on one page are one page. |
 | `DUPLICATE_SOURCE_ID` | one retrieved posting appears as two rows | delete the duplicate; de-duplication removes rows, nothing adds them |
@@ -790,6 +831,8 @@ Do not automatically start a mock interview or another mode.
 - [ ] `shortlist.md` is in **one** language — the user's — end to end: section
       names, the stamp, the 未取详情 / no detail fetched labels and the disclosure
       block, with no furniture left in the other one.
+- [ ] Every rendered candidate has a clickable direct posting link copied from
+      its `url` field. A search/category/source page is not a job link.
 - [ ] Every row carries an `effort` value, and rows are ordered by it within a band.
 - [ ] Cards that could not support any level were dropped and named in
       `shortfall_reason` — not listed as `insufficient_evidence` rows.

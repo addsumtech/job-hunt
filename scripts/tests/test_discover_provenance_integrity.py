@@ -113,6 +113,16 @@ def test_a_url_the_shortlist_does_carry_is_not_reported(tmp_path):
     assert run(ws) == (0, [])
 
 
+def test_a_candidate_without_its_rendered_posting_link_fires(tmp_path):
+    ws = fx.build_english_workspace(tmp_path)
+    missing = "https://www.linkedin.com/jobs/view/3912345678/"
+    md = (ws / "shortlist.md").read_text(encoding="utf-8")
+    (ws / "shortlist.md").write_text(md.replace(
+        f"[Open posting]({missing})", "posting link unavailable"), encoding="utf-8")
+    rc, codes = run(ws)
+    assert rc == 1 and "MD_POSTING_URL_MISSING" in codes
+
+
 # ── 2. the fields the reader acts on ──────────────────────────────────────────
 
 def test_a_company_that_contradicts_its_own_capture_is_reported(tmp_path):

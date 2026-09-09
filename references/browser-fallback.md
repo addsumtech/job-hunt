@@ -1,14 +1,47 @@
-# Read-only browser fallback
+# OpenCLI-first read-only browser fallback
 
-Use the daily browser via CDP first, following [daily-browser.md](daily-browser.md).
-A supported host-browser connection is also a normal read route. No OpenCLI
-failure or extension installation is required before choosing browser capture.
-When using OpenCLI instead, inspect its adapter help and actual connection.
-A browser tool policy denial remains a denial, never a fallback trigger.
+Before considering a browser, run `opencli doctor` (with a bounded process
+timeout) and inspect the adapter's help. This is a capability probe, not a login
+operation. The selection order is fixed:
+
+1. Use **OpenCLI** when the required read adapter and its connection work.
+2. Use **web-access** only when the OpenCLI probe diagnoses `cli_missing`,
+   `bridge_disconnected`, or `unsupported_extraction` for the requested page or
+   market.
+3. If web-access is unavailable after that OpenCLI diagnosis, disclose the gap;
+   do not switch back to OpenCLI for the same round. Web-access is a one-way
+   fallback, not a second route for re-reading the site.
+
+For step 2, read the available web-access skill and follow its supported browser
+setup; do not assume a localhost port, install extensions, restart the user's
+browser, or change browser settings. A browser tool policy denial remains a
+denial, never a fallback trigger.
+
+## Check a local-bridge boundary before falling back
+
+An agent sandbox can reject a localhost bridge even while the user's OpenCLI daemon
+and browser extension are healthy. When an OpenCLI browser command reports
+`BROWSER_CONNECT`, `Failed to start opencli daemon`, or `EPERM` on
+`127.0.0.1:19825`, retain its transport output and run one bounded `opencli doctor`
+through the platform's approved host-local or unsandboxed path, after obtaining any
+required permission. This probe does not read a job site.
+
+- If the host-level doctor says the daemon and extension are connected, rerun the
+  same bounded read through that path and continue with **OpenCLI**. The original
+  transport record remains evidence of the runner boundary; it is not a site
+  refusal and it does not authorize an unbounded retry.
+- If the host-level doctor also fails, the bridge is genuinely disconnected and
+  `bridge_disconnected` permits the one-way web-access fallback above.
+- If a manual daemon start says `EADDRINUSE`, another process owns the port; use
+  the host-level doctor to inspect it. Never kill that process, change ports,
+  reinstall/update OpenCLI, or restart the user's browser as a workaround.
+
+This diagnostic applies only before a site refusal. A captcha, login wall,
+401/403/429 or platform limit remains a site stop across every execution path and
+every backend.
 
 Only these reasons are accepted by the recorder:
 
-- `preferred_browser`: directly selected daily-browser/CDP route; no CLI failure needed.
 - `cli_missing`: executable unavailable.
 - `bridge_disconnected`: diagnostic confirms the required bridge is unavailable.
 - `unsupported_extraction`: no suitable documented read extraction, including an
@@ -20,10 +53,10 @@ Only these reasons are accepted by the recorder:
 
 A generic timeout, blank fields or unclassified transport error does not establish
 one of these reasons. Diagnose first using [network recovery](network-recovery.md);
-existing detail recovery still applies.
-A site refusal (captcha, login wall, 401/403/429, platform limit) stops this site
-for this round across **all** tools. Use the same stable `site` name for both
-backends, e.g. `51job`.
+existing detail recovery still applies. A site refusal (captcha, login wall,
+401/403/429, platform limit) is different from a backend capability failure: it
+stops this site for this round across both allowed retrieval backends. Use the
+same stable `site` name for both backends, e.g. `51job`.
 
 The stop is keyed on three things, so a rename does not quietly reset it: the
 declared name, the host actually read, and the hosts that name was already seen

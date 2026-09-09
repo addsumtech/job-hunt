@@ -206,9 +206,9 @@ SHORTLIST_MD = """# Shortlist — 2026-08-09 · 算法工程师 · 上海/西安
 ## §1 候选（全部为基于卡片信息的初判 · provisional）
 
 1. **高级AI算法工程师(J10032)** — 拓荆键科（海宁）半导体设备 · 海宁 · 1.7-3.4万·15薪
-   — `strong_apply`（初判）
+   — `strong_apply`（初判）· [打开职位](https://jobs.51job.com/haining/173199597.html)
 2. **高级算法工程师（视觉调试智能化、AI方向）** — 比亚迪汽车工业 · 西安 · 3-6万
-   — `worth_applying`（初判）· 未取详情
+   — `worth_applying`（初判）· 未取详情 · [打开职位](https://jobs.51job.com/xian-gxjs/173198362.html)
 """
 
 JOURNAL = [
@@ -403,9 +403,10 @@ and the user asked for a Dutch-market round of visibly steadier roles.
 
 1. **Senior Image Reconstruction Engineer** — Amsterdam UMC · Amsterdam,
    Noord-Holland · €5,800 - €7,200 per month — `strong_apply` (provisional) ·
-   effort: quick
+   effort: quick · [Open posting](https://www.linkedin.com/jobs/view/3912345678/)
 2. **MRI Reconstruction Scientist** — Philips Research · Eindhoven, North Brabant
-   — `worth_applying` (provisional) · effort: evening · no detail fetched
+   — `worth_applying` (provisional) · effort: evening · no detail fetched ·
+   [Open posting](https://www.linkedin.com/jobs/view/3987654321/)
 """
 
 JOURNAL_EN = [
