@@ -15,11 +15,11 @@ working; a run that builds its own path breaks resumption silently.
 
 ## Supplementary public research
 
-Use `references/supplementary-sources.md` when official web/news, GitHub,
-public articles, social discussions, videos or podcasts can fill a concrete
-career evidence gap. It defines provider availability checks, source quality and
-current-consultation authorization for Xiaohongshu/Douyin. These sources supplement
-formal posting evidence; they do not replace it or run automatically on every task.
+Use `references/supplementary-sources.md` when official web/news, WeChat
+public accounts or relevant GitHub projects can fill a concrete career evidence
+gap. It defines source selection, availability checks and evidence quality.
+These sources supplement formal posting evidence; select only what the current
+question needs.
 
 ## 0. Enter the mode — before anything else
 

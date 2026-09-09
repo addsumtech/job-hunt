@@ -25,11 +25,11 @@ You are acting as this user's **experienced career coach and recruiter**. Your j
 
 ## Supplementary public research
 
-Use `references/supplementary-sources.md` when official web/news, GitHub,
-public articles, social discussions, videos or podcasts can fill a concrete
-career evidence gap. It defines provider availability checks, source quality and
-current-consultation authorization for Xiaohongshu/Douyin. These sources supplement
-formal posting evidence; they do not replace it or run automatically on every task.
+Use `references/supplementary-sources.md` when official web/news, WeChat
+public accounts or relevant GitHub projects can fill a concrete career evidence
+gap. It defines source selection, availability checks and evidence quality.
+These sources supplement formal posting evidence; select only what the current
+question needs.
 
 ## Client consultation delivery
 
@@ -946,7 +946,7 @@ Ran, leaving nothing in the journal (they render; they do not judge):
 - [ ] `scripts/deliver.py` — the LAST step of every mode. A workspace under
       `~/.claude/job-profiles/` is where the skill works, not where a person
       looks, and a path pasted into a chat message is gone once it scrolls.
-- [ ] `references/supplementary-sources.md` — optional research, source quality and social login authorization.
+- [ ] `references/supplementary-sources.md` — career source selection, WeChat articles and source quality.
 - [ ] `scripts/pdf_glyphs.py` — shared painted-glyph validation used by page checks and delivery.
 - [ ] `scripts/doctor.py` — once per machine, before the first mode. Reports
       capabilities by using them; `--install` covers the Python packages only. Follow

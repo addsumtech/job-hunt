@@ -1,62 +1,63 @@
-# Supplementary sources for career consultations
+# Sources for career consultations
 
-Use these when they can answer the user's question. Start with an employer's
-careers page and current official JD for vacancy status, conditions and pay.
-Broaden only for a concrete evidence gap: company/product context, technical work,
-public hiring announcements, interview preparation or industry changes. Do not
-run every source on every consultation.
+Choose sources that answer the current career question. Start with the employer's
+careers page and current JD for vacancy status, requirements and pay. Add a source
+when it can change the application decision or help the user prepare. The table
+below is a selection guide, not a checklist to run in full.
 
-## Routing
+## Useful sources
 
-| Need | Preferred route | Boundary |
+| Need | Source and route | What to verify |
 |---|---|---|
-| Official sites, public web, company news | AnySearch public search | Open the original page; a search snippet is discovery, not full-page evidence. |
-| Several keywords or companies | AnySearch `batch_search` | Batch independent queries within the shared concurrency budget; deduplicate URLs and syndicated stories. |
-| A specified website | AnySearch `site:target-domain` | Search public indexed pages; no private-page claims. |
-| Unspecified social discussion | AnySearch social-media vertical | Discover public candidates first; keep opinions separate from employer facts. |
-| Employer engineering work, open-source evidence | `gh search repos`, `gh search code`, `gh search issues`, `gh search prs` | Search public content only; inspect original repo/issue/PR. Never upload a candidate CV or private code as a query. |
-| WeChat public accounts | OpenCLI Sogou WeChat public search | Anonymous search only; follow the public article. No personal WeChat history or contacts. |
-| Xiaohongshu | Daily-browser CDP site search (OpenCLI when compatible) | Requires explicit authorization for this platform in the current consultation before reading the login state; otherwise use public indexed candidates. |
-| Douyin | Daily-browser CDP site search (OpenCLI when compatible) | Same current-consultation authorization; low-frequency reads and a small relevant sample. |
-| Toutiao | OpenCLI article/image-text search | Use a dedicated anonymous environment; do not attach a personal login. |
-| X/Twitter | Grok OAuth + `grok-consult` public X search | Only when configured; require original post URLs and dates. Do not treat generated commentary as a source. |
-| Bilibili | `bili search` | Anonymous public-video metadata and links; read content only when needed. |
-| YouTube | `yt-dlp --skip-download --flat-playlist --dump-json "ytsearch5:<query>"` | Anonymous search; information and links only, no video/audio download. |
-| Xiaoyuzhou | AnySearch `site:xiaoyuzhoufm.com` | Public episode pages, descriptions and available transcripts; do not claim to have listened. |
-| A relevant legal, financial, academic or security question | Corresponding AnySearch vertical | On demand only, then verify primary law/regulator/paper/advisory sources and their dates/jurisdiction. |
+| Current openings and requirements | Employer careers pages and recruitment platforms; daily-browser CDP, with OpenCLI when its CDP adapter works | Original posting, location, requirements, pay and posting date. |
+| Employer or industry background | AnySearch public search, then the original website or news article | Publisher, date and the claim supported; a snippet is not a full-page read. |
+| Recruitment announcements, referral leads and industry analysis | WeChat public accounts; anonymous Sogou WeChat search through CDP | Account name, article date and original article. Follow recruitment links to confirm the job; reposts and old announcements do not establish a current opening. |
+| A candidate's public work or an employer's technical projects | GitHub public repositories, code, issues or PRs through `gh search` | Read the relevant original material; distinguish project activity from the candidate's personal contribution. |
 
-## Availability and invocation
+For China-related hiring, use WeChat when recruitment announcements or industry
+context are relevant;
+consider it explicitly during source selection rather than silently omitting it.
+A generic web search is not a substitute for an actual WeChat search. If Sogou or
+an article cannot be accessed, record that result and the scope actually read.
 
-Apply [daily-browser.md](daily-browser.md) to all independent sources, not only
-AnySearch: separate browser tabs, shared budgets and serial journal imports.
-Prepare OpenCLI, AnySearch and web-access via [agent-setup.md](agent-setup.md).
+Other channels are outside the default search plan. Add one only for a concrete
+information gap or an explicit user request, after checking that it serves the
+question. Do not expand into unrelated social, video or podcast research to make
+a report look comprehensive.
 
-This table is a routing policy, not a promise that every provider is installed.
-Inspect the current tool registry/help before invocation. AnySearch and
-`grok-consult` names do not imply a fixed local CLI syntax: use the available
-connector/skill schema. For OpenCLI inspect `opencli list -f json` and the listed
-site's `search --help`; never invent an adapter name. If a route is unavailable,
-use an available public search tool with the same source boundary. Do not install
-all optional providers or request social account access just to complete setup.
+## Availability and execution
 
-Keep existing recruitment adapters and their receipts unchanged. These routes are
-supplementary web/background research, not new verified OpenCLI job adapters. A
-public hiring lead may become a shortlist candidate only after its original
-posting has been read through the supported evidence workflow. An unavailable
-source is not evidence that no jobs exist.
+Apply [daily-browser.md](daily-browser.md) to independent reads: separate browser
+tabs, shared site budgets and serial journal imports. Prepare OpenCLI, AnySearch
+and web-access using [agent-setup.md](agent-setup.md). Browser reads prefer CDP;
+a site adapter that requires an extension is replaced by direct CDP page reading.
+Inspect current help before calling a tool. AnySearch `batch_search` can group
+independent queries; use its documented schema. If a provider is unavailable,
+use an available public source with the same access boundary and record the gap.
+
+Before retrieval, briefly record the selected sources and the question each one
+will answer in the workspace. For each source selected, record whether it was
+read, unavailable or no longer needed, and why. Do not count a source as searched
+just because this reference names it. Do not install unrelated providers or
+request additional social accounts to complete setup.
+
+These supplementary reads are background research. A hiring lead may become a
+shortlist candidate only after its original posting has been read through the
+supported evidence workflow. Use [browser-fallback.md](browser-fallback.md) for
+browser posting captures and keep the recruitment gates and refusal locks.
 
 ## Evidence and client report
 
-For each used source record the original URL, publisher/account, publication date
-(if available), read date, claim supported and reading scope (snippet, full text,
-metadata or transcript). Keep captured evidence in the workspace. Distinguish
-company statements, independent reporting and individual experience. Seek a
-primary source for consequential hiring conditions; anonymous anecdotes cannot
-establish pay, vacancy status, guaranteed interview questions or a candidate's
-success probability.
+For every source used, retain the original URL, publisher/account, publication
+date when available, read date, claim supported and reading scope (snippet, full
+text or metadata). Save actual captured evidence in the workspace. Distinguish
+company statements, independent reporting and individual experience. Confirm
+important hiring conditions with primary sources.
 
-Answer the client question in `report.md` with relevant source links and career
-uncertainties. Technical errors and provider setup/debugging belong in internal
-records. If unavailable evidence limits a conclusion, say which career fact could
-not be verified, without inserting tool logs. Deliver the verified report PDF with
-any requested CV in the same consultation folder.
+Use relevant findings in `report.md` and place source links beside the claims or
+in a short source list. WeChat findings should name the account and article, with
+the reading scope clear. Do not add a link merely to show platform coverage.
+Tool diagnostics and the full source-selection audit stay in internal records.
+If a missing source limits a career conclusion, explain the fact that remains
+unverified. Deliver the verified report PDF with any requested CV in the same
+consultation folder.

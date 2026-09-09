@@ -8,6 +8,8 @@ and static pages need no browser. Follow an explicitly selected browser. Verify
 browser/profile identity before reading: a host's default may be an isolated
 agent browser or an in-app browser. Do not silently use those as the daily browser.
 If multiple daily profiles remain ambiguous, ask which one to use.
+An explicit CDP-only request excludes extension-backed and host-browser routes;
+verify the transport before use rather than inferring it from the browser name.
 
 1. Reuse an authorized connection to the intended daily browser, preferring CDP.
    A working host browser connection is also usable without installing anything;
@@ -50,7 +52,7 @@ Official references: [Chrome existing-session connection](https://developer.chro
 ## Parallelize independent sources
 
 Apply this to all research modes and information sources, including job boards,
-company sites, AnySearch, GitHub, articles and public video metadata. Do not run
+company sites, AnySearch, WeChat public accounts, GitHub and relevant articles. Do not run
 unneeded sources merely to fill a batch.
 
 - Schedule independent reads concurrently, normally at most **4 in flight** in

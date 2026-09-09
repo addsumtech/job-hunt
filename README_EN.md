@@ -143,7 +143,7 @@ Every consultation produces a PDF report with career analysis, supporting source
 
 Delivery uses `简历/` (CV) and `报告/` (report) subfolders, with filenames such as `简历.docx`, `简历.pdf` and `求职建议报告.pdf`.
 
-For company or industry research, the agent can consult official sites, news, GitHub and public discussions through [supplementary sources](references/supplementary-sources.md). Logged-in Xiaohongshu or Douyin searches require your permission in the current consultation.
+For company or industry research, the agent can consult official sites, news, WeChat public accounts and relevant GitHub projects through [supplementary sources](references/supplementary-sources.md).
 
 ## Where files live
 

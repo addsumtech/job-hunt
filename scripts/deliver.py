@@ -27,6 +27,8 @@ SKIP_NAMES = {"journal.jsonl", ".DS_Store", "master-fingerprint.json"}
 SKIP_SUFFIXES = {".err", ".pyc"}
 
 DEFAULT_ROOT = pathlib.Path.home() / "Downloads"
+# Report font setup uses fontspec and xeCJK, so both supported engines use XeTeX.
+REPORT_ENGINES = ("tectonic", "xelatex")
 
 # Probed in order. macOS first, then the common Linux packages. The list exists
 # because "it worked on my machine" is how a PDF full of boxes ships.
@@ -101,7 +103,10 @@ def writable(directory: pathlib.Path) -> tuple[bool, str]:
 
 def _pandoc(md: pathlib.Path, pdf: pathlib.Path, font: str | dict | None) -> bool:
     pdf.unlink(missing_ok=True)
-    cmd = ["pandoc", str(md), "-o", str(pdf), "--pdf-engine=tectonic",
+    engine = next((e for e in REPORT_ENGINES if shutil.which(e)), None)
+    if engine is None:
+        return False
+    cmd = ["pandoc", str(md), "-o", str(pdf), f"--pdf-engine={engine}",
            "--lua-filter", str(pathlib.Path(__file__).with_name("pdf_symbols.lua")),
            "-V", "mainfont=Times New Roman"]
     if font:
@@ -114,10 +119,10 @@ def _pandoc(md: pathlib.Path, pdf: pathlib.Path, font: str | dict | None) -> boo
             cmd += ["-V", "header-includes=" +
                     r"\xeCJKsetup{AutoFallBack=true}\setCJKfallbackfamilyfont{\CJKrmdefault}{" + fallback + "}"]
     try:
-        subprocess.run(cmd, capture_output=True, timeout=180, check=False)
+        result = subprocess.run(cmd, capture_output=True, timeout=180, check=False)
     except (OSError, subprocess.SubprocessError):
         return False
-    return pdf.is_file() and pdf.stat().st_size > 0
+    return result.returncode == 0 and pdf.is_file() and pdf.stat().st_size > 0
 
 
 def pdf_text(pdf: pathlib.Path) -> str:
@@ -200,7 +205,7 @@ def render_pdf(md: pathlib.Path, pdf: pathlib.Path,
                        "the PDF is refused rather than handed over full of boxes")
     if not _pandoc(md, pdf, font if needs_cjk else None):
         pdf.unlink(missing_ok=True)
-        return False, "pandoc/tectonic produced no PDF"
+        return False, "pandoc with a supported XeTeX engine produced no PDF"
 
     problems = glyph_findings(pdf)
     if problems:

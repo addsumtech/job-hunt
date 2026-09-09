@@ -65,6 +65,14 @@ example), retain that output and set `http_status: 403` or `blocked: true` on th
 snapshot; never record it as an empty successful page. Bare navbar links labelled
 Login do not establish a login wall. Explicit wall language does.
 
+If a tool returns richer link objects, preserve its original output and make a
+separate deterministic projection to the snapshot shape above: retain `text`
+unchanged and extract only original HTTP(S) link URLs. Do not pass link objects
+or `javascript:` links to the importer, and never reconstruct text from memory.
+Workers must return that shape to the coordinator and wait for import/classification
+before their next read of the same site. A late bulk import does not establish
+that this ordering was followed; retain the deviation and rerun a bounded sample.
+
 Separately extract a JSON array into `raw/<site>-browser-<n>-rows.json`:
 
 ```json

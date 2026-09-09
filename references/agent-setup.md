@@ -25,9 +25,10 @@ verification remain with the user.
 4. Install missing tools needed for the requested output. For live discovery,
    prepare Node/npm, OpenCLI, AnySearch, web-access and the daily browser
    connection as described below. For PDF output, prepare Pandoc, a usable
-   LaTeX engine (prefer a smaller working option such as Tectonic), Poppler and
+   XeTeX engine (Tectonic or XeLaTeX), Poppler and
    fonts required by the output language. Reuse an existing LaTeX engine; do not
-   install a second one merely because its name differs. Assessing a pasted job
+   install a second compatible one merely because its name differs. The CJK
+   templates use xeCJK; LuaLaTeX/pdfLaTeX alone do not satisfy report delivery. Assessing a pasted job
    does not require setting up a browser, and Word-only output does not require
    installing the PDF toolchain.
 5. Use an available package manager or official portable distribution appropriate

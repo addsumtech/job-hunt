@@ -1592,15 +1592,15 @@ _ENGINE_DIRS = ["/opt/homebrew/bin", "/usr/local/bin", "/Library/TeX/texbin",
 def find_latex_engine(cjk=False):
     """Locate a usable LaTeX engine, returning its path (or bare name).
 
-    A CJK CV must be typeset by a Unicode/OpenType engine (XeTeX or LuaTeX) so
+    A CJK CV must be typeset by XeTeX so
     that ``xeCJK`` and system CJK fonts work — ``pdflatex`` cannot do it. So for
-    CJK we look only for ``xelatex``/``lualatex``/``tectonic`` (tectonic is
+    CJK we look only for ``xelatex``/``tectonic`` (tectonic is
     XeTeX-based and handles ``xeCJK``). For Latin scripts, ``pdflatex`` is fine
     and ``tectonic`` is preferred for its self-contained package handling.
     Callers detect the engine *type* from the basename, so a returned absolute
     path works the same as a bare name.
     """
-    candidates = ("xelatex", "lualatex", "tectonic") if cjk else ("tectonic", "pdflatex")
+    candidates = ("xelatex", "tectonic") if cjk else ("tectonic", "xelatex", "lualatex", "pdflatex")
     for engine in candidates:
         found = shutil.which(engine)
         if found:

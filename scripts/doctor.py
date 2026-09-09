@@ -27,6 +27,9 @@ import subprocess
 import sys
 import tempfile
 
+# Keep diagnostics importable before requirements.txt has been installed.
+REPORT_ENGINES = ("tectonic", "xelatex")
+
 REPO = pathlib.Path(__file__).resolve().parent.parent
 REQUIREMENTS = REPO / "requirements.txt"
 
@@ -61,23 +64,24 @@ def can_render_pdf() -> tuple[bool, str]:
     """Render one, rather than believe a `command -v`."""
     if not shutil.which("pandoc"):
         return False, "pandoc is not installed"
-    engines = [e for e in ("tectonic", "xelatex", "lualatex", "pdflatex")
+    engines = [e for e in REPORT_ENGINES
                if shutil.which(e)]
     if not engines:
-        return False, "no LaTeX engine (tectonic, xelatex, lualatex or pdflatex)"
+        return False, "no supported report LaTeX engine (tectonic or xelatex)"
     with tempfile.TemporaryDirectory() as tmp:
         d = pathlib.Path(tmp)
         md = d / "probe.md"
         md.write_text("# probe\n\nHello.\n", encoding="utf-8")
         pdf = d / "probe.pdf"
         try:
-            subprocess.run(["pandoc", str(md), "-o", str(pdf),
-                            f"--pdf-engine={engines[0]}"],
-                           capture_output=True, timeout=180, check=False)
+            result = subprocess.run(["pandoc", str(md), "-o", str(pdf),
+                                     f"--pdf-engine={engines[0]}",
+                                     "-V", "mainfont=Times New Roman"],
+                                    capture_output=True, timeout=180, check=False)
         except (OSError, subprocess.SubprocessError) as exc:
             return False, f"pandoc + {engines[0]} failed to run: {exc}"
-        if pdf.is_file() and pdf.stat().st_size > 0:
-            return True, f"pandoc + {engines[0]}"
+        if result.returncode == 0 and pdf.is_file() and pdf.stat().st_size > 0:
+            return True, f"pandoc + {engines[0]} (report font configuration)"
     return False, f"pandoc + {engines[0]} produced no PDF"
 
 
@@ -102,7 +106,7 @@ def fast_capabilities() -> list[str]:
         if not importable(module):
             missing.append(f"python package {pkg}")
     if not shutil.which("pandoc") or not any(
-            shutil.which(e) for e in ("tectonic", "xelatex", "lualatex", "pdflatex")):
+            shutil.which(e) for e in REPORT_ENGINES):
         missing.append("PDF rendering (pandoc + a LaTeX engine)")
     if not shutil.which("pdftotext"):
         missing.append("pdftotext")
@@ -112,16 +116,16 @@ def fast_capabilities() -> list[str]:
 
 
 def install_hint(binary: str) -> str:
+    if binary == "opencli":
+        return "Agent: prepare a dedicated opencli prefix via references/agent-setup.md"
     if platform.system() == "Windows":
         return (f"Agent: install {binary} with a verified Windows package or portable "
                 "release; follow references/agent-setup.md")
     mac = platform.system() == "Darwin"
     brew = {"pandoc": "brew install pandoc", "tectonic": "brew install tectonic",
-            "pdftotext": "brew install poppler",
-            "opencli": "npm install -g @jackwener/opencli"}
+            "pdftotext": "brew install poppler"}
     apt = {"pandoc": "sudo apt install pandoc", "tectonic": "sudo apt install tectonic",
-           "pdftotext": "sudo apt install poppler-utils",
-           "opencli": "npm install -g @jackwener/opencli"}
+           "pdftotext": "sudo apt install poppler-utils"}
     return (brew if mac else apt).get(binary, f"install {binary}")
 
 
@@ -151,7 +155,9 @@ def checks() -> list[dict]:
             "ok": importable(module),
             "cost": ("nothing in this skill runs without it"
                      if module == "yaml" else
-                     f".docx output is unavailable ({module})"),
+                     ".docx output is unavailable" if module == "docx" else
+                     "PDF glyph verification and delivery are unavailable" if module == "pymupdf" else
+                     f"features using {module} are unavailable"),
             "fix": f"{sys.executable} -m pip install {pkg}",
             "auto": True,
             "install_argv": [sys.executable, "-m", "pip", "install", pkg],

@@ -35,9 +35,9 @@ language contract; no invented retrieval or login state):
 ## Supplementary public research
 
 Use `references/supplementary-sources.md` when official web/news, GitHub,
-public articles, social discussions, videos or podcasts can fill a concrete
+WeChat articles or relevant role discussions can fill a concrete
 career evidence gap. It defines provider availability checks, source quality and
-current-consultation authorization for Xiaohongshu/Douyin. These sources supplement
+source-selection records. These sources supplement
 formal posting evidence; they do not replace it or run automatically on every task.
 
 ## On entering this mode — before anything else

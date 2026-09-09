@@ -143,7 +143,7 @@ Agent 会根据目标地区选择岗位来源，通过浏览器或可用的 Open
 
 交付文件分为 `简历/` 和 `报告/` 两个子文件夹，名称如“简历.docx”“简历.pdf”“求职建议报告.pdf”。
 
-需要了解公司或行业时，Agent 还可以查询官网、新闻、GitHub 和公开讨论，见[补充信息源](references/supplementary-sources.md)。使用小红书、抖音的登录状态搜索前，会先征得你在本轮咨询中的授权。
+需要了解公司或行业时，Agent 还可以查询官网、新闻、微信公众号，以及与问题相关的 GitHub 项目，见[补充信息源](references/supplementary-sources.md)。
 
 ## 文件保存在什么位置
 

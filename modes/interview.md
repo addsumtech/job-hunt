@@ -5,17 +5,18 @@ a CV and says they have an interview.
 
 **Reads:** `posting.yaml`, `cv.md`, `tailored-profile.yaml`, `fit-assessment.*`,
 `interview-brief.md`, `claims.yaml`.
-**Writes (exclusively):** `mock/`. Plus two append-only write-backs: a `## Walk-back list`
+**Interview artifacts:** `mock/`. Also author the client `report.md` required by
+the delivery contract below. Plus two append-only write-backs: a `## Walk-back list`
 section on `interview-brief.md`, and `source_kind: session-answer` rows on `claims.yaml`.
 Nothing else in the workspace is modified, and `profile.yaml` is never touched.
 
 ## Supplementary public research
 
-Use `references/supplementary-sources.md` when official web/news, GitHub,
-public articles, social discussions, videos or podcasts can fill a concrete
-career evidence gap. It defines provider availability checks, source quality and
-current-consultation authorization for Xiaohongshu/Douyin. These sources supplement
-formal posting evidence; they do not replace it or run automatically on every task.
+Use `references/supplementary-sources.md` when official web/news, WeChat
+public accounts or relevant GitHub projects can fill a concrete career evidence
+gap. It defines source selection, availability checks and evidence quality.
+These sources supplement formal posting evidence; select only what the current
+question needs.
 
 ## 0. Before the first question
 

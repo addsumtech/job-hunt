@@ -143,7 +143,7 @@ Cada consulta genera un informe PDF con el análisis profesional, las fuentes y 
 
 La entrega usa las subcarpetas `简历/` (CV) y `报告/` (informe), con nombres como `简历.docx`, `简历.pdf` y `求职建议报告.pdf`.
 
-Para investigar empresas o sectores, el agente también puede consultar sitios oficiales, noticias, GitHub y debates públicos mediante las [fuentes complementarias](references/supplementary-sources.md). Las búsquedas con sesión iniciada en Xiaohongshu o Douyin requieren tu permiso en la consulta actual.
+Para investigar empresas o sectores, el agente también puede consultar sitios oficiales, noticias, cuentas públicas de WeChat y proyectos relevantes de GitHub mediante las [fuentes complementarias](references/supplementary-sources.md).
 
 ## Dónde se guardan los archivos
 

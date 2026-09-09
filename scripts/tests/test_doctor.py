@@ -259,3 +259,31 @@ def test_python_install_preserves_interpreter_path_with_spaces(monkeypatch):
     monkeypatch.setattr(doctor.subprocess, "run", installer)
     assert doctor.install_python(missing) == 1
     assert calls == [[executable, "-m", "pip", "install", "PyYAML"]]
+
+
+def test_pdflatex_only_does_not_pass_report_capability(monkeypatch):
+    monkeypatch.setattr(doctor.shutil, 'which', lambda name: '/bin/' + name if name in {'pandoc', 'pdflatex'} else None)
+    assert doctor.can_render_pdf()[0] is False
+
+
+def test_opencli_setup_hint_preserves_custom_adapters(monkeypatch):
+    for system in ('Darwin', 'Linux', 'Windows'):
+        monkeypatch.setattr(doctor.platform, 'system', lambda: system)
+        hint = doctor.install_hint('opencli')
+        assert 'references/agent-setup.md' in hint and 'npm install -g' not in hint
+
+
+def test_report_engine_contract_agrees_without_bootstrap_import():
+    import deliver
+    assert doctor.REPORT_ENGINES == deliver.REPORT_ENGINES
+    result = subprocess.run([sys.executable, '-S', str(REPO / 'scripts/doctor.py'), '--help'], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_missing_pdf_verifier_is_not_reported_as_a_word_failure(monkeypatch):
+    monkeypatch.setattr(doctor, 'requirements', lambda: [('PyMuPDF', 'pymupdf')])
+    monkeypatch.setattr(doctor, 'importable', lambda name: False)
+    monkeypatch.setattr(doctor, 'can_render_pdf', lambda: (False, 'not checked'))
+    monkeypatch.setattr(doctor.shutil, 'which', lambda name: None)
+    check = doctor.checks()[0]
+    assert 'PDF' in check['cost'] and '.docx' not in check['cost']
