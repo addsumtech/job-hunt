@@ -99,7 +99,7 @@ def test_a_pdf_that_dropped_characters_is_deleted_not_delivered(tmp_path, monkey
     """
     ws = build(tmp_path, md="# 岗位候选\n\n这是中文内容。\n")
     dest = tmp_path / "out"
-    monkeypatch.setattr(deliver, "_render_cjk_report",
+    monkeypatch.setattr(deliver, "_render_portable_report",
                         lambda *args: (False, "disabled for this regression"))
     monkeypatch.setattr(deliver, "pick_cjk_font", lambda *args: "SomeFont")
     monkeypatch.setattr(deliver, "_pandoc",
@@ -197,18 +197,17 @@ def test_pdf_with_an_authored_link_but_no_link_annotation_is_refused(tmp_path):
     assert not pdf.exists(), "an unclickable report PDF must not be delivered"
 
 
-@pytest.mark.parametrize("source", ["研究エンジニアと機械学習", "AI 연구개발 엔지니어"])
-def test_japanese_and_korean_keep_the_existing_cjk_renderer(tmp_path, monkeypatch, source):
+@pytest.mark.parametrize("source", [
+    "研究エンジニアと機械学習",
+    "AI 연구개발 엔지니어",
+    "Senior AI engineer with reliable deployment experience",
+    "Ingeniería de aprendizaje automático y visión por computadora",
+])
+def test_localized_reports_use_the_bundled_portable_renderer(tmp_path, source):
     md, pdf = tmp_path / "report.md", tmp_path / "report.pdf"
     md.write_text(source, encoding="utf-8")
-    monkeypatch.setattr(deliver, "visible_markdown", lambda _: source)
-    monkeypatch.setattr(deliver, "_render_cjk_report",
-                        lambda *args: pytest.fail("Chinese renderer was selected"))
-    monkeypatch.setattr(deliver, "_pandoc",
-                        lambda _md, output, _font: (output.write_bytes(b"%PDF"), True)[1])
-    monkeypatch.setattr(deliver, "glyph_findings", lambda _: [])
-    monkeypatch.setattr(deliver, "pdf_text", lambda _: source)
-    assert deliver.render_pdf(md, pdf, "CJK test font") == (True, "")
+    assert deliver.render_pdf(md, pdf, None) == (True, "")
+    assert source in deliver.pdf_text(pdf)
 
 
 @pytest.mark.skipif(not HAVE_PDF, reason="needs pandoc + tectonic + pdftotext")
@@ -414,7 +413,7 @@ def test_a_refused_pdf_is_named_in_the_record(tmp_path, monkeypatch):
     """
     import json
     ws = build(tmp_path, md="# 岗位候选\n\n中文内容。\n")
-    monkeypatch.setattr(deliver, "_render_cjk_report",
+    monkeypatch.setattr(deliver, "_render_portable_report",
                         lambda *args: (False, "disabled for this regression"))
     monkeypatch.setattr(deliver, "pick_cjk_font", lambda *args: None)
     assert run(ws, tmp_path / "out") == 2

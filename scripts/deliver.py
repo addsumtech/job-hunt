@@ -59,14 +59,39 @@ def has_han(text: str) -> bool:
     return bool(_HAN.search(text))
 
 
-def is_chinese_report(text: str) -> bool:
-    """Use the Chinese layout only for Chinese, not Japanese/Korean reports.
+def _portable_report_style(text: str) -> dict[str, str] | None:
+    """Return a bundled-font report style when every visible glyph is covered."""
+    try:
+        import pymupdf
+    except ImportError:
+        return None
 
-    Japanese uses Han ideographs too, so `has_han()` alone would route a normal
-    Japanese report through a Chinese-only font path. Keep the established
-    Japanese/Korean Pandoc probing path whenever either native script appears.
-    """
-    return has_han(text) and not _JAPANESE.search(text) and not _KOREAN.search(text)
+    if _JAPANESE.search(text):
+        style = {"font": "japan", "footer": "キャリア相談レポート",
+                 "page": "{number} ページ", "link": "リンク：", "separator": "："}
+    elif _KOREAN.search(text):
+        style = {"font": "korea", "footer": "커리어 상담 보고서",
+                 "page": "{number}쪽", "link": "링크: ", "separator": ": "}
+    elif has_han(text):
+        style = {"font": "china-s", "footer": "职业咨询报告",
+                 "page": "第 {number} 页", "link": "链接：", "separator": "："}
+    elif (re.search(r"[áéíóúüñ¿¡]", text, re.I)
+          or re.search(r"\b(?:candidaturas?|experiencia|puestos?|salario|evidencia|"
+                       r"vacante|recomendaci[oó]n|ubicaci[oó]n)\b", text, re.I)):
+        style = {"font": "helv", "footer": "Informe de orientación profesional",
+                 "page": "Página {number}", "link": "Enlace: ", "separator": ": "}
+    else:
+        style = {"font": "helv", "footer": "Career consultation report",
+                 "page": "Page {number}", "link": "Link: ", "separator": ": "}
+
+    # The rendered form intentionally substitutes a readable [!] for the one
+    # warning symbol a built-in PDF font cannot carry. Source Markdown stays
+    # untouched, as required by the delivery contract.
+    visible = text.replace("⚠️", "[!]").replace("⚠", "[!]")
+    font = pymupdf.Font(style["font"])
+    if any(not char.isspace() and not font.has_glyph(ord(char)) for char in visible):
+        return None
+    return style
 
 
 def cjk_chars(text: str) -> int:
@@ -256,11 +281,12 @@ def _is_table_rule(cells: list[str]) -> bool:
     return bool(cells) and all(re.fullmatch(r":?-{3,}:?", cell) for cell in cells)
 
 
-def _render_cjk_report(md: pathlib.Path, pdf: pathlib.Path) -> tuple[bool, str]:
-    """Render Chinese reports with PyMuPDF's bundled Simplified Chinese font.
+def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
+                            style: dict[str, str]) -> tuple[bool, str]:
+    """Render a supported LTR report with a bundled, extractable PDF font.
 
-    Unlike a ReportLab CID fallback, PyMuPDF's `china-s` font does not depend on
-    a host-installed CJK font or emit unextractable replacement glyphs.
+    This avoids host-installed fonts and TeX font discovery for the five report
+    languages the skill localizes: Chinese, English, Japanese, Korean, Spanish.
     """
     try:
         import pymupdf
@@ -272,7 +298,7 @@ def _render_cjk_report(md: pathlib.Path, pdf: pathlib.Path) -> tuple[bool, str]:
     body_color = (0.14, 0.23, 0.33)
     heading_color = (0.06, 0.16, 0.26)
     link_color = (0.11, 0.31, 0.85)
-    font = pymupdf.Font("china-s")
+    font = pymupdf.Font(style["font"])
     document = pymupdf.open()
     page = None
     cursor = top
@@ -336,7 +362,7 @@ def _render_cjk_report(md: pathlib.Path, pdf: pathlib.Path) -> tuple[bool, str]:
         page.draw_line(pymupdf.Point(left, 790), pymupdf.Point(right, 790),
                        color=(0.85, 0.89, 0.93), width=0.5)
         footer = pymupdf.TextWriter(page.rect)
-        footer.append(pymupdf.Point(left, 811), "职业咨询报告", font=font, fontsize=8)
+        footer.append(pymupdf.Point(left, 811), style["footer"], font=font, fontsize=8)
         footer.write_text(page, color=(0.38, 0.49, 0.60))
         cursor = top
 
@@ -354,6 +380,7 @@ def _render_cjk_report(md: pathlib.Path, pdf: pathlib.Path) -> tuple[bool, str]:
             links.append((label, url))
             return label
 
+        value = value.replace("⚠️", "[!]").replace("⚠", "[!]")
         value = _MD_LINK.sub(markdown_link, value)
         value = _RAW_ANGLE_URL.sub(raw_link, value)
         value = _MD_BOLD.sub(r"\1", value)
@@ -367,7 +394,7 @@ def _render_cjk_report(md: pathlib.Path, pdf: pathlib.Path) -> tuple[bool, str]:
             return False
         cursor += gap
         for label, url in links:
-            if not write_lines(wrap(f"链接：{label}", 9.2, right - left), left,
+            if not write_lines(wrap(f"{style['link']}{label}", 9.2, right - left), left,
                                9.2, link_color, 14.5, url):
                 return False
             cursor += 3
@@ -381,10 +408,11 @@ def _render_cjk_report(md: pathlib.Path, pdf: pathlib.Path) -> tuple[bool, str]:
         entries: list[tuple[list[str], str | None]] = []
         for label, value in fields:
             display, links = text_and_links(value)
-            entries.append((wrap(f"{label}：{display}", 9.4, right - left - 18), None))
-            entries.extend((wrap(f"链接：{link_label}", 9.2, right - left - 18), url)
+            entries.append((wrap(f"{label}{style['separator']}{display}", 9.4,
+                                 right - left - 18), None))
+            entries.extend((wrap(f"{style['link']}{link_label}", 9.2, right - left - 18), url)
                            for link_label, url in links)
-        entries.extend((wrap(f"链接：{link_label}", 9.2, right - left - 18), url)
+        entries.extend((wrap(f"{style['link']}{link_label}", 9.2, right - left - 18), url)
                        for link_label, url in title_links)
         title_height = len(title_lines) * 17
         body_height = sum(len(lines) * 14.5 + 3 for lines, _ in entries)
@@ -394,7 +422,7 @@ def _render_cjk_report(md: pathlib.Path, pdf: pathlib.Path) -> tuple[bool, str]:
             # a visual frame that could not fit on one page.
             if not add_block(title, 11, heading_color, 4):
                 return False
-            return all(add_block(f"{label}：{value}", 9.4, body_color, 3)
+            return all(add_block(f"{label}{style['separator']}{value}", 9.4, body_color, 3)
                        for label, value in fields)
         if cursor + height > bottom:
             new_page()
@@ -447,7 +475,7 @@ def _render_cjk_report(md: pathlib.Path, pdf: pathlib.Path) -> tuple[bool, str]:
                     table.append(lines[index].strip())
                     index += 1
                 if not add_table(table):
-                    return False, "Chinese report block does not fit on a page"
+                    return False, "report block does not fit on a page"
                 continue
             if line.startswith("# "):
                 value, size, color, gap = line[2:], 18, heading_color, 15
@@ -460,10 +488,10 @@ def _render_cjk_report(md: pathlib.Path, pdf: pathlib.Path) -> tuple[bool, str]:
             else:
                 value, size, color, gap = line, 9.6, body_color, 7
             if not add_block(value, size, color, gap):
-                return False, "Chinese report block does not fit on a page"
+                return False, "report block does not fit on a page"
         for number, current_page in enumerate(document, start=1):
             footer = pymupdf.TextWriter(current_page.rect)
-            label = f"第 {number} 页"
+            label = style["page"].format(number=number)
             footer.append(pymupdf.Point(right - text_width(label, 8), 811), label,
                           font=font, fontsize=8)
             footer.write_text(current_page, color=(0.38, 0.49, 0.60))
@@ -479,10 +507,10 @@ def _render_cjk_report(md: pathlib.Path, pdf: pathlib.Path) -> tuple[bool, str]:
 def pdf_text(pdf: pathlib.Path) -> str:
     """Read PDF text with Poppler, then the bundled PyMuPDF reader if needed.
 
-    Older Poppler builds can return an empty string for a valid PDF that uses
-    MuPDF's bundled CJK font. Treating that transport-specific limitation as an
-    empty document rejected a readable Chinese report in CI. Both readers still
-    have to fail before the verifier accepts "no extractable text" as a result.
+    Older Poppler builds can return an empty string for a valid PDF that uses a
+    MuPDF bundled font. Treating that transport-specific limitation as an empty
+    document rejected readable localized reports in CI. Both readers still have
+    to fail before the verifier accepts "no extractable text" as a result.
     """
     try:
         r = subprocess.run(["pdftotext", str(pdf), "-"], capture_output=True,
@@ -598,25 +626,26 @@ def render_pdf(md: pathlib.Path, pdf: pathlib.Path,
                        "Markdown and .docx still ship")
     needs_cjk = has_cjk(source)
 
-    # Chinese reports use PyMuPDF's bundled CJK font first. It avoids Tectonic's
-    # platform-dependent font discovery and host-specific CID fallbacks. Japanese
-    # and Korean retain the CJK font-probe path because their scripts share Han.
-    if is_chinese_report(source):
-        ok, why = _render_cjk_report(md, pdf)
+    style = _portable_report_style(source)
+    # Every supported left-to-right report uses a bundled, embedded font first.
+    # This keeps Chinese, English, Japanese, Korean and Spanish layout identical
+    # across machines, while the explicit RTL refusal above remains unchanged.
+    if style:
+        ok, why = _render_portable_report(md, pdf, style)
         if ok:
             return _verify_pdf(pdf, source, needs_cjk)
-        cjk_renderer_problem = why
+        portable_renderer_problem = why
     else:
-        cjk_renderer_problem = ""
+        portable_renderer_problem = ""
 
     if needs_cjk and font is None:
-        suffix = f"; bundled CJK renderer: {cjk_renderer_problem}" if cjk_renderer_problem else ""
+        suffix = f"; bundled report renderer: {portable_renderer_problem}" if portable_renderer_problem else ""
         return False, ("no CJK font on this machine that survives a render "
                        f"round-trip (tried {len(CJK_FONTS)}); the Markdown ships, "
                        "the PDF is refused rather than handed over full of boxes" + suffix)
     if not _pandoc(md, pdf, font if needs_cjk else None):
         pdf.unlink(missing_ok=True)
-        suffix = f"; bundled CJK renderer: {cjk_renderer_problem}" if cjk_renderer_problem else ""
+        suffix = f"; bundled report renderer: {portable_renderer_problem}" if portable_renderer_problem else ""
         return False, "pandoc/tectonic produced no PDF" + suffix
     return _verify_pdf(pdf, source, needs_cjk)
 
@@ -666,9 +695,9 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
             try:
                 source = visible_markdown(src)
                 glyphs = frozenset(_CJK.findall(source))
-                # Chinese sources take the bundled CJK path in render_pdf(), so a
-                # Tectonic font probe cannot delay or fail their delivery first.
-                if glyphs and not is_chinese_report(source) and glyphs not in fonts:
+                # Bundled report fonts take precedence whenever every visible
+                # glyph is covered, so a Tectonic probe cannot delay delivery.
+                if glyphs and not _portable_report_style(source) and glyphs not in fonts:
                     fonts[glyphs] = pick_cjk_font(source)
                 ok, why = render_pdf(src, pdf, fonts.get(glyphs))
             except OSError as exc:
