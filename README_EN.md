@@ -144,6 +144,14 @@ The activation command above is for macOS/Linux; on Windows, use the activation 
 Sign in to job platforms yourself when needed. A connected extension confirms the browser connection; access to each platform still needs to be checked.
 
 
+### Compatibility patches and browser fallback
+
+The patches ship with this skill and the agent applies them before the first relevant site read; importing the browser extension alone does not install them. Complete the OpenCLI CLI and extension setup above first.
+
+**You normally do not need to install patches manually.** Before reading Indeed or 51job, the skill checks known compatibility issues and automatically patches a local copy only when the OpenCLI version and source bytes match. The installed package stays unchanged. Current patches target 1.8.7; other versions and custom edits are not overwritten. You can tell the agent “check job-site compatibility patches” or “revert compatibility patches.” See [check, apply and revert instructions](references/opencli-compat.md).
+
+For a diagnosed adapter incompatibility, web-access can use **the job site's own search box** in Chrome or another supported browser and read the results. It is not limited to Google search and does not require a patch first. Login, CAPTCHA and permission barriers still require your action; switching tools cannot bypass them.
+
 ## Markets, platforms, and languages
 
 Discovery reads postings through `opencli` adapters. The repository's source catalogue includes 51job, Indeed, LinkedIn, and BOSS Zhipin, with distinctions between login requirements, job listings, and interview-experience sources. Availability is checked at runtime. The Indeed adapter connects to the US site and cannot switch country sites. For other markets, prefer local job sources. See the [source catalogue](references/discovery-sources.md) and [source policy](references/source-policy.md).

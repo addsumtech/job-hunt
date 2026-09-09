@@ -294,6 +294,13 @@ the second is the politeness cap from `references/source-policy.md`. Falling sho
 
 ## Retrieval backend — OpenCLI first, web-access fallback
 
+Before the first Indeed or 51job read, follow `references/opencli-compat.md`:
+check and automatically apply only the known version/hash-matched local repairs
+with `scripts/opencli_compat.py`. Do not overwrite custom edits or force a patch
+onto another version. This local preparation performs no site reads and cannot
+reset a site's refusal. Browser fallback can use the site's own search box;
+it is not limited to Google or other search engines.
+
 Before Step 1, probe OpenCLI availability and its connection. If it is missing,
 the bridge is disconnected, or there is no suitable read extraction, read
 `references/browser-fallback.md` and use the available web-access skill. On this

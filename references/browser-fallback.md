@@ -14,8 +14,11 @@ Only these reasons are accepted by the recorder:
 - `cli_missing`: executable unavailable.
 - `bridge_disconnected`: diagnostic confirms the required bridge is unavailable.
 - `unsupported_extraction`: no suitable documented read extraction, including an
-  adapter that cannot serve the requested market. Preserve the help/diagnostic
-  evidence under `raw/` and explain the reason in shortlist §0.
+  adapter that cannot serve the requested market or a diagnosed adapter
+  incompatibility while the requested browser search demonstrably works.
+  Preserve the help/diagnostic evidence under `raw/` and explain the reason in
+  shortlist §0. Known optional repairs are in [opencli-compat.md](opencli-compat.md);
+  patching is not required before using a supported browser fallback.
 
 A generic timeout, blank fields or unclassified transport error does not establish
 one of these reasons. Diagnose first; existing detail recovery still applies.

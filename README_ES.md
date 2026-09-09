@@ -144,6 +144,14 @@ El comando de activación anterior es para macOS/Linux; en Windows, utiliza el s
 Inicia sesión en las plataformas de empleo cuando sea necesario. La extensión conectada confirma la conexión con el navegador; el acceso a cada plataforma se comprueba por separado.
 
 
+### Parches de compatibilidad y alternativa en el navegador
+
+Los parches se incluyen en este skill y el agente los aplica antes de la primera lectura del portal correspondiente; importar la extensión del navegador no los instala. Completa primero la configuración anterior de la CLI de OpenCLI y de la extensión.
+
+**Normalmente no necesitas instalar parches manualmente.** Antes de leer Indeed o 51job, el skill comprueba los problemas conocidos y aplica el parche a una copia local solo si coinciden la versión y el código de OpenCLI. El paquete instalado no cambia. Los parches actuales son para 1.8.7; no se sobrescriben otras versiones ni cambios personalizados. Puedes pedir al agente «comprueba los parches de compatibilidad» o «revierte los parches de compatibilidad». Consulta las [instrucciones para comprobar, aplicar y revertir](references/opencli-compat.md) (en inglés).
+
+Si se confirma una incompatibilidad del adaptador, web-access puede usar **el buscador del propio portal de empleo** en Chrome u otro navegador compatible y leer sus resultados. No se limita a buscar en Google ni exige aplicar un parche primero. El inicio de sesión, los CAPTCHA y las restricciones de permisos siguen requiriendo tu intervención; cambiar de herramienta no permite eludirlos.
+
 ## Mercados, plataformas e idiomas
 
 La búsqueda obtiene ofertas mediante adaptadores de `opencli`. El catálogo del repositorio incluye 51job, Indeed, LinkedIn y BOSS Zhipin, y distingue entre requisitos de acceso, ofertas de empleo y fuentes de experiencias de entrevistas. La disponibilidad se comprueba al ejecutar la búsqueda. El adaptador de Indeed se conecta al sitio de Estados Unidos y no permite cambiar de sitio nacional. Para otros mercados, prioriza las fuentes locales de empleo. Consulta el [catálogo de fuentes](references/discovery-sources.md) y la [política de uso](references/source-policy.md), en inglés.

@@ -77,6 +77,8 @@ job-hunt/
 │   ├── candidate-situations.md      # Non-standard candidates (gap, switch, exec, military, intl)
 │   ├── cv-craft.md                  # CV writing conventions (markets, links, bullets, ordering)
 │   ├── browser-fallback.md          # Read-only web-access capture and fallback
+│   ├── opencli-compat.md            # Optional version-checked adapter repairs
+│   ├── opencli-patches/             # Exact replacements and upstream license
   user-recovery.md         # human login/verification hand-off and linked new round
 │   ├── discovery-sources.md         # Per-adapter catalogue for discover
 │   ├── gap-analysis.md              # Gap analysis, tailoring methodology, claim provenance
@@ -113,6 +115,7 @@ job-hunt/
     ├── check_no_write.py            # discover is read-only — a journaled write command fails
     ├── record_browser_capture.py    # Browser snapshot importer and evidence checks
     ├── check_opencli_result.py      # adapter result classifier (wrapper, not a gate)
+    ├── opencli_compat.py            # Check/apply/revert known local adapter fixes
     ├── check_pages.py               # page count + the text actually inside the delivered PDF
     ├── check_personal_data.py       # Cluster-1 personal-data interlock
     ├── check_render_freshness.py    # the judges read the files still on disk

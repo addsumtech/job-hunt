@@ -831,6 +831,9 @@ believing you vetted it.
       Use `browser_page` evidence and stop across tools after a site refusal.
 
 Read-when:
+- [ ] Diagnosed OpenCLI adapter incompatibility? Read `references/opencli-compat.md`;
+      `scripts/opencli_compat.py` checks optional, reversible local patches.
+      Browser fallback does not require patching; a site refusal still stops reads.
 - [ ] Running on a host that is not Claude Code — codex, another agent, or as a
       subagent without `AskUserQuestion`? Read `references/portability.md`.
 - [ ] Not a software/research/engineering role? Read `references/role-families.md`.
