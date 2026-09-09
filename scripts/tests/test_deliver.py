@@ -119,6 +119,15 @@ def test_chinese_report_uses_bundled_cjk_renderer_when_pandoc_has_no_cjk_font(tm
     ))
     dest = tmp_path / "out"
     monkeypatch.setattr(deliver, "pick_cjk_font", lambda *args: None)
+
+    real_run = deliver.subprocess.run
+
+    def poppler_without_cjk_text(args, *positional, **keywords):
+        if args and args[0] == "pdftotext":
+            return subprocess.CompletedProcess(args, 0, b"", b"")
+        return real_run(args, *positional, **keywords)
+
+    monkeypatch.setattr(deliver.subprocess, "run", poppler_without_cjk_text)
     assert run(ws, dest) == 0
     pdf = dest / "报告" / "求职建议报告.pdf"
     assert pdf.is_file()
@@ -155,6 +164,22 @@ def test_chinese_pdf_contains_distinct_clickable_urls(tmp_path):
     with pymupdf.open(dest / "报告" / "求职建议报告.pdf") as pdf:
         urls = {link.get("uri") for page in pdf for link in page.get_links()}
     assert {first, second} <= urls
+
+
+def test_pdf_text_falls_back_to_pymupdf_for_bundled_cjk_fonts(tmp_path, monkeypatch):
+    """A Poppler build that returns no text must not reject a readable PDF."""
+    import pymupdf
+    pdf = tmp_path / "cjk.pdf"
+    with pymupdf.open() as document:
+        page = document.new_page()
+        page.insert_text((72, 72), "大模型工程师", fontname="china-s", fontsize=12)
+        document.save(pdf)
+
+    def blank_poppler(*args, **kwargs):
+        return subprocess.CompletedProcess(args[0], 0, b"", b"")
+
+    monkeypatch.setattr(deliver.subprocess, "run", blank_poppler)
+    assert "大模型工程师" in deliver.pdf_text(pdf)
 
 
 def test_pdf_with_an_authored_link_but_no_link_annotation_is_refused(tmp_path):

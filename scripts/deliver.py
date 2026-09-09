@@ -394,13 +394,28 @@ def _render_cjk_report(md: pathlib.Path, pdf: pathlib.Path) -> tuple[bool, str]:
 
 
 def pdf_text(pdf: pathlib.Path) -> str:
+    """Read PDF text with Poppler, then the bundled PyMuPDF reader if needed.
+
+    Older Poppler builds can return an empty string for a valid PDF that uses
+    MuPDF's bundled CJK font. Treating that transport-specific limitation as an
+    empty document rejected a readable Chinese report in CI. Both readers still
+    have to fail before the verifier accepts "no extractable text" as a result.
+    """
     try:
         r = subprocess.run(["pdftotext", str(pdf), "-"], capture_output=True,
                            timeout=60, check=False)
         # Decode in this thread: Windows subprocess text readers can lose a
         # UnicodeDecodeError in a background thread and return stdout=None.
-        return r.stdout.decode("utf-8")
+        text = r.stdout.decode("utf-8")
+        if text.strip():
+            return text
     except (OSError, UnicodeError, subprocess.SubprocessError):
+        pass
+    try:
+        import pymupdf
+        with pymupdf.open(pdf) as document:
+            return "\n".join(page.get_text("text") for page in document)
+    except Exception:
         return ""
 
 
