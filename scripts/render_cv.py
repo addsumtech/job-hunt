@@ -301,10 +301,10 @@ def resolve_link(item, key=None):
 # roles) exist mainly for senior/executive CVs; they sit near the end of the
 # default orders (empty → skipped for everyone else), and an exec promotes them
 # via meta.section_order. They must appear here so section_order accepts them.
-_INDUSTRY_ORDER = ["summary", "achievements", "experience", "education", "skills",
+_INDUSTRY_ORDER = ["summary", "achievements", "experience", "internships", "education", "skills",
                    "projects", "publications", "awards", "certifications", "board",
                    "volunteer"]
-_ACADEMIC_ORDER = ["summary", "achievements", "education", "experience", "publications",
+_ACADEMIC_ORDER = ["summary", "achievements", "education", "experience", "internships", "publications",
                    "skills", "projects", "awards", "certifications", "board", "volunteer"]
 _ALL_SECTIONS = _INDUSTRY_ORDER  # canonical set of known section keys
 
@@ -358,6 +358,22 @@ def is_academic_profile(profile):
     currently_studying = any(_is_current(ed) for ed in (profile.get("education") or []))
     has_pro_experience = any((ex.get("bullets") or []) for ex in (profile.get("experience") or []))
     return currently_studying and not has_pro_experience
+
+
+def experience_entries(profile, section):
+    # Keep the evidence schema intact: only the display group changes.
+    return [entry for entry in profile.get("experience", []) or []
+            if entry.get("section", "experience") == section]
+
+
+def experience_heading(profile, section):
+    if section == "experience":
+        return headings(profile)["experience"]
+    return headings(profile).get("internships", {
+        "zh": "实习经历", "ja": "インターンシップ", "ko": "인턴 경력",
+        "en": "Internships", "fr": "Stages", "de": "Praktika", "es": "Prácticas",
+        "it": "Tirocini", "nl": "Stages",
+    }.get(str((profile.get("meta") or {}).get("language", "en"))[:2], "Internships"))
 
 
 def section_order(profile):
@@ -1072,11 +1088,11 @@ def render_markdown(profile):
             return ["", f"## {h['summary']}", normalize_text(profile["summary"]).strip()]
         return []
 
-    def experience():
+    def experience(section="experience"):
         out = []
-        for e in (profile.get("experience") or []):
+        for e in experience_entries(profile, section):
             if not out:
-                out += ["", f"## {h['experience']}"]
+                out += ["", f"## {experience_heading(profile, section)}"]
             header = f"**{e.get('title','')}**, {e.get('org','')}"
             dates = _dates(e, meta.get("language", "en"))
             meta_bits = " · ".join(
@@ -1150,7 +1166,7 @@ def render_markdown(profile):
         return ["", f"## {h[key]}"] + [f"- {normalize_text(item_str(it))}" for it in items]
 
     builders = {
-        "summary": summary, "experience": experience, "education": education,
+        "summary": summary, "experience": experience, "internships": lambda: experience("internships"), "education": education,
         "skills": skills, "projects": projects,
         "publications": lambda: simple_list("publications"),
         "awards": lambda: simple_list("awards"),
@@ -1210,7 +1226,7 @@ def render_docx(profile, out_path):
     section.top_margin, section.bottom_margin = Mm(10), Mm(12)
     section.left_margin = section.right_margin = Mm(12.7)
     width = section.page_width - section.left_margin - section.right_margin
-    east_asia = {"zh": "宋体", "ja": "Yu Mincho", "ko": "Malgun Gothic"}.get(language)
+    east_asia = {"zh": "Songti SC" if sys.platform == "darwin" else "SimSun", "ja": "Yu Mincho", "ko": "Malgun Gothic"}.get(language)
     for name, size, before, after in [("Normal", 11, 0, 2), ("Title", 16, 0, 4),
                                       ("Heading 1", 11, 9, 3), ("List Bullet", 11, 0, 2)]:
         style = doc.styles[name]
@@ -1310,11 +1326,11 @@ def render_docx(profile, out_path):
             doc.add_heading(h["summary"], level=1)
             doc.add_paragraph(normalize_text(profile["summary"]).strip())
 
-    def experience():
-        exp = profile.get("experience") or []
+    def experience(section="experience"):
+        exp = experience_entries(profile, section)
         if not exp:
             return
-        doc.add_heading(h["experience"], level=1)
+        doc.add_heading(experience_heading(profile, section), level=1)
         for e in exp:
             dates = _dates(e, language)
             entry_row(e.get("org", ""), dates)
@@ -1377,7 +1393,7 @@ def render_docx(profile, out_path):
             doc.add_paragraph(normalize_text(item_str(it)), style="List Bullet")
 
     builders = {
-        "summary": summary, "experience": experience, "education": education,
+        "summary": summary, "experience": experience, "internships": lambda: experience("internships"), "education": education,
         "skills": skills, "projects": projects,
         "publications": lambda: simple_list("publications"),
         "awards": lambda: simple_list("awards"),
@@ -2051,11 +2067,11 @@ def build_latex(profile, cjk=None, engine=None, asset_dir=None, asset_stem="cv")
         if profile.get("summary"):
             parts.extend([r"\section*{%s}" % h["summary"], e(profile["summary"].strip())])
 
-    def experience():
-        exp = profile.get("experience") or []
+    def experience(section="experience"):
+        exp = experience_entries(profile, section)
         if not exp:
             return
-        parts.append(r"\section*{%s}" % h["experience"])
+        parts.append(r"\section*{%s}" % e(experience_heading(profile, section)))
         for ex in exp:
             dates = _dates_tex(ex, meta.get("language", "en"))
             # `location` is on the right with the dates, matching the `location ·
@@ -2133,7 +2149,7 @@ def build_latex(profile, cjk=None, engine=None, asset_dir=None, asset_stem="cv")
         parts.append(r"\end{itemize}")
 
     builders = {
-        "summary": summary, "experience": experience, "education": education,
+        "summary": summary, "experience": experience, "internships": lambda: experience("internships"), "education": education,
         "skills": skills, "projects": projects,
         "publications": lambda: simple_list("publications"),
         "awards": lambda: simple_list("awards"),
