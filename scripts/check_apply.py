@@ -201,6 +201,64 @@ def _latest_round(ws: pathlib.Path):
     return max(numbers) if numbers else None
 
 
+def _statement_only(ws: pathlib.Path):
+    """An explicit, sourced no-CV decision; missing CV files alone prove nothing.
+
+    The source quote makes the writer's routing decision reviewable. Matching
+    its bytes does not establish that the quote really means "no CV required";
+    that reading remains the author's responsibility.
+    """
+    plan_path = ws / "application-plan.yaml"
+    if not plan_path.exists():
+        return False, [], {}
+    try:
+        plan = journal.load_yaml(plan_path)
+    except journal.YamlUnreadable as exc:
+        return False, [exc.finding], {}
+    hashes = {plan_path.name: journal.sha256_file(plan_path)}
+    if plan.get("cv_required") is not False:
+        if plan.get("cv_required") is True:
+            return False, [], hashes
+        return False, ["BAD_APPLICATION_PLAN: cv_required must be a YAML boolean"], hashes
+    try:
+        posting = journal.load_yaml(ws / "posting.yaml")
+    except journal.YamlUnreadable:
+        posting = {}
+    if plan.get("application_type") != "structured" or posting.get("application_type") != "structured":
+        return False, ["BAD_APPLICATION_PLAN: a no-CV plan requires application_type: "
+                       "structured in both the plan and posting.yaml"], hashes
+    ref = plan.get("source_ref")
+    quote = plan.get("source_quote")
+    if not isinstance(ref, str) or not ref.strip() or not isinstance(quote, str) or not quote.strip():
+        return False, ["BAD_APPLICATION_PLAN: no-CV routing needs source_ref and "
+                       "the verbatim source_quote that supports the decision"], hashes
+    relative = pathlib.Path(ref)
+    source = ws / relative
+    # Original inputs only: a rendered CV, a judge reply or a receipt cannot
+    # become the evidence for skipping the very review it belongs to.
+    original = ((bool(relative.parts) and relative.parts[0] in ("raw", "inputs", "source")) or
+                relative.as_posix() in ("input.md", "posting-source.md", "posting-source.txt"))
+    try:
+        inside = source.resolve().is_relative_to(ws.resolve()) and source.is_file()
+    except (OSError, RuntimeError, ValueError):
+        inside = False
+    if (relative.is_absolute() or ".." in relative.parts or not original or
+            not inside):
+        return False, ["BAD_APPLICATION_PLAN: source_ref must name a readable original "
+                       "input inside this workspace (input.md, posting-source.md/.txt, "
+                       "or a file under raw/, inputs/, source/)"], hashes
+    try:
+        source_text = source.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        return False, [f"BAD_APPLICATION_PLAN: source_ref cannot be read: {exc}"], hashes
+    if quote not in source_text:
+        return False, ["BAD_APPLICATION_PLAN: source_quote is not present verbatim "
+                       "in source_ref; no sourced no-CV decision is recorded"], hashes
+    hashes[relative.as_posix()] = journal.sha256_file(source)
+    has_cv = any((ws / f"cv.{ext}").exists() for ext in ("md", "docx", "pdf", "tex"))
+    return not has_cv, [], hashes
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--workspace", required=True)
@@ -278,9 +336,13 @@ def main(argv=None) -> int:
             "reader of the document the employer actually marks. Fix the YAML and "
             "re-run")
 
+    statement_only, plan_findings, plan_hashes = _statement_only(ws)
+    findings.extend(plan_findings)
     conditional = conditional_gates(ws)
     trigger = dict(conditional)
-    required = list(REQUIRED_GATES) + [g for g, _ in conditional]
+    required = [g for g in REQUIRED_GATES
+                if not statement_only or g not in ("parse_verdicts", "lint_cv")]
+    required += [g for g, _ in conditional]
     for gate in required:
         receipts = journal.read_receipts(ws, gate)
         if not receipts:
@@ -312,6 +374,14 @@ def main(argv=None) -> int:
                             f"({detail})")
         else:
             findings.extend(_stale_inputs(ws, gate, last))
+            if statement_only and gate == "check_render_freshness":
+                expected = {"supporting-statement.md", "posting.yaml", *plan_hashes}
+                missing = expected - set(last.get("input_hashes") or {})
+                if missing:
+                    findings.append("STRUCTURED_INPUT_NOT_REVIEWED: the freshness "
+                                    "receipt does not cover " + ", ".join(sorted(missing)) +
+                                    " — record all statement-review inputs, review "
+                                    "the criteria, then verify freshness")
 
     # ── any other gate that ran and failed ────────────────────────────────
     # Enumerating gates cannot keep up with the gates: check_pages and
@@ -352,7 +422,7 @@ def main(argv=None) -> int:
     # `combined_verdict: "PASS"` while round 1's receipt vouched for it, and the
     # package went out over a round the judges had rejected. Round 1 alone was
     # protected, by MISSING_RECEIPT.
-    if n is not None:
+    if n is not None and not statement_only:
         pv = journal.read_receipts(ws, "parse_verdicts")
         recorded = pv[-1].get("round") if pv else None
         if pv and recorded is None:
@@ -368,11 +438,11 @@ def main(argv=None) -> int:
                 f"the gate — re-run parse_verdicts --round {n}")
 
     combined = rounds.load_round(ws, n).get("combined_verdict") if n else None
-    if n is None:
+    if n is None and not statement_only:
         findings.append("NO_ROUND: no judge-round-<n>.json in the workspace — the "
                         "three-judge review loop is non-negotiable and leaves an "
                         "artifact")
-    elif combined != "PASS":
+    elif combined != "PASS" and not statement_only:
         stop_path = ws / "honest-stop.yaml"
         if not stop_path.exists():
             findings.append(f"NO_PASS_NO_STOP: round {n} is {combined} and there is no "
@@ -460,9 +530,12 @@ def main(argv=None) -> int:
 
     for f in findings:
         print(f)
-    journal.receipt(ws, GATE, {}, "fail" if findings else "pass", findings)
+    journal.receipt(ws, GATE, plan_hashes, "fail" if findings else "pass", findings)
     return 1 if findings else 0
 
 
 if __name__ == "__main__":
+    from cli_io import configure_output
+
+    configure_output()
     sys.exit(main())

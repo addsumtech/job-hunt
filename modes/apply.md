@@ -134,7 +134,7 @@ A worked file, including a retracted row, is in `assets/claims.example.yaml`.
   ```
 
 - **The PDF always ships with its `.tex` source.** Each `--format pdf` run writes `cv.tex` next to `cv.pdf` (whether or not the compile succeeds), so deliver both — the candidate can hand-tune typography or recompile later. List the `.tex` among the outputs in Step 7.
-- If the PDF run warns about a missing LaTeX engine: tell the user the Markdown and .docx outputs are still produced, the `.tex` was emitted, and they can get the PDF by installing a LaTeX engine (`tectonic` recommended) and compiling the `.tex`. That case, and only that case, exits 0.
+- If the PDF run warns about a missing LaTeX engine: follow `references/agent-setup.md` to install a suitable engine, then re-render and verify the requested PDF. If setup is blocked, deliver the available Markdown, .docx and `.tex`, and name the actual blocker. The renderer's no-engine fallback exits 0; that does not mean a PDF was produced.
 - **If the PDF run exits non-zero and reports dropped characters, there is no PDF and there must not be one.** The engine reports a `Missing character` per glyph it could not typeset and still exits 0 by itself, so the renderer scans for them and refuses; `cv.md` and `cv.docx` are unaffected and will look perfect while the PDF would have lost letters out of the candidate's own name. Do not hand over a PDF from a previous run, and do not describe the PDF as delivered. Read the codepoints it names, set `meta.main_font` (Latin) or `meta.cjk_font` (CJK) in the tailored profile to a font installed on this machine, and re-render — or ship `.docx` + `.tex` and say plainly that the PDF could not be produced.
 - **Japan rirekisho fork:** if the target is Japan AND a traditional/domestic employer (or the user asks for a 履歴書), the standard form differs from the Western CV — render it with `scripts/render_rirekisho.py` per `references/rirekisho.md`. Collect the `jp:` personal-data fields honestly from the user (DOB, address, photo, furigana, 志望の動機 — never invent them), compute `age` from DOB using today's date, output `.docx` (the authentic form; export to PDF from Word/LibreOffice), and keep the Western CV as the companion 職務経歴書. For an international/foreign-capital employer, the normal Western CV (Step 4 above, in Japanese or English) is correct — don't force a rirekisho.
 
@@ -287,6 +287,30 @@ python3 scripts/check_claims.py --workspace <workspace> \
 
 ## Gate commands, in the order they run
 
+**Confirmed statement-only structured applications:** first write the sourced
+`application-plan.yaml` described in `references/structured-applications.md`.
+Keep `profile.yaml`, `tailored-profile.yaml` and the claim ledger for provenance,
+but do not render a CV when the confirmed portal instructions exclude it.
+Run `check_personal_data` and the verifying `check_claims` pass as usual, then
+`check_word_limits`. Replace the CV dispatch block below with:
+
+```bash
+python3 scripts/check_render_freshness.py --workspace <ws> --round 1 \
+    --record <ws>/supporting-statement.md <ws>/posting.yaml \
+    <ws>/application-plan.yaml <ws>/<source_ref>
+# Read the statement against every Essential criterion; verify evidence and
+# STAR structure, record the criterion coverage and any honest gaps in the
+# completion report, and prepare interview-brief.md. No CV judge verdicts.
+python3 scripts/check_render_freshness.py --workspace <ws> --round 1
+python3 scripts/check_apply.py --workspace <ws>
+```
+
+The final gate still requires the statement, its word-limit check, provenance,
+and freshness of the statement, posting, plan and quoted source. A missing plan
+does not activate this exception; producing any CV restores the normal three-judge
+loop. For structured applications that also require a CV, use the full block below
+and separately review the supporting statement against its criteria.
+
 ```bash
 # after tailoring, before dispatching the judges
 python3 scripts/check_personal_data.py --workspace <ws>
@@ -370,35 +394,29 @@ every mode is a command, not a claim:
 python3 scripts/deliver.py --workspace <ws>
 ```
 
-It copies this round's readable artifacts **straight into `~/Downloads`**, named
-`<slug>-<file>`, renders every Markdown to **PDF as well**, and prints the paths.
-Quote them in the completion message. The slug prefix is not a folder in
-disguise: two rounds both produce `shortlist.md`, and a bare name would have the
-second silently overwrite the first.
+Author `report.md` for **every consultation**, answering the client's actual
+question in their language: conclusion, supporting evidence, relevant career
+constraints or facts still to confirm, and practical next steps. Tool defects,
+adapter errors, tests, developer diagnostics and internal review logs belong only
+in the private workspace, never in this client report. Do not copy an internal
+`completion.md` into it. A general question still receives a PDF reply report.
 
-**The PDF is verified, not trusted.** `pandoc --pdf-engine=tectonic` on a Chinese
-document exits 0, prints a warning nobody reads, and writes a PDF whose every CJK
-glyph is a box — measured, 528 characters in and 0 read back. So a CJK document
-gets a CJK font chosen by probing what this machine actually has, and every PDF
-is read back with `pdftotext` and compared against its source before it counts as
-delivered. One that lost characters is deleted and reported; the Markdown still
-ships.
+Run `deliver.py` as the last step. It requires `report.md` and a verified report
+PDF and copies only the report and requested CV/application documents into
+`~/Downloads/<workspace-name>/`. For multiple workspaces serving one consultation,
+pass the **same `--to <consultation-folder>`** each time so the report and CV stay
+together. Quote that folder and its client files in the reply. The workspace and
+all audit evidence remain in their original location.
 
-**It is a copy, and the split is deliberate.** `raw/`, `journal.jsonl` and the
-adapter `.err` files stay in the workspace: they are the provenance chain, they
-are unreadable to a person, and an audit has to read them where they live rather
-than in an export that may have gone stale.
+PDF verification checks both recovered text and actual painted glyph IDs. A
+missing or refused PDF means incomplete delivery (exit 2); repair the cause and
+rerun before declaring completion. `--no-pdf` is only for an explicit user format
+exception. A cover letter is provided on demand; it is not the domestic default.
+Do not automatically start a mock interview or another mode.
 
-**Do not move the workspace itself.** `scripts/paths.py` owns that layout,
-`modes/apply.md`'s resume-an-unfinished-run lookup finds work BY the path shape,
-and `check_claims.py` fingerprints the master profile at that path. `~/Downloads`
-is also a directory the user's own housekeeping empties.
-
-`deliver.py` exits 0 or 2, never 1 — there is no such thing as a delivery
-finding. Exit 2 with `DELIVER_DEST_UNWRITABLE` is the macOS case worth knowing:
-`~/Downloads` sits behind TCC, it can start refusing writes part-way through a
-session, and `os.access` says yes while the write fails. The script probes by
-writing a real file. When it exits 2, say so and offer `--to` with somewhere
-else — do not silently leave the artifacts undelivered.
 
 When Word files are delivered, `check_pages.py` requires LibreOffice to measure them independently. A `DOCX_NOT_MEASURED` finding means Word pagination was not verified; install the dependency and rerun, or clearly report the remaining limitation. A passing LaTeX PDF does not establish Word pagination.
+
+For native Word/LibreOffice export, complete ordinary save and print dialogs directly with the host's available UI tools. Disabled document controls can mean a modal dialog is waiting, not that the application is frozen. Before asking the user to restart or take over, inspect the current app windows and accessibility state; if the dialog is absent from that view, inspect a screenshot and use the host's supported interaction method. Save a separately named output when checking another renderer so existing artifacts remain intact, then verify that the file exists and inspect its text and page layout before reporting success.
+
+Request user intervention only for an observed blocker the available tools cannot resolve or an action that requires human participation under the host's rules. State what is actually visible and what was attempted; do not diagnose a crash from grey controls or one unchanged tool response. This document-export guidance does not change the login, verification or refusal rules for job websites.

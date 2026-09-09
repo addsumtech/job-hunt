@@ -120,7 +120,7 @@ def workspace(tmp_path) -> pathlib.Path:
 def run(script, argv, ws):
     return subprocess.run([sys.executable, str(SCRIPTS / script),
                            "--workspace", str(ws)] + argv,
-                          capture_output=True, text=True, cwd=str(ROOT))
+                          capture_output=True, text=True, encoding="utf-8", cwd=str(ROOT))
 
 
 def receipts(ws):
@@ -215,6 +215,6 @@ def test_check_apply_reports_rather_than_refuses_on_an_empty_workspace():
     ws = workspace(tmp)
     proc = subprocess.run(
         [sys.executable, str(SCRIPTS / "check_apply.py"), "--workspace", str(ws)],
-        capture_output=True, text=True, cwd=str(ROOT))
+        capture_output=True, text=True, encoding="utf-8", cwd=str(ROOT))
     assert proc.returncode == 1, f"expected findings, got {proc.returncode}"
     assert proc.stdout.strip(), "check_apply must SAY what is missing"

@@ -148,7 +148,7 @@ def test_no_harness_module_carries_a_machine_specific_absolute_path(prefix):
     # files most likely to grow a path someone pasted from their own shell.
     import subprocess  # local: only this test shells out
     listed = subprocess.run(["git", "ls-files", "evals"], cwd=str(_REPO_ROOT),
-                            capture_output=True, text=True)
+                            capture_output=True, text=True, encoding="utf-8")
     assert listed.returncode == 0, "could not list committed evals files"
     committed = [_REPO_ROOT / rel for rel in listed.stdout.split() if rel.strip()]
     assert len(committed) > 20, (

@@ -102,6 +102,7 @@ def test_the_self_check_names_every_script():
     # lands last silently deletes the earlier plans' entries and the deletion
     # shows up as an unrelated red test in someone else's task.
     skip = {"journal.py", "paths.py", "rounds.py", "vocab.py",
+            "cli_io.py",                         # imported by CLI entry points
             "report_locales.py",                 # shared text, imported by gates
             "opencli_meta.py",                    # Plan 3 — leave it
             "mock_vocab.py", "mock_blocks.py",    # imported, never invoked
@@ -414,7 +415,7 @@ def _paragraphs(path: pathlib.Path) -> list[str]:
 # what to do on a host with no subagent tool has to be in layer 1 too — a codex run
 # reading only SKILL.md would otherwise hit "dispatch subagents" with no subagents
 # and no stated alternative.
-SHARED_WITH_APPLY = 19
+SHARED_WITH_APPLY = 22
 
 
 def test_the_paragraphs_layer_1_shares_with_a_mode_file_are_byte_identical():

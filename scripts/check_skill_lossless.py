@@ -129,10 +129,10 @@ def baseline_docs(spec: str, repo: Path) -> dict:
         for f in sorted(p.rglob("*")):
             rel = f.relative_to(p)
             if f.is_file() and in_corpus(rel):
-                out[str(rel)] = f.read_text(encoding="utf-8", errors="replace")
+                out[rel.as_posix()] = f.read_text(encoding="utf-8", errors="replace")
         return out
     listing = subprocess.run(["git", "ls-tree", "-r", "--name-only", spec],
-                             cwd=repo, capture_output=True, text=True)
+                             cwd=repo, capture_output=True, text=True, encoding="utf-8")
     if listing.returncode != 0:
         raise BaselineUnavailable(
             f"cannot read baseline {spec!r}: {listing.stderr.strip()}")
@@ -142,7 +142,7 @@ def baseline_docs(spec: str, repo: Path) -> dict:
         if not rel or not in_corpus(rel):
             continue
         blob = subprocess.run(["git", "show", f"{spec}:{rel}"],
-                              cwd=repo, capture_output=True, text=True)
+                              cwd=repo, capture_output=True, text=True, encoding="utf-8")
         if blob.returncode == 0:
             out[rel] = blob.stdout
     return out
@@ -241,4 +241,7 @@ def main(argv=None) -> int:
 
 
 if __name__ == "__main__":
+    from cli_io import configure_output
+
+    configure_output()
     sys.exit(main())

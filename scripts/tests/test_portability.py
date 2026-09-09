@@ -21,7 +21,7 @@ sys.path.insert(0, str(SCRIPTS))
 
 # ---- the enforcement layer is agent-agnostic, and that is testable ---------
 
-def test_the_scripts_import_nothing_beyond_the_standard_library_and_two_packages():
+def test_the_scripts_import_nothing_beyond_the_standard_library_and_declared_packages():
     """`requirements.txt` is the whole dependency surface. A third package would
     be a new install step on every host, and a host-specific import would make
     the gates unrunnable off Claude Code."""
@@ -34,7 +34,7 @@ def test_the_scripts_import_nothing_beyond_the_standard_library_and_two_packages
                 external.update(a.name.split(".")[0] for a in node.names)
             elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
                 external.add(node.module.split(".")[0])
-    assert external - std - local == {"docx", "yaml"}
+    assert external - std - local == {"docx", "yaml", "pymupdf"}
 
 
 def test_no_script_mentions_a_claude_only_tool():
@@ -56,11 +56,11 @@ def test_a_gate_runs_with_bare_python_and_no_agent(tmp_path):
     enter = subprocess.run(
         [sys.executable, str(SCRIPTS / "enter_mode.py"),
          "--workspace", str(tmp_path), "--mode", "discover"],
-        capture_output=True, text=True, env=env)
+        capture_output=True, text=True, encoding="utf-8", env=env)
     assert enter.returncode == 0, enter.stderr
     gate = subprocess.run(
         [sys.executable, str(SCRIPTS / "check_no_write.py"), "--workspace", str(tmp_path)],
-        capture_output=True, text=True, env=env)
+        capture_output=True, text=True, encoding="utf-8", env=env)
     assert gate.returncode == 0, gate.stderr
     assert (tmp_path / "journal.jsonl").is_file()
 
@@ -73,7 +73,7 @@ def test_the_store_honours_an_environment_override(tmp_path):
         [sys.executable, "-c",
          "import sys; sys.path.insert(0, %r); import paths; print(paths.PROFILES_ROOT)"
          % str(SCRIPTS)],
-        capture_output=True, text=True,
+        capture_output=True, text=True, encoding="utf-8",
         env={**os.environ, "JOBHUNT_PROFILES_ROOT": str(tmp_path / "elsewhere")})
     assert out.stdout.strip() == str(tmp_path / "elsewhere"), out.stderr
 
@@ -86,7 +86,7 @@ def test_the_default_is_unchanged_when_the_variable_is_absent():
         [sys.executable, "-c",
          "import sys; sys.path.insert(0, %r); import paths; print(paths.PROFILES_ROOT)"
          % str(SCRIPTS)],
-        capture_output=True, text=True, env=env)
+        capture_output=True, text=True, encoding="utf-8", env=env)
     assert out.stdout.strip() == str(pathlib.Path.home() / ".claude" / "job-profiles")
 
 

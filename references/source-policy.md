@@ -48,8 +48,11 @@ Allowed, capped, and disclosed. Say plainly that account risk is not zero.
 - Small-volume capture for the user's own analysis, with source, timestamp and
   read-quality retained on every row.
 - **Stop on any risk-control signal**, for that site, for that round. Do not retry.
-  Do not change parameters and retry. Do not route around it. Emit the
-  direction-level degraded shortlist and its disclosure block.
+  Do not change parameters and retry. Do not route around it. First pause and
+  offer [user recovery](user-recovery.md); resume only after explicit user
+  confirmation, in a new bounded round preserving the stopped journal.
+  Offer partial results or directions if the user declines or cannot recover;
+  do not silently end the task while waiting for a login/verification reply.
 
 ## Red
 

@@ -105,7 +105,7 @@ def test_korean_spaces_survive_into_the_compiled_pdf(tmp_path):
             pytest.skip("no Korean-capable CJK font on this machine")
         pytest.fail(f"Korean CV did not render: {reasons}")
     text = subprocess.run(["pdftotext", str(out), "-"],
-                          capture_output=True, text=True)
+                          capture_output=True, text=True, encoding="utf-8")
     if text.returncode != 0:
         pytest.skip("pdftotext not available")
     assert "데이터 엔지니어" in text.stdout, "the word space was eaten in the PDF"
@@ -227,7 +227,7 @@ def test_ordinary_publication_dois_and_repo_urls_stay_on_the_page(tmp_path):
     out = tmp_path / "cv.pdf"
     assert render_cv.render_pdf(p, out) is True
     bbox = subprocess.run(["pdftotext", "-bbox", str(out), "-"],
-                          capture_output=True, text=True)
+                          capture_output=True, text=True, encoding="utf-8")
     if bbox.returncode != 0:
         pytest.skip("pdftotext not available")
     xmaxs = [float(m) for m in re.findall(r'xMax="([0-9.]+)"', bbox.stdout)]
@@ -377,7 +377,7 @@ def _korean_font_installed():
     if not shutil.which("fc-list"):
         return None  # cannot tell
     try:
-        listing = subprocess.run(["fc-list"], capture_output=True, text=True,
+        listing = subprocess.run(["fc-list"], capture_output=True, text=True, encoding="utf-8",
                                  timeout=30).stdout
     except (OSError, subprocess.SubprocessError):
         return None

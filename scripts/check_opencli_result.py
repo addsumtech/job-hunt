@@ -166,6 +166,25 @@ def _error_code(stderr_text):
     return error.get("code") if isinstance(error, dict) else None
 
 
+def recovery_guidance(kind="platform"):
+    """Operator guidance only: a user reply is required, never a retry token."""
+    actions = {
+        "login": "Ask the user to finish login in the connected browser.",
+        "verification": "Ask the user to open the site in the connected browser and complete the human verification themselves; do not describe it as a missing login.",
+        "rate_limit": "Explain the rate limit and any displayed wait time; login is not a fix. Do not poll or automatically retry after a timer.",
+        "platform": "Ask the user to inspect the site in the connected browser: complete login or human verification only if the page asks for it. A permission or account restriction may not be fixable by logging in.",
+    }
+    return (actions[kind] + " Pause this source and keep the retrieved results. "
+            "Wait for explicit user confirmation that the required action is done "
+            "and they want to continue; elapsed time is not confirmation. Then "
+            "start one new bounded round linked to the paused workspace, using "
+            "the same source and backend, and verify access with one read. "
+            "Preserve the old journal; never clear its stop lock. If refused "
+            "again, pause and ask again. Offer partial results, other sources "
+            "or a pasted posting instead of silently abandoning the task. "
+            "See references/user-recovery.md.")
+
+
 def classify(site, command, exit_code, stdout_text, stderr_text,
              auth_rows=None, signals=()):
     """Classify one invocation. Returns a JSON-serialisable dict."""
@@ -199,7 +218,8 @@ def classify(site, command, exit_code, stdout_text, stderr_text,
             result["signal_id"] = "opencli-anti-bot"
             result["remedy"] = (
                 "OpenCLI reported ANTI_BOT. Stop this site for this round: "
-                "do not retry, refresh the session, or switch tools to route around it.")
+                "do not retry, refresh the session, or switch tools to route around it. "
+                + recovery_guidance("verification"))
             return result
 
         # Matched against the WHOLE stderr of the failed call, not just the
@@ -218,9 +238,13 @@ def classify(site, command, exit_code, stdout_text, stderr_text,
                 result["remedy"] = (
                     f"platform stop-signal {signal['id']!r} matched. Stop this "
                     "site for this round: do not retry, do not change "
-                    "parameters and retry, do not route around it. Output the "
-                    "direction-level degraded shortlist with its disclosure "
-                    "block."
+                    "parameters and retry, do not route around it. "
+                    + recovery_guidance("rate_limit" if signal["id"] in {
+                        "http-429-rate-limited", "too-frequent-cn"}
+                        else "verification" if signal["id"] in {
+                            "indeed-cloudflare-challenge", "verify-human-en",
+                            "captcha-interstitial", "slider-verification-cn",
+                            "security-verification-cn"} else "platform")
                 )
                 return result
 
@@ -232,8 +256,9 @@ def classify(site, command, exit_code, stdout_text, stderr_text,
                 result["remedy"] = (
                     f"{site} has no auth adapter — it is absent from "
                     f"`opencli auth status` and `opencli {site} login` does not "
-                    "exist. This is the platform refusing, not a session "
-                    "problem: treat the site as unavailable for this round."
+                    "exist. Do not invent a login command or assume the browser "
+                    "session is missing. Stop this site for this round. "
+                    + recovery_guidance()
                 )
             elif state == "logged_in":
                 result["classification"] = "platform_limit"
@@ -241,7 +266,7 @@ def classify(site, command, exit_code, stdout_text, stderr_text,
                     "auth status says logged_in and the site still refused. "
                     "Treat it as a platform control. Stop this site for this "
                     "round: do not retry, do not change parameters and retry, "
-                    "do not route around it."
+                    "do not route around it. " + recovery_guidance()
                 )
             elif state == "unknown":
                 result["classification"] = "not_logged_in"
@@ -249,14 +274,16 @@ def classify(site, command, exit_code, stdout_text, stderr_text,
                     "auth status returned `unknown` (its logged_in field is an "
                     "EMPTY STRING, not false). Re-probe before concluding "
                     f"anything: opencli auth status --site {site} --full "
-                    "--timeout 40 -f json, then classify again."
+                    "--timeout 40 -f json, then classify again. "
+                    + recovery_guidance("login")
                 )
             else:
                 result["classification"] = "not_logged_in"
                 result["remedy"] = (
                     f"Hand `opencli {site} login` to the user to run — it is a "
                     "write command and this skill never runs one. Do not retry "
-                    "the read: the refusal is deterministic while logged out."
+                    "the read: the refusal is deterministic while logged out. "
+                    + recovery_guidance("login")
                 )
                 if state == "unchecked":
                     result["remedy"] += (
@@ -286,6 +313,26 @@ def classify(site, command, exit_code, stdout_text, stderr_text,
     if not isinstance(rows, list):
         result["classification"] = "transport"
         result["remedy"] = "exit 0 but stdout was not a JSON array"
+        return result
+
+    # Measured 2026-09-09: Indeed's detail adapter returns exit 0 and the
+    # sign-in heading as a job title, with an empty company and description.
+    # Match the observed shape, not login words in legitimate job prose.
+    if site == "indeed" and command in {"job", "detail", "view"} and any(
+        isinstance(row, dict)
+        and str(row.get("title") or "").strip().casefold()
+            == "ready to take the next step?"
+        and not str(row.get("company") or "").strip()
+        and not str(row.get("description") or "").strip()
+        for row in rows
+    ):
+        result["classification"] = "not_logged_in"
+        result["signal_id"] = "indeed-sign-in-interstitial"
+        result["error_message"] = "Indeed returned its sign-in page instead of a job detail"
+        result["remedy"] = (
+            "Stop this site for this round. Do not count the sign-in page as a "
+            "job or retry the read. Indeed has no OpenCLI login command. "
+            + recovery_guidance("login"))
         return result
 
     result["classification"] = "ok"
@@ -403,4 +450,7 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    from cli_io import configure_output
+
+    configure_output()
     raise SystemExit(main())

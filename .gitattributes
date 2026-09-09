@@ -1,0 +1,3 @@
+# Journals and carried eval scenarios hash the committed bytes. Do not let
+# core.autocrlf change those bytes when the skill is checked out on Windows.
+* text=auto eol=lf

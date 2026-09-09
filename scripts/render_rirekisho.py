@@ -38,11 +38,19 @@ import render_cv  # reuse load_profile + _is_current
 
 # ── date helpers ──────────────────────────────────────────────────────────────
 
+_DATE = re.compile(r"\s*(\d{4})(?:[-/.年\s]+(\d+))?")
+
+
+def _invalid_month(match):
+    return bool(match and match.group(2) is not None
+                and (len(match.group(2)) > 2 or not 1 <= int(match.group(2)) <= 12))
+
+
 def _ym(s):
     """Extract (year, month) strings from a date like '2023-09' / '2021' /
-    '2023年9月'. Returns ('', '') if no year is present."""
-    m = re.match(r"\s*(\d{4})(?:[-/.年\s]+(\d{1,2}))?", str(s or ""))
-    if not m:
+    '2023年9月'. Returns ('', '') for an absent year or invalid month."""
+    m = _DATE.match(str(s or ""))
+    if not m or _invalid_month(m):
         return "", ""
     month = str(int(m.group(2))) if m.group(2) else ""   # drop leading zero (9, not 09)
     return m.group(1), month
@@ -62,6 +70,12 @@ def _checked_ym(value, what, problems):
     passes pytest, and the rirekisho is deliberately routed away from all three
     judges, so no other reader exists.
     """
+    match = _DATE.match(str(value or ""))
+    if _invalid_month(match):
+        if problems is not None:
+            problems.append(f"INVALID_MONTH: {what}: month {match.group(2)!r} "
+                            "must have one or two digits and be between 1 and 12")
+        return "", ""
     y, mo = _ym(value)
     if not y and problems is not None:
         problems.append(f"{what}: could not read a year from {value!r} — accepted "
@@ -76,12 +90,12 @@ def _checked_ym(value, what, problems):
 # anchoring, and require a plausible year shape (19xx/20xx, not adjacent to
 # another digit) so that "ISO 27001" and "CCNA 200-301" do not silently print
 # a fabricated date into the form.
-_CERT_YEAR = re.compile(r"(?<!\d)((?:19|20)\d{2})(?!\d)(?:\s*[-/.年]\s*(\d{1,2})(?!\d))?")
+_CERT_YEAR = re.compile(r"(?<!\d)((?:19|20)\d{2})(?!\d)(?:\s*[-/.年]\s*(\d+))?")
 
 
 def _cert_ym(value):
     m = _CERT_YEAR.search(str(value or ""))
-    if not m:
+    if not m or _invalid_month(m):
         return "", ""
     return m.group(1), (str(int(m.group(2))) if m.group(2) else "")
 
@@ -123,7 +137,11 @@ def licenses_rows(profile, problems=None):
     rows = []
     for cert in (profile.get("certifications") or []):
         y, mo = _cert_ym(cert)
-        if not y and problems is not None:
+        match = _CERT_YEAR.search(str(cert or ""))
+        if _invalid_month(match) and problems is not None:
+            problems.append(f"INVALID_MONTH: 免許・資格 {cert}: month "
+                            f"{match.group(2)!r} must have one or two digits and be between 1 and 12")
+        elif not y and problems is not None:
             problems.append(f"免許・資格 {cert}: no year found — the 年 cell will be "
                             f"blank; add one, e.g. '基本情報技術者試験 合格 (2021)'")
         rows.append({"y": y, "m": mo, "text": cert})
@@ -140,6 +158,8 @@ def date_problems(profile):
     fatal, warnings = [], []
     gakureki_shokureki_rows(profile, fatal)
     licenses_rows(profile, warnings)
+    fatal.extend(problem for problem in warnings if problem.startswith("INVALID_MONTH:"))
+    warnings = [problem for problem in warnings if not problem.startswith("INVALID_MONTH:")]
     return fatal, warnings
 
 
@@ -185,9 +205,16 @@ def render_markdown(profile):
 
 def _ym_table(doc, title, rows):
     from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Mm
     doc.add_heading(title, level=1)
     t = doc.add_table(rows=1, cols=3)
     t.style = "Table Grid"
+    t.autofit = False
+    # The writing area is 174 mm; year/month are short values, not prose columns.
+    for column, width in zip(t.columns, (18, 13, 143)):
+        column.width = Mm(width)
+        for cell in column.cells:
+            cell.width = Mm(width)
     hdr = t.rows[0].cells
     hdr[0].text, hdr[1].text, hdr[2].text = "年", "月", title
     for r in rows:
@@ -291,9 +318,11 @@ def main(argv=None):
     fatal, warnings = date_problems(profile)
     for problem in fatal + warnings:
         print(f"WARNING: {problem}", file=sys.stderr)
-    if fatal and not args.allow_blank_dates:
-        print("Refusing to write a 履歴書 with blank 年/月 cells in 学歴・職歴 — the "
-              "table is the form. Fix the dates, or pass --allow-blank-dates.",
+    invalid_month = any(problem.startswith("INVALID_MONTH:") for problem in fatal)
+    if fatal and (invalid_month or not args.allow_blank_dates):
+        print("Refusing to write a 履歴書 with invalid or unreadable 年/月 dates. "
+              "Fix the dates, or pass --allow-blank-dates for "
+              "unreadable dates only. Invalid month values are always rejected.",
               file=sys.stderr)
         return 1
     out = pathlib.Path(args.out)
@@ -306,4 +335,6 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    from cli_io import configure_output
+    configure_output()
     sys.exit(main())

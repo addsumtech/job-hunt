@@ -29,7 +29,7 @@ GATE = "check_render_freshness"
 
 def _rel(ws: pathlib.Path, p: pathlib.Path) -> str:
     try:
-        return str(p.resolve().relative_to(ws.resolve()))
+        return p.resolve().relative_to(ws.resolve()).as_posix()
     except ValueError:
         return str(p.resolve())
 
@@ -102,4 +102,7 @@ def main(argv=None) -> int:
 
 
 if __name__ == "__main__":
+    from cli_io import configure_output
+
+    configure_output()
     sys.exit(main())

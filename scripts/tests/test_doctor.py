@@ -85,9 +85,8 @@ def test_every_check_says_what_it_costs_and_how_to_fix_it():
 
 
 def test_only_python_packages_are_marked_auto_installable():
-    """System binaries are never installed for the user. A LaTeX engine is a
-    package-manager action of several hundred megabytes, and running one unasked
-    is the class of act source-policy.md keeps on its Red list."""
+    """The diagnostic's pip installer stays scoped; the agent provisions other
+    tools through the separate setup workflow."""
     for c in doctor.checks():
         if c.get("auto"):
             assert c["what"].startswith("python package"), c["what"]
@@ -105,6 +104,14 @@ def test_the_platform_specific_hint_is_actually_platform_specific(monkeypatch):
 def test_an_unknown_binary_still_gets_a_hint(monkeypatch):
     monkeypatch.setattr(doctor.platform, "system", lambda: "Linux")
     assert "wkhtmltopdf" in doctor.install_hint("wkhtmltopdf")
+
+
+def test_windows_setup_does_not_suggest_linux_package_commands(monkeypatch):
+    monkeypatch.setattr(doctor.platform, "system", lambda: "Windows")
+    for binary in ("opencli", "pandoc", "tectonic", "pdftotext"):
+        hint = doctor.install_hint(binary)
+        assert binary in hint and "references/agent-setup.md" in hint
+        assert "apt install" not in hint and "brew install" not in hint
 
 
 # ---- exit codes ------------------------------------------------------------
@@ -142,7 +149,7 @@ def test_install_never_shells_out_for_a_system_binary(monkeypatch):
 
 def test_it_runs_as_a_script():
     r = subprocess.run([sys.executable, str(REPO / "scripts" / "doctor.py")],
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, encoding="utf-8")
     assert r.returncode in (0, 1), r.stderr
     assert "job-hunt environment" in r.stdout
 
@@ -151,7 +158,7 @@ def test_the_skill_tells_a_new_user_to_run_it():
     t = (REPO / "SKILL.md").read_text(encoding="utf-8")
     assert "scripts/doctor.py" in t
     assert "--install" in t
-    assert "never installed for the user" in t or "never installed for you" in t
+    assert "references/agent-setup.md" in t
 
 
 # ---- the hook that makes any of this run ----------------------------------
@@ -233,3 +240,22 @@ def test_the_skill_says_the_check_runs_automatically():
     src = (REPO / "scripts" / "enter_mode.py").read_text(encoding="utf-8")
     assert "fast_capabilities()" in src
     assert "NOTICE_MISSING_CAPABILITIES" in src
+
+
+def test_python_install_preserves_interpreter_path_with_spaces(monkeypatch):
+    executable = "/tmp/Fresh User/python env/bin/python"
+    monkeypatch.setattr(doctor.sys, "executable", executable)
+    monkeypatch.setattr(doctor, "requirements", lambda: [("PyYAML", "yaml")])
+    monkeypatch.setattr(doctor, "importable", lambda module: False)
+    monkeypatch.setattr(doctor, "can_render_pdf", lambda: (False, "unavailable"))
+    monkeypatch.setattr(doctor.shutil, "which", lambda name: None)
+    missing = [c for c in doctor.checks() if c.get("auto")]
+    calls = []
+
+    def installer(argv, **kwargs):
+        calls.append(argv)
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr(doctor.subprocess, "run", installer)
+    assert doctor.install_python(missing) == 1
+    assert calls == [[executable, "-m", "pip", "install", "PyYAML"]]

@@ -25,9 +25,12 @@ def build(tmp_path, md="# rows\n"):
     ws = tmp_path / "2026-09-06-round"
     (ws / "raw" / "opencli-help").mkdir(parents=True)
     (ws / "mock").mkdir()
-    (ws / "shortlist.md").write_text(md, encoding="utf-8")
+    (ws / "report.md").write_text(md, encoding="utf-8")
     (ws / "shortlist.yaml").write_text("rows: []\n", encoding="utf-8")
-    (ws / "cv.pdf").write_bytes(b"%PDF-1.4\n")
+    import pymupdf
+    with pymupdf.open() as doc:
+        doc.new_page().insert_text((72, 72), "Candidate CV")
+        doc.save(ws / "cv.pdf")
     (ws / "mock" / "assessment-1.md").write_text("# round 1\n", encoding="utf-8")
     (ws / "journal.jsonl").write_text('{"action":"gate"}\n', encoding="utf-8")
     (ws / "raw" / "51job-1.json").write_text("[]", encoding="utf-8")
@@ -42,40 +45,19 @@ def run(ws, dest, *extra):
 
 # ---- what lands, and where ------------------------------------------------
 
-def test_files_land_flat_with_the_round_as_a_filename_prefix(tmp_path):
-    """No folder: the user asked for the result files themselves.
-
-    The prefix is not a folder in disguise. Two rounds both produce
-    `shortlist.md`, and a bare name would have the second silently overwrite the
-    first in a directory the user also keeps everything else in.
-    """
+def test_client_documents_share_one_explicit_folder(tmp_path):
     ws = build(tmp_path)
-    dest = tmp_path / "out"
+    dest = tmp_path / "consultation"
     assert run(ws, dest, "--no-pdf") == 0
-    assert (dest / "2026-09-06-round-shortlist.md").is_file()
-    assert (dest / "2026-09-06-round-shortlist.yaml").is_file()
-    assert (dest / "2026-09-06-round-cv.pdf").is_file()
-    assert not (dest / "2026-09-06-round").exists(), "no subdirectory"
-    assert not (dest / "shortlist.md").exists(), "unprefixed name would collide"
+    assert {p.name for p in dest.iterdir()} == {
+        "2026-09-06-round-report.md", "2026-09-06-round-cv.pdf"}
 
 
-def test_a_nested_output_is_flattened_with_its_directory_in_the_name(tmp_path):
-    """`mock/assessment-1.md` keeps `mock` in the delivered name, joined by `__`.
-
-    Flattening on the basename alone is what let two same-named files in
-    different directories overwrite each other — see the collision tests below.
-    """
+def test_default_destination_is_a_consultation_folder(tmp_path, monkeypatch):
     ws = build(tmp_path)
-    dest = tmp_path / "out"
-    assert run(ws, dest, "--no-pdf") == 0
-    assert (dest / "2026-09-06-round-mock__assessment-1.md").is_file()
-    assert not (dest / "2026-09-06-round-assessment-1.md").exists()
-
-
-def test_the_default_destination_is_downloads_itself():
-    """The user named Downloads. A default nobody can find is the bug this
-    script exists to fix, and a subfolder under it was the first version's."""
-    assert deliver.DEFAULT_ROOT == pathlib.Path.home() / "Downloads"
+    monkeypatch.setattr(deliver, "DEFAULT_ROOT", tmp_path / "Downloads")
+    assert deliver.main(["--workspace", str(ws), "--no-pdf"]) == 0
+    assert (tmp_path / "Downloads" / ws.name / (ws.name + "-report.md")).is_file()
 
 
 # ---- what stays behind ----------------------------------------------------
@@ -120,18 +102,18 @@ def test_a_pdf_that_dropped_characters_is_deleted_not_delivered(tmp_path, monkey
     monkeypatch.setattr(deliver, "_pandoc",
                         lambda md, pdf, font: (pdf.write_bytes(b"%PDF"), True)[1])
     monkeypatch.setattr(deliver, "pdf_text", lambda pdf: "boxes only, no CJK")
-    assert run(ws, dest) == 0
-    assert not (dest / "2026-09-06-round-shortlist.pdf").exists()
-    assert (dest / "2026-09-06-round-shortlist.md").is_file(), "the Markdown still ships"
+    assert run(ws, dest) == 2
+    assert not (dest / "2026-09-06-round-report.pdf").exists()
+    assert (dest / "2026-09-06-round-report.md").is_file(), "the Markdown still ships"
 
 
 def test_no_cjk_font_refuses_the_pdf_and_still_ships_the_markdown(tmp_path, monkeypatch):
     ws = build(tmp_path, md="# 岗位候选\n\n这是中文内容。\n")
     dest = tmp_path / "out"
     monkeypatch.setattr(deliver, "pick_cjk_font", lambda *args: None)
-    assert run(ws, dest) == 0
-    assert not (dest / "2026-09-06-round-shortlist.pdf").exists()
-    assert (dest / "2026-09-06-round-shortlist.md").is_file()
+    assert run(ws, dest) == 2
+    assert not (dest / "2026-09-06-round-report.pdf").exists()
+    assert (dest / "2026-09-06-round-report.md").is_file()
 
 
 def test_cjk_detection_and_counting():
@@ -148,7 +130,7 @@ def test_a_chinese_document_really_round_trips_through_a_real_pdf(tmp_path):
     ws = build(tmp_path, md="# 岗位候选\n\n医学影像与图像重建方向的岗位清单。\n")
     dest = tmp_path / "out"
     assert run(ws, dest) == 0
-    pdf = dest / "2026-09-06-round-shortlist.pdf"
+    pdf = dest / "2026-09-06-round-report.pdf"
     assert pdf.is_file()
     assert deliver.cjk_chars(deliver.pdf_text(pdf)) >= 15
 
@@ -190,7 +172,7 @@ def test_it_runs_as_a_script(tmp_path):
     dest = tmp_path / "out"
     r = subprocess.run([sys.executable, str(REPO / "scripts" / "deliver.py"),
                         "--workspace", str(ws), "--to", str(dest), "--no-pdf"],
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, encoding="utf-8")
     assert r.returncode == 0, r.stderr
     assert str(dest) in r.stdout, "the path to quote must be printed"
 
@@ -220,15 +202,14 @@ def test_the_skill_file_lists_delivery_and_the_path_to_tell_the_user():
 # `mock/transcript-n.md`, `mock/assessment-n.md` and `mock/answer-guide.md`
 # beside root-level outputs, so this is the ordinary layout, not a corner.
 
-def test_two_same_named_files_in_different_directories_both_survive(tmp_path):
-    ws = tmp_path / "round"
-    (ws / "mock").mkdir(parents=True)
-    (ws / "notes.md").write_text("ROOT\n", encoding="utf-8")
-    (ws / "mock" / "notes.md").write_text("NESTED\n", encoding="utf-8")
+def test_internal_reports_are_excluded_even_if_markdown(tmp_path):
+    ws = build(tmp_path)
+    (ws / "completion.md").write_text("TOOL BUGS")
+    (ws / "mock" / "report.md").write_text("INTERNAL REVIEW")
     dest = tmp_path / "out"
     assert run(ws, dest, "--no-pdf") == 0
-    assert (dest / "round-notes.md").read_text(encoding="utf-8") == "ROOT\n"
-    assert (dest / "round-mock__notes.md").read_text(encoding="utf-8") == "NESTED\n"
+    assert not any("TOOL BUGS" in p.read_text() or "INTERNAL REVIEW" in p.read_text()
+                   for p in dest.glob("*.md"))
 
 
 def test_the_reported_count_matches_what_actually_landed(tmp_path, capsys):
@@ -236,7 +217,7 @@ def test_the_reported_count_matches_what_actually_landed(tmp_path, capsys):
     the part that would have gone unnoticed."""
     ws = tmp_path / "round"
     (ws / "mock").mkdir(parents=True)
-    (ws / "notes.md").write_text("ROOT\n", encoding="utf-8")
+    (ws / "report.md").write_text("ROOT\n", encoding="utf-8")
     (ws / "mock" / "notes.md").write_text("NESTED\n", encoding="utf-8")
     assert run(ws, tmp_path / "out", "--no-pdf") == 0
     said = capsys.readouterr().out
@@ -268,7 +249,7 @@ def test_a_delivery_leaves_a_record_in_the_workspace_journal(tmp_path):
     delivery = [r for r in records if r.get("action") == "delivery"]
     assert len(delivery) == 1
     assert delivery[0]["destination"].endswith("out")
-    assert "2026-09-06-round-shortlist.md" in delivery[0]["files"]
+    assert "2026-09-06-round-report.md" in delivery[0]["files"]
 
 
 def test_the_record_is_not_a_gate_receipt(tmp_path):
@@ -304,13 +285,13 @@ def test_a_refused_pdf_is_named_in_the_record(tmp_path, monkeypatch):
     import json
     ws = build(tmp_path, md="# 岗位候选\n\n中文内容。\n")
     monkeypatch.setattr(deliver, "pick_cjk_font", lambda *args: None)
-    assert run(ws, tmp_path / "out") == 0
+    assert run(ws, tmp_path / "out") == 2
     rec = [json.loads(l) for l in
            (ws / "journal.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
     delivery = [r for r in rec if r.get("action") == "delivery"][0]
     refused = delivery["pdf_refused"]
     assert refused, "a refused PDF left no trace"
-    shortlist = [n for n in refused if "shortlist.pdf" in n]
+    shortlist = [n for n in refused if "report.pdf" in n]
     assert shortlist, f"the CJK document is not named among {refused}"
     assert "CJK font" in shortlist[0], (
         "the entry must carry WHY, not just that something was refused: "

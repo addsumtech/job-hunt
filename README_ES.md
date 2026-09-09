@@ -93,56 +93,29 @@ ln -s "$PWD" ~/.claude/skills/job-hunt
 
 Para Codex, sustituye `~/.claude/skills` por `~/.codex/skills` en las dos últimas líneas. Si el destino ya existe, revisa primero la instalación existente.
 
-### Instalar dependencias y comprobar el entorno
+### Primer uso: deja la configuración al agente
 
-Entra en el **directorio raíz de job-hunt instalado**, donde están `SKILL.md` y `requirements.txt`, y ejecuta lo siguiente con Python 3.10+:
+Tras instalar el skill, dile al agente: **«Configura job-hunt y empieza mi tarea; yo cargaré la extensión de Chrome».**
 
-Primero ejecuta `python3 --version` y comprueba que sea 3.10 o posterior. Si es anterior, instala Python 3.10+ y usa su comando (por ejemplo, `python3.12`) para crear el entorno virtual siguiente.
+El agente reutiliza las herramientas existentes, instala las dependencias de Python, Node.js, OpenCLI y las herramientas de documentos necesarias, y descarga y extrae la [extensión oficial de OpenCLI](https://github.com/jackwener/opencli/releases). No tienes que copiar comandos de terminal.
 
-```bash
-python3 -m venv ~/.venvs/job-hunt
-source ~/.venvs/job-hunt/bin/activate
-python3 -m pip install -r requirements.txt
-python3 scripts/doctor.py
-```
+**Normalmente, el único paso manual de configuración es cargar la extensión de Chrome:**
 
-El comando de activación anterior es para macOS/Linux; en Windows, utiliza el script de activación del directorio `Scripts` del entorno. Haz que el agente utilice este mismo entorno de Python para ejecutar los scripts del proyecto. Los paquetes básicos son `PyYAML` y `python-docx`. `doctor.py --install` puede añadir los paquetes que falten en el entorno de Python actual.
+1. El agente abre `chrome://extensions/` y te indica la ruta completa de la carpeta extraída.
+2. Activa el **Modo de desarrollador**, pulsa **Cargar descomprimida** y selecciona la carpeta que contiene directamente `manifest.json`, no el ZIP. En macOS, puedes pegar la ruta con `Command + Shift + G`.
+3. Avisa al agente cuando esté cargada. Ejecutará `opencli doctor`, verificará la extensión y la conexión, aplicará los parches compatibles y continuará tu tarea. Si ya está conectada, se reutiliza.
 
-| Función | Dependencia adicional | Qué ocurre si falta |
-|---|---|---|
-| PDF del CV y de la carta | Un motor LaTeX; se recomienda `tectonic` | Se pueden generar Markdown, Word y `.tex` para compilar después |
-| Informes Markdown en PDF | `pandoc` y un motor LaTeX | Los informes entregados pueden quedar solo en Markdown |
-| Extracción y comprobación del texto del PDF | `pdftotext`, de Poppler | No se puede verificar por completo la integridad del texto del PDF |
-| Búsqueda de ofertas actuales | `opencli` y su entorno de navegador | Se puede evaluar, preparar documentos y practicar con una oferta pegada como texto |
-| PDF en chino, japonés y coreano | Fuentes del idioma de salida | Hay que instalar fuentes adecuadas para una composición fiable |
+No muevas ni borres la carpeta de la extensión cargada. El inicio de sesión, los CAPTCHA y los permisos del sistema que requieran tu intervención siguen siendo pasos personales; el agente completa primero toda la preparación independiente y te indica solo lo que falta.
 
-`doctor.py` intenta generar un PDF real e informa de las capacidades que faltan. Su opción `--install` solo instala paquetes de Python; sigue las indicaciones del informe para instalar herramientas del sistema.
+`doctor.py` comprueba capacidades reales; `doctor.py --install` solo instala paquetes de Python. El agente instala otras herramientas siguiendo el [proceso de configuración inicial](references/agent-setup.md) (en inglés). La salida solo en Word o la evaluación de una oferta pegada no requiere herramientas de PDF o navegador innecesarias.
 
-### Configura la extensión de Chrome de OpenCLI
+### Parches de compatibilidad y alternativa en el navegador
 
-**La búsqueda en vivo necesita tanto la CLI de OpenCLI como la extensión Browser Bridge. Instala la extensión manualmente en Chrome.** Ni `npm install` ni `doctor.py --install` la instalan por ti.
+Los parches se incluyen en este skill y el agente los aplica antes de la primera lectura del portal correspondiente; importar la extensión del navegador no los instala.
 
-1. **Instala la CLI.** Ejecuta en un terminal:
+**Normalmente no necesitas instalar parches manualmente.** Antes de leer Indeed o 51job, el skill comprueba los problemas conocidos y aplica el parche a una copia local solo si coinciden la versión y el código de OpenCLI. El paquete instalado no cambia. Los parches actuales son para 1.8.7; no se sobrescriben otras versiones ni cambios personalizados. Puedes pedir al agente «comprueba los parches de compatibilidad» o «revierte los parches de compatibilidad». Consulta las [instrucciones para comprobar, aplicar y revertir](references/opencli-compat.md) (en inglés).
 
-   ```bash
-   npm install -g @jackwener/opencli
-   opencli doctor
-   ```
-
-   Es normal que la extensión aparezca desconectada antes de instalarla.
-
-2. **Descarga y extrae la extensión.** En Assets de las [Releases oficiales de OpenCLI](https://github.com/jackwener/opencli/releases), descarga `opencli-extension-v*.zip`, no `Source code`. Extrae el archivo en una ubicación permanente y localiza la carpeta que contiene directamente `manifest.json`.
-3. **Cárgala en Chrome.** Escribe `chrome://extensions/` en la barra de direcciones, activa el **Modo de desarrollador**, pulsa **Cargar descomprimida** y selecciona esa carpeta. Selecciona la carpeta, no el ZIP ni el archivo `manifest.json`. Revisa los permisos que muestra Chrome.
-4. **Comprueba la conexión.** Mantén Chrome abierto y vuelve a ejecutar `opencli doctor`. Confirma **Extension: connected** y **Connectivity: connected**; no basta con que funcionen la CLI o el daemon. No muevas ni borres la carpeta de la extensión.
-
-| Problema | Solución |
-|---|---|
-| No aparece la carpeta en el selector | En macOS, pulsa `Command + Shift + G` y pega la ruta completa; las carpetas que empiezan por `.` están ocultas por defecto |
-| Error de manifiesto no encontrado | Selecciona la carpeta que contiene directamente `manifest.json`; puede estar un nivel dentro del directorio extraído |
-| Extensión cargada pero desconectada | Comprueba que está activada en el perfil actual de Chrome y vuelve a ejecutar `opencli doctor` |
-
-Inicia sesión en las plataformas de empleo cuando sea necesario. La extensión conectada confirma la conexión con el navegador; el acceso a cada plataforma se comprueba por separado.
-
+Si se confirma una incompatibilidad del adaptador, web-access puede usar **el buscador del propio portal de empleo** en Chrome u otro navegador compatible y leer sus resultados. No se limita a buscar en Google ni exige aplicar un parche primero. El inicio de sesión, los CAPTCHA y las restricciones de permisos siguen requiriendo tu intervención; cambiar de herramienta no permite eludirlos.
 
 ## Mercados, plataformas e idiomas
 
@@ -150,7 +123,7 @@ La búsqueda obtiene ofertas mediante adaptadores de `opencli`. El catálogo del
 
 Para China, la skill también pregunta por preferencias de empresa: grandes empresas privadas, pequeñas y medianas empresas privadas, empresas estatales y empresas extranjeras. Estas preferencias afectan al orden sin excluir otras categorías de forma silenciosa. Nowcoder y 1point3acres aportan experiencias de entrevistas y contexto sobre el proceso; los hilos de foro no se convierten en ofertas.
 
-Tú realizas cualquier inicio de sesión necesario. Si aparece un CAPTCHA, un límite de solicitudes o una negativa de la plataforma, se detiene la consulta de ese sitio durante la ronda y se informa de ello. Si no se pueden obtener ofertas reales, el resultado se identifica como una propuesta de líneas de búsqueda. La exploración es de solo lectura: no envía mensajes, no modifica perfiles en línea ni presenta candidaturas.
+Si hace falta iniciar sesión o completar una verificación humana, el skill explica el motivo, te pide hacerlo en el navegador y pausa esa fuente. Responde «listo, continúa» para iniciar una nueva ronda limitada que conserva el registro anterior y comprueba si se ha recuperado el acceso. Los límites de solicitudes y los problemas de permisos se explican por separado. Si el acceso sigue bloqueado, puedes elegir otra fuente, pegar una oferta o revisar los resultados ya obtenidos. La exploración es de solo lectura: no envía mensajes, no modifica perfiles en línea ni presenta candidaturas.
 
 **Las reglas del mercado y el idioma de salida se tratan por separado.** El generador de CV incluye títulos de sección y etiquetas de datos personales en inglés, neerlandés, alemán, francés, español, italiano, chino, japonés y coreano. `discover` y `assess` generan y verifican las fichas de recuento, los títulos obligatorios y las aclaraciones en chino, inglés, japonés, coreano y español mediante las [plantillas de idioma del informe](references/report-localization.md). Algunos documentos internos, diagnósticos y fichas de convenciones con fuentes siguen sin traducir; los PDF también necesitan fuentes adecuadas para el idioma de salida.
 
@@ -174,7 +147,7 @@ Los datos personales siguen las reglas del mercado de destino. En los CV convenc
 
 Las solicitudes estructuradas revisan el supporting statement según los criterios de la empresa. Si también se exige un CV convencional, se le aplica por separado la revisión de los tres evaluadores. El rirekisho japonés se comprueba como formulario completo; el documento de trayectoria profesional que lo acompaña sigue el proceso de revisión del CV.
 
-Los materiales legibles de cada ronda se entregan por defecto en `~/Downloads`, por ejemplo `<company>-<role>-<date>-cv.md` y su PDF. La generación y verificación del PDF dependen de las herramientas disponibles; el informe de entrega identifica archivos ausentes y comprobaciones incompletas.
+Cada consulta incluye un informe PDF que responde a la pregunta del cliente, junto con el CV y los documentos solicitados en una carpeta `~/Downloads/<workspace-name>/`. Se reutiliza la misma carpeta entre etapas. El informe contiene análisis profesional, evidencia y cuestiones por confirmar; los diagnósticos técnicos permanecen internos. Las cartas se ofrecen bajo demanda y las entrevistas simuladas no se inician automáticamente. La entrega no está completa hasta generar y verificar el PDF. Las [fuentes complementarias](references/supplementary-sources.md) permiten investigar sitios oficiales, noticias, GitHub y debates públicos cuando sean pertinentes; las búsquedas con sesión iniciada en Xiaohongshu/Douyin requieren autorización explícita para la consulta actual.
 
 ## Dónde se guardan los archivos
 

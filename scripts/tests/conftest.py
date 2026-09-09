@@ -1,3 +1,7 @@
+import builtins
+import errno
+import io
+import os
 import pathlib
 import sys
 
@@ -19,3 +23,22 @@ def sample_profile_path():
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+
+
+@pytest.fixture
+def deny_file_reads(monkeypatch):
+    """Stage a real read error without depending on chmod, ACLs or root status."""
+    denied = set()
+
+    def guard(opener):
+        def checked_open(file, mode="r", *args, **kwargs):
+            if (isinstance(file, (str, os.PathLike))
+                    and ("r" in mode or "+" in mode)
+                    and pathlib.Path(file).resolve() in denied):
+                raise PermissionError(errno.EACCES, "Permission denied", str(file))
+            return opener(file, mode, *args, **kwargs)
+        return checked_open
+
+    monkeypatch.setattr(builtins, "open", guard(builtins.open))
+    monkeypatch.setattr(io, "open", guard(io.open))
+    return lambda path: denied.add(pathlib.Path(path).resolve())

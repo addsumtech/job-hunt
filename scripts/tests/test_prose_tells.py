@@ -17,6 +17,7 @@ Two rules govern everything here, and both are the repo's own:
   A tell known only in English is reported as English-only. `lint_cv`'s
   weak-opener list carries the scar of enforcing a style rule on one alphabet.
 """
+import os
 import pathlib
 import sys
 
@@ -180,25 +181,85 @@ def test_a_heading_or_contact_line_is_not_prose():
 
 # ---- the real artifacts this was calibrated on ----------------------------
 
-def test_the_skill_own_letters_do_not_trip_the_vocabulary_or_the_pivot():
-    """Both letters from the iteration-2 with_skill runs, if they are on this
-    machine. They are the closest thing to production output the repo has."""
+def _letter_corpus_paths():
+    """An explicit fresh corpus is required to exist and contain letters.
+
+    Without JOBHUNT_PROSE_CORPUS, retain the optional historical calibration
+    corpus used by the default CI run. Never fall back from an explicit corpus.
+    """
     import glob
 
-    import yaml
-    letters = sorted(glob.glob(str(
+    if "JOBHUNT_PROSE_CORPUS" in os.environ:
+        value = os.environ["JOBHUNT_PROSE_CORPUS"]
+        assert value.strip(), "JOBHUNT_PROSE_CORPUS must name a corpus directory"
+        corpus = pathlib.Path(value).expanduser()
+        assert corpus.is_dir(), f"JOBHUNT_PROSE_CORPUS is not a directory: {corpus}"
+        letters = sorted(path for path in corpus.rglob("letter.yaml") if path.is_file())
+        assert letters, f"JOBHUNT_PROSE_CORPUS contains no letter.yaml files: {corpus}"
+        return letters
+
+    return sorted(pathlib.Path(path) for path in glob.glob(str(
         pathlib.Path.home() / "code_project/job-hunt-workspace/iteration-2"
         / "eval-*/with_skill/run-1/outputs/workspace/**/letter.yaml"), recursive=True))
-    if not letters:
-        pytest.skip("the iteration-2 results tree is not on this machine")
+
+
+def _assert_letter_corpus_clean(letters):
+    import yaml
+
     for path in letters:
-        doc = yaml.safe_load(pathlib.Path(path).read_text(encoding="utf-8")) or {}
+        doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         body = doc.get("body") or []
         joined = "\n".join(str(p) for p in (body if isinstance(body, list) else [body]))
         noisy = [f for f in prose_tells.vocabulary_findings(joined, path)
                  + prose_tells.prose_findings(joined, path)
                  if "NOT_JUST" in f or "AI_VOCABULARY" in f or "TRICOLON" in f]
         assert not noisy, f"{path}: {noisy}"
+
+
+def test_the_skill_own_letters_do_not_trip_the_vocabulary_or_the_pivot():
+    """Use JOBHUNT_PROSE_CORPUS for fresh output, or optional iteration-2 data."""
+    letters = _letter_corpus_paths()
+    if not letters:
+        pytest.skip("the iteration-2 results tree is not on this machine")
+    _assert_letter_corpus_clean(letters)
+
+
+@pytest.mark.parametrize("machine_written", [False, True])
+def test_an_explicit_fresh_letter_corpus_is_actually_linted(tmp_path, monkeypatch,
+                                                          machine_written):
+    import yaml
+
+    letter = tmp_path / "fresh-run" / "outputs" / "letter.yaml"
+    letter.parent.mkdir(parents=True)
+    letter.write_text(yaml.safe_dump({"body": MACHINE_LETTER if machine_written
+                                     else HUMAN_LETTER}), encoding="utf-8")
+    monkeypatch.setenv("JOBHUNT_PROSE_CORPUS", str(tmp_path))
+    assert _letter_corpus_paths() == [letter]
+    if machine_written:
+        with pytest.raises(AssertionError, match="AI_VOCABULARY"):
+            test_the_skill_own_letters_do_not_trip_the_vocabulary_or_the_pivot()
+    else:
+        test_the_skill_own_letters_do_not_trip_the_vocabulary_or_the_pivot()
+
+
+@pytest.mark.parametrize("state", ["missing", "empty", "file", "blank"])
+def test_an_invalid_explicit_corpus_fails_instead_of_skipping(tmp_path, monkeypatch,
+                                                           state):
+    corpus = tmp_path / "corpus"
+    if state == "empty":
+        corpus.mkdir()
+    elif state == "file":
+        corpus.write_text("not a directory", encoding="utf-8")
+    monkeypatch.setenv("JOBHUNT_PROSE_CORPUS", "" if state == "blank" else str(corpus))
+    with pytest.raises(AssertionError, match="JOBHUNT_PROSE_CORPUS"):
+        test_the_skill_own_letters_do_not_trip_the_vocabulary_or_the_pivot()
+
+
+def test_the_default_historical_corpus_remains_optional(tmp_path, monkeypatch):
+    monkeypatch.delenv("JOBHUNT_PROSE_CORPUS", raising=False)
+    monkeypatch.setattr(pathlib.Path, "home", classmethod(lambda cls: tmp_path))
+    with pytest.raises(pytest.skip.Exception, match="iteration-2"):
+        test_the_skill_own_letters_do_not_trip_the_vocabulary_or_the_pivot()
 
 
 def test_a_finding_location_is_not_given_a_phantom_column():
@@ -244,7 +305,7 @@ def _statement_gate(text, tmp_path):
     (tmp_path / "supporting-statement.md").write_text(text, encoding="utf-8")
     (tmp_path / "posting.yaml").write_text("application_type: structured\n", encoding="utf-8")
     r = subprocess.run([sys.executable, str(ROOT / "scripts" / "check_word_limits.py"),
-                        "--workspace", str(tmp_path)], capture_output=True, text=True)
+                        "--workspace", str(tmp_path)], capture_output=True, text=True, encoding="utf-8")
     return r.stdout
 
 

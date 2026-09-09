@@ -37,7 +37,7 @@ def test_native_count_cli_preserves_the_counts_and_does_not_invent_judgements(tm
     output = capsys.readouterr().out
     assert output.splitlines()[0] == SPECIMENS[lang][6]
     assert "/" not in output and "%" not in output
-    payload = json.loads((tmp_path / "coverage.json").read_text())
+    payload = json.loads((tmp_path / "coverage.json").read_text(encoding="utf-8"))
     assert payload[f"block_{lang}"] == output.rstrip("\n")
     assert payload["must_strong"] == 2 and payload["must_total"] == 6
     assert payload["resp_demonstrated"] == 1 and payload["resp_total"] == 3
@@ -96,7 +96,7 @@ def test_native_refusal_cannot_still_print_a_verdict(tmp_path, lang):
     ws, market, root = build(tmp_path, assessment=assessment, markdown=SPECIMENS[lang][1])
     assert ca.check(ws, market, TODAY, root) == []
     path = ws / "fit-assessment.md"
-    path.write_text(path.read_text() + "\n" + cc.render_block(assessment, cc.coverage([]), lang))
+    path.write_text(path.read_text(encoding="utf-8") + "\n" + cc.render_block(assessment, cc.coverage([]), lang), encoding="utf-8")
     assert any(f.startswith("REFUSAL_WITH_VERDICT:") for f in ca.check(ws, market, TODAY, root))
 
 
@@ -140,7 +140,7 @@ def test_localised_verdict_labels_and_disclaimers_do_not_trigger_prediction_lint
 def test_full_documented_disclaimer_passes_prediction_lint(lang):
     from pathlib import Path
     import re
-    guide = (Path(__file__).resolve().parents[2] / "references" / "report-localization.md").read_text()
+    guide = (Path(__file__).resolve().parents[2] / "references" / "report-localization.md").read_text(encoding="utf-8")
     disclaimer = re.search(rf"\*\*{lang}\*\*\s+> (.+)", guide).group(1)
     assert locales.GATE_TEXT[lang]["disclaimer"] in disclaimer
     assert prediction.scan_text(disclaimer, "fit-assessment.md") == []
@@ -149,7 +149,7 @@ def test_full_documented_disclaimer_passes_prediction_lint(lang):
 @pytest.mark.parametrize("lang", SPECIMENS)
 def test_consistency_cli_prints_a_native_notice_without_changing_the_finding(tmp_path, capsys, lang):
     assessment = dict(ASSESSMENT, verdict="strong_apply", effort="multi_day")
-    (tmp_path / "fit-assessment.yaml").write_text(yaml.safe_dump(assessment))
+    (tmp_path / "fit-assessment.yaml").write_text(yaml.safe_dump(assessment), encoding="utf-8")
     assert consistency.main(["--workspace", str(tmp_path), "--lang", lang]) == 0
     output = capsys.readouterr().out
     assert output.startswith("NOTICE_VERDICT_EFFORT:")

@@ -213,7 +213,7 @@ def _run_cli(*args):
     import subprocess
     script = _REPO_ROOT / "evals" / "lint_assertions.py"
     return subprocess.run([sys.executable, str(script), *args],
-                          capture_output=True, text=True)
+                          capture_output=True, text=True, encoding="utf-8")
 
 
 def _write_doc(d, root):

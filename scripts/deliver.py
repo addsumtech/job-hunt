@@ -1,38 +1,10 @@
 #!/usr/bin/env python3
-"""Hand the round's result files to the user, as Markdown AND PDF.
+"""Deliver a client consultation report and requested application documents.
 
-Files land **directly in `~/Downloads`**, named `<slug>-<file>`, because that is
-where the user actually looks. The slug prefix is not a folder in disguise: two
-rounds both produce `shortlist.md`, and a bare name would have the second round
-silently overwrite the first.
-
-The workspace under `~/.claude/job-profiles/` stays exactly where it is. This is
-a copy, one-way and deliberate: `scripts/paths.py` owns that layout,
-`modes/apply.md`'s resume-an-unfinished-run lookup finds work BY the path shape,
-`check_claims.py` fingerprints the master profile at that path, and `~/Downloads`
-is a directory the user's own housekeeping empties.
-
-`raw/`, `journal.jsonl` and the adapter `.err` files are NOT copied. They are the
-provenance chain every claim in these documents is traced to; they are large and
-unreadable to a person; and an audit has to read them where they live rather than
-in an export that may have gone stale.
-
-## The PDF, and why it is verified rather than trusted
-
-`pandoc --pdf-engine=tectonic` on a Chinese document exits 0, prints a warning
-nobody reads, and produces a PDF whose every CJK glyph is a box. Measured: the
-source held 528 Chinese characters and `pdftotext` read 0 back out of the PDF.
-That is a wrong artifact behind a green exit code.
-
-So a CJK document gets a CJK font, chosen by probing the ones this machine
-actually has, and **every PDF is read back with `pdftotext` and compared against
-its source** before it is called delivered. A PDF that loses characters is
-deleted and reported, never handed over. If no usable font exists, the Markdown
-still ships and the PDF is refused loudly — the same shape as `render_cv.py`
-refusing to write a reversed right-to-left PDF.
-
-Exit codes follow the gate contract even though this is not a gate: 0 delivered,
-2 could not run. Never 1 — there is no such thing as a delivery "finding".
+Default destination: ~/Downloads/<workspace-name>/. Use the same explicit --to
+folder for all workspaces answering one consultation. Internal audit artifacts
+stay in the workspace. A report PDF is required unless --no-pdf is explicitly
+requested. Exit 2 means incomplete delivery; never call that complete.
 """
 from __future__ import annotations
 
@@ -47,6 +19,8 @@ import sys
 import tempfile
 
 import journal
+from render_cv import has_rtl
+from pdf_glyphs import glyph_findings
 
 SKIP_DIRS = {"raw"}
 SKIP_NAMES = {"journal.jsonl", ".DS_Store", "master-fingerprint.json"}
@@ -93,11 +67,10 @@ def flat_name(slug: str, rel: pathlib.Path) -> str:
 
 def is_deliverable(path: pathlib.Path, workspace: pathlib.Path) -> bool:
     rel = path.relative_to(workspace)
-    if set(rel.parts[:-1]) & SKIP_DIRS:
-        return False
-    if rel.name in SKIP_NAMES or rel.name.startswith("."):
-        return False
-    return rel.suffix not in SKIP_SUFFIXES
+    # Explicit client artifacts only. completion.md can contain tool diagnostics.
+    return (len(rel.parts) == 1 and rel.stem in {
+        "report", "cv", "letter", "rirekisho", "supporting-statement"
+    } and rel.suffix in {".md", ".pdf", ".docx"})
 
 
 def writable(directory: pathlib.Path) -> tuple[bool, str]:
@@ -139,9 +112,11 @@ def _pandoc(md: pathlib.Path, pdf: pathlib.Path, font: str | dict | None) -> boo
 def pdf_text(pdf: pathlib.Path) -> str:
     try:
         r = subprocess.run(["pdftotext", str(pdf), "-"], capture_output=True,
-                           timeout=60, text=True, check=False)
-        return r.stdout or ""
-    except (OSError, subprocess.SubprocessError):
+                           timeout=60, check=False)
+        # Decode in this thread: Windows subprocess text readers can lose a
+        # UnicodeDecodeError in a background thread and return stdout=None.
+        return r.stdout.decode("utf-8")
+    except (OSError, UnicodeError, subprocess.SubprocessError):
         return ""
 
 
@@ -153,11 +128,11 @@ def visible_markdown(md: pathlib.Path) -> str:
     source = md.read_text(encoding="utf-8", errors="replace")
     try:
         result = subprocess.run(["pandoc", str(md), "-t", "plain", "--wrap=none"],
-                                capture_output=True, text=True, timeout=60,
+                                capture_output=True, timeout=60,
                                 check=False)
         if result.returncode == 0:
-            return result.stdout
-    except (OSError, subprocess.SubprocessError):
+            return result.stdout.decode("utf-8")
+    except (OSError, UnicodeError, subprocess.SubprocessError):
         pass
     return source
 
@@ -176,7 +151,7 @@ def pick_cjk_font(source: str = "测试中文渲染") -> str | dict | None:
             preferred += ["Noto Sans CJK JP", "Hiragino Sans W3", "Yu Gothic"]
         for font in dict.fromkeys(preferred + list(CJK_FONTS)) :
             out = d / f"probe-{abs(hash(font))}.pdf"
-            if _pandoc(probe_md, out, font) and glyphs <= set(_CJK.findall(pdf_text(out))):
+            if _pandoc(probe_md, out, font) and not glyph_findings(out) and glyphs <= set(_CJK.findall(pdf_text(out))):
                 return font
         # Mixed reports can quote a posting in another script. No single macOS
         # face necessarily covers all of them; probe an explicit fallback chain.
@@ -186,7 +161,7 @@ def pick_cjk_font(source: str = "测试中文渲染") -> str | dict | None:
             selection = {"main": main, "fallbacks": fallbacks}
             out = d / "probe-fallback.pdf"
             out.unlink(missing_ok=True)
-            if _pandoc(probe_md, out, selection) and glyphs <= set(_CJK.findall(pdf_text(out))):
+            if _pandoc(probe_md, out, selection) and not glyph_findings(out) and glyphs <= set(_CJK.findall(pdf_text(out))):
                 return selection
     return None
 
@@ -195,6 +170,13 @@ def render_pdf(md: pathlib.Path, pdf: pathlib.Path,
                font: str | dict | None) -> tuple[bool, str]:
     """Render, then READ IT BACK. A PDF that dropped characters is not a PDF."""
     source = visible_markdown(md)
+    if has_rtl(source):
+        # Delivery must not rebuild a PDF that the CV renderer refused. A
+        # nonempty English header does not prove the RTL body survived.
+        pdf.unlink(missing_ok=True)
+        pdf.with_suffix(".tex").unlink(missing_ok=True)
+        return False, ("right-to-left text is not supported by this PDF path; "
+                       "Markdown and .docx still ship")
     needs_cjk = has_cjk(source)
     if needs_cjk and font is None:
         return False, ("no CJK font on this machine that survives a render "
@@ -204,6 +186,10 @@ def render_pdf(md: pathlib.Path, pdf: pathlib.Path,
         pdf.unlink(missing_ok=True)
         return False, "pandoc/tectonic produced no PDF"
 
+    problems = glyph_findings(pdf)
+    if problems:
+        pdf.unlink(missing_ok=True)
+        return False, "; ".join(problems)
     back = pdf_text(pdf)
     if not back.strip():
         pdf.unlink(missing_ok=True)
@@ -229,7 +215,8 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
     written, notes = [], []
     fonts = {}
     sources = [p for p in sorted(workspace.rglob("*"))
-               if p.is_file() and is_deliverable(p, workspace)]
+               if p.is_file() and is_deliverable(p, workspace)
+               and not (make_pdf and p.name == "report.pdf")]
 
     claimed: dict = {}
     for src in sources:
@@ -246,6 +233,12 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
                          f"this happens.")
             continue
         claimed[target] = src.relative_to(workspace)
+        if src.suffix == ".pdf":
+            problems = glyph_findings(src)
+            if problems:
+                target.unlink(missing_ok=True)
+                notes.extend(problems)
+                continue
         try:
             shutil.copy2(src, target)
         except OSError as exc:
@@ -256,7 +249,7 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
             notes.append(f"{src.relative_to(workspace)}: not delivered — {exc}")
             continue
         written.append(target)
-        if make_pdf and src.suffix == ".md":
+        if make_pdf and src.suffix == ".md" and (src.name == "report.md" or not src.with_suffix(".pdf").exists()):
             pdf = target.with_suffix(".pdf")
             try:
                 source = visible_markdown(src)
@@ -287,11 +280,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"DELIVER_NO_WORKSPACE: {ws} is not a directory", file=sys.stderr)
         return 2
 
-    dest = (args.to.expanduser() if args.to else DEFAULT_ROOT).resolve()
+    dest = (args.to.expanduser() if args.to else DEFAULT_ROOT / ws.name).resolve()
     if dest == ws or ws in dest.parents:
         print(f"DELIVER_DEST_INSIDE_WORKSPACE: {dest} is the workspace or inside "
               "it; delivering there would copy the round into itself",
               file=sys.stderr)
+        return 2
+
+    if not (ws / "report.md").is_file():
+        print("DELIVER_REPORT_REQUIRED: author report.md answering the client question", file=sys.stderr)
         return 2
 
     ok, why = writable(dest)
@@ -322,7 +319,8 @@ def main(argv: list[str] | None = None) -> int:
     except OSError:
         pass  # a workspace we can read but not write is not a delivery failure
 
-    print(f"Delivered {len(written)} file(s) to {dest}")
+    complete = not notes and (args.no_pdf or dest / flat_name(ws.name, pathlib.Path("report.pdf")) in written)
+    print(f"{'Delivered' if complete else 'Incomplete delivery:'} {len(written)} file(s) to {dest}")
     for p in written:
         print(f"  {p.name}")
     for n in notes:
@@ -332,8 +330,11 @@ def main(argv: list[str] | None = None) -> int:
         code = "NOTICE_NOT_DELIVERED" if "not delivered" in n else "NOTICE_PDF_REFUSED"
         print(f"{code}: {n}", file=sys.stderr)
     print(f"\nTell the user these files are in: {dest}")
-    return 0
+    return 0 if complete else 2
 
 
 if __name__ == "__main__":
+    from cli_io import configure_output
+
+    configure_output()
     sys.exit(main())

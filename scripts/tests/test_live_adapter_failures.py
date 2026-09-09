@@ -56,3 +56,44 @@ def test_anti_bot_code_survives_json_output_and_different_wording():
     result = classifier.classify('51job', 'search', 1, '',
                                 '{"error":{"code":"ANTI_BOT","message":"request refused"}}')
     assert result['classification'] == 'platform_limit'
+
+
+@pytest.mark.parametrize('command', ['job', 'detail', 'view'])
+@pytest.mark.parametrize('auth_rows', [None, [], [{'site': 'indeed', 'status': 'logged_in'}]])
+def test_actual_indeed_sign_in_detail_is_not_a_job(command, auth_rows):
+    raw = (pathlib.Path(__file__).parent / 'fixtures/indeed-sign-in-detail.json').read_text()
+    result = classifier.classify('indeed', command, 0, raw, '', auth_rows=auth_rows)
+    assert result['classification'] == 'not_logged_in'
+    assert result['signal_id'] == 'indeed-sign-in-interstitial'
+    assert result['row_count'] == 0
+    assert not result['empty_result']
+    assert not result['needs_detail_recovery']
+    assert 'connected browser' in result['remedy']
+    assert 'explicit user confirmation' in result['remedy']
+    assert 'opencli indeed login' not in result['remedy']
+
+
+@pytest.mark.parametrize('row', [
+    {'title': 'Ready to take the next step?', 'company': 'Example', 'description': ''},
+    {'title': 'Ready to take the next step?', 'company': '', 'description': 'Build APIs.'},
+    {'title': 'Engineer', 'company': '', 'description': ''},
+    {'title': 'Engineer', 'description': 'Ready to take the next step? Sign in to apply.'},
+])
+def test_real_job_fields_do_not_trigger_sign_in_detection(row):
+    import json
+    assert classifier.classify('indeed', 'job', 0, json.dumps([row]), '')['classification'] == 'ok'
+
+
+def test_sign_in_shape_is_scoped_to_indeed_details():
+    raw = (pathlib.Path(__file__).parent / 'fixtures/indeed-sign-in-detail.json').read_text()
+    for site, command in [('indeed', 'search'), ('linkedin', 'job')]:
+        assert classifier.classify(site, command, 0, raw, '')['classification'] == 'ok'
+
+
+def test_sign_in_detail_stops_later_reads_in_the_same_round():
+    import record_browser_capture as browser
+    raw = (pathlib.Path(__file__).parent / 'fixtures/indeed-sign-in-detail.json').read_text()
+    result = classifier.classify('indeed', 'job', 0, raw, '')
+    result['action'] = 'adapter_call'
+    assert browser.check_stop_order([
+        result, {'action': 'adapter_call', 'site': 'indeed', 'command': 'job'}])

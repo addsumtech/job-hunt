@@ -21,7 +21,7 @@ SCRIPTS = REPO / "scripts"
 def run(script, *args):
     return subprocess.run(
         [sys.executable, str(SCRIPTS / script), *args],
-        capture_output=True, text=True)
+        capture_output=True, text=True, encoding="utf-8")
 
 
 def journal_records(workspace):

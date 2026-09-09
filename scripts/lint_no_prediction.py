@@ -508,6 +508,17 @@ def capture_corpus(workspace: pathlib.Path) -> str:
             pieces.append(source.read_text(encoding="utf-8", errors="replace"))
         except OSError:
             pass
+    # Candidate facts are trusted only while the evidence source hash matches.
+    try:
+        evidence = json.loads((workspace / "evidence-blocks.json").read_text())
+        record = evidence["sources"]["cv"]
+        cv = pathlib.Path(record["path"])
+        if not cv.is_absolute():
+            cv = workspace / cv
+        if journal.sha256_file(cv) == record["sha256"]:
+            pieces.append(cv.read_text(encoding="utf-8"))
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
     for path in journaled_captures(workspace):
         try:
             node = json.loads(path.read_text(encoding="utf-8", errors="replace"))
@@ -544,6 +555,13 @@ def mask_copied_numbers(line: str, corpus: str) -> str:
             continue
         window = [t[2] for t in tokens[max(0, index - 1):index + 2]]
         if " " + _normalise(" ".join(window)) + " " in padded:
+            out[start:end] = " " * (end - start)
+    # Chinese prose has no whitespace tokens. Exempt only the numeric span
+    # attached to an exact captured metric phrase; never erase prediction words.
+    metric = re.compile(r"(?:效率|成本|收入|营收|耗时|转化率|准确率|产量|销量|用户数)(?:提升|提高|增长|增加|降低|减少|下降)(?:了)?\s*([0-9]+(?:\.[0-9]+)?\s*[%％])")
+    for match in metric.finditer(line):
+        if _normalise(match.group(0)) in corpus:
+            start, end = match.span(1)
             out[start:end] = " " * (end - start)
     return "".join(out)
 
@@ -669,7 +687,7 @@ def main(argv: list[str] | None = None) -> int:
     hashes: dict[str, str] = {}
     for path in files:
         try:
-            relative = str(path.relative_to(workspace))
+            relative = path.relative_to(workspace).as_posix()
         except ValueError:
             relative = path.name
         hashes[relative] = journal.sha256_file(path)
@@ -683,4 +701,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from cli_io import configure_output
+
+    configure_output()
     raise SystemExit(main())

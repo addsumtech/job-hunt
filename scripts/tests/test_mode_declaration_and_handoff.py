@@ -45,7 +45,7 @@ def enter(ws, mode="apply", *extra):
     return subprocess.run(
         [sys.executable, str(SCRIPTS / "enter_mode.py"), "--workspace", str(ws),
          "--mode", mode, *extra],
-        capture_output=True, text=True, cwd=str(REPO))
+        capture_output=True, text=True, encoding="utf-8", cwd=str(REPO))
 
 
 def test_the_reason_for_the_mode_is_recorded_beside_the_choice(tmp_path):
@@ -80,7 +80,7 @@ def test_entry_records_whether_an_assessment_was_there(tmp_path):
 def _check_apply(ws):
     return subprocess.run(
         [sys.executable, str(SCRIPTS / "check_apply.py"), "--workspace", str(ws)],
-        capture_output=True, text=True, cwd=str(REPO))
+        capture_output=True, text=True, encoding="utf-8", cwd=str(REPO))
 
 
 def test_check_apply_says_when_no_assessment_was_made(tmp_path):

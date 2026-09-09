@@ -7,19 +7,10 @@ version has already been wrong here: an earlier check looked for `xelatex`, did
 not find it, and concluded PDF rendering was at risk — while `tectonic` was
 installed and every PDF rendered fine. So the PDF check renders a PDF.
 
-Two classes of missing thing, handled differently on purpose:
-
-  Python packages   installed for you with --install. They are small, scoped to
-                    the interpreter already running, and listed in
-                    requirements.txt, which is parsed rather than duplicated
-                    here.
-
-  System binaries   NEVER installed for you. A LaTeX engine is a package-manager
-                    action of several hundred megabytes; running one unasked on
-                    someone's machine is the same class of act as running
-                    `opencli <site> login` for them, which source-policy.md keeps
-                    on its Red list. The exact command is printed for the
-                    platform detected, and the user runs it.
+This diagnostic's --install option handles requirements.txt Python packages.
+The agent performs other needed setup using references/agent-setup.md, including
+system tools and extension download/extraction. The user loads the prepared
+extension in Chrome. A diagnostic run alone never installs system tools.
 
 Exit codes: 0 everything the skill needs is present, 1 something is missing
 (the report says what it costs), 2 the check itself could not run.
@@ -42,7 +33,7 @@ REQUIREMENTS = REPO / "requirements.txt"
 # Which import each requirement actually provides. A requirement's install name
 # and its module name differ often enough (python-docx -> docx, PyYAML -> yaml)
 # that guessing from the install name reports a working machine as broken.
-IMPORT_NAME = {"pyyaml": "yaml", "python-docx": "docx"}
+IMPORT_NAME = {"pyyaml": "yaml", "python-docx": "docx", "pymupdf": "pymupdf"}
 
 
 def requirements() -> list[tuple[str, str]]:
@@ -121,6 +112,9 @@ def fast_capabilities() -> list[str]:
 
 
 def install_hint(binary: str) -> str:
+    if platform.system() == "Windows":
+        return (f"Agent: install {binary} with a verified Windows package or portable "
+                "release; follow references/agent-setup.md")
     mac = platform.system() == "Darwin"
     brew = {"pandoc": "brew install pandoc", "tectonic": "brew install tectonic",
             "pdftotext": "brew install poppler",
@@ -137,8 +131,8 @@ def can_reach_browser() -> tuple[bool, str]:
         return False, "opencli is not installed"
     try:
         result = subprocess.run(["opencli", "doctor"], capture_output=True,
-                                text=True, timeout=15, check=False)
-    except (OSError, subprocess.SubprocessError) as exc:
+                                text=True, encoding="utf-8", timeout=15, check=False)
+    except (OSError, UnicodeError, subprocess.SubprocessError) as exc:
         return False, f"browser health check could not complete: {exc}"
     output = re.sub(r"\x1b\[[0-9;]*m", "", (result.stdout or "") + (result.stderr or ""))
     if re.search(r"\[(?:MISSING|FAIL)\]", output, re.I):
@@ -160,6 +154,7 @@ def checks() -> list[dict]:
                      f".docx output is unavailable ({module})"),
             "fix": f"{sys.executable} -m pip install {pkg}",
             "auto": True,
+            "install_argv": [sys.executable, "-m", "pip", "install", pkg],
         })
     ok, detail = can_render_pdf()
     out.append({
@@ -197,7 +192,7 @@ def install_python(missing: list[dict]) -> int:
     installed = 0
     for c in missing:
         print(f"installing: {c['fix']}")
-        r = subprocess.run(c["fix"].split(), capture_output=True, text=True)
+        r = subprocess.run(c["install_argv"], capture_output=True, text=True, encoding="utf-8")
         if r.returncode == 0:
             installed += 1
             print(f"  ok: {c['what']}")
@@ -210,7 +205,7 @@ def install_python(missing: list[dict]) -> int:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--install", action="store_true",
-                    help="install the missing PYTHON packages (never system binaries)")
+                    help="install missing Python packages; agent handles other tools via references/agent-setup.md")
     args = ap.parse_args(argv)
 
     results = checks()
@@ -241,15 +236,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"    fix:        {c['fix']}")
     auto = [c for c in missing if c.get("auto")]
     if auto and not args.install:
-        print("\nRe-run with --install to install the Python packages above. "
-              "System binaries are never installed for you — run their command "
-              "yourself.")
-    else:
-        print("\nSystem binaries are never installed for you: a LaTeX engine is a "
-              "package-manager action of several hundred megabytes, and running "
-              "one unasked is not this skill's call. Run the commands above.")
+        print("\nRe-run with --install to install the missing Python packages.")
+    print("\nAgent: resolve required missing capabilities using "
+          "references/agent-setup.md, then re-run the checks. "
+          "Prepare the extension folder for the user to load in Chrome.")
     return 1
 
 
 if __name__ == "__main__":
+    from cli_io import configure_output
+
+    configure_output()
     sys.exit(main())

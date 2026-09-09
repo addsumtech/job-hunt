@@ -93,56 +93,29 @@ ln -s "$PWD" ~/.claude/skills/job-hunt
 
 使用 Codex 时，将最后两行的 `~/.claude/skills` 换成 `~/.codex/skills`。目标位置已经存在时，先检查已有安装。
 
-### 安装依赖并检查环境
+### 首次使用：让 Agent 完成环境配置
 
-进入安装后的 **job-hunt 根目录**（包含 `SKILL.md` 和 `requirements.txt` 的目录），在 Python 3.10+ 环境中运行：
+安装 Skill 后，直接告诉 Agent：**“帮我配置 job-hunt 并开始使用，Chrome 扩展我来导入。”**
 
-先运行 `python3 --version`，确认版本不低于 3.10。若版本较旧，请安装 Python 3.10+，并用对应命令（如 `python3.12`）创建下面的虚拟环境。
+Agent 会检查并复用已有环境，自动安装当前任务所需的 Python 依赖、Node.js、OpenCLI 和文档工具，下载并解压 [OpenCLI 官方扩展](https://github.com/jackwener/opencli/releases)，准备好扩展文件夹。无需你复制终端命令。
 
-```bash
-python3 -m venv ~/.venvs/job-hunt
-source ~/.venvs/job-hunt/bin/activate
-python3 -m pip install -r requirements.txt
-python3 scripts/doctor.py
-```
+**通常你只需要手动加载 Chrome 扩展：**
 
-以上激活命令适用于 macOS/Linux；Windows 使用虚拟环境中的 `Scripts` 激活脚本。让 Agent 执行项目脚本时也使用这个 Python 环境。基础依赖为 `PyYAML` 和 `python-docx`；`doctor.py --install` 可以补装当前 Python 环境中缺少的包。
+1. Agent 会打开 `chrome://extensions/`，并给出已解压文件夹的完整路径。
+2. 开启「开发者模式」，点击「加载已解压的扩展程序」，选择 Agent 准备的文件夹（直接包含 `manifest.json`），不是 ZIP 文件。macOS 可按 `Command + Shift + G` 粘贴路径。
+3. 告诉 Agent“已导入”。Agent 会运行 `opencli doctor`，确认扩展和连接正常，自动处理适用的兼容补丁，然后继续原任务。已连接的扩展会直接复用。
 
-| 能力 | 额外依赖 | 缺少时的影响 |
-|---|---|---|
-| 简历和求职信 PDF | LaTeX 引擎，推荐 `tectonic` | 仍可生成 Markdown、Word 和供后续编译的 `.tex` |
-| Markdown 报告转 PDF | `pandoc`＋LaTeX 引擎 | 下载目录中的报告可能只有 Markdown |
-| PDF 文字回读与校验 | Poppler 的 `pdftotext` | 无法完成 PDF 文字完整性验证 |
-| 实时岗位检索 | `opencli` 及对应浏览器环境 | 可以用粘贴的岗位正文继续评估、准备申请和模拟面试 |
-| 中、日、韩 PDF | 对应语言的字体 | 需要先补齐字体才能可靠排版 |
+扩展目录会保存在长期位置，加载后不要移动或删除。网站登录、验证码或系统要求本人确认的权限仍需你完成；Agent 会先处理能自动完成的步骤，只说明剩余的具体操作。
 
-`doctor.py` 会尝试实际生成 PDF，并说明缺少的能力。它的 `--install` 只安装 Python 包，系统工具按报告中的指引安装。
+`doctor.py` 用于检查真实能力，`doctor.py --install` 只补装 Python 包；其他工具由 Agent 按[首次配置流程](references/agent-setup.md)安装。只做 Word 输出或评估粘贴的岗位时，不会安装无关的 PDF／浏览器工具。
 
-### 配置 OpenCLI 的 Chrome 扩展
+### 兼容补丁与浏览器兜底
 
-**实时岗位检索需要 OpenCLI 命令行和 Browser Bridge 扩展。扩展须在 Chrome 中手动安装。** `npm install` 和 `doctor.py --install` 都不会替你完成扩展安装。
+补丁随本 Skill 提供，由 Agent 在首次读取对应网站前自动应用；导入浏览器扩展本身不会安装补丁。
 
-1. **安装命令行工具。** 在终端运行：
+**正常使用即可，不需要手动安装补丁或复制命令。** Skill 会自动修复已确认的 Indeed、51job 兼容问题，当前支持我们测试过的 OpenCLI 1.8.7。OpenCLI 更新后会先照常使用，不会把旧补丁强行套上去，也不会覆盖你自己改过的代码。需要时，可以直接告诉 Agent：“检查招聘网站兼容补丁”或“撤销兼容补丁”。[具体检查与回退方法](references/opencli-compat.md)（英文）。
 
-   ```bash
-   npm install -g @jackwener/opencli
-   opencli doctor
-   ```
-
-   扩展还没安装时，显示未连接是正常的。
-
-2. **下载并解压扩展。** 在 [OpenCLI 官方 Releases](https://github.com/jackwener/opencli/releases) 的 Assets 中下载 `opencli-extension-v*.zip`，不要下载 `Source code`。解压到长期保留的目录，找到直接包含 `manifest.json` 的文件夹。
-3. **在 Chrome 中加载。** 地址栏输入 `chrome://extensions/`，开启「开发者模式」，点击「加载已解压的扩展程序」，选择上一步的文件夹。选择文件夹，不是 ZIP 或 `manifest.json` 文件。查看 Chrome 显示的扩展权限。
-4. **检查连接。** 保持 Chrome 打开，再运行 `opencli doctor`。确认 **Extension: connected** 和 **Connectivity: connected**；只有 CLI 或 daemon 正常还不够。之后不要移动或删除扩展目录。
-
-| 遇到的问题 | 处理方式 |
-|---|---|
-| 文件选择窗口找不到目录 | macOS 按 `Command + Shift + G`，粘贴完整目录路径；以 `.` 开头的目录默认隐藏 |
-| 提示找不到清单文件 | 重新选择直接包含 `manifest.json` 的文件夹，通常是解压目录内的一层子目录 |
-| 扩展已加载，但仍未连接 | 确认扩展在当前 Chrome 个人资料中已启用，再运行 `opencli doctor` |
-
-需要登录招聘网站时，由你在浏览器中完成。扩展连接成功只说明工具已连上浏览器，平台是否允许读取仍需实际检查。
-
+适配器确认不兼容时，可由 web-access 在 Chrome 等浏览器中直接操作 **51job／Indeed 自己的搜索框**并读取页面结果；它并不限于 Google 搜索，也不要求先装补丁。登录、验证码或权限拦截仍需要你完成，不能靠切换工具绕过。
 
 ## 地区、平台与语言
 
@@ -150,7 +123,7 @@ python3 scripts/doctor.py
 
 中国市场还会询问大型私企、中小型私企、国企、外企等雇主偏好。这些偏好影响排序，不会悄悄过滤其他类型。牛客和一亩三分地用于面经与流程参考，论坛内容不会当作真实岗位填入清单。
 
-需要登录时由你完成。遇到验证码、限流或平台拒绝，流程停止该站点本轮读取并说明情况；无法获取真实岗位时，交付明确标注的方向建议。整个找岗流程只读，不发送消息、不修改在线资料、不自动投递。
+需要登录或完成人机验证时，Skill 会说明原因、提示你在浏览器中处理，并暂停该站点。你回复“已完成，继续”后，它会保留此前记录，开启新一轮少量读取并检查是否恢复。限流或权限问题会另行说明，不会一概要求登录；仍无法读取时，可选择其他来源、粘贴岗位正文或先查看已取得的结果。整个找岗流程只读，不发送消息、不修改在线资料、不自动投递。
 
 **地区规则与输出语言分别处理。** 简历渲染器包含英语、荷兰语、德语、法语、西班牙语、意大利语、中文、日语和韩语的标题与个人信息标签。`discover`、`assess` 的统计卡片、必需标题与说明支持中文、英文、日语、韩语和西班牙语，按[报告语言模板](references/report-localization.md)生成并校验。内部文档、诊断信息和有来源的市场惯例卡片仍有未翻译部分；PDF 也需要输出语言对应的字体。
 
@@ -174,7 +147,7 @@ python3 scripts/doctor.py
 
 结构化申请按雇主给定的条件审查 supporting statement；如果同时需要普通简历，再对简历运行三方评审。日本履历书检查表单完整性，配套的职业经历文档按普通简历流程审查。
 
-每轮可读材料默认交付到 `~/Downloads`，例如 `<company>-<role>-<date>-cv.md` 和对应 PDF。PDF 能否生成并验证取决于工具链，交付结果会说明缺失文件或未完成的验证。
+每次咨询都提供针对客户问题的 PDF 回复报告，与本次简历等材料统一放入 `~/Downloads/<workspace-name>/`，多阶段工作使用同一个交付文件夹。报告只包含求职分析、依据和相关待确认事项，工具诊断保留在内部。求职信按需提供，模拟面试不自动展开；PDF 未生成或未通过验证时，交付尚未完成。可按需要使用[补充信息源](references/supplementary-sources.md)查询官网、新闻、GitHub 和公开讨论；小红书、抖音登录态搜索需当轮明确授权。
 
 ## 文件保存在什么位置
 

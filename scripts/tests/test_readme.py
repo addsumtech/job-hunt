@@ -127,7 +127,7 @@ def test_the_advertised_test_count_is_the_real_one(readme):
         # opt-in motif check, this), so the suite states its own emptiness.
         pytest.skip(f"{readme.name} states no test count; nothing to verify")
     out = subprocess.run([sys.executable, "-m", "pytest", str(ROOT / "scripts" / "tests"),
-                          "-q", "--collect-only"], capture_output=True, text=True).stdout
+                          "-q", "--collect-only"], capture_output=True, text=True, encoding="utf-8").stdout
     m = re.search(r"(\d+) tests? collected", out)
     assert m, f"could not read the collected count from pytest:\n{out[-400:]}"
     real = int(m.group(1))

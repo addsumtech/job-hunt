@@ -197,7 +197,7 @@ def _pdftotext(path) -> str:
         return ""
     try:
         proc = subprocess.run([exe, "-q", str(path), "-"], capture_output=True,
-                              text=True, errors="replace", timeout=60)
+                              text=True, encoding="utf-8", errors="replace", timeout=60)
     except (OSError, subprocess.SubprocessError):
         return ""
     return proc.stdout if proc.returncode == 0 else ""
@@ -363,7 +363,8 @@ def max_pages(profile, today_year: int):
 
 
 def findings_for(cv_pdf, profile, today_year: int, letter_pdf=None) -> list:
-    out = []
+    from pdf_glyphs import glyph_findings
+    out = glyph_findings(cv_pdf)
     # Reported before anything is read off the PDF, because it is a fact about
     # the PROFILE: the page budget below was chosen without these dates, and a
     # reader who cannot see that will not know why a one-page CV got two. It
@@ -392,6 +393,7 @@ def findings_for(cv_pdf, profile, today_year: int, letter_pdf=None) -> list:
         # has already been reported and would produce a second, derivative finding.
         out += text_findings(cv_pdf, profile)
     if letter_pdf and pathlib.Path(letter_pdf).exists():
+        out += glyph_findings(letter_pdf)
         lp = page_count(letter_pdf)
         if lp is None:
             out.append(f"UNREADABLE_PDF: {pathlib.Path(letter_pdf).name} has no "
@@ -426,13 +428,15 @@ def docx_findings(cv_docx, profile, today_year, letter_docx=None):
                 result = subprocess.run(
                     [office, "-env:UserInstallation=" + (root / "profile").as_uri(),
                      "--headless", "--convert-to", "pdf", "--outdir", str(folder),
-                     str(docx.resolve())], capture_output=True, text=True,
+                     str(docx.resolve())], capture_output=True, text=True, encoding="utf-8",
                     timeout=60, check=False)
                 pdf = folder / (docx.stem + ".pdf")
                 if result.returncode or not pdf.is_file():
                     out.append(f"DOCX_NOT_MEASURED: {docx.name} could not be exported by LibreOffice")
                     continue
                 if is_letter:
+                    from pdf_glyphs import glyph_findings
+                    out.extend(glyph_findings(pdf))
                     pages = page_count(pdf)
                     problems = (["UNREADABLE_PDF: no readable page tree"] if pages is None
                                 else [f"LETTER_TOO_LONG: {pages} pages; maximum is 1"]
@@ -441,7 +445,7 @@ def docx_findings(cv_docx, profile, today_year, letter_docx=None):
                     problems = findings_for(pdf, profile, today_year)
                 out.extend(f"{problem.split(':', 1)[0]}: Word file {docx.name}: "
                            f"{problem.split(':', 1)[-1].strip()}" for problem in problems)
-            except (OSError, subprocess.SubprocessError) as exc:
+            except (OSError, UnicodeError, subprocess.SubprocessError) as exc:
                 out.append(f"DOCX_NOT_MEASURED: {docx.name}: {exc}")
     return out
 
@@ -498,4 +502,7 @@ def main(argv=None) -> int:
 
 
 if __name__ == "__main__":
+    from cli_io import configure_output
+
+    configure_output()
     sys.exit(main())
