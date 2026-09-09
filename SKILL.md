@@ -871,6 +871,8 @@ believing you vetted it.
       Use `browser_page` evidence and stop across tools after a site refusal.
 
 Read-when:
+- [ ] Page unavailable? Follow `references/network-recovery.md`: classify first,
+      use bounded retries, and inspect relevant VPN/split-routing evidence.
 - [ ] Diagnosed OpenCLI adapter incompatibility? Read `references/opencli-compat.md`;
       `scripts/opencli_compat.py` checks optional, reversible local patches.
       Browser fallback does not require patching; a site refusal still stops reads.
