@@ -76,6 +76,7 @@ job-hunt/
 ├── references/                     # Layer 2 — read on demand
 │   ├── candidate-situations.md      # Non-standard candidates (gap, switch, exec, military, intl)
 │   ├── cv-craft.md                  # CV writing conventions (markets, links, bullets, ordering)
+│   ├── word-resume-layout.md        # Reviewed Word layout and fictional bilingual examples
 │   ├── browser-fallback.md          # Read-only web-access capture and fallback
 │   ├── agent-setup.md              # Agent installs tools and prepares the Chrome extension
 │   ├── opencli-compat.md            # Optional version-checked adapter repairs
