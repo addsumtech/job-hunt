@@ -19,6 +19,7 @@ import sys
 import tempfile
 
 import journal
+import lint_no_prediction
 from render_cv import has_rtl
 from pdf_glyphs import glyph_findings
 
@@ -27,10 +28,12 @@ SKIP_NAMES = {"journal.jsonl", ".DS_Store", "master-fingerprint.json"}
 SKIP_SUFFIXES = {".err", ".pyc"}
 
 DEFAULT_ROOT = pathlib.Path.home() / "Downloads"
+# Report font setup uses fontspec and xeCJK, so both supported engines use XeTeX.
+REPORT_ENGINES = ("tectonic", "xelatex")
 
 # Probed in order. macOS first, then the common Linux packages. The list exists
 # because "it worked on my machine" is how a PDF full of boxes ships.
-CJK_FONTS = ("PingFang SC", "Hiragino Sans GB", "Songti SC", "STSong",
+CJK_FONTS = ("SimSun", "PingFang SC", "Hiragino Sans GB", "Songti SC", "STSong",
              "Noto Sans CJK SC", "Noto Serif CJK SC", "Source Han Sans SC",
              "WenQuanYi Zen Hei", "SimSun", "Microsoft YaHei")
 
@@ -65,6 +68,14 @@ def flat_name(slug: str, rel: pathlib.Path) -> str:
     return f"{slug}-" + "__".join(rel.parts)
 
 
+def client_path(rel: pathlib.Path) -> pathlib.Path:
+    """Client names never expose the company/role workspace slug."""
+    names = {"report": "求职建议报告", "cv": "简历", "letter": "求职信",
+             "rirekisho": "履历书", "supporting-statement": "申请陈述"}
+    folder = "报告" if rel.stem == "report" else "简历"
+    return pathlib.Path(folder) / (names[rel.stem] + rel.suffix)
+
+
 def is_deliverable(path: pathlib.Path, workspace: pathlib.Path) -> bool:
     rel = path.relative_to(workspace)
     # Explicit client artifacts only. completion.md can contain tool diagnostics.
@@ -93,20 +104,26 @@ def writable(directory: pathlib.Path) -> tuple[bool, str]:
 
 def _pandoc(md: pathlib.Path, pdf: pathlib.Path, font: str | dict | None) -> bool:
     pdf.unlink(missing_ok=True)
-    cmd = ["pandoc", str(md), "-o", str(pdf), "--pdf-engine=tectonic",
-           "--lua-filter", str(pathlib.Path(__file__).with_name("pdf_symbols.lua"))]
+    engine = next((e for e in REPORT_ENGINES if shutil.which(e)), None)
+    if engine is None:
+        return False
+    cmd = ["pandoc", str(md), "-o", str(pdf), f"--pdf-engine={engine}",
+           "--lua-filter", str(pathlib.Path(__file__).with_name("pdf_symbols.lua")),
+           "-V", "mainfont=Times New Roman"]
     if font:
         main = font["main"] if isinstance(font, dict) else font
-        cmd += ["-V", f"CJKmainfont={main}", "-V", f"mainfont={main}"]
+        cmd += ["-V", f"CJKmainfont={main}"]
+        if main == "SimSun":
+            cmd += ["-V", "CJKoptions=AutoFakeBold=2"]
         if isinstance(font, dict):
             fallback = ",".join(font["fallbacks"])
             cmd += ["-V", "header-includes=" +
                     r"\xeCJKsetup{AutoFallBack=true}\setCJKfallbackfamilyfont{\CJKrmdefault}{" + fallback + "}"]
     try:
-        subprocess.run(cmd, capture_output=True, timeout=180, check=False)
+        result = subprocess.run(cmd, capture_output=True, timeout=180, check=False)
     except (OSError, subprocess.SubprocessError):
         return False
-    return pdf.is_file() and pdf.stat().st_size > 0
+    return result.returncode == 0 and pdf.is_file() and pdf.stat().st_size > 0
 
 
 def pdf_text(pdf: pathlib.Path) -> str:
@@ -149,10 +166,15 @@ def pick_cjk_font(source: str = "测试中文渲染") -> str | dict | None:
             preferred += ["Noto Sans CJK KR", "Apple SD Gothic Neo", "Malgun Gothic"]
         if re.search(r"[぀-ヿ]", source):
             preferred += ["Noto Sans CJK JP", "Hiragino Sans W3", "Yu Gothic"]
-        for font in dict.fromkeys(preferred + list(CJK_FONTS)) :
+        # Chinese-only reports must use the requested Song font, not a silent
+        # readable-but-different substitute. Other scripts retain their fonts.
+        candidates = preferred + list(CJK_FONTS) if preferred else ["SimSun"]
+        for font in dict.fromkeys(candidates):
             out = d / f"probe-{abs(hash(font))}.pdf"
             if _pandoc(probe_md, out, font) and not glyph_findings(out) and glyphs <= set(_CJK.findall(pdf_text(out))):
                 return font
+        if not preferred:
+            return None
         # Mixed reports can quote a posting in another script. No single macOS
         # face necessarily covers all of them; probe an explicit fallback chain.
         for main, fallbacks in [
@@ -184,7 +206,7 @@ def render_pdf(md: pathlib.Path, pdf: pathlib.Path,
                        "the PDF is refused rather than handed over full of boxes")
     if not _pandoc(md, pdf, font if needs_cjk else None):
         pdf.unlink(missing_ok=True)
-        return False, "pandoc/tectonic produced no PDF"
+        return False, "pandoc with a supported XeTeX engine produced no PDF"
 
     problems = glyph_findings(pdf)
     if problems:
@@ -220,7 +242,7 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
 
     claimed: dict = {}
     for src in sources:
-        target = dest / flat_name(slug, src.relative_to(workspace))
+        target = dest / client_path(src.relative_to(workspace))
         # A REDELIVERY must land on the same name. The previous version renamed
         # to `-2` whenever the bytes differed, which froze the obvious filename
         # at round 1 forever: a user opening `<slug>-cv.md` in Downloads after
@@ -240,6 +262,7 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
                 notes.extend(problems)
                 continue
         try:
+            target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, target)
         except OSError as exc:
             # One unreadable file, or a name past the OS limit, must not abandon
@@ -291,6 +314,17 @@ def main(argv: list[str] | None = None) -> int:
         print("DELIVER_REPORT_REQUIRED: author report.md answering the client question", file=sys.stderr)
         return 2
 
+    try:
+        findings = lint_no_prediction.scan_text(
+            (ws / "report.md").read_text(encoding="utf-8"), "report.md",
+            lint_no_prediction.capture_corpus(ws))
+    except (OSError, UnicodeError) as exc:
+        print(f"DELIVER_REPORT_UNREADABLE: {exc}", file=sys.stderr)
+        return 2
+    if findings:
+        print("DELIVER_REPORT_PREDICTION: " + "\n".join(findings), file=sys.stderr)
+        return 2
+
     ok, why = writable(dest)
     if not ok:
         print(f"DELIVER_DEST_UNWRITABLE: cannot write to {dest}: {why}. On macOS "
@@ -313,16 +347,16 @@ def main(argv: list[str] | None = None) -> int:
         journal.append(ws, {
             "action": "delivery",
             "destination": str(dest),
-            "files": [q.name for q in written],
+            "files": [q.relative_to(dest).as_posix() for q in written],
             "pdf_refused": notes,
         })
     except OSError:
         pass  # a workspace we can read but not write is not a delivery failure
 
-    complete = not notes and (args.no_pdf or dest / flat_name(ws.name, pathlib.Path("report.pdf")) in written)
+    complete = not notes and (args.no_pdf or dest / client_path(pathlib.Path("report.pdf")) in written)
     print(f"{'Delivered' if complete else 'Incomplete delivery:'} {len(written)} file(s) to {dest}")
     for p in written:
-        print(f"  {p.name}")
+        print(f"  {p.relative_to(dest)}")
     for n in notes:
         # The prefix has to name what happened: this list holds refused PDFs AND
         # files that could not be copied at all, and calling a permission error a

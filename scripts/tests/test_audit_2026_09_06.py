@@ -155,8 +155,8 @@ def test_redelivering_overwrites_the_name_the_user_opens(tmp_path):
         (ws / "cv.md").write_text(f"# cv\n{marker}\n", encoding="utf-8")
         assert deliver.main(["--workspace", str(ws), "--to", str(dest),
                              "--no-pdf"]) == 0
-    assert sorted(p.name for p in dest.iterdir()) == ["ws-cv.md", "ws-report.md"]
-    assert "FINAL-3" in (dest / "ws-cv.md").read_text(encoding="utf-8")
+    assert {p.relative_to(dest).as_posix() for p in dest.rglob("*") if p.is_file()} == {"简历/简历.md", "报告/求职建议报告.md"}
+    assert "FINAL-3" in (dest / "简历" / "简历.md").read_text(encoding="utf-8")
 
 
 def test_internal_nested_files_do_not_enter_client_package(tmp_path):
@@ -171,7 +171,7 @@ def test_internal_nested_files_do_not_enter_client_package(tmp_path):
     (ws / "report.md").write_text("Client response")
     dest = tmp_path / "out"
     assert deliver.main(["--workspace", str(ws), "--to", str(dest), "--no-pdf"]) == 0
-    assert {p.name for p in dest.iterdir()} == {"ws-report.md"}
+    assert {p.relative_to(dest).as_posix() for p in dest.rglob("*") if p.is_file()} == {"报告/求职建议报告.md"}
 
 
 def test_one_unreadable_file_does_not_abandon_the_round(tmp_path, monkeypatch):
@@ -198,7 +198,7 @@ def test_one_unreadable_file_does_not_abandon_the_round(tmp_path, monkeypatch):
     dest = tmp_path / "out"
     assert deliver.main(["--workspace", str(ws), "--to", str(dest),
                          "--no-pdf"]) == 2
-    assert sorted(p.name for p in dest.iterdir()) == ["ws-cv.md", "ws-letter.md", "ws-report.md"]
+    assert {p.relative_to(dest).as_posix() for p in dest.rglob("*") if p.is_file()} == {"简历/简历.md", "简历/求职信.md", "报告/求职建议报告.md"}
     import json
     rec = [json.loads(l) for l
            in (ws / "journal.jsonl").read_text(encoding="utf-8").splitlines()

@@ -123,7 +123,7 @@ unwritable home, or a deliberate split.
 
 ## 5. What to check before trusting a run on a new host
 
-The agent prepares missing dependencies and the extension using
+The agent prepares missing dependencies and daily-browser CDP using
 [agent-setup.md](agent-setup.md), then runs the capability checks below.
 
 ```bash

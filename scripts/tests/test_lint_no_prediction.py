@@ -596,3 +596,10 @@ def test_the_cjk_suffix_exclusions_hold_in_both_directions(text, fires):
 ])
 def test_a_decimal_is_not_an_n_over_m_score(text, fires):
     assert bool(lnp.scan_text(text, "fit-assessment.md")) is fires, text
+
+
+def test_client_report_is_a_default_judgement_surface(tmp_path):
+    report = tmp_path / 'report.md'
+    report.write_text('You are likely to be hired.\n', encoding='utf-8')
+    assert report in lnp.target_files(tmp_path)
+    assert lnp.main(['--workspace', str(tmp_path)]) == 1

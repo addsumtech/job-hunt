@@ -96,3 +96,40 @@ def test_warning_symbol_has_a_readable_pdf_fallback_without_editing_source(tmp_p
     text = deliver.pdf_text(pdf)
     assert '[!]' in text and 'Evidence count' in text
     assert md.read_text(encoding='utf-8') == source
+
+
+@pytest.mark.parametrize('engine', ['tectonic', 'xelatex'])
+def test_report_uses_available_supported_engine(tmp_path, monkeypatch, engine):
+    import subprocess
+    md, pdf = tmp_path / 'report.md', tmp_path / 'report.pdf'
+    md.write_text('Report')
+    monkeypatch.setattr(deliver.shutil, 'which', lambda name: '/bin/' + name if name in {'pandoc', engine} else None)
+    seen = []
+    def run(cmd, **kwargs):
+        seen.append(cmd)
+        pdf.write_bytes(b'%PDF test')
+        return subprocess.CompletedProcess(cmd, 0)
+    monkeypatch.setattr(deliver.subprocess, 'run', run)
+    assert deliver._pandoc(md, pdf, None)
+    assert '--pdf-engine=' + engine in seen[0]
+
+
+def test_failed_report_compile_cannot_pass_on_partial_output(tmp_path, monkeypatch):
+    import subprocess
+    md, pdf = tmp_path / 'report.md', tmp_path / 'report.pdf'
+    md.write_text('Report')
+    monkeypatch.setattr(deliver.shutil, 'which', lambda name: '/bin/' + name)
+    def fail(cmd, **kwargs):
+        pdf.write_bytes(b'%PDF partial')
+        return subprocess.CompletedProcess(cmd, 1)
+    monkeypatch.setattr(deliver.subprocess, 'run', fail)
+    ok, _ = deliver.render_pdf(md, pdf, None)
+    assert not ok and not pdf.exists()
+
+
+def test_cjk_does_not_select_luatex_for_xecjk(monkeypatch):
+    import render_cv
+    monkeypatch.setattr(render_cv, '_ENGINE_DIRS', ())
+    monkeypatch.setattr(render_cv.shutil, 'which', lambda name: '/bin/lualatex' if name == 'lualatex' else None)
+    assert render_cv.find_latex_engine(cjk=True) is None
+    assert render_cv.find_latex_engine(cjk=False) == '/bin/lualatex'

@@ -1,16 +1,14 @@
 # Read-only browser fallback
 
-OpenCLI is preferred when the required read adapter and its connection work.
-Before the first call, run `opencli doctor` (with a bounded process timeout) and
-inspect the adapter's help. This is a capability probe, not a login operation.
-If the CLI is missing, its browser bridge is disconnected, or no documented
-extraction command serves this page/market, use an available **web-access** skill.
-Read that skill and follow its supported browser setup; do not assume a localhost
-port, install extensions, restart the user's browser, or change browser settings.
+Use the daily browser via CDP first, following [daily-browser.md](daily-browser.md).
+A supported host-browser connection is also a normal read route. No OpenCLI
+failure or extension installation is required before choosing browser capture.
+When using OpenCLI instead, inspect its adapter help and actual connection.
 A browser tool policy denial remains a denial, never a fallback trigger.
 
 Only these reasons are accepted by the recorder:
 
+- `preferred_browser`: directly selected daily-browser/CDP route; no CLI failure needed.
 - `cli_missing`: executable unavailable.
 - `bridge_disconnected`: diagnostic confirms the required bridge is unavailable.
 - `unsupported_extraction`: no suitable documented read extraction, including an
@@ -21,9 +19,10 @@ Only these reasons are accepted by the recorder:
   patching is not required before using a supported browser fallback.
 
 A generic timeout, blank fields or unclassified transport error does not establish
-one of these reasons. Diagnose first; existing detail recovery still applies.
+one of these reasons. Diagnose first using [network recovery](network-recovery.md);
+existing detail recovery still applies.
 A site refusal (captcha, login wall, 401/403/429, platform limit) stops this site
-for this round across **both** tools. Use the same stable `site` name for both
+for this round across **all** tools. Use the same stable `site` name for both
 backends, e.g. `51job`.
 
 The stop is keyed on three things, so a rename does not quietly reset it: the
@@ -44,10 +43,11 @@ request a pasted JD/export and disclose that live discovery was unavailable.
 
 ## Capture, then import
 
-Use web-access to open/read the page. Navigation and the user's requested job
+Use the selected read-only browser tool to open/read the page. Navigation and the user's requested job
 search are allowed; login submission, applications, recruiter messages and any
 other account mutation are not. Record every retrieved search/detail page,
-including empty results and refusal pages, immediately and before another read.
+including empty results and refusal pages, immediately and before another read of the same site. Independent sites may
+be in flight; one coordinator imports captures serially.
 Save the actual tool output; do not ask a model to recreate a snapshot from memory.
 When the tool supports a read-only JavaScript expression, this snapshot shape can
 be returned directly (HTTP status is unknown unless the tool actually reports it):
@@ -66,6 +66,14 @@ example), retain that output and set `http_status: 403` or `blocked: true` on th
 snapshot; never record it as an empty successful page. Bare navbar links labelled
 Login do not establish a login wall. Explicit wall language does.
 
+If a tool returns richer link objects, preserve its original output and make a
+separate deterministic projection to the snapshot shape above: retain `text`
+unchanged and extract only original HTTP(S) link URLs. Do not pass link objects
+or `javascript:` links to the importer, and never reconstruct text from memory.
+Workers must return that shape to the coordinator and wait for import/classification
+before their next read of the same site. A late bulk import does not establish
+that this ordering was followed; retain the deviation and rerun a bounded sample.
+
 Separately extract a JSON array into `raw/<site>-browser-<n>-rows.json`:
 
 ```json
@@ -83,14 +91,16 @@ pages have `[]` rows, distinguished by the snapshot's status/text.
 python3 scripts/record_browser_capture.py --workspace <ws> --site 51job \
   --snapshot-file <ws>/raw/51job-browser-1.json \
   --rows-file <ws>/raw/51job-browser-1-rows.json \
-  --fallback-reason unsupported_extraction --command search \
+  --backend web-access --fallback-reason preferred_browser --command search \
   --query 'Python' --page 1
 ```
 
 This importer performs no network operation. Exit 0 means **recorded**, even for
 `classification: platform_limit`; inspect that result and stop the site. Exit 2
 means invalid input; repair the evidence/reporting error before any further read.
-It appends `browser_call` with `backend: web-access`, `operation: snapshot`, query,
+Select the actual `--backend`: `web-access` (default), `chrome-devtools`, or
+`host-browser`. The legacy `--fallback-reason` flag also accepts the preferred
+route. It appends `browser_call` with that backend, `operation: snapshot`, query,
 page, row count, classification, source URL/time and both file hashes. It does not
 fabricate an `adapter_call`, shell command or OpenCLI access metadata.
 

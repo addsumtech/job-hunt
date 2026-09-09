@@ -9,8 +9,8 @@ installed and every PDF rendered fine. So the PDF check renders a PDF.
 
 This diagnostic's --install option handles requirements.txt Python packages.
 The agent performs other needed setup using references/agent-setup.md, including
-system tools and extension download/extraction. The user loads the prepared
-extension in Chrome. A diagnostic run alone never installs system tools.
+system tools and daily-browser CDP. The user grants browser connection consent.
+A diagnostic run alone never installs system tools.
 
 Exit codes: 0 everything the skill needs is present, 1 something is missing
 (the report says what it costs), 2 the check itself could not run.
@@ -26,6 +26,9 @@ import shutil
 import subprocess
 import sys
 import tempfile
+
+# Keep diagnostics importable before requirements.txt has been installed.
+REPORT_ENGINES = ("tectonic", "xelatex")
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 REQUIREMENTS = REPO / "requirements.txt"
@@ -61,23 +64,24 @@ def can_render_pdf() -> tuple[bool, str]:
     """Render one, rather than believe a `command -v`."""
     if not shutil.which("pandoc"):
         return False, "pandoc is not installed"
-    engines = [e for e in ("tectonic", "xelatex", "lualatex", "pdflatex")
+    engines = [e for e in REPORT_ENGINES
                if shutil.which(e)]
     if not engines:
-        return False, "no LaTeX engine (tectonic, xelatex, lualatex or pdflatex)"
+        return False, "no supported report LaTeX engine (tectonic or xelatex)"
     with tempfile.TemporaryDirectory() as tmp:
         d = pathlib.Path(tmp)
         md = d / "probe.md"
         md.write_text("# probe\n\nHello.\n", encoding="utf-8")
         pdf = d / "probe.pdf"
         try:
-            subprocess.run(["pandoc", str(md), "-o", str(pdf),
-                            f"--pdf-engine={engines[0]}"],
-                           capture_output=True, timeout=180, check=False)
+            result = subprocess.run(["pandoc", str(md), "-o", str(pdf),
+                                     f"--pdf-engine={engines[0]}",
+                                     "-V", "mainfont=Times New Roman"],
+                                    capture_output=True, timeout=180, check=False)
         except (OSError, subprocess.SubprocessError) as exc:
             return False, f"pandoc + {engines[0]} failed to run: {exc}"
-        if pdf.is_file() and pdf.stat().st_size > 0:
-            return True, f"pandoc + {engines[0]}"
+        if result.returncode == 0 and pdf.is_file() and pdf.stat().st_size > 0:
+            return True, f"pandoc + {engines[0]} (report font configuration)"
     return False, f"pandoc + {engines[0]} produced no PDF"
 
 
@@ -102,7 +106,7 @@ def fast_capabilities() -> list[str]:
         if not importable(module):
             missing.append(f"python package {pkg}")
     if not shutil.which("pandoc") or not any(
-            shutil.which(e) for e in ("tectonic", "xelatex", "lualatex", "pdflatex")):
+            shutil.which(e) for e in REPORT_ENGINES):
         missing.append("PDF rendering (pandoc + a LaTeX engine)")
     if not shutil.which("pdftotext"):
         missing.append("pdftotext")
@@ -112,16 +116,16 @@ def fast_capabilities() -> list[str]:
 
 
 def install_hint(binary: str) -> str:
+    if binary == "opencli":
+        return "Agent: prepare a dedicated opencli prefix via references/agent-setup.md"
     if platform.system() == "Windows":
         return (f"Agent: install {binary} with a verified Windows package or portable "
                 "release; follow references/agent-setup.md")
     mac = platform.system() == "Darwin"
     brew = {"pandoc": "brew install pandoc", "tectonic": "brew install tectonic",
-            "pdftotext": "brew install poppler",
-            "opencli": "npm install -g @jackwener/opencli"}
+            "pdftotext": "brew install poppler"}
     apt = {"pandoc": "sudo apt install pandoc", "tectonic": "sudo apt install tectonic",
-           "pdftotext": "sudo apt install poppler-utils",
-           "opencli": "npm install -g @jackwener/opencli"}
+           "pdftotext": "sudo apt install poppler-utils"}
     return (brew if mac else apt).get(binary, f"install {binary}")
 
 
@@ -151,7 +155,9 @@ def checks() -> list[dict]:
             "ok": importable(module),
             "cost": ("nothing in this skill runs without it"
                      if module == "yaml" else
-                     f".docx output is unavailable ({module})"),
+                     ".docx output is unavailable" if module == "docx" else
+                     "PDF glyph verification and delivery are unavailable" if module == "pymupdf" else
+                     f"features using {module} are unavailable"),
             "fix": f"{sys.executable} -m pip install {pkg}",
             "auto": True,
             "install_argv": [sys.executable, "-m", "pip", "install", pkg],
@@ -173,16 +179,16 @@ def checks() -> list[dict]:
     })
     out.append({
         "what": "job adapters (opencli)", "ok": bool(shutil.which("opencli")),
-        "cost": "discover mode cannot retrieve postings; assess, apply and "
-                "interview still work from a posting you paste",
+        "cost": "OpenCLI adapters are unavailable; verify daily-browser CDP separately "
+                "or use a pasted posting",
         "fix": install_hint("opencli"), "auto": False,
     })
     if shutil.which("opencli"):
         connected, detail = can_reach_browser()
         out.append({
             "what": "browser-backed job adapters (Browser Bridge)", "ok": connected,
-            "cost": detail + "; browser-backed searches are unverified, not empty results",
-            "fix": "run opencli doctor and follow its extension connection instructions",
+            "cost": detail + "; this OpenCLI route is unverified, not an empty result; check CDP separately",
+            "fix": "verify the daily-browser CDP route in references/daily-browser.md",
             "auto": False, "detail": detail,
         })
     return out
@@ -239,7 +245,7 @@ def main(argv: list[str] | None = None) -> int:
         print("\nRe-run with --install to install the missing Python packages.")
     print("\nAgent: resolve required missing capabilities using "
           "references/agent-setup.md, then re-run the checks. "
-          "Prepare the extension folder for the user to load in Chrome.")
+          "Prepare daily-browser CDP; no extension installation is required.")
     return 1
 
 

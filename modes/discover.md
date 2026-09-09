@@ -35,9 +35,9 @@ language contract; no invented retrieval or login state):
 ## Supplementary public research
 
 Use `references/supplementary-sources.md` when official web/news, GitHub,
-public articles, social discussions, videos or podcasts can fill a concrete
+WeChat articles or relevant role discussions can fill a concrete
 career evidence gap. It defines provider availability checks, source quality and
-current-consultation authorization for Xiaohongshu/Douyin. These sources supplement
+source-selection records. These sources supplement
 formal posting evidence; they do not replace it or run automatically on every task.
 
 ## On entering this mode — before anything else
@@ -300,21 +300,22 @@ the second is the politeness cap from `references/source-policy.md`. Falling sho
 `target_count` requires a written `shortfall_reason` in `shortlist.yaml`
 (`SHORTFALL_NO_REASON`). **Never pad the count.**
 
-## Retrieval backend — OpenCLI first, web-access fallback
+## Retrieval backend — daily-browser CDP first
 
-Before the first Indeed or 51job read, follow `references/opencli-compat.md`:
+Before using OpenCLI for the first Indeed or 51job read, follow `references/opencli-compat.md`:
 check and automatically apply only the known version/hash-matched local repairs
 with `scripts/opencli_compat.py`. Do not overwrite custom edits or force a patch
 onto another version. This local preparation performs no site reads and cannot
 reset a site's refusal. Browser fallback can use the site's own search box;
 it is not limited to Google or other search engines.
 
-Before Step 1, probe OpenCLI availability and its connection. If it is missing,
-the bridge is disconnected, or there is no suitable read extraction, read
-`references/browser-fallback.md` and use the available web-access skill. On this
-path skip OpenCLI-only auth/help commands and retain the same source selection,
-query, page, row, detail and disclosure rules. Do not stop merely because an
-optional adapter executable is absent. If neither path works, disclose the gap.
+Before Step 1, select the daily browser and schedule independent sources under
+`references/daily-browser.md`. Prefer CDP; use OpenCLI only when its CDP adapter
+works, or use `references/browser-fallback.md` directly with web-access or a
+supported host browser. No extension or prior CLI failure is required. On the
+browser path skip OpenCLI-only auth/help commands and retain the same source,
+query, page, row, detail and disclosure rules. If neither path works, disclose
+the gap. Site login remains a user action when a real login wall is encountered.
 
 Browser captures use `scripts/record_browser_capture.py`, `browser_call` journal
 records and `extraction_method: browser_page`. They are not adapter responses.
@@ -451,7 +452,7 @@ The wrapper returns one of five classifications, each with an action:
 | `not_logged_in` | login wall, and auth says the session is absent or unknown | cross-check auth; hand `opencli <site> login` **to the user** — it is a write command. Pause for [user recovery](../references/user-recovery.md); no read retry while logged out. **Do not treat `strategy: public` as evidence that no login is needed** — 1point3acres' public-strategy `forum` still 403s. |
 | `no_auth_adapter` | login wall on a site with no login concept | no CLI login command is available. Pause and ask the user to inspect the browser page; do not invent a login command or infer a missing session. |
 | `platform_limit` | a stop-signal from `references/risk-control-signals.yaml`, or a refusal while auth says logged in | **立即停止。不重试、不改参数重试、不绕过。** Pause this source, not the whole task. Explain whether it is verification, rate limiting or an unknown refusal; follow [user recovery](../references/user-recovery.md) before offering degraded output. |
-| `transport` | unrecognised failure, or exit 0 with unparsable stdout | run `opencli doctor` — a dead browser bridge takes out every `browser: true` command on every site at once, which distinguishes infrastructure failure from a single-site problem. |
+| `transport` | unrecognised failure, or exit 0 with unparsable stdout | Check the actual selected connection (`opencli doctor` when using OpenCLI), then follow [bounded network recovery](../references/network-recovery.md). Distinguish a disconnected browser from a site loading or route failure; a timeout alone is not evidence that a VPN caused it. |
 
 ## Step 5 — row integrity, before anything else
 
@@ -738,12 +739,17 @@ every mode is a command, not a claim:
 python3 scripts/deliver.py --workspace <ws>
 ```
 
+Delivery uses two child folders: `简历/` for `简历.docx`, `简历.pdf` and other requested application documents; `报告/` for `求职建议报告.pdf` and its editable text. Filenames never include the employer, role or internal workspace slug.
+
 Author `report.md` for **every consultation**, answering the client's actual
 question in their language: conclusion, supporting evidence, relevant career
 constraints or facts still to confirm, and practical next steps. Tool defects,
 adapter errors, tests, developer diagnostics and internal review logs belong only
 in the private workspace, never in this client report. Do not copy an internal
 `completion.md` into it. A general question still receives a PDF reply report.
+
+After authoring `report.md`, run `lint_no_prediction.py --workspace <ws>`.
+Delivery also refuses prediction language in the report.
 
 Run `deliver.py` as the last step. It requires `report.md` and a verified report
 PDF and copies only the report and requested CV/application documents into

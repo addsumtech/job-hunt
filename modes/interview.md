@@ -5,17 +5,18 @@ a CV and says they have an interview.
 
 **Reads:** `posting.yaml`, `cv.md`, `tailored-profile.yaml`, `fit-assessment.*`,
 `interview-brief.md`, `claims.yaml`.
-**Writes (exclusively):** `mock/`. Plus two append-only write-backs: a `## Walk-back list`
+**Interview artifacts:** `mock/`. Also author the client `report.md` required by
+the delivery contract below. Plus two append-only write-backs: a `## Walk-back list`
 section on `interview-brief.md`, and `source_kind: session-answer` rows on `claims.yaml`.
 Nothing else in the workspace is modified, and `profile.yaml` is never touched.
 
 ## Supplementary public research
 
-Use `references/supplementary-sources.md` when official web/news, GitHub,
-public articles, social discussions, videos or podcasts can fill a concrete
-career evidence gap. It defines provider availability checks, source quality and
-current-consultation authorization for Xiaohongshu/Douyin. These sources supplement
-formal posting evidence; they do not replace it or run automatically on every task.
+Use `references/supplementary-sources.md` when official web/news, WeChat
+public accounts or relevant GitHub projects can fill a concrete career evidence
+gap. It defines source selection, availability checks and evidence quality.
+These sources supplement formal posting evidence; select only what the current
+question needs.
 
 ## 0. Before the first question
 
@@ -465,12 +466,17 @@ every mode is a command, not a claim:
 python3 scripts/deliver.py --workspace <ws>
 ```
 
+Delivery uses two child folders: `简历/` for `简历.docx`, `简历.pdf` and other requested application documents; `报告/` for `求职建议报告.pdf` and its editable text. Filenames never include the employer, role or internal workspace slug.
+
 Author `report.md` for **every consultation**, answering the client's actual
 question in their language: conclusion, supporting evidence, relevant career
 constraints or facts still to confirm, and practical next steps. Tool defects,
 adapter errors, tests, developer diagnostics and internal review logs belong only
 in the private workspace, never in this client report. Do not copy an internal
 `completion.md` into it. A general question still receives a PDF reply report.
+
+After authoring `report.md`, run `lint_no_prediction.py --workspace <ws>`.
+Delivery also refuses prediction language in the report.
 
 Run `deliver.py` as the last step. It requires `report.md` and a verified report
 PDF and copies only the report and requested CV/application documents into

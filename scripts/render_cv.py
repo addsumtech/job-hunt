@@ -42,6 +42,7 @@ import journal  # noqa: E402
 
 HEADINGS = {
     "en": {
+        "internships": "Internships",
         "summary":        "Summary",
         "experience":     "Experience",
         "education":      "Education",
@@ -55,6 +56,7 @@ HEADINGS = {
         "volunteer":      "Volunteer",
     },
     "nl": {
+        "internships": "Stages",
         "summary":        "Samenvatting",
         "experience":     "Werkervaring",
         "education":      "Opleiding",
@@ -66,38 +68,45 @@ HEADINGS = {
         "volunteer":      "Vrijwilligerswerk",
     },
     "de": {
+        "internships": "Praktika",
         "summary": "Profil", "experience": "Berufserfahrung", "education": "Ausbildung",
         "skills": "Kenntnisse", "projects": "Projekte", "publications": "Publikationen",
         "awards": "Auszeichnungen", "certifications": "Zertifizierungen", "volunteer": "Ehrenamt",
     },
     "fr": {
+        "internships": "Stages",
         "summary": "Profil", "experience": "Expérience professionnelle", "education": "Formation",
         "skills": "Compétences", "projects": "Projets", "publications": "Publications",
         "awards": "Distinctions", "certifications": "Certifications", "volunteer": "Bénévolat",
     },
     "es": {
+        "internships": "Prácticas",
         "summary": "Perfil", "experience": "Experiencia profesional", "education": "Formación",
         "skills": "Competencias", "projects": "Proyectos", "publications": "Publicaciones",
         "awards": "Premios", "certifications": "Certificaciones", "volunteer": "Voluntariado",
     },
     "it": {
+        "internships": "Tirocini",
         "summary": "Profilo", "experience": "Esperienza professionale", "education": "Formazione",
         "skills": "Competenze", "projects": "Progetti", "publications": "Pubblicazioni",
         "awards": "Riconoscimenti", "certifications": "Certificazioni", "volunteer": "Volontariato",
     },
     "zh": {
+        "internships": "实习经历",
         "summary": "个人简介", "experience": "工作经历", "education": "教育背景",
         "skills": "专业技能", "projects": "项目经历", "publications": "论文发表",
         "awards": "获奖经历", "certifications": "证书", "volunteer": "志愿服务",
         "achievements": "主要成就", "board": "董事会与顾问",
     },
     "ja": {
+        "internships": "インターンシップ",
         "summary": "概要", "experience": "職務経歴", "education": "学歴",
         "skills": "スキル", "projects": "プロジェクト", "publications": "論文",
         "awards": "受賞歴", "certifications": "資格", "volunteer": "ボランティア",
         "achievements": "主な実績", "board": "役員・顧問",
     },
     "ko": {
+        "internships": "인턴 경력",
         "summary": "소개", "experience": "경력", "education": "학력",
         "skills": "기술", "projects": "프로젝트", "publications": "출판물",
         "awards": "수상 경력", "certifications": "자격증", "volunteer": "봉사활동",
@@ -301,10 +310,10 @@ def resolve_link(item, key=None):
 # roles) exist mainly for senior/executive CVs; they sit near the end of the
 # default orders (empty → skipped for everyone else), and an exec promotes them
 # via meta.section_order. They must appear here so section_order accepts them.
-_INDUSTRY_ORDER = ["summary", "achievements", "experience", "education", "skills",
+_INDUSTRY_ORDER = ["summary", "achievements", "experience", "internships", "education", "skills",
                    "projects", "publications", "awards", "certifications", "board",
                    "volunteer"]
-_ACADEMIC_ORDER = ["summary", "achievements", "education", "experience", "publications",
+_ACADEMIC_ORDER = ["summary", "achievements", "education", "experience", "internships", "publications",
                    "skills", "projects", "awards", "certifications", "board", "volunteer"]
 _ALL_SECTIONS = _INDUSTRY_ORDER  # canonical set of known section keys
 
@@ -358,6 +367,16 @@ def is_academic_profile(profile):
     currently_studying = any(_is_current(ed) for ed in (profile.get("education") or []))
     has_pro_experience = any((ex.get("bullets") or []) for ex in (profile.get("experience") or []))
     return currently_studying and not has_pro_experience
+
+
+def experience_entries(profile, section):
+    # Keep the evidence schema intact: only the display group changes.
+    return [entry for entry in profile.get("experience", []) or []
+            if entry.get("section", "experience") == section]
+
+
+def experience_heading(profile, section):
+    return headings(profile)[section]
 
 
 def section_order(profile):
@@ -1072,11 +1091,11 @@ def render_markdown(profile):
             return ["", f"## {h['summary']}", normalize_text(profile["summary"]).strip()]
         return []
 
-    def experience():
+    def experience(section="experience"):
         out = []
-        for e in (profile.get("experience") or []):
+        for e in experience_entries(profile, section):
             if not out:
-                out += ["", f"## {h['experience']}"]
+                out += ["", f"## {experience_heading(profile, section)}"]
             header = f"**{e.get('title','')}**, {e.get('org','')}"
             dates = _dates(e, meta.get("language", "en"))
             meta_bits = " · ".join(
@@ -1150,7 +1169,7 @@ def render_markdown(profile):
         return ["", f"## {h[key]}"] + [f"- {normalize_text(item_str(it))}" for it in items]
 
     builders = {
-        "summary": summary, "experience": experience, "education": education,
+        "summary": summary, "experience": experience, "internships": lambda: experience("internships"), "education": education,
         "skills": skills, "projects": projects,
         "publications": lambda: simple_list("publications"),
         "awards": lambda: simple_list("awards"),
@@ -1196,27 +1215,80 @@ def render_docx(profile, out_path):
 
     h = headings(profile)
     doc = Document()
-    from docx.shared import Mm, Pt
+    from docx.shared import Mm, Pt, RGBColor
+    from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    meta = profile.get("meta", {}) or {}
+    language = meta.get("language", "en")
     section = doc.sections[0]
     section.page_width, section.page_height = (
-        (Mm(215.9), Mm(279.4)) if paper_for(profile.get("meta")) == "letterpaper"
+        (Mm(215.9), Mm(279.4)) if paper_for(meta) == "letterpaper"
         else (Mm(210), Mm(297)))
-    section.top_margin = section.bottom_margin = Mm(16)
-    section.left_margin = section.right_margin = Mm(18)
-    normal = doc.styles["Normal"]
-    normal.font.size = Pt(10)
-    normal.paragraph_format.space_after = Pt(3)
-    normal.paragraph_format.line_spacing = 1.0
-    for name, size, before, after in [("Title", 20, 0, 5), ("Heading 1", 12, 8, 3),
-                                       ("List Bullet", 10, 0, 2)]:
+    section.top_margin, section.bottom_margin = Mm(10), Mm(12)
+    section.left_margin = section.right_margin = Mm(12.7)
+    width = section.page_width - section.left_margin - section.right_margin
+    east_asia = {"zh": "SimSun", "ja": "Yu Mincho", "ko": "Malgun Gothic"}.get(language)
+    body_size = 11
+    for name, size, before, after in [("Normal", body_size, 0, 2), ("Title", 16, 0, 4),
+                                      ("Heading 1", 11, 9, 3), ("List Bullet", body_size, 0, 2)]:
         style = doc.styles[name]
+        style.font.name = "Times New Roman"
         style.font.size = Pt(size)
-        style.paragraph_format.space_before = Pt(before)
-        style.paragraph_format.space_after = Pt(after)
-    meta = profile.get("meta", {}) or {}
+        style.font.color.rgb = RGBColor(0, 0, 0)
+        style.font.bold = name in {"Title", "Heading 1"}
+        if east_asia:
+            fonts = style.element.get_or_add_rPr().rFonts
+            for attr in ("asciiTheme", "hAnsiTheme", "eastAsiaTheme", "cstheme"):
+                fonts.attrib.pop(qn("w:" + attr), None)
+            fonts.set(qn("w:eastAsia"), east_asia)
+        fmt = style.paragraph_format
+        fmt.space_before, fmt.space_after = Pt(before), Pt(after)
+        fmt.line_spacing = 1.0
+        fmt.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    doc.styles["Title"].paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    bullet_format = doc.styles["List Bullet"].paragraph_format
+    bullet_format.left_indent, bullet_format.first_line_indent = Pt(17), Pt(-17)
+    # A paragraph border spans the text area; underlined spaces do not reliably
+    # print to the right margin in Word. Clear inherited title decoration too.
+    heading_pr = doc.styles["Heading 1"].element.get_or_add_pPr()
+    for border in list(heading_pr.findall(qn("w:pBdr"))):
+        heading_pr.remove(border)
+    borders = OxmlElement("w:pBdr")
+    bottom = OxmlElement("w:bottom")
+    for key, value in {"val": "single", "sz": "4", "space": "1", "color": "000000"}.items():
+        bottom.set(qn("w:" + key), value)
+    borders.append(bottom)
+    heading_pr.append(borders)
+    for border in list(doc.styles["Title"].element.get_or_add_pPr().findall(qn("w:pBdr"))):
+        border.getparent().remove(border)
+    doc.core_properties.author = ""
+    doc.core_properties.last_modified_by = ""
+    doc.core_properties.comments = ""
     doc.add_heading(meta.get("name", ""), level=0)
     if meta.get("headline"):
-        doc.add_paragraph(meta["headline"])
+        doc.add_paragraph(meta["headline"]).alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    def entry_row(left, right="", right_bold=False):
+        paragraph = doc.add_paragraph()
+        paragraph.paragraph_format.tab_stops.add_tab_stop(width, WD_TAB_ALIGNMENT.RIGHT)
+        paragraph.add_run(left).bold = True
+        if right:
+            paragraph.add_run("\t" + right).bold = right_bold
+        return paragraph
+
+    def bullet(text, emphasize=True):
+        text = normalize_text(text)
+        paragraph = doc.add_paragraph(style="List Bullet")
+        # Only a short explicit label is emphasized; ordinary prose remains plain.
+        match = re.match(r"^([^：:]{1,48}(?:：|: ))(.+)$", text) if emphasize else None
+        if match:
+            paragraph.add_run(match.group(1)).bold = True
+            paragraph.add_run(match.group(2))
+        else:
+            paragraph.add_run(text)
+        return paragraph
 
     # Contact line — plain runs for email/phone/location, real hyperlinks (with
     # the friendly label as visible text) for the rest.
@@ -1225,6 +1297,7 @@ def render_docx(profile, out_path):
     links = list(_contact_links(profile))
     if plain_bits or links:
         p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         first = True
         for b in plain_bits:
             if not first:
@@ -1239,7 +1312,7 @@ def render_docx(profile, out_path):
 
     personal = [f"{label}: {value}" for label, value in personal_items(profile)]
     if personal:
-        doc.add_paragraph(" · ".join(personal))
+        doc.add_paragraph(" · ".join(personal)).alignment = WD_ALIGN_PARAGRAPH.CENTER
     ph = photo_path(profile)
     if ph:
         try:
@@ -1260,21 +1333,20 @@ def render_docx(profile, out_path):
             doc.add_heading(h["summary"], level=1)
             doc.add_paragraph(normalize_text(profile["summary"]).strip())
 
-    def experience():
-        exp = profile.get("experience") or []
+    def experience(section="experience"):
+        exp = experience_entries(profile, section)
         if not exp:
             return
-        doc.add_heading(h["experience"], level=1)
+        doc.add_heading(experience_heading(profile, section), level=1)
         for e in exp:
-            doc.add_paragraph().add_run(
-                f"{e.get('title','')}, {e.get('org','')}").bold = True
-            dates = _dates(e, meta.get("language", "en"))
-            meta_bits = " · ".join(
-                b for b in [scalar_field(e.get("location"), "experience[].location"), dates] if b)
-            if meta_bits:
-                doc.add_paragraph(meta_bits)
+            dates = _dates(e, language)
+            entry_row(e.get("org", ""), dates)
+            title = e.get("title", "")
+            location = scalar_field(e.get("location"), "experience[].location")
+            if title or location:
+                entry_row(title, location)
             for b in as_list(e.get("bullets")):
-                doc.add_paragraph(normalize_text(b), style="List Bullet")
+                bullet(b)
 
     def education():
         edu = profile.get("education") or []
@@ -1282,15 +1354,13 @@ def render_docx(profile, out_path):
             return
         doc.add_heading(h["education"], level=1)
         for ed in edu:
-            doc.add_paragraph().add_run(
-                f"{ed.get('degree','')}, {ed.get('institution','')}").bold = True
-            dates = _dates(ed, meta.get("language", "en"))
-            meta_bits = " · ".join(b for b in
-                                   [scalar_field(ed.get("location"), "education[].location"), dates] if b)
-            if meta_bits:
-                doc.add_paragraph(meta_bits)
+            location = scalar_field(ed.get("location"), "education[].location")
+            entry_row(ed.get("institution", ""), location, right_bold=True)
+            degree, dates = ed.get("degree", ""), _dates(ed, language)
+            if degree or dates:
+                entry_row(degree, dates)
             if ed.get("details"):
-                doc.add_paragraph(ed["details"])
+                bullet(ed["details"], emphasize=False)
 
     def skills():
         sk = profile.get("skills") or {}
@@ -1300,7 +1370,7 @@ def render_docx(profile, out_path):
         for group, items in sk.items():
             items = as_list(items)
             if items:
-                p = doc.add_paragraph()
+                p = doc.add_paragraph(style="List Bullet")
                 p.add_run(f"{group_label(group)}: ").bold = True
                 p.add_run(", ".join(normalize_text(item_str(i)) for i in items))
 
@@ -1310,7 +1380,7 @@ def render_docx(profile, out_path):
             return
         doc.add_heading(h["projects"], level=1)
         for pr in prs:
-            p = doc.add_paragraph()
+            p = doc.add_paragraph(style="List Bullet")
             p.add_run(pr.get("name", "")).bold = True
             text_parts = [x for x in [pr.get("role", ""), pr.get("description", "")] if x]
             if text_parts:
@@ -1330,7 +1400,7 @@ def render_docx(profile, out_path):
             doc.add_paragraph(normalize_text(item_str(it)), style="List Bullet")
 
     builders = {
-        "summary": summary, "experience": experience, "education": education,
+        "summary": summary, "experience": experience, "internships": lambda: experience("internships"), "education": education,
         "skills": skills, "projects": projects,
         "publications": lambda: simple_list("publications"),
         "awards": lambda: simple_list("awards"),
@@ -1342,12 +1412,13 @@ def render_docx(profile, out_path):
     for key in section_order(profile):
         builders.get(key, lambda: None)()
 
-    # An entry label and its date line must not be left at the page foot.
-    for index, paragraph in enumerate(doc.paragraphs[:-1]):
-        if paragraph.runs and all(run.bold for run in paragraph.runs):
-            paragraph.paragraph_format.keep_with_next = True
-            if index + 2 < len(doc.paragraphs):
-                doc.paragraphs[index + 1].paragraph_format.keep_with_next = True
+    for paragraph in doc.paragraphs:
+        if paragraph.style.name == "List Bullet":
+            # Direct indents take precedence over the numbering definition.
+            paragraph.paragraph_format.left_indent = Pt(17)
+            paragraph.paragraph_format.first_line_indent = Pt(-17)
+    # Keep section headings with their content via Word's heading style; avoid
+    # inferring pagination from run boldness (a skill row may also be all bold).
     doc.save(str(out_path))
 
 
@@ -1521,15 +1592,15 @@ _ENGINE_DIRS = ["/opt/homebrew/bin", "/usr/local/bin", "/Library/TeX/texbin",
 def find_latex_engine(cjk=False):
     """Locate a usable LaTeX engine, returning its path (or bare name).
 
-    A CJK CV must be typeset by a Unicode/OpenType engine (XeTeX or LuaTeX) so
+    A CJK CV must be typeset by XeTeX so
     that ``xeCJK`` and system CJK fonts work — ``pdflatex`` cannot do it. So for
-    CJK we look only for ``xelatex``/``lualatex``/``tectonic`` (tectonic is
+    CJK we look only for ``xelatex``/``tectonic`` (tectonic is
     XeTeX-based and handles ``xeCJK``). For Latin scripts, ``pdflatex`` is fine
     and ``tectonic`` is preferred for its self-contained package handling.
     Callers detect the engine *type* from the basename, so a returned absolute
     path works the same as a bare name.
     """
-    candidates = ("xelatex", "lualatex", "tectonic") if cjk else ("tectonic", "pdflatex")
+    candidates = ("xelatex", "tectonic") if cjk else ("tectonic", "xelatex", "lualatex", "pdflatex")
     for engine in candidates:
         found = shutil.which(engine)
         if found:
@@ -1729,8 +1800,8 @@ def overfull_boxes(log):
 # Japanese resolved to a Chinese face, which is subtler: the shared kanji differ
 # in stroke shape and a Japanese reader sees it immediately.
 _CJK_FONTS_BY_LANG = {
-    "zh": ["Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC",
-           "Hiragino Sans GB", "Microsoft YaHei", "SimSun"],
+    "zh": ["SimSun", "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC",
+           "Hiragino Sans GB", "Microsoft YaHei"],
     "ja": ["Noto Sans CJK JP", "Source Han Sans JP", "Hiragino Sans W3",
            "Hiragino Kaku Gothic ProN", "Hiragino Sans",
            "Yu Gothic", "MS Gothic"],
@@ -1777,17 +1848,8 @@ def _cjk_font_setup(meta):
 
 
 def _main_font_setup(meta):
-    """The Latin main-font chain for the fontspec path.
-
-    Deliberately empty by default: fontspec's own default under a Unicode engine
-    is Latin Modern Roman, which is the OpenType cut of the same typeface the
-    pdfLaTeX path uses (ec-lmr10), so the PDF looks unchanged — and, measured,
-    it covers Latin-1 and Latin Extended-A (Ł ą Š Ș all render). What it does not
-    cover — Cyrillic, Greek — is now caught loudly by the `Missing character`
-    scan in `render_pdf` rather than dropped, and `meta.main_font` is the answer
-    the scan's message points at.
-    """
-    fonts = [str(meta["main_font"])] if meta.get("main_font") else []
+    """Prefer the client English typeface; explicit profile fonts still win."""
+    fonts = [str(meta["main_font"])] if meta.get("main_font") else ["Times New Roman"]
     return _font_chain(fonts, "setmainfont")
 
 
@@ -2003,11 +2065,11 @@ def build_latex(profile, cjk=None, engine=None, asset_dir=None, asset_stem="cv")
         if profile.get("summary"):
             parts.extend([r"\section*{%s}" % h["summary"], e(profile["summary"].strip())])
 
-    def experience():
-        exp = profile.get("experience") or []
+    def experience(section="experience"):
+        exp = experience_entries(profile, section)
         if not exp:
             return
-        parts.append(r"\section*{%s}" % h["experience"])
+        parts.append(r"\section*{%s}" % e(experience_heading(profile, section)))
         for ex in exp:
             dates = _dates_tex(ex, meta.get("language", "en"))
             # `location` is on the right with the dates, matching the `location ·
@@ -2085,7 +2147,7 @@ def build_latex(profile, cjk=None, engine=None, asset_dir=None, asset_stem="cv")
         parts.append(r"\end{itemize}")
 
     builders = {
-        "summary": summary, "experience": experience, "education": education,
+        "summary": summary, "experience": experience, "internships": lambda: experience("internships"), "education": education,
         "skills": skills, "projects": projects,
         "publications": lambda: simple_list("publications"),
         "awards": lambda: simple_list("awards"),

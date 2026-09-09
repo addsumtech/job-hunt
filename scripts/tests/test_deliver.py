@@ -49,15 +49,16 @@ def test_client_documents_share_one_explicit_folder(tmp_path):
     ws = build(tmp_path)
     dest = tmp_path / "consultation"
     assert run(ws, dest, "--no-pdf") == 0
-    assert {p.name for p in dest.iterdir()} == {
-        "2026-09-06-round-report.md", "2026-09-06-round-cv.pdf"}
+    assert {p.name for p in dest.iterdir()} == {"简历", "报告"}
+    assert {p.relative_to(dest).as_posix() for p in dest.rglob("*") if p.is_file()} == {
+        "报告/求职建议报告.md", "简历/简历.pdf"}
 
 
 def test_default_destination_is_a_consultation_folder(tmp_path, monkeypatch):
     ws = build(tmp_path)
     monkeypatch.setattr(deliver, "DEFAULT_ROOT", tmp_path / "Downloads")
     assert deliver.main(["--workspace", str(ws), "--no-pdf"]) == 0
-    assert (tmp_path / "Downloads" / ws.name / (ws.name + "-report.md")).is_file()
+    assert (tmp_path / "Downloads" / ws.name / "报告" / "求职建议报告.md").is_file()
 
 
 # ---- what stays behind ----------------------------------------------------
@@ -103,8 +104,8 @@ def test_a_pdf_that_dropped_characters_is_deleted_not_delivered(tmp_path, monkey
                         lambda md, pdf, font: (pdf.write_bytes(b"%PDF"), True)[1])
     monkeypatch.setattr(deliver, "pdf_text", lambda pdf: "boxes only, no CJK")
     assert run(ws, dest) == 2
-    assert not (dest / "2026-09-06-round-report.pdf").exists()
-    assert (dest / "2026-09-06-round-report.md").is_file(), "the Markdown still ships"
+    assert not (dest / "报告" / "求职建议报告.pdf").exists()
+    assert (dest / "报告" / "求职建议报告.md").is_file(), "the Markdown still ships"
 
 
 def test_no_cjk_font_refuses_the_pdf_and_still_ships_the_markdown(tmp_path, monkeypatch):
@@ -112,8 +113,8 @@ def test_no_cjk_font_refuses_the_pdf_and_still_ships_the_markdown(tmp_path, monk
     dest = tmp_path / "out"
     monkeypatch.setattr(deliver, "pick_cjk_font", lambda *args: None)
     assert run(ws, dest) == 2
-    assert not (dest / "2026-09-06-round-report.pdf").exists()
-    assert (dest / "2026-09-06-round-report.md").is_file()
+    assert not (dest / "报告" / "求职建议报告.pdf").exists()
+    assert (dest / "报告" / "求职建议报告.md").is_file()
 
 
 def test_cjk_detection_and_counting():
@@ -130,7 +131,7 @@ def test_a_chinese_document_really_round_trips_through_a_real_pdf(tmp_path):
     ws = build(tmp_path, md="# 岗位候选\n\n医学影像与图像重建方向的岗位清单。\n")
     dest = tmp_path / "out"
     assert run(ws, dest) == 0
-    pdf = dest / "2026-09-06-round-report.pdf"
+    pdf = dest / "报告" / "求职建议报告.pdf"
     assert pdf.is_file()
     assert deliver.cjk_chars(deliver.pdf_text(pdf)) >= 15
 
@@ -209,7 +210,7 @@ def test_internal_reports_are_excluded_even_if_markdown(tmp_path):
     dest = tmp_path / "out"
     assert run(ws, dest, "--no-pdf") == 0
     assert not any("TOOL BUGS" in p.read_text() or "INTERNAL REVIEW" in p.read_text()
-                   for p in dest.glob("*.md"))
+                   for p in dest.rglob("*.md"))
 
 
 def test_the_reported_count_matches_what_actually_landed(tmp_path, capsys):
@@ -221,7 +222,7 @@ def test_the_reported_count_matches_what_actually_landed(tmp_path, capsys):
     (ws / "mock" / "notes.md").write_text("NESTED\n", encoding="utf-8")
     assert run(ws, tmp_path / "out", "--no-pdf") == 0
     said = capsys.readouterr().out
-    landed = len(list((tmp_path / "out").iterdir()))
+    landed = len([p for p in (tmp_path / "out").rglob("*") if p.is_file()])
     assert f"Delivered {landed} file(s)" in said
 
 
@@ -249,7 +250,7 @@ def test_a_delivery_leaves_a_record_in_the_workspace_journal(tmp_path):
     delivery = [r for r in records if r.get("action") == "delivery"]
     assert len(delivery) == 1
     assert delivery[0]["destination"].endswith("out")
-    assert "2026-09-06-round-report.md" in delivery[0]["files"]
+    assert "报告/求职建议报告.md" in delivery[0]["files"]
 
 
 def test_the_record_is_not_a_gate_receipt(tmp_path):
@@ -291,7 +292,7 @@ def test_a_refused_pdf_is_named_in_the_record(tmp_path, monkeypatch):
     delivery = [r for r in rec if r.get("action") == "delivery"][0]
     refused = delivery["pdf_refused"]
     assert refused, "a refused PDF left no trace"
-    shortlist = [n for n in refused if "report.pdf" in n]
+    shortlist = [n for n in refused if "求职建议报告.pdf" in n]
     assert shortlist, f"the CJK document is not named among {refused}"
     assert "CJK font" in shortlist[0], (
         "the entry must carry WHY, not just that something was refused: "
@@ -305,3 +306,12 @@ def test_an_unwritable_workspace_journal_does_not_fail_the_delivery(tmp_path, mo
     monkeypatch.setattr(deliver.journal, "append",
                         lambda *a, **k: (_ for _ in ()).throw(OSError("read-only")))
     assert run(ws, tmp_path / "out", "--no-pdf") == 0
+
+
+@pytest.mark.parametrize('text', ['You have an 80% chance of getting an interview.',
+                                  'You are likely to be hired.'])
+def test_delivery_refuses_predictions_in_client_report(tmp_path, text):
+    ws = build(tmp_path, md=text)
+    dest = tmp_path / 'out'
+    assert run(ws, dest, '--no-pdf') == 2
+    assert not dest.exists()

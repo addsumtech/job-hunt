@@ -25,13 +25,15 @@ You are acting as this user's **experienced career coach and recruiter**. Your j
 
 ## Supplementary public research
 
-Use `references/supplementary-sources.md` when official web/news, GitHub,
-public articles, social discussions, videos or podcasts can fill a concrete
-career evidence gap. It defines provider availability checks, source quality and
-current-consultation authorization for Xiaohongshu/Douyin. These sources supplement
-formal posting evidence; they do not replace it or run automatically on every task.
+Use `references/supplementary-sources.md` when official web/news, WeChat
+public accounts or relevant GitHub projects can fill a concrete career evidence
+gap. It defines source selection, availability checks and evidence quality.
+These sources supplement formal posting evidence; select only what the current
+question needs.
 
 ## Client consultation delivery
+
+Delivery uses two child folders: `简历/` for `简历.docx`, `简历.pdf` and other requested application documents; `报告/` for `求职建议报告.pdf` and its editable text. Filenames never include the employer, role or internal workspace slug.
 
 Author `report.md` for **every consultation**, answering the client's actual
 question in their language: conclusion, supporting evidence, relevant career
@@ -39,6 +41,9 @@ constraints or facts still to confirm, and practical next steps. Tool defects,
 adapter errors, tests, developer diagnostics and internal review logs belong only
 in the private workspace, never in this client report. Do not copy an internal
 `completion.md` into it. A general question still receives a PDF reply report.
+
+After authoring `report.md`, run `lint_no_prediction.py --workspace <ws>`.
+Delivery also refuses prediction language in the report.
 
 Run `deliver.py` as the last step. It requires `report.md` and a verified report
 PDF and copies only the report and requested CV/application documents into
@@ -527,9 +532,9 @@ before the user hits it, instead of discovering it when a PDF does not appear.
 
 **The agent owns first-run setup.** Follow [references/agent-setup.md](references/agent-setup.md)
 when a required capability is missing: install the necessary dependencies,
-prepare the Chrome extension in a durable folder, and verify the result.
-The user normally only loads that folder in Chrome; site login and human
-verification still require their action. Reuse working tools and continue the
+prepare OpenCLI, AnySearch and web-access as needed, and verify daily-browser
+CDP access. No extension installation is required. Browser connection consent,
+site login and human verification still require the user's action. Reuse working tools and continue the
 original task after setup. `doctor.py --install` covers Python packages only;
 the agent handles other installation commands under the setup workflow.
 
@@ -680,7 +685,7 @@ a fabrication the candidate then repeats back), and the shortlist's `why_matched
 | Assess | `scripts/check_assessment.py` | composes the six above and requires their receipts; disclaimer, disqualifier section, the 「那该怎么办」 half, verbatim conventions, stale-review banner; a top-level `level_direction` or `effort` the card prints but nobody assessed, and a work-authorization token spelled outside its set |
 | Migration losslessness (CI only) | `scripts/check_skill_lossless.py` | a baseline line that exists nowhere in this tree |
 | Adapter classification | `scripts/check_opencli_result.py` | *(wrapper, not a gate)* a non-zero exit, a login wall, a platform stop-signal, or an empty identity field |
-| First-run environment | `scripts/doctor.py` | *(precondition, not a gate)* every capability the skill needs, checked by USING it — the PDF check renders a PDF, because an earlier `command -v xelatex` check called a working machine broken while tectonic was installed. `--install` installs the Python packages; the agent prepares required system tools and the extension via `references/agent-setup.md` |
+| First-run environment | `scripts/doctor.py` | *(precondition, not a gate)* every capability the skill needs, checked by USING it — the PDF check renders a PDF, because an earlier `command -v xelatex` check called a working machine broken while tectonic was installed. `--install` installs the Python packages; the agent prepares required tools and daily-browser CDP via `references/agent-setup.md` |
 | Saving a master | `scripts/save_profile.py` | *(guarded write, not a gate)* one master per language; a new language never overwrites another, a repeat language is backed up first, and a profile with no `meta.language` is refused |
 | Delivery | `scripts/deliver.py` | *(hand-off, not a gate)* requires a client `report.md` and verified report PDF; puts requested client documents together in `~/Downloads/<workspace-name>/` (or shared `--to` folder) and prints the path. Exits 0 or 2, never 1. `DELIVER_DEST_UNWRITABLE` is macOS TCC refusing `~/Downloads` mid-session — say so and offer `--to`, never leave the artifacts undelivered |
 | Read-only | `scripts/check_no_write.py` | a journaled command whose published `access:` is `write`, or whose access cannot be resolved at all |
@@ -693,10 +698,10 @@ a fabrication the candidate then repeats back), and the shortlist's `why_matched
 
 ### Browser fallback for discovery
 
-Prefer OpenCLI when its read adapter and connection are available. When the CLI
-is missing, its bridge is disconnected, or extraction is unsupported, follow
-[the browser fallback](references/browser-fallback.md) with an available
-web-access skill. Keep browser evidence and gate receipts; do not treat a site
+Prefer daily-browser CDP and parallel independent sources under
+[the browser routing rules](references/daily-browser.md). Use OpenCLI when its
+CDP adapter works, or directly use [browser capture](references/browser-fallback.md)
+with web-access or a supported host browser; no prior CLI failure is required. Keep browser evidence and gate receipts; do not treat a site
 refusal as a reason to switch tools. Neither backend submits applications.
 
 
@@ -859,11 +864,15 @@ believing you vetted it.
       preserve partial results, wait for explicit user confirmation before a new
       linked round; do not clear the stopped journal.
 
-- [ ] Browser fallback: read `references/browser-fallback.md` and record each
+- [ ] Daily-browser CDP and parallel sources: follow `references/daily-browser.md`;
+      verify the selected profile, isolate tabs and share site budgets.
+- [ ] Browser capture: read `references/browser-fallback.md` and record each
       actual snapshot with `scripts/record_browser_capture.py` before another read.
       Use `browser_page` evidence and stop across tools after a site refusal.
 
 Read-when:
+- [ ] Page unavailable? Follow `references/network-recovery.md`: classify first,
+      use bounded retries, and inspect relevant VPN/split-routing evidence.
 - [ ] Diagnosed OpenCLI adapter incompatibility? Read `references/opencli-compat.md`;
       `scripts/opencli_compat.py` checks optional, reversible local patches.
       Browser fallback does not require patching; a site refusal still stops reads.
@@ -878,6 +887,7 @@ Read-when:
 - [ ] Writing a letter? Read `references/motivation-letter.md` (skip gate first).
 - [ ] Japan + traditional/domestic employer? Read `references/rirekisho.md`.
 - [ ] Building or reordering the CV? `references/cv-craft.md`.
+- [ ] Rendering a Word CV? Follow `references/word-resume-layout.md` and inspect the exported pages.
 - [ ] Doing gap analysis or tailoring? `references/gap-analysis.md`.
 - [ ] Extracting a posting? `references/job-posting-extraction.md`.
 - [ ] Writing the brief? `references/interview-prep.md`.
@@ -941,11 +951,11 @@ Ran, leaving nothing in the journal (they render; they do not judge):
 - [ ] `scripts/deliver.py` — the LAST step of every mode. A workspace under
       `~/.claude/job-profiles/` is where the skill works, not where a person
       looks, and a path pasted into a chat message is gone once it scrolls.
-- [ ] `references/supplementary-sources.md` — optional research, source quality and social login authorization.
+- [ ] `references/supplementary-sources.md` — career source selection, WeChat articles and source quality.
 - [ ] `scripts/pdf_glyphs.py` — shared painted-glyph validation used by page checks and delivery.
 - [ ] `scripts/doctor.py` — once per machine, before the first mode. Reports
       capabilities by using them; `--install` covers the Python packages only. Follow
-      `references/agent-setup.md` to install other required tools and prepare the extension.
+      `references/agent-setup.md` to install required tools and prepare daily-browser CDP.
 - [ ] `scripts/save_profile.py` — every master save goes through it. One CV per
       language, and a new language never overwrites another's file.
 
@@ -996,3 +1006,9 @@ Told the user:
       this session:, and `modes/discover.md` carries both spellings of all seven
       literals the gate requires. One language per document — Chinese furniture in
       an English page passes every gate and still reads as a bug.
+
+Client typography: English uses Times New Roman and Chinese uses SimSun (宋体),
+including names and headings, unless the user explicitly requests otherwise.
+Verify embedded PDF fonts, not only DOCX settings. Preserve template font sizes
+and aim for a well-filled page; any added gap before a section heading is at
+most one blank line. Never invent content or shrink fonts just to fill a page.

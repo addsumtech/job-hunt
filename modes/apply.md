@@ -120,6 +120,7 @@ A worked file, including a retracted row, is in `assets/claims.example.yaml`.
 
 - Write the tailored copy to `<workspace>/tailored-profile.yaml`. **Never edit the master.**
 - Apply the tailoring plan: reorder, re-emphasize, weave in exact keywords **where truthful**, and trim to the market's length conventions (see `references/cv-craft.md`).
+- **User template takes precedence:** when the user supplies a reference CV/template, inspect its actual section, entry and bullet order before tailoring. Preserve that order in all rendered formats. Set `meta.section_order` and `meta.headings` from it, remove an unrequested generated summary if the template has none, and mark internship entries with `experience[].section: internships` when they have their own section. Preserve entry and bullet order in the profile arrays; do not reorder them using career heuristics. Compare the generated DOCX/PDF headings and entry sequence to the reference before delivery. The following default order advice applies only when no user template specifies the order.
 - **Section order:** confirm the order fits the candidate and target (`cv-craft.md §1`, **including its 'Deciding between the templates' block** — read it whenever the candidate matches more than one template, which a PhD applying to industry always does). The renderer auto-leads with Education for a current PhD/researcher (or a no-experience student) and with Experience for everyone else; when that's wrong for this application, set `meta.section_order` explicitly in the tailored profile. **What decides it is how RELEVANT the degree is to the target role, not whether the employer is academic or industrial.** A doctorate in the role's own field is a credential the reader is looking for and belongs near the top whoever the employer is; an industry engineering target leads with Experience even for a PhD *only when the doctorate is not in that role's domain*, or once the candidate has 3+ years of formal experience. Academic/research targets lead with Education and surface Publications early. Say which template you applied and offer the alternative — this is the candidate's call to make.
 - **Projects vs. Experience (de-duplicate):** work done inside a job belongs as bullets under that role, not restated in a separate Projects section; Projects holds only genuinely standalone work (thesis, coursework, open-source, competitions). Cut a Projects section that merely echoes the day job or lists stale coursework. See `cv-craft.md §9`.
 - **Links:** keep links in `contact.links` keyed by service (`scholar`, `github`, `linkedin`, …) so the renderer shows a clean label ("Google Scholar", "GitHub") hyperlinked to the URL — never the raw URL as visible text. Use the `{label, url}` form for anything unusual. See `cv-craft.md §8`.
@@ -394,12 +395,17 @@ every mode is a command, not a claim:
 python3 scripts/deliver.py --workspace <ws>
 ```
 
+Delivery uses two child folders: `简历/` for `简历.docx`, `简历.pdf` and other requested application documents; `报告/` for `求职建议报告.pdf` and its editable text. Filenames never include the employer, role or internal workspace slug.
+
 Author `report.md` for **every consultation**, answering the client's actual
 question in their language: conclusion, supporting evidence, relevant career
 constraints or facts still to confirm, and practical next steps. Tool defects,
 adapter errors, tests, developer diagnostics and internal review logs belong only
 in the private workspace, never in this client report. Do not copy an internal
 `completion.md` into it. A general question still receives a PDF reply report.
+
+After authoring `report.md`, run `lint_no_prediction.py --workspace <ws>`.
+Delivery also refuses prediction language in the report.
 
 Run `deliver.py` as the last step. It requires `report.md` and a verified report
 PDF and copies only the report and requested CV/application documents into
@@ -415,8 +421,16 @@ exception. A cover letter is provided on demand; it is not the domestic default.
 Do not automatically start a mock interview or another mode.
 
 
+For the default Word layout and fictional bilingual examples, see [references/word-resume-layout.md](../references/word-resume-layout.md).
+
 When Word files are delivered, `check_pages.py` requires LibreOffice to measure them independently. A `DOCX_NOT_MEASURED` finding means Word pagination was not verified; install the dependency and rerun, or clearly report the remaining limitation. A passing LaTeX PDF does not establish Word pagination.
 
 For native Word/LibreOffice export, complete ordinary save and print dialogs directly with the host's available UI tools. Disabled document controls can mean a modal dialog is waiting, not that the application is frozen. Before asking the user to restart or take over, inspect the current app windows and accessibility state; if the dialog is absent from that view, inspect a screenshot and use the host's supported interaction method. Save a separately named output when checking another renderer so existing artifacts remain intact, then verify that the file exists and inspect its text and page layout before reporting success.
 
 Request user intervention only for an observed blocker the available tools cannot resolve or an action that requires human participation under the host's rules. State what is actually visible and what was attempted; do not diagnose a crash from grey controls or one unchanged tool response. This document-export guidance does not change the login, verification or refusal rules for job websites.
+
+Client typography: English uses Times New Roman and Chinese uses SimSun (宋体),
+including names and headings, unless the user explicitly requests otherwise.
+Verify embedded PDF fonts, not only DOCX settings. Preserve template font sizes
+and aim for a well-filled page; any added gap before a section heading is at
+most one blank line. Never invent content or shrink fonts just to fill a page.

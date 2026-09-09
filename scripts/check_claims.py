@@ -86,6 +86,7 @@ _PUNCT = re.compile(r"[^\w\s+#./-]", re.UNICODE)
 # deciding whether it is checked now fails a test instead of passing silently.
 
 SCANNED_SECTIONS = {
+    "internships": "Display group only; entries remain in experience[] and their titles and employers are scanned there.",
     "skills":         "skills.<group>[] — the invented-tool class",
     "certifications": "certifications[] — the claimed-credential class",
     "experience":     "experience[].title (inflated title), experience[].org "

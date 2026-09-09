@@ -49,9 +49,14 @@ def record(ws, args):
     return call
 
 
-def test_browser_only_full_shortlist_passes(tmp_path, capsys):
+@pytest.mark.parametrize("backend", browser.BACKENDS)
+@pytest.mark.parametrize("reason", ["bridge_disconnected", "preferred_browser"])
+def test_browser_only_full_shortlist_passes(tmp_path, capsys, backend, reason):
     ws, data, snap, _, args = setup_capture(tmp_path)
+    args[args.index("--fallback-reason") + 1] = reason
+    args.extend(["--backend", backend])
     call = record(ws, args)
+    assert call["backend"] == backend
     for row in data["rows"]:
         row.update(extraction_method="browser_page", retrieved_at=snap["retrieved_at"])
     source = data["sources"][0]
@@ -242,3 +247,21 @@ def test_detail_read_does_not_spend_search_row_budget_again():
     calls = [{'site':'51job', 'command':'search', 'exit_code':0, 'row_count':25},
              {'site':'51job', 'command':'detail', 'exit_code':0, 'row_count':1}]
     assert not cs._check_caps_against_the_run(fx.BRIEF, {}, [], calls)
+
+
+@pytest.mark.parametrize("backend", browser.BACKENDS)
+def test_direct_browser_cannot_clear_previous_refusal(tmp_path, backend):
+    ws, _, _, _, args = setup_capture(tmp_path, text="Please sign in to continue")
+    record(ws, args)
+    args[args.index("--fallback-reason") + 1] = "preferred_browser"
+    args.extend(["--backend", backend])
+    assert browser.main(args) == 2
+    assert len(browser.read_retrieval_calls(ws)) == 1
+
+
+def test_unknown_backend_even_with_valid_receipt_is_rejected(tmp_path):
+    ws, _, _, _, args = setup_capture(tmp_path)
+    call = record(ws, args)
+    call["backend"] = "unrecognized-browser"
+    call = journal.sign_receipt(call)
+    assert browser.validate_record(call, ws)

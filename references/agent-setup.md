@@ -5,8 +5,9 @@ a missing capability needed for the task. The agent executes setup; do not hand
 the user a list of terminal commands. A request to set up or use job-hunt includes
 ordinary dependency preparation. Respect an explicit no-install preference and
 the host's actual execution permissions. Do not add a separate approval step for
-each dependency. The normal manual setup step is loading the prepared extension
-in Chrome; account login and human verification remain with the user.
+each dependency. Use CDP with the user's daily browser; extensions are not a
+required dependency. Browser connection consent, account login and human
+verification remain with the user.
 
 ## Reuse, then install what the task needs
 
@@ -22,10 +23,12 @@ in Chrome; account login and human verification remain with the user.
    `--install` installs missing Python packages only; **this is the helper's
    scope, not a prohibition on the agent installing other dependencies**.
 4. Install missing tools needed for the requested output. For live discovery,
-   prepare Node/npm, OpenCLI and Chrome. For PDF output, prepare Pandoc, a usable
-   LaTeX engine (prefer a smaller working option such as Tectonic), Poppler and
+   prepare Node/npm, OpenCLI, AnySearch, web-access and the daily browser
+   connection as described below. For PDF output, prepare Pandoc, a usable
+   XeTeX engine (Tectonic or XeLaTeX), Poppler and
    fonts required by the output language. Reuse an existing LaTeX engine; do not
-   install a second one merely because its name differs. Assessing a pasted job
+   install a second compatible one merely because its name differs. The CJK
+   templates use xeCJK; LuaLaTeX/pdfLaTeX alone do not satisfy report delivery. Assessing a pasted job
    does not require setting up a browser, and Word-only output does not require
    installing the PDF toolchain.
 5. Use an available package manager or official portable distribution appropriate
@@ -37,7 +40,7 @@ in Chrome; account login and human verification remain with the user.
    host requires an approval the agent cannot provide, report that specific
    blocker after completing the independent preparation.
 
-## OpenCLI and the extension
+## OpenCLI
 
 Use the [official OpenCLI installation instructions](https://github.com/jackwener/opencli#quick-start)
 and [release assets](https://github.com/jackwener/opencli/releases). For automation,
@@ -63,48 +66,63 @@ with correctly quoted paths or argument arrays, including spaces. If an older
 broken installation needs replacement, preserve its custom adapters first; do
 not delete the old installation merely because the new command works.
 
-Run `opencli doctor` and inspect its output before downloading anything. If the
-extension and connectivity are already confirmed, reuse them and skip manual
-loading. Otherwise:
+Do not download or require the OpenCLI extension. Inspect the installed version
+and adapter help before using CDP: `OPENCLI_CDP_ENDPOINT` alone does not enable
+website CDP in every released version. Follow [daily-browser.md](daily-browser.md)
+for the connection and compatibility decision; a working browser route does not
+need an unsuccessful OpenCLI call first.
 
-1. Resolve an `opencli-extension-v*.zip` asset from an official release. The
-   extension version is independent of the CLI version. Do not download GitHub's
-   source-code archive or pin an old release merely to enable our patches.
-2. Download and extract it into a durable, versioned directory in user storage,
-   outside temporary folders and the replaceable skill checkout. Use the host's
-   available download/archive tools. Reject absolute or parent-traversing ZIP
-   paths; do not overwrite an existing loaded extension directory. Reuse a
-   previously prepared directory only after checking its manifest.
-3. Find the folder directly containing a valid `manifest.json`; verify that it
-   is the extension root, not an outer wrapper. Record the asset URL, release,
-   manifest version and absolute folder path. Open that folder and
-   `chrome://extensions/` in the intended Chrome profile using available tools.
-4. Give the user only the remaining action: enable Developer mode, choose
-   **Load unpacked**, and select the prepared folder. On macOS, `Command + Shift
-   + G` accepts its full path. Do not try to bypass Chrome's extension approval
-   or edit its profile files. Wait for the user's completion reply.
-5. Run `opencli doctor` again. Both extension and connectivity must be confirmed;
-   a running CLI or daemon is not enough. With multiple profiles, use the profile
-   the user selected; do not silently switch accounts. Diagnose ordinary local
-   connection errors before requesting more user action. A repeated unchanged
-   failure is a blocker, not a successful setup or a reason for an endless retry.
+## AnySearch and web-access
+
+Reuse installed, working skills. Otherwise install from the official repositories:
+
+- [AnySearch](https://github.com/anysearch-ai/anysearch-skill): resolve a current
+  release tag, download its archive and place the skill under `anysearch` in the
+  host's actual skill directory. Read its `SKILL.md`, run its offline `doc` entry
+  check using an available runtime, and record the working command in
+  `runtime.conf` as upstream describes. Use anonymous access by default; no API
+  key or account registration is required. Reuse a configured key without
+  exposing it. Do not register an account just to complete setup. Verify a small
+  public query; quotas or unavailable service are reported as such.
+- [web-access](https://github.com/eze-is/web-access): use its documented
+  `npx skills add eze-is/web-access` installation, selecting the current host,
+  or place a reviewed release/commit checkout in its actual skill directory as
+  `web-access`. Inspect installer help before choosing unattended flags. Read the
+  installed skill and run
+  `node <web_access_dir>/scripts/check-deps.mjs --browser chrome` (or the supported browser the user selected). Use the Node version
+  required by that release; current CDP scripts require Node 22+.
+
+Choose the skill directory from the host's configured search roots; do not assume
+Claude's path on Codex. Do not overwrite an existing skill or its configuration.
+For downloaded archives, reject absolute and parent-traversing paths, verify the
+root `SKILL.md` and entry scripts, and record the exact release/commit and path.
+These are upstream dependencies, not vendored copies in job-hunt. If the host
+cannot hot-load a skill, read its installed instructions and use its documented
+CLI in this task. Do not require an agent restart merely to discover its tools.
+
+Use AnySearch `batch_search` for independent queries and the shared concurrency
+rules in [daily-browser.md](daily-browser.md). Use its current command help;
+do not invent an npm package called AnySearch. If anonymous quota is exhausted,
+continue independent sources and explain the gap; do not rotate identities.
 
 ## Finish and resume
 
-Before the first Indeed or 51job read, follow [opencli-compat.md](opencli-compat.md)
+Before using an OpenCLI adapter for the first Indeed or 51job read, follow [opencli-compat.md](opencli-compat.md)
 to check and automatically apply recognized patches. A new OpenCLI version is
 used normally; an unsupported patch does not justify a downgrade. Local setup
 does not clear any site's refusal lock or authorize account login.
 
 Re-run the relevant capability checks after installation. Verify the actual PDF
-render when PDF output is needed and Browser Bridge connectivity for live reads.
+render when PDF output is needed and an actual page read in the selected daily
+browser for live browser reads. `doctor.py` checks the OpenCLI route only; its
+missing-bridge warning does not invalidate a verified CDP/host-browser route.
 Proceed with the user's original task, using the recorded executable paths; do
 not stop at “dependencies installed.” Record what was reused, installed, tested,
 and still blocked in `setup.md` in the task workspace (no credentials). Retain
-the loaded extension and active runtimes; delete only disposable download and
+the installed skills and active runtimes; delete only disposable download and
 installation scratch files created by this run.
 
 Validation must distinguish a fresh prefix/virtualenv on an existing OS from a
 clean machine: the former does not test missing Python/Node, package-manager
-bootstrap, OS prompts, or Windows/Linux behavior. Unit tests and a prepared ZIP
-also do not prove that a human loaded the extension or a site accepted access.
+bootstrap, OS prompts, or Windows/Linux behavior. Unit tests also do not prove
+that the user authorized a browser connection or that a site accepted access.

@@ -1,4 +1,4 @@
-# job-hunt: candidaturas respaldadas por experiencia real
+# job-hunt: busca empleo, adapta tu CV y practica entrevistas
 
 <p align="center">
   <a href="README.md">简体中文</a> ·
@@ -18,22 +18,20 @@
   <img src="docs/assets/hero.jpg" alt="Afirmaciones de un CV conectadas con sus fuentes: un artículo, notas, certificados y proyectos">
 </p>
 
-**Busca ofertas, decide dónde postularte, adapta tus documentos y practica la entrevista. Explica con claridad tu experiencia y los requisitos que aún no cumples.**
+job-hunt es una skill de búsqueda de empleo para Claude Code y Codex. Te ayuda a encontrar ofertas, decidir dónde postularte, preparar el CV y la carta de presentación y practicar entrevistas.
 
-job-hunt es una skill de búsqueda de empleo para Claude Code y Codex. Tú aportas un objetivo, un CV o una oferta. El agente lee los materiales, comprueba las evidencias, adapta el texto, lo maqueta y lo revisa; los scripts de Python verifican las fuentes, la coherencia entre archivos y las condiciones de entrega. Incluye orientación para perfiles técnicos, de investigación y de otras áreas, así como para cambios de carrera, periodos sin empleo, recién graduados y candidaturas internacionales.
-
-El objetivo es que puedas explicar cada línea del CV en una entrevista a partir de tu experiencia.
+Dale al agente tus objetivos, tu CV o el enlace de una oferta. Comparará los requisitos con tu experiencia y se encargará de editar, maquetar y revisar los documentos. Incluye orientación para perfiles técnicos y de investigación, cambios de carrera, periodos sin empleo, recién graduados y candidaturas internacionales.
 
 ## Empieza por el paso que necesitas
 
 | Modo | Cuándo usarlo | Resultado principal |
 |---|---|---|
-| **discover · Buscar ofertas** | Tienes una dirección y quieres encontrar puestos que explorar | Lista de ofertas con fuentes reales, estado de consulta y valoraciones provisionales |
+| **discover · Buscar ofertas** | Quieres encontrar puestos en tu área de interés | Lista de ofertas, enlaces originales y orientación inicial |
 | **assess · Valorar la candidatura** | Tienes una oferta y quieres decidir si merece dedicarle tiempo | Requisitos vinculados a evidencias, condiciones excluyentes, carencias y orientación |
 | **apply · Preparar documentos** | Has elegido un puesto y necesitas materiales adaptados | CV, carta de presentación opcional, registros de revisión y guía de preparación para la entrevista |
 | **interview · Practicar** | Tienes una oferta y un CV y quieres ensayar tus respuestas | Una ronda de entrevista, transcripción, dos evaluaciones independientes y cuestiones pendientes |
 
-Puedes usar cada modo por separado. Al terminar una ronda, tú eliges si continúas con alguno de los siguientes pasos sugeridos. Una lista de ofertas no se convierte automáticamente en un lote de CV. Tú decides si envías los documentos terminados y realizas el envío.
+Puedes usar cada modo por separado. Al terminar una ronda, el agente propone los siguientes pasos y tú decides si continúas. Tú presentas la candidatura con los documentos terminados.
 
 Después de instalarlo, prueba estas peticiones:
 
@@ -44,17 +42,17 @@ Usa job-hunt para adaptar mi CV a este puesto y redactar una carta de presentaci
 Usa job-hunt para hacer una entrevista técnica simulada a partir de esta oferta y mi CV.
 ```
 
-El agente confirma primero el modo y el mercado de destino, y después solicita las preferencias y los materiales necesarios. Tú confirmas el mercado; no se deduce de tus antiguos lugares de trabajo ni del idioma de la conversación.
+El agente confirma primero la tarea y el mercado de destino, y después pide los materiales y las preferencias que falten.
 
-## Cómo se convierte la experiencia en una candidatura
+## Cómo prepara tu candidatura
 
-**Las afirmaciones tienen una fuente.** Cada habilidad, herramienta, responsabilidad o resultado nuevo debe proceder de una parte concreta de tu perfil original, de una respuesta que hayas dado durante la sesión o de un artículo o proyecto tuyo que el agente haya leído. La experiencia existente se puede reorganizar, destacar y reformular. Lo que carece de respaldo permanece en la lista de carencias. `claims.yaml` registra esas relaciones y la adaptación se hace sobre una copia del perfil, conservando el original.
+Antes de editar el CV, el agente comprueba tu experiencia en el perfil, tus respuestas, artículos y proyectos. Ajusta el orden y la redacción, y enumera los puntos que necesitan más información. Trabaja sobre una copia y conserva el perfil original.
 
-**La valoración muestra sus evidencias.** Cada requisito imprescindible se clasifica como suficientemente respaldado, parcialmente respaldado o sin respaldo. Las condiciones excluyentes, como los permisos de trabajo o las licencias, aparecen primero. Si los materiales son insuficientes, devuelve `insufficient_evidence` y explica qué falta. El proyecto prohíbe inventar probabilidades de entrevista o contratación y puntuaciones arbitrarias de adecuación de 0–100; la comprobación de expresiones predictivas detecta frases predefinidas en los nueve idiomas del CV. La cobertura de palabras clave del ATS describe el texto, no las posibilidades de contratación.
+Para valorar una oferta, compara cada requisito con tu experiencia e indica cuáles cumples, cuáles cumples en parte y cuáles necesitan más evidencia. Los permisos de trabajo, las licencias y otras condiciones de acceso aparecen primero, seguidos de consejos para la candidatura y la información que debes añadir.
 
-**Un CV convencional pasa por tres revisiones independientes de IA.** El revisor ATS comprueba las palabras clave y la facilidad de análisis; el revisor de selección, la legibilidad y los requisitos básicos; y el responsable de contratación, la experiencia, el alcance de las funciones y la credibilidad. Cada uno trabaja en un contexto nuevo. Los tres deben emitir `PASS` para superar esta revisión interna. Los problemas corregibles dan lugar a cambios y una nueva revisión, hasta un máximo de tres rondas. Si solo quedan carencias que ninguna reformulación veraz puede resolver, el proceso termina antes y explica el motivo.
+Un CV convencional pasa por tres revisiones independientes de IA. El revisor ATS comprueba las palabras clave y la lectura del archivo; el de selección, la claridad y los requisitos básicos; y el responsable de contratación, la experiencia y las funciones. El agente corrige y vuelve a revisar hasta un máximo de tres rondas, y señala los puntos que requieren más experiencia o documentación.
 
-**La entrevista se evalúa a partir de lo que realmente dijiste.** Una evaluación examina las respuestas y otra verifica las fuentes de los hechos. La skill ayuda a organizar experiencias existentes y aclarar detalles inciertos. Las afirmaciones del CV que no puedas respaldar pasan a una lista de correcciones.
+Después de una entrevista simulada, dos evaluaciones independientes revisan la calidad de las respuestas y su respaldo factual. La devolución indica qué detalles conviene añadir y qué frases del CV necesitan cambios.
 
 ## Instalación
 
@@ -95,45 +93,39 @@ Para Codex, sustituye `~/.claude/skills` por `~/.codex/skills` en las dos últim
 
 ### Primer uso: deja la configuración al agente
 
-Tras instalar el skill, dile al agente: **«Configura job-hunt y empieza mi tarea; yo cargaré la extensión de Chrome».**
+Tras la instalación, dile al agente: «Configura job-hunt y empieza mi tarea con mi navegador habitual».
 
-El agente reutiliza las herramientas existentes, instala las dependencias de Python, Node.js, OpenCLI y las herramientas de documentos necesarias, y descarga y extrae la [extensión oficial de OpenCLI](https://github.com/jackwener/opencli/releases). No tienes que copiar comandos de terminal.
+El agente comprueba el entorno e instala lo necesario: dependencias de Python, Node.js, OpenCLI, [AnySearch](https://github.com/anysearch-ai/anysearch-skill), [web-access](https://github.com/eze-is/web-access) y herramientas de documentos. Después continúa la tarea. **La conexión del navegador usa CDP por defecto y no requiere extensiones.**
 
-**Normalmente, el único paso manual de configuración es cargar la extensión de Chrome:**
+Cuando el entorno lo permite, el agente conecta con tu navegador habitual y aprovecha la sesión abierta. La primera vez puede que tengas que activar la depuración remota en `chrome://inspect/#remote-debugging` y aceptar la solicitud de Chrome. El agente comprueba la compatibilidad y te explica los pasos necesarios.
 
-1. El agente abre `chrome://extensions/` y te indica la ruta completa de la carpeta extraída.
-2. Activa el **Modo de desarrollador**, pulsa **Cargar descomprimida** y selecciona la carpeta que contiene directamente `manifest.json`, no el ZIP. En macOS, puedes pegar la ruta con `Command + Shift + G`.
-3. Avisa al agente cuando esté cargada. Ejecutará `opencli doctor`, verificará la extensión y la conexión, aplicará los parches compatibles y continuará tu tarea. Si ya está conectada, se reutiliza.
+AnySearch permite acceso anónimo sin clave API. Las fuentes independientes se consultan a la vez cuando es posible para reducir la espera. Tú completas los inicios de sesión, las verificaciones y los permisos del navegador.
 
-No muevas ni borres la carpeta de la extensión cargada. El inicio de sesión, los CAPTCHA y los permisos del sistema que requieran tu intervención siguen siendo pasos personales; el agente completa primero toda la preparación independiente y te indica solo lo que falta.
+Consulta la [configuración del entorno](references/agent-setup.md) y las [conexiones del navegador y búsquedas paralelas](references/daily-browser.md) para más detalles.
 
-`doctor.py` comprueba capacidades reales; `doctor.py --install` solo instala paquetes de Python. El agente instala otras herramientas siguiendo el [proceso de configuración inicial](references/agent-setup.md) (en inglés). La salida solo en Word o la evaluación de una oferta pegada no requiere herramientas de PDF o navegador innecesarias.
+### Si un portal de empleo no se puede leer
 
-### Parches de compatibilidad y alternativa en el navegador
+El agente comprueba los problemas conocidos de Indeed y 51job y aplica la corrección adecuada. Los parches actuales son para OpenCLI 1.8.7; las demás versiones se comprueban por separado.
 
-Los parches se incluyen en este skill y el agente los aplica antes de la primera lectura del portal correspondiente; importar la extensión del navegador no los instala.
-
-**Normalmente no necesitas instalar parches manualmente.** Antes de leer Indeed o 51job, el skill comprueba los problemas conocidos y aplica el parche a una copia local solo si coinciden la versión y el código de OpenCLI. El paquete instalado no cambia. Los parches actuales son para 1.8.7; no se sobrescriben otras versiones ni cambios personalizados. Puedes pedir al agente «comprueba los parches de compatibilidad» o «revierte los parches de compatibilidad». Consulta las [instrucciones para comprobar, aplicar y revertir](references/opencli-compat.md) (en inglés).
-
-Si se confirma una incompatibilidad del adaptador, web-access puede usar **el buscador del propio portal de empleo** en Chrome u otro navegador compatible y leer sus resultados. No se limita a buscar en Google ni exige aplicar un parche primero. El inicio de sesión, los CAPTCHA y las restricciones de permisos siguen requiriendo tu intervención; cambiar de herramienta no permite eludirlos.
+También puedes pedirle que busque directamente en el buscador del portal. Para revisar un problema, di «comprueba los parches de compatibilidad» o «revierte los parches de compatibilidad». Consulta las [instrucciones de comprobación y reversión](references/opencli-compat.md).
 
 ## Mercados, plataformas e idiomas
 
-La búsqueda obtiene ofertas mediante adaptadores de `opencli`. El catálogo del repositorio incluye 51job, Indeed, LinkedIn y BOSS Zhipin, y distingue entre requisitos de acceso, ofertas de empleo y fuentes de experiencias de entrevistas. La disponibilidad se comprueba al ejecutar la búsqueda. El adaptador de Indeed se conecta al sitio de Estados Unidos y no permite cambiar de sitio nacional. Para otros mercados, prioriza las fuentes locales de empleo. Consulta el [catálogo de fuentes](references/discovery-sources.md) y la [política de uso](references/source-policy.md), en inglés.
+El agente elige fuentes para tu mercado de destino y las lee desde el navegador o un adaptador de OpenCLI disponible. Incluyen 51job, Indeed, LinkedIn y BOSS Zhipin. El adaptador de Indeed conecta actualmente con Estados Unidos; para otros mercados se priorizan las fuentes locales. El [catálogo de fuentes](references/discovery-sources.md) explica los requisitos de acceso y los usos; la [política de fuentes](references/source-policy.md) detalla las reglas de consulta.
 
-Para China, la skill también pregunta por preferencias de empresa: grandes empresas privadas, pequeñas y medianas empresas privadas, empresas estatales y empresas extranjeras. Estas preferencias afectan al orden sin excluir otras categorías de forma silenciosa. Nowcoder y 1point3acres aportan experiencias de entrevistas y contexto sobre el proceso; los hilos de foro no se convierten en ofertas.
+Para China, el agente pregunta si prefieres grandes empresas privadas, pequeñas y medianas empresas privadas, empresas estatales o extranjeras, y usa la respuesta para ordenar las ofertas. Nowcoder y 1point3acres aportan experiencias de entrevistas y contexto sobre los procesos de selección.
 
-Si hace falta iniciar sesión o completar una verificación humana, el skill explica el motivo, te pide hacerlo en el navegador y pausa esa fuente. Responde «listo, continúa» para iniciar una nueva ronda limitada que conserva el registro anterior y comprueba si se ha recuperado el acceso. Los límites de solicitudes y los problemas de permisos se explican por separado. Si el acceso sigue bloqueado, puedes elegir otra fuente, pegar una oferta o revisar los resultados ya obtenidos. La exploración es de solo lectura: no envía mensajes, no modifica perfiles en línea ni presenta candidaturas.
+Si un sitio exige iniciar sesión o completar una verificación, el agente pausa esa fuente y te indica qué hacer. Responde «listo, continúa» para reanudar la comprobación. Si sigue sin haber acceso, puedes probar más tarde, pegar el texto de la oferta o revisar los resultados ya recogidos.
 
-**Las reglas del mercado y el idioma de salida se tratan por separado.** El generador de CV incluye títulos de sección y etiquetas de datos personales en inglés, neerlandés, alemán, francés, español, italiano, chino, japonés y coreano. `discover` y `assess` generan y verifican las fichas de recuento, los títulos obligatorios y las aclaraciones en chino, inglés, japonés, coreano y español mediante las [plantillas de idioma del informe](references/report-localization.md). Algunos documentos internos, diagnósticos y fichas de convenciones con fuentes siguen sin traducir; los PDF también necesitan fuentes adecuadas para el idioma de salida.
+Los títulos y las etiquetas de datos personales del CV están disponibles en inglés, neerlandés, alemán, francés, español, italiano, chino, japonés y coreano. Los informes de búsqueda y valoración usan [plantillas](references/report-localization.md) en chino, inglés, japonés, coreano y español. Algunos documentos internos están en inglés. El agente comprueba las fuentes del PDF durante la configuración.
 
-El proyecto incluye **5 tablas de convenciones de mercado con 38 entradas** para Estados Unidos, Reino Unido, Alemania, Países Bajos y China, con fuentes y fechas de revisión. Señala las entradas cuya fecha de revisión ha vencido e informa cuando no hay datos para un mercado. Son información de contexto que debe leerse dentro del ámbito indicado en cada entrada.
+El proyecto incluye 5 tablas de convenciones de mercado con 38 entradas para Estados Unidos, Reino Unido, Alemania, Países Bajos y China. Cada entrada tiene fuente, ámbito de aplicación y fecha de revisión. El agente señala la información desactualizada o ausente; los requisitos de la empresa guían cada candidatura.
 
 <p align="center">
   <img src="docs/assets/personal-data.jpg" alt="Ejemplos del repositorio: un CV para Estados Unidos omite datos personales y otro para Alemania conserva una foto y una fecha de nacimiento aportadas">
 </p>
 
-Los datos personales siguen las reglas del mercado de destino. En los CV convencionales para Estados Unidos, Canadá, Reino Unido, Irlanda, Australia o Nueva Zelanda, el generador omite la foto y los campos de `contact.personal`, y el flujo explica el cambio. Los mercados no reconocidos también aplican la omisión por defecto. Otros mercados reconocidos pueden mostrar la información proporcionada según sus reglas. La imagen ilustra el comportamiento del generador; no significa que todas las empresas de un país exijan el mismo formato.
+Las fotos y los datos personales se adaptan al mercado de destino. Los CV convencionales para Estados Unidos, Canadá, Reino Unido, Irlanda, Australia y Nueva Zelanda los omiten por defecto. Los demás mercados reconocidos siguen sus reglas con los datos que aportes. Si el mercado está sin confirmar, esos campos se omiten.
 
 ## Qué recibes
 
@@ -147,7 +139,11 @@ Los datos personales siguen las reglas del mercado de destino. En los CV convenc
 
 Las solicitudes estructuradas revisan el supporting statement según los criterios de la empresa. Si también se exige un CV convencional, se le aplica por separado la revisión de los tres evaluadores. El rirekisho japonés se comprueba como formulario completo; el documento de trayectoria profesional que lo acompaña sigue el proceso de revisión del CV.
 
-Cada consulta incluye un informe PDF que responde a la pregunta del cliente, junto con el CV y los documentos solicitados en una carpeta `~/Downloads/<workspace-name>/`. Se reutiliza la misma carpeta entre etapas. El informe contiene análisis profesional, evidencia y cuestiones por confirmar; los diagnósticos técnicos permanecen internos. Las cartas se ofrecen bajo demanda y las entrevistas simuladas no se inician automáticamente. La entrega no está completa hasta generar y verificar el PDF. Las [fuentes complementarias](references/supplementary-sources.md) permiten investigar sitios oficiales, noticias, GitHub y debates públicos cuando sean pertinentes; las búsquedas con sesión iniciada en Xiaohongshu/Douyin requieren autorización explícita para la consulta actual.
+Cada consulta genera un informe PDF con el análisis profesional, las fuentes y las cuestiones pendientes. Se guarda en `~/Downloads/<workspace-name>/` junto con el CV y los demás documentos solicitados. Las siguientes etapas usan la misma carpeta. Puedes pedir cartas de presentación y entrevistas simuladas cuando las necesites.
+
+La entrega usa las subcarpetas `简历/` (CV) y `报告/` (informe), con nombres como `简历.docx`, `简历.pdf` y `求职建议报告.pdf`.
+
+Para investigar empresas o sectores, el agente también puede consultar sitios oficiales, noticias, cuentas públicas de WeChat y proyectos relevantes de GitHub mediante las [fuentes complementarias](references/supplementary-sources.md).
 
 ## Dónde se guardan los archivos
 
@@ -167,11 +163,11 @@ make check
 make eval-lint
 ```
 
-`make check` ejecuta las pruebas de Python, la comprobación de conservación del contenido migrado y las comprobaciones de las tablas de mercado. Algunas pruebas inspeccionan la instalación local de la skill y las herramientas externas; sus resultados deben interpretarse según ese entorno. **Superar las comprobaciones no garantiza que el resultado sea correcto** ni demuestra resultados de búsqueda de empleo.
+`make check` ejecuta las pruebas de Python, las comprobaciones del contenido migrado y las tablas de mercado. Las pruebas que usan herramientas externas necesitan tenerlas instaladas; las comprobaciones de la instalación local de la skill son opcionales.
 
-[`evals/`](evals/README.md) contiene 20 escenarios de evaluación del comportamiento. La segunda iteración registrada, del 2026-09-05/06, emparejó 15 escenarios con y sin la skill. Diez comprobaciones diseñadas para distinguir los grupos pasaron de `FAIL` en la referencia a `PASS` con la skill. **Solo hubo una ejecución por escenario y grupo, n = 1**. No es una tasa de éxito estable ni una predicción de contratación. El registro completo incluye comprobaciones no ejercitadas y un resultado de escenario invalidado: consulta el [registro de evaluación](evals/iterations/iteration-2-with-skill.md).
+[`evals/`](evals/README.md) contiene 20 escenarios de comportamiento. La segunda iteración (2026-09-05/06) ejecutó 15 escenarios con y sin la skill, una vez por grupo (n = 1). Diez comprobaciones pasaron de `FAIL` en la referencia a `PASS` con la skill. El [registro de evaluación](evals/iterations/iteration-2-with-skill.md) recoge los resultados, las comprobaciones pendientes y el escenario invalidado.
 
-El repositorio también documenta una verificación del 2026-09-06 de los tres revisores de CV mediante `codex exec`. Consulta [portabilidad entre agentes](references/portability.md) para conocer los mecanismos y el alcance de la verificación. Los entornos no probados no se presentan como integraciones verificadas.
+Los tres revisores de CV se probaron mediante `codex exec` el 2026-09-06. Consulta [portabilidad entre agentes](references/portability.md) para configurar otros entornos y conocer el alcance de las pruebas.
 
 - [SKILL.md](SKILL.md): selección de modos y reglas principales.
 - [REFERENCE.md](REFERENCE.md): arquitectura, espacios de trabajo, estructuras de datos y uso de scripts.
