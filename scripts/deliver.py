@@ -268,19 +268,76 @@ def _render_cjk_report(md: pathlib.Path, pdf: pathlib.Path) -> tuple[bool, str]:
         return False, "PyMuPDF is unavailable"
 
     page_width, page_height = 595.28, 841.89  # A4 in PDF points
-    left, right, top, bottom = 56, 539, 56, 770
-    body_color, heading_color, link_color = (0.14, 0.23, 0.33), (0.06, 0.16, 0.26), (0.11, 0.31, 0.85)
+    left, right, top, bottom = 56, 539, 64, 770
+    body_color = (0.14, 0.23, 0.33)
+    heading_color = (0.06, 0.16, 0.26)
+    link_color = (0.11, 0.31, 0.85)
+    font = pymupdf.Font("china-s")
     document = pymupdf.open()
     page = None
     cursor = top
+
+    def text_width(value: str, size: float) -> float:
+        return font.text_length(value, fontsize=size)
+
+    def wrap(value: str, size: float, width: float) -> list[str]:
+        """Wrap CJK and Latin text without spacing individual Latin glyphs."""
+        result: list[str] = []
+        for source_line in value.splitlines() or [""]:
+            rest = source_line.strip()
+            while rest:
+                if text_width(rest, size) <= width:
+                    result.append(rest)
+                    break
+                end = len(rest)
+                while end > 1 and text_width(rest[:end], size) > width:
+                    end -= 1
+                split_at = rest.rfind(" ", 1, end + 1)
+                if split_at > 0:
+                    result.append(rest[:split_at].rstrip())
+                    rest = rest[split_at + 1:].lstrip()
+                else:
+                    result.append(rest[:end])
+                    rest = rest[end:]
+            if not source_line.strip():
+                result.append("")
+        return result or [""]
+
+    def write_lines(lines: list[str], x: float, size: float,
+                    color: tuple[float, float, float], leading: float,
+                    link: str | None = None) -> bool:
+        """Paint text through TextWriter, whose CJK metrics stay compact."""
+        nonlocal cursor
+        height = len(lines) * leading
+        if cursor + height > bottom:
+            new_page()
+        if cursor + height > bottom:
+            return False
+        assert page is not None
+        writer = pymupdf.TextWriter(page.rect)
+        start = cursor
+        for line in lines:
+            writer.append(pymupdf.Point(x, cursor + size), line, font=font,
+                          fontsize=size)
+            cursor += leading
+        writer.write_text(page, color=color)
+        if link:
+            width = min(right - x, max(text_width(line, size) for line in lines))
+            page.insert_link({
+                "kind": pymupdf.LINK_URI,
+                "from": pymupdf.Rect(x, start, x + width, cursor),
+                "uri": link,
+            })
+        return True
 
     def new_page():
         nonlocal page, cursor
         page = document.new_page(width=page_width, height=page_height)
         page.draw_line(pymupdf.Point(left, 790), pymupdf.Point(right, 790),
                        color=(0.85, 0.89, 0.93), width=0.5)
-        page.insert_text(pymupdf.Point(left, 811), "职业咨询报告", fontname="china-s",
-                         fontsize=8, color=(0.38, 0.49, 0.60))
+        footer = pymupdf.TextWriter(page.rect)
+        footer.append(pymupdf.Point(left, 811), "职业咨询报告", font=font, fontsize=8)
+        footer.write_text(page, color=(0.38, 0.49, 0.60))
         cursor = top
 
     def text_and_links(value: str) -> tuple[str, list[tuple[str, str]]]:
@@ -302,56 +359,77 @@ def _render_cjk_report(md: pathlib.Path, pdf: pathlib.Path) -> tuple[bool, str]:
         value = _MD_BOLD.sub(r"\1", value)
         return _MD_CODE.sub(r"\1", value), links
 
-    def place(value: str, size: float, color: tuple[float, float, float], gap: float,
-              link: str | None = None) -> bool:
-        nonlocal cursor
-        if not value.strip():
-            return True
-        assert page is not None
-        rect = pymupdf.Rect(left, cursor, right, bottom)
-        spare = page.insert_textbox(rect, value, fontname="china-s", fontsize=size,
-                                    lineheight=1.45, color=color)
-        if spare < 0:
-            new_page()
-            rect = pymupdf.Rect(left, cursor, right, bottom)
-            spare = page.insert_textbox(rect, value, fontname="china-s", fontsize=size,
-                                        lineheight=1.45, color=color)
-        if spare < 0:
-            return False
-        used = rect.height - spare
-        written = pymupdf.Rect(left, cursor, right, cursor + max(used, size * 1.45))
-        if link:
-            page.insert_link({"kind": pymupdf.LINK_URI, "from": written, "uri": link})
-        cursor = written.y1 + gap
-        return True
-
     def add_block(value: str, size: float, color: tuple[float, float, float], gap: float) -> bool:
+        nonlocal cursor
         display, links = text_and_links(value)
-        if not place(display, size, color, gap):
+        if not write_lines(wrap(display, size, right - left), left, size, color,
+                           size * 1.55):
             return False
+        cursor += gap
         for label, url in links:
-            if not place(f"链接：{label}", 9.2, link_color, 3, url):
+            if not write_lines(wrap(f"链接：{label}", 9.2, right - left), left,
+                               9.2, link_color, 14.5, url):
                 return False
+            cursor += 3
         return True
 
-    def table_blocks(block: list[str]):
+    def add_card(title: str, fields: list[tuple[str, str]]) -> bool:
+        """Draw a short-list row as a card rather than a cramped wide table."""
+        nonlocal cursor
+        title_display, title_links = text_and_links(title)
+        title_lines = wrap(title_display, 11, right - left - 18)
+        entries: list[tuple[list[str], str | None]] = []
+        for label, value in fields:
+            display, links = text_and_links(value)
+            entries.append((wrap(f"{label}：{display}", 9.4, right - left - 18), None))
+            entries.extend((wrap(f"链接：{link_label}", 9.2, right - left - 18), url)
+                           for link_label, url in links)
+        entries.extend((wrap(f"链接：{link_label}", 9.2, right - left - 18), url)
+                       for link_label, url in title_links)
+        title_height = len(title_lines) * 17
+        body_height = sum(len(lines) * 14.5 + 3 for lines, _ in entries)
+        height = 10 + title_height + 7 + body_height + 8
+        if height > bottom - top:
+            # A single unusually long evidence field still ships, just without
+            # a visual frame that could not fit on one page.
+            if not add_block(title, 11, heading_color, 4):
+                return False
+            return all(add_block(f"{label}：{value}", 9.4, body_color, 3)
+                       for label, value in fields)
+        if cursor + height > bottom:
+            new_page()
+        assert page is not None
+        start = cursor
+        page.draw_rect(pymupdf.Rect(left, start, right, start + height),
+                       color=(0.79, 0.84, 0.89), fill=(0.98, 0.99, 1.0), width=0.5)
+        page.draw_rect(pymupdf.Rect(left, start, right, start + 10 + title_height),
+                       color=(0.79, 0.84, 0.89), fill=(0.92, 0.95, 0.98), width=0.5)
+        cursor += 7
+        if not write_lines(title_lines, left + 9, 11, heading_color, 17):
+            return False
+        cursor += 4
+        for lines, url in entries:
+            color = link_color if url else body_color
+            size = 9.2 if url else 9.4
+            if not write_lines(lines, left + 9, size, color, 14.5, url):
+                return False
+            cursor += 3
+        cursor = start + height + 10
+        return True
+
+    def add_table(block: list[str]) -> bool:
         rows = [_table_cells(line) for line in block]
         if len(rows) < 3 or not _is_table_rule(rows[1]):
-            return [(" | ".join(row), 9.6, body_color, 6) for row in rows]
+            return all(add_block(" | ".join(row), 9.6, body_color, 6) for row in rows)
         header, rows = rows[0], rows[2:]
-        result = []
         for row in rows:
             if len(row) != len(header):
                 continue
             title = " ".join(piece for piece in row[:2] if piece)
-            if title:
-                result.append((title, 11, heading_color, 4))
-            result.extend(
-                (f"{label}：{value}", 9.4, body_color, 3)
-                for label, value in zip(header[2:], row[2:]) if value
-            )
-            result.append(("", 9.4, body_color, 6))
-        return result
+            fields = [(label, value) for label, value in zip(header[2:], row[2:]) if value]
+            if not add_card(title, fields):
+                return False
+        return True
 
     try:
         pdf.unlink(missing_ok=True)
@@ -368,9 +446,8 @@ def _render_cjk_report(md: pathlib.Path, pdf: pathlib.Path) -> tuple[bool, str]:
                 while index < len(lines) and lines[index].strip().startswith("|"):
                     table.append(lines[index].strip())
                     index += 1
-                for value, size, color, gap in table_blocks(table):
-                    if not add_block(value, size, color, gap):
-                        return False, "Chinese report block does not fit on a page"
+                if not add_table(table):
+                    return False, "Chinese report block does not fit on a page"
                 continue
             if line.startswith("# "):
                 value, size, color, gap = line[2:], 18, heading_color, 15
@@ -384,6 +461,12 @@ def _render_cjk_report(md: pathlib.Path, pdf: pathlib.Path) -> tuple[bool, str]:
                 value, size, color, gap = line, 9.6, body_color, 7
             if not add_block(value, size, color, gap):
                 return False, "Chinese report block does not fit on a page"
+        for number, current_page in enumerate(document, start=1):
+            footer = pymupdf.TextWriter(current_page.rect)
+            label = f"第 {number} 页"
+            footer.append(pymupdf.Point(right - text_width(label, 8), 811), label,
+                          font=font, fontsize=8)
+            footer.write_text(current_page, color=(0.38, 0.49, 0.60))
         document.save(pdf, garbage=4, deflate=True)
     except (OSError, RuntimeError, ValueError) as exc:
         pdf.unlink(missing_ok=True)
