@@ -452,7 +452,7 @@ The wrapper returns one of five classifications, each with an action:
 | `not_logged_in` | login wall, and auth says the session is absent or unknown | cross-check auth; hand `opencli <site> login` **to the user** — it is a write command. Pause for [user recovery](../references/user-recovery.md); no read retry while logged out. **Do not treat `strategy: public` as evidence that no login is needed** — 1point3acres' public-strategy `forum` still 403s. |
 | `no_auth_adapter` | login wall on a site with no login concept | no CLI login command is available. Pause and ask the user to inspect the browser page; do not invent a login command or infer a missing session. |
 | `platform_limit` | a stop-signal from `references/risk-control-signals.yaml`, or a refusal while auth says logged in | **立即停止。不重试、不改参数重试、不绕过。** Pause this source, not the whole task. Explain whether it is verification, rate limiting or an unknown refusal; follow [user recovery](../references/user-recovery.md) before offering degraded output. |
-| `transport` | unrecognised failure, or exit 0 with unparsable stdout | run `opencli doctor` — a dead browser bridge takes out every `browser: true` command on every site at once, which distinguishes infrastructure failure from a single-site problem. |
+| `transport` | unrecognised failure, or exit 0 with unparsable stdout | Check the actual selected connection (`opencli doctor` when using OpenCLI), then follow [bounded network recovery](../references/network-recovery.md). Distinguish a disconnected browser from a site loading or route failure; a timeout alone is not evidence that a VPN caused it. |
 
 ## Step 5 — row integrity, before anything else
 

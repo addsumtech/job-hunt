@@ -45,6 +45,10 @@ user's browser with those flags, copy a profile, or export cookies as a shortcut
 Close only tabs created for this task when finished. Site refusal and login
 recovery rules still apply across all tools and survive a connection change.
 
+For pages that fail to load, use [bounded network recovery](network-recovery.md)
+before declaring the source unavailable: classify the failure, retry only within
+the limit, and check relevant VPN/split-routing evidence when appropriate.
+
 Official references: [Chrome existing-session connection](https://developer.chrome.com/blog/chrome-devtools-mcp-debug-your-browser-session),
 [default-profile debugging restriction](https://developer.chrome.com/blog/remote-debugging-port),
 [OpenCLI CDP guide](https://github.com/jackwener/opencli/blob/main/docs/advanced/cdp.md).

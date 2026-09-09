@@ -19,7 +19,8 @@ Only these reasons are accepted by the recorder:
   patching is not required before using a supported browser fallback.
 
 A generic timeout, blank fields or unclassified transport error does not establish
-one of these reasons. Diagnose first; existing detail recovery still applies.
+one of these reasons. Diagnose first using [network recovery](network-recovery.md);
+existing detail recovery still applies.
 A site refusal (captcha, login wall, 401/403/429, platform limit) stops this site
 for this round across **all** tools. Use the same stable `site` name for both
 backends, e.g. `51job`.
