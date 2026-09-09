@@ -42,6 +42,7 @@ import journal  # noqa: E402
 
 HEADINGS = {
     "en": {
+        "internships": "Internships",
         "summary":        "Summary",
         "experience":     "Experience",
         "education":      "Education",
@@ -55,6 +56,7 @@ HEADINGS = {
         "volunteer":      "Volunteer",
     },
     "nl": {
+        "internships": "Stages",
         "summary":        "Samenvatting",
         "experience":     "Werkervaring",
         "education":      "Opleiding",
@@ -66,38 +68,45 @@ HEADINGS = {
         "volunteer":      "Vrijwilligerswerk",
     },
     "de": {
+        "internships": "Praktika",
         "summary": "Profil", "experience": "Berufserfahrung", "education": "Ausbildung",
         "skills": "Kenntnisse", "projects": "Projekte", "publications": "Publikationen",
         "awards": "Auszeichnungen", "certifications": "Zertifizierungen", "volunteer": "Ehrenamt",
     },
     "fr": {
+        "internships": "Stages",
         "summary": "Profil", "experience": "Expérience professionnelle", "education": "Formation",
         "skills": "Compétences", "projects": "Projets", "publications": "Publications",
         "awards": "Distinctions", "certifications": "Certifications", "volunteer": "Bénévolat",
     },
     "es": {
+        "internships": "Prácticas",
         "summary": "Perfil", "experience": "Experiencia profesional", "education": "Formación",
         "skills": "Competencias", "projects": "Proyectos", "publications": "Publicaciones",
         "awards": "Premios", "certifications": "Certificaciones", "volunteer": "Voluntariado",
     },
     "it": {
+        "internships": "Tirocini",
         "summary": "Profilo", "experience": "Esperienza professionale", "education": "Formazione",
         "skills": "Competenze", "projects": "Progetti", "publications": "Pubblicazioni",
         "awards": "Riconoscimenti", "certifications": "Certificazioni", "volunteer": "Volontariato",
     },
     "zh": {
+        "internships": "实习经历",
         "summary": "个人简介", "experience": "工作经历", "education": "教育背景",
         "skills": "专业技能", "projects": "项目经历", "publications": "论文发表",
         "awards": "获奖经历", "certifications": "证书", "volunteer": "志愿服务",
         "achievements": "主要成就", "board": "董事会与顾问",
     },
     "ja": {
+        "internships": "インターンシップ",
         "summary": "概要", "experience": "職務経歴", "education": "学歴",
         "skills": "スキル", "projects": "プロジェクト", "publications": "論文",
         "awards": "受賞歴", "certifications": "資格", "volunteer": "ボランティア",
         "achievements": "主な実績", "board": "役員・顧問",
     },
     "ko": {
+        "internships": "인턴 경력",
         "summary": "소개", "experience": "경력", "education": "학력",
         "skills": "기술", "projects": "프로젝트", "publications": "출판물",
         "awards": "수상 경력", "certifications": "자격증", "volunteer": "봉사활동",
@@ -367,13 +376,7 @@ def experience_entries(profile, section):
 
 
 def experience_heading(profile, section):
-    if section == "experience":
-        return headings(profile)["experience"]
-    return headings(profile).get("internships", {
-        "zh": "实习经历", "ja": "インターンシップ", "ko": "인턴 경력",
-        "en": "Internships", "fr": "Stages", "de": "Praktika", "es": "Prácticas",
-        "it": "Tirocini", "nl": "Stages",
-    }.get(str((profile.get("meta") or {}).get("language", "en"))[:2], "Internships"))
+    return headings(profile)[section]
 
 
 def section_order(profile):
