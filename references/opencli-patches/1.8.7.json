@@ -46,6 +46,53 @@
           "new": "        if (detail?.loginRequired) {\n            throw new CommandExecutionError('Indeed login required: the page is an account sign-in or verification screen, not a job posting', 'Complete login in the connected browser before requesting another read.');\n        }\n        if (!detail?.ready) {"
         }
       ]
+    },
+    {
+      "path": "51job/detail.js",
+      "base_sha256": "d37c0ae62c7dc76f34b777c0b1b8d340a08f359aec60f6168ba3c62dc5f38118",
+      "patched_sha256": "5231e4000783ba717b0e1b98317792532acddd0ec5710b3b000fb8894f2873c5",
+      "replacements": [
+        {
+          "old": "        { name: 'jobId',",
+          "new": "        { name: 'url', type: 'string', required: false, help: 'search 返回的原始职位链接' },\n        { name: 'jobId',"
+        },
+        {
+          "old": "        const url = `${JOBS_ORIGIN}/x/${jobId}.html`;",
+          "new": "        const url = kwargs.url || `${JOBS_ORIGIN}/x/${jobId}.html`;\n        let parsed;\n        try { parsed = new URL(url); } catch { throw new CliError('INVALID_ARGUMENT', 'Invalid job URL'); }\n        if (parsed.protocol !== 'https:' || parsed.hostname !== 'jobs.51job.com'\n            || parsed.username || parsed.password || parsed.port\n            || !parsed.pathname.endsWith(`/${jobId}.html`)) {\n            throw new CliError('INVALID_ARGUMENT', 'Use the matching jobs.51job.com URL captured by search');\n        }"
+        },
+        {
+          "old": "const bodyText = (document.body.innerText || '').slice(0, 400);",
+          "new": "if (!document.body) return { ready: false };\n            const bodyText = (document.body.innerText || '').slice(0, 1200);\n            if (/安全验证|滑块验证|拖动滑块|人机验证/.test(bodyText)) return { error: 'BLOCKED' };"
+        },
+        {
+          "old": "return (clone.innerText || '').trim();",
+          "new": "return (clone.innerText || clone.textContent || '').trim();"
+        },
+        {
+          "old": "        const data = await page.evaluate(script);",
+          "new": "        let data;\n        for (let attempt = 0; attempt < 8; attempt++) {\n            data = await page.evaluate(script) || {};\n            if (data.error || (data.title && data.description)) break;\n            if (attempt < 7) await page.wait(1);\n        }\n        if (data.error === 'BLOCKED') {\n            throw new CliError('NO_DATA', '51job requires browser verification; stop and ask the user to complete it');\n        }"
+        },
+        {
+          "old": "        if (!data.title) {",
+          "new": "        if (!data.title || !data.description) {"
+        },
+        {
+          "old": "title: sel('h1') || sel('.cn .name'),",
+          "new": "title: sel('.cn h1') || sel('.cn .name'),"
+        },
+        {
+          "old": "const companyA = document.querySelector('.cname a, .tCompany_sidebar .com_msg a');",
+          "new": "const companyA = document.querySelector('.cname a, .tCompany_sidebar .com_msg a, a.com_name');"
+        },
+        {
+          "old": "meta: sel('.cn .msg.ltype') || sel('.msg.ltype'),",
+          "new": "meta: [sel('.cn .type_2'), sel('.cn .type_3'), sel('.cn .type_4')].some(Boolean) ? [sel('.cn .type_2'), sel('.cn .type_3'), sel('.cn .type_4')].join('|') : sel('.cn .msg.ltype') || sel('.msg.ltype'),"
+        },
+        {
+          "old": "welfare: all('.t1 span, .jtag .t1 span'),",
+          "new": "welfare: all('.t1 span, .jtag .t1 span, .job-detail .tags .tag'),"
+        }
+      ]
     }
   ]
 }

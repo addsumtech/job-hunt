@@ -363,7 +363,8 @@ def max_pages(profile, today_year: int):
 
 
 def findings_for(cv_pdf, profile, today_year: int, letter_pdf=None) -> list:
-    out = []
+    from pdf_glyphs import glyph_findings
+    out = glyph_findings(cv_pdf)
     # Reported before anything is read off the PDF, because it is a fact about
     # the PROFILE: the page budget below was chosen without these dates, and a
     # reader who cannot see that will not know why a one-page CV got two. It
@@ -392,6 +393,7 @@ def findings_for(cv_pdf, profile, today_year: int, letter_pdf=None) -> list:
         # has already been reported and would produce a second, derivative finding.
         out += text_findings(cv_pdf, profile)
     if letter_pdf and pathlib.Path(letter_pdf).exists():
+        out += glyph_findings(letter_pdf)
         lp = page_count(letter_pdf)
         if lp is None:
             out.append(f"UNREADABLE_PDF: {pathlib.Path(letter_pdf).name} has no "
@@ -433,6 +435,8 @@ def docx_findings(cv_docx, profile, today_year, letter_docx=None):
                     out.append(f"DOCX_NOT_MEASURED: {docx.name} could not be exported by LibreOffice")
                     continue
                 if is_letter:
+                    from pdf_glyphs import glyph_findings
+                    out.extend(glyph_findings(pdf))
                     pages = page_count(pdf)
                     problems = (["UNREADABLE_PDF: no readable page tree"] if pages is None
                                 else [f"LETTER_TOO_LONG: {pages} pages; maximum is 1"]

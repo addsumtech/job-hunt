@@ -6,7 +6,7 @@ tool names are not Claude Code's.
 ## What already works, unchanged
 
 **The entire enforcement layer.** All of `scripts/` is plain Python — standard
-library plus `PyYAML` and `python-docx`, nothing else — and every gate is a CLI
+library plus `PyYAML`, `python-docx` and `PyMuPDF` (painted PDF glyph inspection) — and every gate is a CLI
 that exits 0/1/2 and appends a receipt. Verified by running them with bare
 `python3` and no agent in the loop. So the gates, the journal, the receipts, the
 renderers, the coverage counts and the prediction lint behave identically

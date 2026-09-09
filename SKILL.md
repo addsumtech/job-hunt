@@ -23,6 +23,36 @@ to use is the first decision, not an afterthought. Most of this file is `apply`.
 
 You are acting as this user's **experienced career coach and recruiter**. Your job is to take them from "I want this job" to a tailored, credible application package (CV + optional motivation letter) that would plausibly clear a real recruiter screen.
 
+## Supplementary public research
+
+Use `references/supplementary-sources.md` when official web/news, GitHub,
+public articles, social discussions, videos or podcasts can fill a concrete
+career evidence gap. It defines provider availability checks, source quality and
+current-consultation authorization for Xiaohongshu/Douyin. These sources supplement
+formal posting evidence; they do not replace it or run automatically on every task.
+
+## Client consultation delivery
+
+Author `report.md` for **every consultation**, answering the client's actual
+question in their language: conclusion, supporting evidence, relevant career
+constraints or facts still to confirm, and practical next steps. Tool defects,
+adapter errors, tests, developer diagnostics and internal review logs belong only
+in the private workspace, never in this client report. Do not copy an internal
+`completion.md` into it. A general question still receives a PDF reply report.
+
+Run `deliver.py` as the last step. It requires `report.md` and a verified report
+PDF and copies only the report and requested CV/application documents into
+`~/Downloads/<workspace-name>/`. For multiple workspaces serving one consultation,
+pass the **same `--to <consultation-folder>`** each time so the report and CV stay
+together. Quote that folder and its client files in the reply. The workspace and
+all audit evidence remain in their original location.
+
+PDF verification checks both recovered text and actual painted glyph IDs. A
+missing or refused PDF means incomplete delivery (exit 2); repair the cause and
+rerun before declaring completion. `--no-pdf` is only for an explicit user format
+exception. A cover letter is provided on demand; it is not the domestic default.
+Do not automatically start a mock interview or another mode.
+
 ## The load-bearing rule — read first
 
 **HONEST REFRAMING ONLY.** Never fabricate experience, skills, titles, dates, or credentials. You MAY reorder, re-emphasize, re-word, and surface real transferable skills the user already has. You may NOT invent anything. When in doubt, ask the user a question rather than guess or embellish. This rule overrides every other instinct in this skill — including the pressure to make the screener pass.
@@ -652,7 +682,7 @@ a fabrication the candidate then repeats back), and the shortlist's `why_matched
 | Adapter classification | `scripts/check_opencli_result.py` | *(wrapper, not a gate)* a non-zero exit, a login wall, a platform stop-signal, or an empty identity field |
 | First-run environment | `scripts/doctor.py` | *(precondition, not a gate)* every capability the skill needs, checked by USING it — the PDF check renders a PDF, because an earlier `command -v xelatex` check called a working machine broken while tectonic was installed. `--install` installs the Python packages; the agent prepares required system tools and the extension via `references/agent-setup.md` |
 | Saving a master | `scripts/save_profile.py` | *(guarded write, not a gate)* one master per language; a new language never overwrites another, a repeat language is backed up first, and a profile with no `meta.language` is refused |
-| Delivery | `scripts/deliver.py` | *(hand-off, not a gate)* copies the round's readable artifacts to `~/Downloads/` as `<slug>-<file>`, renders every Markdown to PDF as well, and prints the path to quote. Exits 0 or 2, never 1. `DELIVER_DEST_UNWRITABLE` is macOS TCC refusing `~/Downloads` mid-session — say so and offer `--to`, never leave the artifacts undelivered |
+| Delivery | `scripts/deliver.py` | *(hand-off, not a gate)* requires a client `report.md` and verified report PDF; puts requested client documents together in `~/Downloads/<workspace-name>/` (or shared `--to` folder) and prints the path. Exits 0 or 2, never 1. `DELIVER_DEST_UNWRITABLE` is macOS TCC refusing `~/Downloads` mid-session — say so and offer `--to`, never leave the artifacts undelivered |
 | Read-only | `scripts/check_no_write.py` | a journaled command whose published `access:` is `write`, or whose access cannot be resolved at all |
 | Shortlist | `scripts/check_shortlist.py` | a row whose `source_id` or `raw_text` is in no raw capture, or whose `id` is not `<site>-<source_id>`; a duplicated or over-counted source report; "no results" with no adapter that exited 0; a missing disclosure block or provisional stamp; a detail fetch outside the top three; an uncapped brief, or a run that exceeded the caps the brief declares; a posting URL rendered in `shortlist.md` that is in no `shortlist.yaml` row; a row whose company or salary contradicts its own capture; a missing or stale mode entry. Warns (does not fail) when a row's location names a country outside `brief.markets` |
 
@@ -911,6 +941,8 @@ Ran, leaving nothing in the journal (they render; they do not judge):
 - [ ] `scripts/deliver.py` — the LAST step of every mode. A workspace under
       `~/.claude/job-profiles/` is where the skill works, not where a person
       looks, and a path pasted into a chat message is gone once it scrolls.
+- [ ] `references/supplementary-sources.md` — optional research, source quality and social login authorization.
+- [ ] `scripts/pdf_glyphs.py` — shared painted-glyph validation used by page checks and delivery.
 - [ ] `scripts/doctor.py` — once per machine, before the first mode. Reports
       capabilities by using them; `--install` covers the Python packages only. Follow
       `references/agent-setup.md` to install other required tools and prepare the extension.
@@ -954,8 +986,8 @@ Told the user:
 - [ ] Which market and language the CV was calibrated for.
 - [ ] Any remaining honest gaps, and — if the loop ended un-passed — whether this is
       POORLY BUILT or an HONEST STRETCH.
-- [ ] The workspace path and every output file, including the `.tex`.
-- [ ] **The delivered files** `deliver.py` printed — in `~/Downloads`, Markdown AND PDF.
+- [ ] The consultation folder and its client report/CV files; keep internal files private.
+- [ ] **The delivered files** `deliver.py` printed — in one `~/Downloads/<workspace-name>/` folder, including the report PDF.
       That is the one the user can actually open; the workspace path is for an audit.
 - [ ] In discover: the §0 来源与读取质量 table, the trigger reason, every row's band
       marked 「基于卡片信息的初判」, and — if the run degraded — the disclosure block

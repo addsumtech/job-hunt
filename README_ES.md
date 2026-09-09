@@ -147,7 +147,7 @@ Los datos personales siguen las reglas del mercado de destino. En los CV convenc
 
 Las solicitudes estructuradas revisan el supporting statement según los criterios de la empresa. Si también se exige un CV convencional, se le aplica por separado la revisión de los tres evaluadores. El rirekisho japonés se comprueba como formulario completo; el documento de trayectoria profesional que lo acompaña sigue el proceso de revisión del CV.
 
-Los materiales legibles de cada ronda se entregan por defecto en `~/Downloads`, por ejemplo `<company>-<role>-<date>-cv.md` y su PDF. La generación y verificación del PDF dependen de las herramientas disponibles; el informe de entrega identifica archivos ausentes y comprobaciones incompletas.
+Cada consulta incluye un informe PDF que responde a la pregunta del cliente, junto con el CV y los documentos solicitados en una carpeta `~/Downloads/<workspace-name>/`. Se reutiliza la misma carpeta entre etapas. El informe contiene análisis profesional, evidencia y cuestiones por confirmar; los diagnósticos técnicos permanecen internos. Las cartas se ofrecen bajo demanda y las entrevistas simuladas no se inician automáticamente. La entrega no está completa hasta generar y verificar el PDF. Las [fuentes complementarias](references/supplementary-sources.md) permiten investigar sitios oficiales, noticias, GitHub y debates públicos cuando sean pertinentes; las búsquedas con sesión iniciada en Xiaohongshu/Douyin requieren autorización explícita para la consulta actual.
 
 ## Dónde se guardan los archivos
 

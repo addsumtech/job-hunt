@@ -147,7 +147,7 @@ Personal data follows the target-market rules. For standard CVs targeting the US
 
 Structured applications review the supporting statement against the employer's criteria. If a standard CV is also required, it receives the three-reviewer check separately. A Japanese rirekisho is checked for form completeness; its companion career-history document follows the standard CV review process.
 
-Readable materials from each round are delivered to `~/Downloads` by default, for example `<company>-<role>-<date>-cv.md` and its PDF. PDF generation and verification depend on the toolchain; delivery reports identify missing files or incomplete checks.
+Every consultation includes a PDF report answering the client’s question, kept with the CV and requested documents in one `~/Downloads/<workspace-name>/` folder. Reuse one delivery folder across stages. Reports contain career analysis, evidence and relevant facts to confirm; tool diagnostics stay internal. Cover letters are on demand and mock interviews never start automatically. Delivery is incomplete until the PDF is generated and verified. [Supplementary sources](references/supplementary-sources.md) support official web, news, GitHub and public discussion research when relevant; logged-in Xiaohongshu/Douyin searches require explicit authorization for the current consultation.
 
 ## Where files live
 

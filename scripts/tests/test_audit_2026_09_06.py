@@ -149,16 +149,17 @@ def test_redelivering_overwrites_the_name_the_user_opens(tmp_path):
     three judge rounds read the FIRST draft, and could send it to the employer."""
     ws = tmp_path / "ws"
     ws.mkdir()
+    (ws / "report.md").write_text("Client response")
     dest = tmp_path / "out"
     for marker in ("DRAFT-1", "DRAFT-2", "FINAL-3"):
         (ws / "cv.md").write_text(f"# cv\n{marker}\n", encoding="utf-8")
         assert deliver.main(["--workspace", str(ws), "--to", str(dest),
                              "--no-pdf"]) == 0
-    assert sorted(p.name for p in dest.iterdir()) == ["ws-cv.md"]
+    assert sorted(p.name for p in dest.iterdir()) == ["ws-cv.md", "ws-report.md"]
     assert "FINAL-3" in (dest / "ws-cv.md").read_text(encoding="utf-8")
 
 
-def test_three_paths_that_used_to_collide_all_arrive(tmp_path):
+def test_internal_nested_files_do_not_enter_client_package(tmp_path):
     """Joining the relative path with `-` moved the collision one level up:
     `mock/answer/guide.md`, `mock/answer-guide.md` and `mock-answer-guide.md` all
     flattened to one name, and the run reported three deliveries over two files."""
@@ -167,11 +168,10 @@ def test_three_paths_that_used_to_collide_all_arrive(tmp_path):
     (ws / "mock" / "answer" / "guide.md").write_text("FILE-A\n", encoding="utf-8")
     (ws / "mock" / "answer-guide.md").write_text("FILE-B\n", encoding="utf-8")
     (ws / "mock-answer-guide.md").write_text("FILE-C\n", encoding="utf-8")
+    (ws / "report.md").write_text("Client response")
     dest = tmp_path / "out"
     assert deliver.main(["--workspace", str(ws), "--to", str(dest), "--no-pdf"]) == 0
-    assert len(list(dest.iterdir())) == 3
-    assert {p.read_text(encoding="utf-8").strip() for p in dest.iterdir()} == \
-        {"FILE-A", "FILE-B", "FILE-C"}
+    assert {p.name for p in dest.iterdir()} == {"ws-report.md"}
 
 
 def test_one_unreadable_file_does_not_abandon_the_round(tmp_path, monkeypatch):
@@ -180,10 +180,10 @@ def test_one_unreadable_file_does_not_abandon_the_round(tmp_path, monkeypatch):
     record, so a partial delivery could not be told from one that never ran."""
     ws = tmp_path / "ws"
     ws.mkdir()
-    (ws / "a-cv.md").write_text("A\n", encoding="utf-8")
-    blocked = ws / "b-cv.docx"
+    (ws / "cv.md").write_text("A\n", encoding="utf-8")
+    blocked = ws / "cv.docx"
     blocked.write_text("B\n", encoding="utf-8")
-    (ws / "c-letter.md").write_text("C\n", encoding="utf-8")
+    (ws / "letter.md").write_text("C\n", encoding="utf-8")
     # Windows copy2 can use CopyFile2 without Python open(); stage the OS
     # failure at the copy boundary while retaining real copies for other files.
     copy2 = deliver.shutil.copy2
@@ -194,10 +194,11 @@ def test_one_unreadable_file_does_not_abandon_the_round(tmp_path, monkeypatch):
         return copy2(src, dst, *args, **kwargs)
 
     monkeypatch.setattr(deliver.shutil, "copy2", guarded_copy)
+    (ws / "report.md").write_text("Client response")
     dest = tmp_path / "out"
     assert deliver.main(["--workspace", str(ws), "--to", str(dest),
-                         "--no-pdf"]) == 0
-    assert sorted(p.name for p in dest.iterdir()) == ["ws-a-cv.md", "ws-c-letter.md"]
+                         "--no-pdf"]) == 2
+    assert sorted(p.name for p in dest.iterdir()) == ["ws-cv.md", "ws-letter.md", "ws-report.md"]
     import json
     rec = [json.loads(l) for l
            in (ws / "journal.jsonl").read_text(encoding="utf-8").splitlines()

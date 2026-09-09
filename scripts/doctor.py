@@ -33,7 +33,7 @@ REQUIREMENTS = REPO / "requirements.txt"
 # Which import each requirement actually provides. A requirement's install name
 # and its module name differ often enough (python-docx -> docx, PyYAML -> yaml)
 # that guessing from the install name reports a working machine as broken.
-IMPORT_NAME = {"pyyaml": "yaml", "python-docx": "docx"}
+IMPORT_NAME = {"pyyaml": "yaml", "python-docx": "docx", "pymupdf": "pymupdf"}
 
 
 def requirements() -> list[tuple[str, str]]:

@@ -81,6 +81,7 @@ job-hunt/
 │   ├── opencli-compat.md            # Optional version-checked adapter repairs
 │   ├── opencli-patches/             # Exact replacements and upstream license
   user-recovery.md         # human login/verification hand-off and linked new round
+│   ├── supplementary-sources.md     # optional career background research
 │   ├── discovery-sources.md         # Per-adapter catalogue for discover
 │   ├── gap-analysis.md              # Gap analysis, tailoring methodology, claim provenance
 │   ├── interview-prep.md            # Interview-readiness brief
@@ -126,8 +127,9 @@ job-hunt/
     ├── consistency.py               # contradictions between assessment fields — reports, never repairs
     ├── count_coverage.py            # the ONLY path that produces coverage counts
     ├── doctor.py                    # first-run environment check; --install for pip only
+    ├── pdf_glyphs.py                # inspect painted PDF glyph IDs, including missing CJK
     ├── deliver.py                   # hand-off: the round's readable artifacts land
-    │                                #   in ~/Downloads as <slug>-<file>, md + pdf (not a gate)
+    │                                #   in ~/Downloads/<workspace>/; requires a client report PDF
     ├── enter_mode.py                # mode entry + the mode file's content hash
     ├── evidence_blocks.py           # cuts posting and CV into addressable JD-nnn / CV-nnn blocks
     ├── journal.py                   # gate receipts in journal.jsonl (library)
