@@ -21,6 +21,9 @@ correct page count, or readable Chinese a template match.
    bold. Without that opening label and colon, the whole bullet stays plain.
    Do not pick words, numbers or the first clause for emphasis, or add a label
    just to enable bolding. Record this check under `headings_and_rules`.
+   The opening label must cover the whole bullet. A mixed education paragraph
+   starting with GPA and continuing with courses, research or awards stays plain;
+   do not bold GPA just because it is followed by a colon.
 4. Fix unapproved differences and render again. After the final inspection,
    write `layout-review.yaml` using the example below, replacing every hash with
    the actual SHA-256. No supplied template means `reference: null`; it does not
