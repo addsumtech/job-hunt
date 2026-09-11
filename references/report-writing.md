@@ -32,6 +32,13 @@ what you infer from it, and what you suggest doing. “Your CV does not describe
 product launch” is not “You have never launched a product”. An undisclosed salary
 is not evidence that a pay floor is met, even after the prose is polished.
 
+Preserve explicit employer information without adding speculative uncertainty.
+If a title says “深圳/北京” while a location badge only says “深圳”, display both
+cities from the title. The shorter badge alone does not establish that Beijing
+is uncertain. If useful, describe the field difference briefly in a note rather
+than attaching “待确认” to the location. Reserve uncertainty labels for a real
+unresolved conflict or missing information that affects the client's decision.
+
 For a long report, use a short decision summary and a contents page with useful
 section names and working page links. Put comparable jobs in a table or use
 consistent field labels. Explain each count's unit and exclusions once near the
