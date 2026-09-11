@@ -42,6 +42,11 @@ adapter errors, tests, developer diagnostics and internal review logs belong onl
 in the private workspace, never in this client report. Do not copy an internal
 `completion.md` into it. A general question still receives a PDF reply report.
 
+Before drafting, read `references/report-writing.md`. After drafting, perform its
+reader-focused revision and rendered-report review: concrete recommendations,
+plain explanations, usable next steps and preserved evidence. This applies to
+all four modes; a clean vocabulary lint alone does not establish readability.
+
 After authoring `report.md`, run `lint_no_prediction.py --workspace <ws>`.
 Delivery also refuses prediction language in the report.
 
@@ -129,12 +134,16 @@ holds both halves: that apply mode ends by offering the next modes, and that
 
 The CV and the letter have a gate for machine-sounding prose (`AI_VOCABULARY`,
 `EM_DASH_DENSITY`, `NOT_JUST_PIVOT`, `TRICOLON_DENSITY` — `scripts/prose_tells.py`).
-The documents this skill writes to the *reader* — `shortlist.md`,
-`fit-assessment.md`, the completion message — have none, and cannot: measured
-across all eight of them from the iteration-2 runs, the vocabulary check found
+The documents this skill writes to the *reader* — `report.md`, `shortlist.md`,
+`fit-assessment.md`, the completion message — have no mechanical style gate:
+measured across all eight of them from the iteration-2 runs, the vocabulary check found
 nothing and every structural finding was a false positive on a table or a list.
 So the rules below are rules, not a check, and the artifact is the only place to
 verify them.
+
+Use `references/report-writing.md` for the concrete revision method, examples
+and final reader review. It covers report structure and readability as well as
+formulaic phrasing; it is not a blacklist or an AI-authorship detector.
 
 - **Address the reader as "you", and say who said what.** "You told me you are on
   a search-year permit with eleven months left" is auditable; "the candidate has
@@ -878,6 +887,10 @@ believing you vetted it.
   employer's scale is reporting; applying it as a verdict is fabrication.
 
 ## Self-check — run through this before reporting the package as done
+
+- [ ] Drafting or revising a client report? Read `references/report-writing.md`,
+      apply its readability revision, preserve every grouped posting's city and
+      link, and inspect the final pages, navigation and approved typography.
 
 - [ ] On a site refusal, follow `references/user-recovery.md`: explain the reason,
       preserve partial results, wait for explicit user confirmation before a new

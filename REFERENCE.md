@@ -97,6 +97,7 @@ job-hunt/
 │   ├── rirekisho.md                 # Japanese 履歴書 form guide
 │   ├── portability.md               # running this skill on codex or another agent
 │   ├── report-localization.md       # five-language assess/discover report templates
+│   ├── report-writing.md            # Plain, concrete client reports and readability review
 │   ├── risk-control-signals.yaml    # Platform stop-signals discover must obey
 │   ├── role-families.md             # Non-tech / regulated role conventions (clinical, sales, legal…)
 │   ├── source-policy.md             # What discover may and may not do to a platform

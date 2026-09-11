@@ -461,6 +461,10 @@ adapter errors, tests, developer diagnostics and internal review logs belong onl
 in the private workspace, never in this client report. Do not copy an internal
 `completion.md` into it. A general question still receives a PDF reply report.
 
+Before drafting, read `references/report-writing.md`; revise the report for clear
+recommendations, specific reasons and actionable advice, then inspect the rendered
+pages. Preserve source facts, required labels and the user's approved formatting.
+
 After authoring `report.md`, run `lint_no_prediction.py --workspace <ws>`.
 Delivery also refuses prediction language in the report.
 
