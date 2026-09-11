@@ -95,7 +95,8 @@ ln -s "$PWD" ~/.claude/skills/job-hunt
 
 安装后告诉 Agent：“帮我配置 job-hunt，并使用我的日常浏览器开始任务。”
 
-Agent 会检查并安装 OpenCLI、[AnySearch](https://github.com/anysearch-ai/anysearch-skill)，自动补齐所需的 Python、Node.js 和文档工具。**浏览器通过 CDP 连接。** Agent 先确认 OpenCLI 的 CDP 能力；当前版本或站点不支持时，再通过浏览器 CDP 读取，配置完成后继续任务。
+只需安装这个 skill。AnySearch 客户端和浏览器读取脚本已内置，Agent 会通过统一安装入口自动准备 Python 包、Node.js 和带 CDP 补丁的 OpenCLI，无需你单独安装其他 skill 或浏览器扩展。常规求职报告 PDF 使用内置字体；简历模板需要的排版工具按需自动安装。**浏览器通过 CDP 连接。** Agent 先验证 OpenCLI，遇到已确认的不兼容问题时，才使用内置 CDP 读取脚本。
+
 
 Agent 优先连接你平时使用的浏览器，沿用已有登录状态。首次使用时，可能需要你在 `chrome://inspect/#remote-debugging` 开启远程调试，并确认 Chrome 的连接请求。Agent 会检测浏览器是否支持，说明需要你完成的操作。
 

@@ -95,7 +95,8 @@ Codex에서는 마지막 두 줄의 `~/.claude/skills`를 `~/.codex/skills`로 �
 
 설치 후 “job-hunt를 설정하고 평소 쓰는 브라우저로 작업을 시작해 줘.”라고 요청하세요.
 
-Agent가 OpenCLI와 [AnySearch](https://github.com/anysearch-ai/anysearch-skill)를 확인하고 설치한 뒤, 필요한 Python, Node.js, 문서 도구를 준비합니다. **브라우저는 CDP로 연결합니다.** 먼저 OpenCLI의 CDP 지원 여부를 확인하고, 설치된 버전이나 사이트가 지원되지 않으면 브라우저 CDP로 읽어 작업을 이어갑니다.
+이 skill만 설치하면 됩니다. AnySearch 클라이언트와 브라우저 읽기 스크립트가 포함되어 있으며, Agent가 통합 설치 도구로 Python 패키지, Node.js, CDP 패치가 적용된 OpenCLI를 준비합니다. 다른 skill이나 브라우저 확장 프로그램을 따로 설치할 필요가 없습니다. 상담 보고서 PDF는 포함된 글꼴을 사용하고 이력서 조판 도구는 필요할 때 준비합니다. **브라우저는 CDP로 연결합니다.** 먼저 OpenCLI를 검증하고 호환성 문제가 확인되면 내장 CDP 리더를 사용합니다.
+
 
 지원되는 환경에서는 평소 브라우저에 연결해 로그인 상태를 재사용합니다. 처음에는 `chrome://inspect/#remote-debugging`에서 원격 디버깅을 켜고 Chrome 연결 요청을 승인해야 할 수 있습니다. Agent가 지원 여부를 확인하고 필요한 조작을 안내합니다.
 

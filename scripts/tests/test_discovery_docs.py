@@ -124,11 +124,11 @@ def test_discovery_backend_selection_is_opencli_first_and_one_way():
         encoding="utf-8")
     skill = SKILL.read_text(encoding="utf-8")
 
-    assert "OpenCLI first; one-way web-access fallback" in mode
+    assert "OpenCLI first; one-way built-in CDP fallback" in mode
     assert "run `python3 scripts/doctor.py`" in mode
-    assert "web-access-to-OpenCLI fallback for the same round" in mode
+    assert "built-in-CDP-to-OpenCLI fallback for the same round" in mode
     assert "Use **OpenCLI** when the required read adapter" in fallback
-    assert re.search(r"Web-access is a one-way\s+fallback", fallback)
+    assert re.search(r"The built-in reader is a one-way\s+fallback", fallback)
     assert "Begin every discovery round with OpenCLI" in skill
     assert "do not switch back to\nOpenCLI for the same round" in skill
     for text in (mode, fallback, skill):

@@ -520,7 +520,8 @@ render a PDF when a PDF failed to appear. A capability that does not enter the
 scaffolding is a capability nobody uses.
 
 The fast check is sound about what is MISSING and silent about what works — no
-pandoc on PATH means no PDF, full stop, while pandoc plus an engine can both be
+pandoc on PATH means no template-based CV PDF; bundled report PDFs still work.
+Pandoc plus an engine can both be
 present and still fail. Confirming a capability stays with `doctor.py`, which
 renders one. A warning may only fire when it is sure, or it becomes the line
 everyone filters out.
@@ -532,11 +533,12 @@ before the user hits it, instead of discovering it when a PDF does not appear.
 
 **The agent owns first-run setup.** Follow [references/agent-setup.md](references/agent-setup.md)
 when a required capability is missing: install the necessary dependencies,
-prepare OpenCLI, AnySearch and CDP tools as needed, and verify daily-browser
+run `scripts/setup_dependencies.py` (add `--discovery` for Node/OpenCLI),
+use the bundled AnySearch client and CDP reader, and verify daily-browser
 CDP access. Never use browser extensions. Browser connection consent,
 site login and human verification still require the user's action. Reuse working tools and continue the
 original task after setup. `doctor.py --install` covers Python packages only;
-the agent handles other installation commands under the setup workflow.
+use `scripts/run_tool.py` to invoke the prepared runtime. No additional skill is required.
 
 ## Mode entry
 
@@ -710,7 +712,7 @@ website adapter is verified to use CDP. Never use browser extensions, even when
 already installed or reported connected. A generic OpenCLI health result is not
 proof of CDP routing. Only when the checks diagnose a missing CLI, disconnected
 CDP connection, or unsupported CDP extraction, follow [the one-way browser
-fallback](references/browser-fallback.md) with an available web-access CDP route.
+fallback](references/browser-fallback.md) with an available built-in CDP route.
 If that fallback is unavailable too, disclose the gap; do not switch back to
 OpenCLI for the same round. Keep browser evidence and gate receipts; a site
 refusal is not a fallback reason and stops reads across both tools. Neither
@@ -975,6 +977,10 @@ Ran, leaving nothing in the journal (they render; they do not judge):
 - [ ] `scripts/doctor.py` — once per machine, before the first mode. Reports
       capabilities by using them; `--install` covers the Python packages only. Follow
       `references/agent-setup.md` to install required tools and prepare daily-browser CDP.
+- [ ] `scripts/setup_dependencies.py` — prepare the private runtime when required;
+      `scripts/run_tool.py` invokes it without depending on global executables.
+- [ ] `scripts/browser_cdp.mjs` — diagnosed fallback reads only; import the capture
+      through `scripts/record_browser_capture.py` before the next same-site read.
 - [ ] `scripts/save_profile.py` — every master save goes through it. One CV per
       language, and a new language never overwrites another's file.
 

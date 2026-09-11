@@ -95,7 +95,8 @@ For Codex, replace `~/.claude/skills` with `~/.codex/skills` in the last two lin
 
 After installation, say: "Set up job-hunt and start my task using my everyday browser."
 
-The agent checks and installs OpenCLI and [AnySearch](https://github.com/anysearch-ai/anysearch-skill), then prepares any required Python, Node.js and document tools. **Browser access uses CDP.** It first verifies OpenCLI’s CDP capability; if the installed version or site is unsupported, it reads through browser CDP and continues the task.
+Install only this skill. The AnySearch client and browser reader are bundled. A single setup entry lets the agent prepare Python packages, Node.js and OpenCLI with its CDP patches; no other skill or browser extension needs a separate installation. Consultation report PDFs use bundled fonts, while CV layout tools are prepared when needed. **Browser access uses CDP.** The agent verifies OpenCLI first and uses the bundled CDP reader only after diagnosing an incompatibility.
+
 
 The agent connects to your everyday browser where supported and reuses its login state. On first use, you may need to enable remote debugging at `chrome://inspect/#remote-debugging` and accept Chrome's connection request. The agent checks support and explains any steps you need to take.
 

@@ -64,7 +64,7 @@ def importable(module: str) -> bool:
 
 
 def can_render_pdf() -> tuple[bool, str]:
-    """Render one, rather than believe a `command -v`."""
+    """Check the optional Pandoc/template PDF path by rendering one."""
     if not shutil.which("pandoc"):
         return False, "pandoc is not installed"
     engines = [e for e in REPORT_ENGINES
@@ -88,6 +88,21 @@ def can_render_pdf() -> tuple[bool, str]:
     return False, f"pandoc + {engines[0]} produced no PDF"
 
 
+def can_render_report() -> tuple[bool, str]:
+    """The common report path uses PyMuPDF and bundled fonts, without TeX."""
+    if not importable("pymupdf") or not importable("yaml"):
+        return False, "report Python dependencies are missing"
+    try:
+        from deliver import render_pdf
+        with tempfile.TemporaryDirectory() as tmp:
+            md = pathlib.Path(tmp) / "report.md"
+            md.write_text("# Career report\n\n求职建议。Résumé. 日本語。한국어.\n", encoding="utf-8")
+            ok, detail = render_pdf(md, md.with_suffix(".pdf"), None)
+            return ok, "PyMuPDF + bundled fonts" if ok else detail
+    except (ImportError, OSError, ValueError, RuntimeError) as exc:
+        return False, str(exc)
+
+
 def fast_capabilities() -> list[str]:
     """What is missing, decided WITHOUT rendering anything. Milliseconds.
 
@@ -95,7 +110,7 @@ def fast_capabilities() -> list[str]:
     renders a PDF. So this trades one direction of accuracy away, deliberately,
     and the asymmetry is the point:
 
-      it is SOUND about missing   -- no pandoc on PATH means no PDF, full stop
+      it is SOUND about missing   -- no pandoc means no template-based CV PDF
       it is UNSOUND about present -- pandoc and an engine can both be installed
                                      and still fail to produce a file
 
@@ -110,7 +125,7 @@ def fast_capabilities() -> list[str]:
             missing.append(f"python package {pkg}")
     if not shutil.which("pandoc") or not any(
             shutil.which(e) for e in REPORT_ENGINES):
-        missing.append("PDF rendering (pandoc + a LaTeX engine)")
+        missing.append("Template CV PDF rendering (pandoc + a LaTeX engine; optional for reports)")
     if not shutil.which("pdftotext"):
         missing.append("pdftotext")
     if not shutil.which("opencli"):
@@ -193,19 +208,26 @@ def checks() -> list[dict]:
             "auto": True,
             "install_argv": [sys.executable, "-m", "pip", "install", pkg],
         })
+    ok, detail = can_render_report()
+    out.append({
+        "what": "consultation report PDF (bundled fonts)", "ok": ok,
+        "cost": "consultation report PDF delivery is unavailable",
+        "fix": "run scripts/setup_dependencies.py and verify the bundled report fonts",
+        "auto": False, "detail": detail,
+    })
     ok, detail = can_render_pdf()
     out.append({
-        "what": "render a PDF", "ok": ok,
-        "cost": "PDF CVs, letters and delivered PDFs are unavailable; "
-                "Markdown and .docx still work",
+        "what": "template-based CV/letter PDF (optional for reports)", "ok": ok,
+        "cost": "template-based PDF CVs and letters are unavailable; "
+                "bundled report PDFs, Markdown and .docx use separate capabilities",
         "fix": f"{install_hint('pandoc')} && {install_hint('tectonic')}",
         "auto": False, "detail": detail if ok else "",
     })
     out.append({
         "what": "read text back out of a PDF (pdftotext)",
         "ok": bool(shutil.which("pdftotext")),
-        "cost": "check_pages cannot verify a rendered CV, and deliver.py cannot "
-                "confirm a PDF kept its characters — both degrade to unverified",
+        "cost": "check_pages cannot verify a template-based CV; "
+                "report delivery can still verify text using PyMuPDF",
         "fix": install_hint("pdftotext"), "auto": False,
     })
     out.append({

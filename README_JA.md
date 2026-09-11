@@ -95,7 +95,8 @@ Codex では最後の二行の `~/.claude/skills` を `~/.codex/skills` に置�
 
 インストール後、「job-hunt を設定して、普段使っているブラウザーで作業を始めて」と伝えてください。
 
-Agent は OpenCLI と [AnySearch](https://github.com/anysearch-ai/anysearch-skill) を確認・導入し、必要な Python、Node.js、文書ツールも準備します。**ブラウザーへの接続には CDP を使います。** まず OpenCLI の CDP 対応を確認し、導入済みのバージョンや対象サイトが未対応なら、ブラウザーの CDP 経由で読み取って作業を続けます。
+インストールするのはこの skill だけです。AnySearch クライアントとブラウザー読み取りスクリプトを同梱し、Agent が共通のセットアップから Python パッケージ、Node.js、CDP パッチ付き OpenCLI を準備します。別の skill やブラウザー拡張機能は不要です。相談レポート PDF は同梱フォントを使用し、履歴書用の組版ツールは必要に応じて準備します。**ブラウザー接続には CDP を使います。** まず OpenCLI を検証し、互換性の問題を確認した場合に同梱 CDP リーダーを使います。
+
 
 対応する環境では普段のブラウザーに接続し、ログイン状態を引き継ぎます。初回は `chrome://inspect/#remote-debugging` でリモートデバッグを有効にし、Chrome の接続要求を承認する必要がある場合があります。Agent が対応状況を確認し、必要な操作を案内します。
 

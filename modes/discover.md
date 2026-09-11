@@ -323,7 +323,7 @@ and set an integer from 1 to 5. It is the maximum number of fetched full descrip
 that can receive a CV-to-JD mapping in this round. It does not raise the source-policy
 page or row caps, and it is not a target count.
 
-## Retrieval backend — OpenCLI first; one-way web-access fallback
+## Retrieval backend — OpenCLI first; one-way built-in CDP fallback
 
 Before using OpenCLI for the first Indeed or 51job read, follow `references/opencli-compat.md`:
 check and automatically apply only the known version/hash-matched local repairs
@@ -343,13 +343,13 @@ Never use browser extensions, including already-connected ones. The presence of
 a CDP class, an endpoint environment variable, or a successful generic health
 check does not prove the website adapter uses CDP. When the installed website
 factory still selects Browser Bridge, record `unsupported_extraction` with the
-version and routing evidence, then use web-access CDP.
+version and routing evidence, then use built-in CDP.
 
 Only a diagnosed `cli_missing`, `bridge_disconnected` (a failed CDP connection),
 or `unsupported_extraction` permits the one-way fallback in
 `references/browser-fallback.md`. On that path skip OpenCLI-only auth/help
 commands and retain source selection, query, page, row, detail and disclosure
-rules. There is no web-access-to-OpenCLI fallback for the same round: if that
+rules. There is no built-in-CDP-to-OpenCLI fallback for the same round: if that
 CDP fallback is unavailable too, disclose the gap. Do not stop merely because
 an optional adapter executable is absent.
 
@@ -370,14 +370,14 @@ connection recovery before a site refusal, never a way around a site stop.
 
 For an unexplained page failure, follow `references/network-recovery.md` before
 choosing a fallback reason. Use `references/daily-browser.md` after the OpenCLI
-CDP diagnosis permits web-access; keep the same source, query, page, row, detail
+CDP diagnosis permits built-in CDP; keep the same source, query, page, row, detail
 and disclosure rules. Site login remains a user action.
 
 Browser captures use `scripts/record_browser_capture.py`, `browser_call` journal
 records and `extraction_method: browser_page`. They are not adapter responses.
 Both `check_no_write.py` and `check_shortlist.py` consume these records. A captcha,
 403, login wall or platform limit is a **site refusal**, not a backend-capability
-failure: it stops the site across tools for this round. Never try web-access to
+failure: it stops the site across tools for this round. Never try built-in CDP to
 route around an OpenCLI site refusal, or vice versa.
 A stop is a pause for [user recovery](../references/user-recovery.md), not a
 reason to abandon the requested search. Explain the actual obstacle and wait for

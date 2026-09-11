@@ -55,8 +55,7 @@ a report look comprehensive.
 ## Availability and execution
 
 Apply [daily-browser.md](daily-browser.md) to independent reads: separate browser
-tabs, shared site budgets and serial journal imports. Prepare OpenCLI, AnySearch
-and web-access using [agent-setup.md](agent-setup.md). AnySearch is an HTTP API
+tabs, shared site budgets and serial journal imports. Prepare OpenCLI and AnySearch, and verify the bundled CDP reader using [agent-setup.md](agent-setup.md). AnySearch is an HTTP API
 search provider; it does not use the browser CDP route. Browser reads use CDP
 only, with OpenCLI diagnosed first and fallback governed by
 [browser-fallback.md](browser-fallback.md). Use the daily browser unless the user

@@ -6,11 +6,11 @@ probe or instantiate Browser Bridge. The selection order is fixed:
 
 1. Use **OpenCLI** when the required read adapter actually uses CDP and the
    selected browser/profile connection is verified.
-2. Use **web-access CDP** only when that probe diagnoses `cli_missing`,
+2. Use **built-in CDP** only when that probe diagnoses `cli_missing`,
    `bridge_disconnected` (the selected CDP connection failed), or
    `unsupported_extraction` (including a website factory that selects Browser Bridge).
-3. If web-access CDP is unavailable after the diagnosis, disclose the gap;
-   do not switch back to OpenCLI for the same round. Web-access is a one-way
+3. If built-in CDP is unavailable after the diagnosis, disclose the gap;
+   do not switch back to OpenCLI for the same round. The built-in reader is a one-way
    fallback, not a second route for re-reading the site.
 
 Never use browser extensions, including ones already installed or connected.
@@ -18,8 +18,8 @@ A successful extension health check or an endpoint variable alone is not proof
 that a website command uses CDP. Preserve the actual offline probe output and
 version; do not execute a disallowed backend to manufacture a fallback reason.
 
-Read the available web-access skill and use its supported CDP connection to the
-selected browser. Do not assume a localhost port, restart the user's browser or
+Use job-hunt's bundled `scripts/browser_cdp.mjs` with the selected daily browser.
+It needs Node 22+ and no separate browser skill. Do not assume a localhost port, restart the user's browser or
 change its settings. A browser tool policy denial remains a denial.
 
 ## Check a local CDP boundary before falling back
@@ -91,6 +91,21 @@ JSON.stringify({url: location.href, retrieved_at: new Date().toISOString(),
   http_status: null})
 ```
 
+For the bundled reader, capture directly to a new workspace file:
+
+```sh
+node scripts/browser_cdp.mjs --browser chrome --url '<original-page-url>' \
+  --output '<ws>/raw/<site>-browser-1.json'
+```
+
+The helper creates and closes its own background tab, captures the rendered DOM,
+and records a main-document HTTP status when CDP reports it. It never selects an
+existing tab. Read/classify and import this file before the next read of the same
+site. Navigation failures return an error, not an empty success. The reader
+supports known HTTP(S) URLs; it does not submit forms or synthesize clicks. If a
+source requires unsupported interaction, retain that limitation and request a
+user-provided original URL or JD. Do not install another browser skill to fill it.
+
 Save the JSON string's contents as `raw/<site>-browser-<n>.json`, without rewriting
 its text or URLs. If a tool reports a refusal outside the DOM (HTTP 403, for
 example), retain that output and set `http_status: 403` or `blocked: true` on the
@@ -122,15 +137,15 @@ pages have `[]` rows, distinguished by the snapshot's status/text.
 python3 scripts/record_browser_capture.py --workspace <ws> --site 51job \
   --snapshot-file <ws>/raw/51job-browser-1.json \
   --rows-file <ws>/raw/51job-browser-1-rows.json \
-  --backend web-access --fallback-reason unsupported_extraction --command search \
+  --backend builtin-cdp --fallback-reason unsupported_extraction --command search \
   --query 'Python' --page 1
 ```
 
 This importer performs no network operation. Exit 0 means **recorded**, even for
 `classification: platform_limit`; inspect that result and stop the site. Exit 2
 means invalid input; repair the evidence/reporting error before any further read.
-Select the actual `--backend`: `web-access` (default), `chrome-devtools`, or
-`host-browser`. Use the actual diagnosed fallback reason; the example assumes
+Select the actual `--backend`: `builtin-cdp` (default). Older backend identifiers remain readable only for
+historical capture verification. Use the actual diagnosed fallback reason; the example assumes
 `unsupported_extraction`. The recorder retains `preferred_browser` for older
 captures, but it is not a capability diagnosis for a new OpenCLI-first round.
 It appends `browser_call` with that backend, `operation: snapshot`, query,

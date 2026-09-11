@@ -243,6 +243,10 @@ Produce the brief in `references/interview-prep.md` (write it to `<workspace>/in
 
 ## Toolchain note
 
+This note concerns template-based CV/letter rendering. Run the private setup in
+`references/agent-setup.md` and use its recorded interpreter; it also installs
+PyMuPDF. Consultation report PDFs use bundled fonts and do not require TeX.
+
 - Scripts need their dependencies: `pip install -r requirements.txt` (PyYAML, python-docx).
 - PDF output needs a LaTeX engine — `tectonic` is recommended. Without it, **Markdown and .docx still work**, and the renderer emits a `.tex` file you can compile later.
 

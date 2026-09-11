@@ -19,7 +19,8 @@ from check_opencli_result import read_journal, recovery_guidance
 
 ACTION = "browser_call"
 REASONS = ("preferred_browser", "cli_missing", "bridge_disconnected", "unsupported_extraction")
-BACKENDS = ("web-access", "chrome-devtools", "host-browser")
+# Older names are accepted for historical receipts, never invoked by this script.
+BACKENDS = ("builtin-cdp", "web-access", "chrome-devtools", "host-browser")
 STOP_CLASSES = {"platform_limit", "not_logged_in", "no_auth_adapter"}
 # Look for actual wall language, not an ordinary navigation link saying Login.
 WALL = re.compile(
@@ -261,7 +262,7 @@ def main(argv=None):
     parser.add_argument("--command", choices=("search", "detail"), default="search")
     parser.add_argument("--snapshot-file", required=True, type=pathlib.Path)
     parser.add_argument("--rows-file", required=True, type=pathlib.Path)
-    parser.add_argument("--backend", choices=BACKENDS, default="web-access")
+    parser.add_argument("--backend", choices=BACKENDS, default="builtin-cdp")
     parser.add_argument("--fallback-reason", choices=REASONS, required=True)
     parser.add_argument("--query", default="")
     parser.add_argument("--page", type=int, default=1)

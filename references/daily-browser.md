@@ -11,27 +11,27 @@ Follow an explicitly selected browser. Verify
 browser/profile identity before reading: a host's default may be an isolated
 agent browser or an in-app browser. Do not silently use those as the daily browser.
 If multiple daily profiles remain ambiguous, ask which one to use.
-Never use browser extensions, including ones already installed. A host-browser
-tool is usable only when its actual transport is verified as CDP; its name alone
-does not establish that. Run the OpenCLI capability diagnosis first, following
+Never use browser extensions, including ones already installed. The browser
+fallback is bundled in job-hunt; no external browser skill is needed. Run the
+OpenCLI capability diagnosis first, following
 [browser-fallback.md](browser-fallback.md).
 
 1. Reuse an authorized CDP connection to the intended daily browser.
    Verify the transport and browser/profile identity before use.
    Open only task-owned tabs and retain their IDs. Do not read unrelated
    tabs, history, credentials or cookies to establish access.
-2. If no suitable connection exists, prepare web-access via
-   [agent-setup.md](agent-setup.md). Verify its reported browser identity, not just
-   a healthy localhost proxy. Never kill a shared proxy/daemon or restart the
-   daily browser to change its target. Use an independently supported connection
-   or report the specific remaining connection action.
+2. Use the bundled `scripts/browser_cdp.mjs` for diagnosed fallback reads.
+   It discovers only the selected Chrome or Edge's `DevToolsActivePort`, creates
+   a task-owned tab through browser-level CDP, reads the URL, and closes that tab.
+   Select `--browser chrome` or `--browser edge` from the customer's preference;
+   it never falls back to another browser. `--endpoint` is only for an explicitly
+   selected browser-level WebSocket endpoint. No proxy service or extra skill is
+   needed. Do not restart the daily browser or copy a profile to establish access.
 3. On supported Chrome (144+), the user enables remote debugging at
    `chrome://inspect/#remote-debugging` and accepts Chrome's connection prompt.
-   Agent tools handle the rest. A supported Chrome DevTools MCP connection using
-   `--autoConnect` is another route. Verify current runtime help and status before
-   starting: its default fresh/headless browser does not inherit daily login.
-   Edge support follows installed web-access/browser capabilities; do not promise
-   this mechanism on every browser or managed machine.
+   The bundled reader handles the connection. Edge must expose its selected
+   daily profile through a valid debugging endpoint too; do not promise this
+   mechanism on every browser or managed machine.
 4. OpenCLI is the first extraction route to diagnose. Inspect the installed
    runtime and official help before selecting its CDP endpoint.
    Version 1.8.7 still selects Browser Bridge for ordinary website adapters even
@@ -39,7 +39,7 @@ does not establish that. Run the OpenCLI capability diagnosis first, following
    [4e8109b](https://github.com/jackwener/opencli/commit/4e8109b6c84afea5e535a7b9a35bc352d1b92fc2)
    fixes that selection. Re-check newer releases rather than assuming the fix is
    installed. If a website adapter selects Browser Bridge, classify its CDP
-   extraction as unsupported and use web-access CDP. Never execute the adapter
+   extraction as unsupported and use built-in CDP. Never execute the adapter
    through that bridge, install an extension or patch global OpenCLI core to
    make this route work. Keep the diagnostic and browser evidence.
 
