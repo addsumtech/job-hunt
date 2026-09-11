@@ -95,11 +95,11 @@ Codex에서는 마지막 두 줄의 `~/.claude/skills`를 `~/.codex/skills`로 �
 
 설치 후 “job-hunt를 설정하고 평소 쓰는 브라우저로 작업을 시작해 줘.”라고 요청하세요.
 
-Agent가 기존 환경을 확인하고 필요한 Python 의존성, Node.js, OpenCLI, [AnySearch](https://github.com/anysearch-ai/anysearch-skill), [web-access](https://github.com/eze-is/web-access), 문서 도구를 설치한 뒤 작업을 이어갑니다. **브라우저는 기본적으로 CDP로 연결하므로 확장 프로그램 설치가 필요 없습니다.**
+Agent가 OpenCLI와 [AnySearch](https://github.com/anysearch-ai/anysearch-skill)를 확인하고 설치한 뒤, 필요한 Python, Node.js, 문서 도구를 준비합니다. **브라우저는 CDP로 연결합니다.** 먼저 OpenCLI의 CDP 지원 여부를 확인하고, 설치된 버전이나 사이트가 지원되지 않으면 브라우저 CDP로 읽어 작업을 이어갑니다.
 
 지원되는 환경에서는 평소 브라우저에 연결해 로그인 상태를 재사용합니다. 처음에는 `chrome://inspect/#remote-debugging`에서 원격 디버깅을 켜고 Chrome 연결 요청을 승인해야 할 수 있습니다. Agent가 지원 여부를 확인하고 필요한 조작을 안내합니다.
 
-AnySearch는 API 키 없이 익명으로 쓸 수 있습니다. 독립적인 정보원은 가능한 범위에서 동시에 검색해 대기 시간을 줄입니다. 사이트 로그인, 인증, 브라우저 연결 승인은 사용자가 진행합니다.
+AnySearch는 HTTP API로 검색하며 API 키 없이 익명으로 쓸 수 있습니다. 브라우저 작업은 기본적으로 평소 사용하는 브라우저에 CDP로 연결해 진행하고, 별도 브라우저는 사용자가 명시적으로 요청한 경우에만 사용합니다. 독립적인 정보원은 가능한 범위에서 동시에 검색해 대기 시간을 줄입니다. 사이트 로그인, 인증, 브라우저 연결 승인은 사용자가 진행합니다.
 
 자세한 방법은 [환경 설정](references/agent-setup.md)과 [브라우저 연결 및 병렬 검색](references/daily-browser.md)을 참고하세요.
 

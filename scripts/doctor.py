@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import json
 import pathlib
 import platform
 import re
@@ -26,6 +27,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+
+from opencli_compat import installed_package
 
 # Keep diagnostics importable before requirements.txt has been installed.
 REPORT_ENGINES = ("tectonic", "xelatex")
@@ -129,21 +132,49 @@ def install_hint(binary: str) -> str:
     return (brew if mac else apt).get(binary, f"install {binary}")
 
 
-def can_reach_browser() -> tuple[bool, str]:
-    """A present adapter executable does not prove its browser bridge works."""
+def can_use_opencli_cdp() -> tuple[bool, str]:
+    """Inspect website routing without connecting to any browser or extension.
+
+    A CDP class existing in the package is insufficient: 1.8.7 exports one but
+    selects BrowserBridge for website adapters. Probe the installed factory,
+    never instantiate its result. Live endpoint/profile verification is separate.
+    """
     if not shutil.which("opencli"):
         return False, "opencli is not installed"
+    node = shutil.which("node")
+    if not node:
+        return False, "Node.js is unavailable; OpenCLI CDP routing is unverified"
     try:
-        result = subprocess.run(["opencli", "doctor"], capture_output=True,
+        package = installed_package()
+        runtime = package / "dist/src/runtime.js"
+        browser = package / "dist/src/browser/index.js"
+        if not runtime.is_file() or not browser.is_file():
+            return False, "installed OpenCLI layout is unknown; inspect its documented CDP route"
+        # The endpoint is a child-process probe value, not a connection target.
+        # No connect(), browserSession(), CLI doctor or daemon command is called.
+        probe = """
+process.env.OPENCLI_CDP_ENDPOINT ||= 'http://127.0.0.1:0';
+const {getBrowserFactory} = await import(process.argv[1]);
+const {CDPBridge} = await import(process.argv[2]);
+const sites = ['51job', 'indeed', 'boss', 'linkedin'];
+console.log(JSON.stringify(sites.map(site => ({site,
+  cdp: typeof CDPBridge === 'function' && getBrowserFactory(site) === CDPBridge}))));
+"""
+        result = subprocess.run([node, "--input-type=module", "-e", probe,
+                                 runtime.as_uri(), browser.as_uri()], capture_output=True,
                                 text=True, encoding="utf-8", timeout=15, check=False)
-    except (OSError, UnicodeError, subprocess.SubprocessError) as exc:
-        return False, f"browser health check could not complete: {exc}"
-    output = re.sub(r"\x1b\[[0-9;]*m", "", (result.stdout or "") + (result.stderr or ""))
-    if re.search(r"\[(?:MISSING|FAIL)\]", output, re.I):
-        return False, "Browser Bridge is disconnected or its connectivity check failed"
-    if result.returncode == 0 and re.search(r"\[OK\]\s*Connectivity:", output, re.I):
-        return True, "opencli doctor confirmed browser connectivity"
-    return False, "opencli doctor did not confirm browser connectivity; inspect its output"
+        routes = json.loads(result.stdout or "null") if result.returncode == 0 else None
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        return False, f"OpenCLI CDP routing check could not complete: {exc}"
+    sites = {"51job", "indeed", "boss", "linkedin"}
+    if (isinstance(routes, list) and len(routes) == len(sites)
+            and all(isinstance(route, dict) and isinstance(route.get("site"), str)
+                    for route in routes)
+            and {route.get("site") for route in routes} == sites
+            and all(route.get("cdp") is True for route in routes)):
+        return True, "website factories select CDP; verify the selected live endpoint and adapter before reading"
+    return False, ("website CDP routing is not confirmed; use the diagnosed browser CDP fallback, "
+                   "never an extension-backed connection")
 
 
 def checks() -> list[dict]:
@@ -184,9 +215,9 @@ def checks() -> list[dict]:
         "fix": install_hint("opencli"), "auto": False,
     })
     if shutil.which("opencli"):
-        connected, detail = can_reach_browser()
+        connected, detail = can_use_opencli_cdp()
         out.append({
-            "what": "browser-backed job adapters (Browser Bridge)", "ok": connected,
+            "what": "OpenCLI website CDP routing", "ok": connected,
             "cost": detail + "; this OpenCLI route is unverified, not an empty result; check CDP separately",
             "fix": "verify the daily-browser CDP route in references/daily-browser.md",
             "auto": False, "detail": detail,
@@ -245,7 +276,7 @@ def main(argv: list[str] | None = None) -> int:
         print("\nRe-run with --install to install the missing Python packages.")
     print("\nAgent: resolve required missing capabilities using "
           "references/agent-setup.md, then re-run the checks. "
-          "Prepare daily-browser CDP; no extension installation is required.")
+          "Prepare the selected browser's CDP connection.")
     return 1
 
 

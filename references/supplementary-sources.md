@@ -5,13 +5,36 @@ careers page and current JD for vacancy status, requirements and pay. Add a sour
 when it can change the application decision or help the user prepare. The table
 below is a selection guide, not a checklist to run in full.
 
+## Fixed tool routes
+
+Source selection and tool routing are separate decisions. The user has assigned
+these routes; do not reconsider the provider when one of these sources is used:
+
+| Source | Required initial route |
+|---|---|
+| WeChat public accounts (Sogou WeChat) | OpenCLI |
+| Xiaohongshu | OpenCLI |
+| Douyin | OpenCLI |
+| Toutiao | OpenCLI |
+| Public web, news, employer websites, specialist verticals and specified domains | AnySearch HTTP API for search |
+| GitHub repositories, code, issues and PRs | `gh search` |
+
+For the four named platforms, diagnose only whether the installed OpenCLI read
+adapter can execute through CDP; do not treat the tool choice as optional or send
+the search to AnySearch instead. If CDP is unsupported or the selected connection
+fails, retain the actual reason and follow the one-way daily-browser CDP fallback
+in [browser-fallback.md](browser-fallback.md). Never use an extension.
+Use the customer's daily browser unless they explicitly request a separate one.
+Xiaohongshu and Douyin retain per-consultation authorization and site read limits.
+These routes do not require running every platform in every consultation.
+
 ## Useful sources
 
 | Need | Source and route | What to verify |
 |---|---|---|
-| Current openings and requirements | Employer careers pages and recruitment platforms; daily-browser CDP, with OpenCLI when its CDP adapter works | Original posting, location, requirements, pay and posting date. |
-| Employer or industry background | AnySearch public search, then the original website or news article | Publisher, date and the claim supported; a snippet is not a full-page read. |
-| Recruitment announcements, referral leads and industry analysis | WeChat public accounts; anonymous Sogou WeChat search through CDP | Account name, article date and original article. Follow recruitment links to confirm the job; reposts and old announcements do not establish a current opening. |
+| Current openings and requirements | Employer careers pages and recruitment platforms; diagnose OpenCLI first, use its verified CDP read adapter, or fall back to daily-browser CDP for the diagnosed reason | Original posting, location, requirements, pay and posting date. |
+| Employer or industry background | AnySearch public search through its HTTP API, then the original website or news article | Publisher, date and the claim supported; a snippet is not a full-page read. |
+| Recruitment announcements, referral leads and industry analysis | WeChat public accounts; anonymous Sogou WeChat search through OpenCLI after verifying its CDP adapter, or diagnosed daily-browser CDP fallback | Account name, article date and original article. Follow recruitment links to confirm the job; reposts and old announcements do not establish a current opening. |
 | A candidate's public work or an employer's technical projects | GitHub public repositories, code, issues or PRs through `gh search` | Read the relevant original material; distinguish project activity from the candidate's personal contribution. |
 
 For China-related hiring, use WeChat when recruitment announcements or industry
@@ -19,6 +42,10 @@ context are relevant;
 consider it explicitly during source selection rather than silently omitting it.
 A generic web search is not a substitute for an actual WeChat search. If Sogou or
 an article cannot be accessed, record that result and the scope actually read.
+
+Use AnySearch vertical search for a relevant specialist question, and its
+`site:` search for public pages on a specified domain. Discover the supported
+vertical domains before using them. Neither route replaces original-job evidence.
 
 Other channels are outside the default search plan. Add one only for a concrete
 information gap or an explicit user request, after checking that it serves the
@@ -29,8 +56,11 @@ a report look comprehensive.
 
 Apply [daily-browser.md](daily-browser.md) to independent reads: separate browser
 tabs, shared site budgets and serial journal imports. Prepare OpenCLI, AnySearch
-and web-access using [agent-setup.md](agent-setup.md). Browser reads prefer CDP;
-a site adapter that requires an extension is replaced by direct CDP page reading.
+and web-access using [agent-setup.md](agent-setup.md). AnySearch is an HTTP API
+search provider; it does not use the browser CDP route. Browser reads use CDP
+only, with OpenCLI diagnosed first and fallback governed by
+[browser-fallback.md](browser-fallback.md). Use the daily browser unless the user
+explicitly requests a separate one.
 Inspect current help before calling a tool. AnySearch `batch_search` can group
 independent queries; use its documented schema. If a provider is unavailable,
 use an available public source with the same access boundary and record the gap.

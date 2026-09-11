@@ -95,11 +95,11 @@ Para Codex, sustituye `~/.claude/skills` por `~/.codex/skills` en las dos últim
 
 Tras la instalación, dile al agente: «Configura job-hunt y empieza mi tarea con mi navegador habitual».
 
-El agente comprueba el entorno e instala lo necesario: dependencias de Python, Node.js, OpenCLI, [AnySearch](https://github.com/anysearch-ai/anysearch-skill), [web-access](https://github.com/eze-is/web-access) y herramientas de documentos. Después continúa la tarea. **La conexión del navegador usa CDP por defecto y no requiere extensiones.**
+El agente comprueba e instala OpenCLI y [AnySearch](https://github.com/anysearch-ai/anysearch-skill), y prepara las dependencias necesarias de Python, Node.js y documentos. **El acceso al navegador usa CDP.** Primero verifica la compatibilidad de OpenCLI con CDP; si la versión instalada o el sitio no lo admite, lee mediante CDP del navegador y continúa la tarea.
 
 Cuando el entorno lo permite, el agente conecta con tu navegador habitual y aprovecha la sesión abierta. La primera vez puede que tengas que activar la depuración remota en `chrome://inspect/#remote-debugging` y aceptar la solicitud de Chrome. El agente comprueba la compatibilidad y te explica los pasos necesarios.
 
-AnySearch permite acceso anónimo sin clave API. Las fuentes independientes se consultan a la vez cuando es posible para reducir la espera. Tú completas los inicios de sesión, las verificaciones y los permisos del navegador.
+AnySearch busca mediante su API HTTP y permite acceso anónimo sin clave API. Las operaciones del navegador usan por defecto tu navegador habitual mediante CDP; solo se utiliza uno independiente si lo solicitas expresamente. Las fuentes independientes se consultan a la vez cuando es posible para reducir la espera. Tú completas los inicios de sesión, las verificaciones y los permisos del navegador.
 
 Consulta la [configuración del entorno](references/agent-setup.md) y las [conexiones del navegador y búsquedas paralelas](references/daily-browser.md) para más detalles.
 

@@ -5,8 +5,8 @@ a missing capability needed for the task. The agent executes setup; do not hand
 the user a list of terminal commands. A request to set up or use job-hunt includes
 ordinary dependency preparation. Respect an explicit no-install preference and
 the host's actual execution permissions. Do not add a separate approval step for
-each dependency. Use CDP with the user's daily browser; extensions are not a
-required dependency. Browser connection consent, account login and human
+each dependency. Use CDP with the user's daily browser; never use browser
+extensions, including ones already installed. Browser connection consent, account login and human
 verification remain with the user.
 
 ## Reuse, then install what the task needs
@@ -66,13 +66,21 @@ with correctly quoted paths or argument arrays, including spaces. If an older
 broken installation needs replacement, preserve its custom adapters first; do
 not delete the old installation merely because the new command works.
 
-Do not download or require the OpenCLI extension. Inspect the installed version
+Never install or use an OpenCLI browser extension. Inspect the installed version
 and adapter help before using CDP: `OPENCLI_CDP_ENDPOINT` alone does not enable
 website CDP in every released version. Follow [daily-browser.md](daily-browser.md)
-for the connection and compatibility decision; a working browser route does not
-need an unsuccessful OpenCLI call first.
+for the connection and compatibility decision. Diagnose OpenCLI's website CDP
+routing with `scripts/doctor.py` before any site read. The offline probe imports
+the installed browser factory without instantiating it; it does not run OpenCLI's
+extension-oriented `doctor` or connect to a daemon. A positive factory result
+still needs verification of the actual adapter and selected live CDP endpoint.
+An unsupported factory permits the browser CDP fallback without first running
+a failing or extension-backed site command.
 
 ## AnySearch and web-access
+
+AnySearch searches through its HTTP API. Browser tools connect through CDP to the
+user's daily browser by default; use a separate browser only on explicit request.
 
 Reuse installed, working skills. Otherwise install from the official repositories:
 
@@ -114,8 +122,9 @@ does not clear any site's refusal lock or authorize account login.
 
 Re-run the relevant capability checks after installation. Verify the actual PDF
 render when PDF output is needed and an actual page read in the selected daily
-browser for live browser reads. `doctor.py` checks the OpenCLI route only; its
-missing-bridge warning does not invalidate a verified CDP/host-browser route.
+browser for live browser reads. `doctor.py` checks OpenCLI's offline website
+CDP routing only; an unsupported or unverified OpenCLI route does not invalidate
+a separately verified browser CDP fallback.
 Proceed with the user's original task, using the recorded executable paths; do
 not stop at “dependencies installed.” Record what was reused, installed, tested,
 and still blocked in `setup.md` in the task workspace (no credentials). Retain

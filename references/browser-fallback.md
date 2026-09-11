@@ -1,49 +1,47 @@
 # OpenCLI-first read-only browser fallback
 
-Before considering a browser, run `opencli doctor` (with a bounded process
-timeout) and inspect the adapter's help. This is a capability probe, not a login
-operation. The selection order is fixed:
+First inspect OpenCLI's version, read-adapter help and offline website CDP routing
+with `python3 scripts/doctor.py`. Do not run OpenCLI's extension-oriented health
+probe or instantiate Browser Bridge. The selection order is fixed:
 
-1. Use **OpenCLI** when the required read adapter and its connection work.
-2. Use **web-access** only when the OpenCLI probe diagnoses `cli_missing`,
-   `bridge_disconnected`, or `unsupported_extraction` for the requested page or
-   market.
-3. If web-access is unavailable after that OpenCLI diagnosis, disclose the gap;
+1. Use **OpenCLI** when the required read adapter actually uses CDP and the
+   selected browser/profile connection is verified.
+2. Use **web-access CDP** only when that probe diagnoses `cli_missing`,
+   `bridge_disconnected` (the selected CDP connection failed), or
+   `unsupported_extraction` (including a website factory that selects Browser Bridge).
+3. If web-access CDP is unavailable after the diagnosis, disclose the gap;
    do not switch back to OpenCLI for the same round. Web-access is a one-way
    fallback, not a second route for re-reading the site.
 
-For step 2, read the available web-access skill and follow its supported browser
-setup; do not assume a localhost port, install extensions, restart the user's
-browser, or change browser settings. A browser tool policy denial remains a
-denial, never a fallback trigger.
+Never use browser extensions, including ones already installed or connected.
+A successful extension health check or an endpoint variable alone is not proof
+that a website command uses CDP. Preserve the actual offline probe output and
+version; do not execute a disallowed backend to manufacture a fallback reason.
 
-## Check a local-bridge boundary before falling back
+Read the available web-access skill and use its supported CDP connection to the
+selected browser. Do not assume a localhost port, restart the user's browser or
+change its settings. A browser tool policy denial remains a denial.
 
-An agent sandbox can reject a localhost bridge even while the user's OpenCLI daemon
-and browser extension are healthy. When an OpenCLI browser command reports
-`BROWSER_CONNECT`, `Failed to start opencli daemon`, or `EPERM` on
-`127.0.0.1:19825`, retain its transport output and run one bounded `opencli doctor`
-through the platform's approved host-local or unsandboxed path, after obtaining any
-required permission. This probe does not read a job site.
+## Check a local CDP boundary before falling back
 
-- If the host-level doctor says the daemon and extension are connected, rerun the
-  same bounded read through that path and continue with **OpenCLI**. The original
-  transport record remains evidence of the runner boundary; it is not a site
-  refusal and it does not authorize an unbounded retry.
-- If the host-level doctor also fails, the bridge is genuinely disconnected and
-  `bridge_disconnected` permits the one-way web-access fallback above.
-- If a manual daemon start says `EADDRINUSE`, another process owns the port; use
-  the host-level doctor to inspect it. Never kill that process, change ports,
-  reinstall/update OpenCLI, or restart the user's browser as a workaround.
+A sandbox can reject a local CDP connection. Retain the actual error and, when
+available and authorized, verify the same selected connection through the
+platform's approved host-local or unsandboxed path. Ask only for a permission the
+platform actually requires; existing authorization is sufficient.
 
-This diagnostic applies only before a site refusal. A captcha, login wall,
-401/403/429 or platform limit remains a site stop across every execution path and
-every backend.
+- If that route works, repeat the single bounded read using the same CDP path.
+- If it still fails, `bridge_disconnected` permits the one-way browser CDP fallback.
+- `EADDRINUSE` does not authorize killing a shared process, changing its port,
+  reinstalling tools or restarting the user's browser. Extension daemon status
+  is not evidence for this CDP check.
+
+This applies only before a site refusal. A captcha, login wall, 401/403/429 or
+platform limit stops the site across every execution path and backend.
 
 Only these reasons are accepted by the recorder:
 
 - `cli_missing`: executable unavailable.
-- `bridge_disconnected`: diagnostic confirms the required bridge is unavailable.
+- `bridge_disconnected`: diagnostic confirms the selected CDP connection is unavailable.
 - `unsupported_extraction`: no suitable documented read extraction, including an
   adapter that cannot serve the requested market or a diagnosed adapter
   incompatibility while the requested browser search demonstrably works.
@@ -124,7 +122,7 @@ pages have `[]` rows, distinguished by the snapshot's status/text.
 python3 scripts/record_browser_capture.py --workspace <ws> --site 51job \
   --snapshot-file <ws>/raw/51job-browser-1.json \
   --rows-file <ws>/raw/51job-browser-1-rows.json \
-  --backend web-access --fallback-reason preferred_browser --command search \
+  --backend web-access --fallback-reason unsupported_extraction --command search \
   --query 'Python' --page 1
 ```
 
@@ -132,8 +130,10 @@ This importer performs no network operation. Exit 0 means **recorded**, even for
 `classification: platform_limit`; inspect that result and stop the site. Exit 2
 means invalid input; repair the evidence/reporting error before any further read.
 Select the actual `--backend`: `web-access` (default), `chrome-devtools`, or
-`host-browser`. The legacy `--fallback-reason` flag also accepts the preferred
-route. It appends `browser_call` with that backend, `operation: snapshot`, query,
+`host-browser`. Use the actual diagnosed fallback reason; the example assumes
+`unsupported_extraction`. The recorder retains `preferred_browser` for older
+captures, but it is not a capability diagnosis for a new OpenCLI-first round.
+It appends `browser_call` with that backend, `operation: snapshot`, query,
 page, row count, classification, source URL/time and both file hashes. It does not
 fabricate an `adapter_call`, shell command or OpenCLI access metadata.
 

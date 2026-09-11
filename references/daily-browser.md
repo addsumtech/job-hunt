@@ -1,20 +1,24 @@
 # Daily browser and concurrent research
 
-## CDP first; no extension installation
+## CDP only, after OpenCLI diagnosis
 
-For browser reads, prefer a supported CDP connection to the user's daily browser
+For browser reads, use a supported CDP connection to the user's daily browser
 and profile, retaining that profile's existing login state. Public APIs, AnySearch
-and static pages need no browser. Follow an explicitly selected browser. Verify
+and static pages need no browser. AnySearch uses its HTTP API, not CDP.
+Use a separate or isolated browser only if the user explicitly requests one;
+connection failure does not authorize switching away from the daily browser.
+Follow an explicitly selected browser. Verify
 browser/profile identity before reading: a host's default may be an isolated
 agent browser or an in-app browser. Do not silently use those as the daily browser.
 If multiple daily profiles remain ambiguous, ask which one to use.
-An explicit CDP-only request excludes extension-backed and host-browser routes;
-verify the transport before use rather than inferring it from the browser name.
+Never use browser extensions, including ones already installed. A host-browser
+tool is usable only when its actual transport is verified as CDP; its name alone
+does not establish that. Run the OpenCLI capability diagnosis first, following
+[browser-fallback.md](browser-fallback.md).
 
-1. Reuse an authorized connection to the intended daily browser, preferring CDP.
-   A working host browser connection is also usable without installing anything;
-   describe its actual transport rather than claiming it proves extension-free
-   CDP. Open only task-owned tabs and retain their IDs. Do not read unrelated
+1. Reuse an authorized CDP connection to the intended daily browser.
+   Verify the transport and browser/profile identity before use.
+   Open only task-owned tabs and retain their IDs. Do not read unrelated
    tabs, history, credentials or cookies to establish access.
 2. If no suitable connection exists, prepare web-access via
    [agent-setup.md](agent-setup.md). Verify its reported browser identity, not just
@@ -28,15 +32,16 @@ verify the transport before use rather than inferring it from the browser name.
    starting: its default fresh/headless browser does not inherit daily login.
    Edge support follows installed web-access/browser capabilities; do not promise
    this mechanism on every browser or managed machine.
-4. OpenCLI is an optional extraction layer over a verified connection. Inspect
-   the installed runtime and official help before selecting its CDP endpoint.
+4. OpenCLI is the first extraction route to diagnose. Inspect the installed
+   runtime and official help before selecting its CDP endpoint.
    Version 1.8.7 still selects Browser Bridge for ordinary website adapters even
    with `OPENCLI_CDP_ENDPOINT`; upstream commit
    [4e8109b](https://github.com/jackwener/opencli/commit/4e8109b6c84afea5e535a7b9a35bc352d1b92fc2)
    fixes that selection. Re-check newer releases rather than assuming the fix is
-   installed. If an adapter requires the extension, use web-access CDP directly
-   and record browser evidence. Do not install an extension or patch global
-   OpenCLI core to make this route work.
+   installed. If a website adapter selects Browser Bridge, classify its CDP
+   extraction as unsupported and use web-access CDP. Never execute the adapter
+   through that bridge, install an extension or patch global OpenCLI core to
+   make this route work. Keep the diagnostic and browser evidence.
 
 Chrome's consent is distinct from macOS automation permission. This is minimal
 manual setup, not guaranteed zero configuration. Modern Chrome does not honor

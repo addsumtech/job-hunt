@@ -532,8 +532,8 @@ before the user hits it, instead of discovering it when a PDF does not appear.
 
 **The agent owns first-run setup.** Follow [references/agent-setup.md](references/agent-setup.md)
 when a required capability is missing: install the necessary dependencies,
-prepare OpenCLI, AnySearch and web-access as needed, and verify daily-browser
-CDP access. No extension installation is required. Browser connection consent,
+prepare OpenCLI, AnySearch and CDP tools as needed, and verify daily-browser
+CDP access. Never use browser extensions. Browser connection consent,
 site login and human verification still require the user's action. Reuse working tools and continue the
 original task after setup. `doctor.py --install` covers Python packages only;
 the agent handles other installation commands under the setup workflow.
@@ -700,16 +700,24 @@ a fabrication the candidate then repeats back), and the shortlist's `why_matched
 
 ### OpenCLI-first fallback for discovery
 
-Begin every discovery round with OpenCLI's read adapter and connection probe.
-Use OpenCLI when it works. Only when it diagnoses a missing CLI, disconnected
-bridge, or unsupported extraction, follow [the one-way browser
-fallback](references/browser-fallback.md) with an available web-access skill.
+Apply the fixed source-to-tool routes in [supplementary-sources.md](references/supplementary-sources.md):
+WeChat (Sogou WeChat), Xiaohongshu, Douyin and Toutiao use OpenCLI. Do not
+reconsider that tool choice. AnySearch search uses its HTTP API.
+
+Begin every discovery round with OpenCLI's offline CDP routing and read-adapter
+capability checks in `scripts/doctor.py`. Use OpenCLI only after its actual
+website adapter is verified to use CDP. Never use browser extensions, even when
+already installed or reported connected. A generic OpenCLI health result is not
+proof of CDP routing. Only when the checks diagnose a missing CLI, disconnected
+CDP connection, or unsupported CDP extraction, follow [the one-way browser
+fallback](references/browser-fallback.md) with an available web-access CDP route.
 If that fallback is unavailable too, disclose the gap; do not switch back to
 OpenCLI for the same round. Keep browser evidence and gate receipts; a site
 refusal is not a fallback reason and stops reads across both tools. Neither
 backend submits applications.
-Use [daily-browser routing](references/daily-browser.md) only on that fallback
-path, and use [network recovery](references/network-recovery.md) for a generic
+Both OpenCLI and its fallback use the customer's daily browser unless they
+explicitly request a separate one; follow [daily-browser routing](references/daily-browser.md).
+Use [network recovery](references/network-recovery.md) for a generic
 transport failure that has not yet established a fallback reason.
 
 

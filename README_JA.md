@@ -95,11 +95,11 @@ Codex では最後の二行の `~/.claude/skills` を `~/.codex/skills` に置�
 
 インストール後、「job-hunt を設定して、普段使っているブラウザーで作業を始めて」と伝えてください。
 
-Agent は既存の環境を確認し、必要な Python 依存関係、Node.js、OpenCLI、[AnySearch](https://github.com/anysearch-ai/anysearch-skill)、[web-access](https://github.com/eze-is/web-access)、文書ツールを導入して作業を続けます。**ブラウザーへの接続は CDP が標準で、拡張機能の導入は不要です。**
+Agent は OpenCLI と [AnySearch](https://github.com/anysearch-ai/anysearch-skill) を確認・導入し、必要な Python、Node.js、文書ツールも準備します。**ブラウザーへの接続には CDP を使います。** まず OpenCLI の CDP 対応を確認し、導入済みのバージョンや対象サイトが未対応なら、ブラウザーの CDP 経由で読み取って作業を続けます。
 
 対応する環境では普段のブラウザーに接続し、ログイン状態を引き継ぎます。初回は `chrome://inspect/#remote-debugging` でリモートデバッグを有効にし、Chrome の接続要求を承認する必要がある場合があります。Agent が対応状況を確認し、必要な操作を案内します。
 
-AnySearch は API キーなしで匿名利用できます。独立した情報源は可能な範囲で同時に検索し、待ち時間を短くします。サイトへのログイン、認証、ブラウザーの接続許可はあなたが行います。
+AnySearch は HTTP API で検索し、API キーなしで匿名利用できます。ブラウザー操作は通常、普段使っているブラウザーに CDP で接続して行います。別のブラウザーを使うのは、あなたが明示的に希望した場合だけです。独立した情報源は可能な範囲で同時に検索し、待ち時間を短くします。サイトへのログイン、認証、ブラウザーの接続許可はあなたが行います。
 
 詳しくは[環境設定](references/agent-setup.md)と[ブラウザー接続・並行検索](references/daily-browser.md)を参照してください。
 
