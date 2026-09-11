@@ -58,7 +58,7 @@ Después de una entrevista simulada, dos evaluaciones independientes revisan la 
 
 ## Instalación
 
-Necesitas un entorno de agente capaz de ejecutar comandos locales y leer y escribir archivos, además de **Python 3.10+**. Para instalar con `npx` también necesitas Node.js/npm. Elige una de estas tres opciones.
+Necesitas un entorno de agente capaz de ejecutar comandos locales y leer y escribir archivos, además de **Python 3.10+**. Para instalar con `npx` también necesitas Node.js/npm. Elige una de estas cuatro opciones.
 
 ### Opción 1: instalar con `npx skills`
 
@@ -92,6 +92,10 @@ ln -s "$PWD" ~/.claude/skills/job-hunt
 ```
 
 Para Codex, sustituye `~/.claude/skills` por `~/.codex/skills` en las dos últimas líneas. Si el destino ya existe, revisa primero la instalación existente.
+
+### Opción 4: instalar desde SkillHub o ClawHub
+
+Abre la ficha de job-hunt en [SkillHub](https://skillhub.cn/skills/user_f486c577/best-job-hunt) o [ClawHub](https://clawhub.ai/dong845/skills/job-hunt) y sigue el proceso de instalación de la plataforma.
 
 ### Primer uso: deja la configuración al agente
 

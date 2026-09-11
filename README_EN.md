@@ -58,7 +58,7 @@ After a mock interview, two independent assessments review the quality of your a
 
 ## Install
 
-You need an agent environment that can run local commands and read and write files, plus **Python 3.10+**. Installation with `npx` also requires Node.js/npm. Choose one of the three paths below.
+You need an agent environment that can run local commands and read and write files, plus **Python 3.10+**. Installation with `npx` also requires Node.js/npm. Choose one of the four paths below.
 
 ### Option 1: install with `npx skills`
 
@@ -92,6 +92,10 @@ ln -s "$PWD" ~/.claude/skills/job-hunt
 ```
 
 For Codex, replace `~/.claude/skills` with `~/.codex/skills` in the last two lines. If the destination already exists, inspect the existing installation first.
+
+### Option 4: install from SkillHub or ClawHub
+
+Open the job-hunt listing on [SkillHub](https://skillhub.cn/skills/user_f486c577/best-job-hunt) or [ClawHub](https://clawhub.ai/dong845/skills/job-hunt), then follow that platform's installation flow.
 
 ### First use: let the agent prepare the environment
 

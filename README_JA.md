@@ -58,7 +58,7 @@ CV の編集では、プロフィール、あなたの回答、論文、プロ�
 
 ## インストール
 
-ローカルコマンドの実行とファイルの読み書きができるエージェント環境、および **Python 3.10+** が必要です。`npx` を使う場合は Node.js/npm も必要です。次の三つから一つを選んでください。
+ローカルコマンドの実行とファイルの読み書きができるエージェント環境、および **Python 3.10+** が必要です。`npx` を使う場合は Node.js/npm も必要です。次の四つから一つを選んでください。
 
 ### 方法 1：`npx skills` でインストール
 
@@ -92,6 +92,10 @@ ln -s "$PWD" ~/.claude/skills/job-hunt
 ```
 
 Codex では最後の二行の `~/.claude/skills` を `~/.codex/skills` に置き換えます。リンク先が既に存在する場合は、既存のインストールを確認してください。
+
+### 方法 4：SkillHub または ClawHub からインストール
+
+[SkillHub](https://skillhub.cn/skills/user_f486c577/best-job-hunt) または [ClawHub](https://clawhub.ai/dong845/skills/job-hunt) で job-hunt の掲載ページを開き、各プラットフォームの案内に従ってインストールしてください。
 
 ### 初回利用：環境設定は Agent に任せる
 

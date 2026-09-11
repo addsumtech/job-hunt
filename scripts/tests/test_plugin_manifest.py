@@ -25,6 +25,10 @@ SKILL = ROOT / "SKILL.md"
 READMES = [ROOT / "README.md"] + [
     ROOT / f"README_{lang}.md" for lang in ("EN", "JA", "KO", "ES")
 ]
+HUB_LISTINGS = (
+    "https://skillhub.cn/skills/user_f486c577/best-job-hunt",
+    "https://clawhub.ai/dong845/skills/job-hunt",
+)
 
 
 def _json(p):
@@ -101,6 +105,14 @@ def test_both_install_paths_are_documented(readme):
         f"{readme.name} omits the plugin path")
     assert "/plugin install job-hunt@job-hunt" in text, (
         f"{readme.name} omits the install line; the marketplace add alone does nothing")
+
+
+@pytest.mark.parametrize("readme", READMES, ids=lambda p: p.name)
+def test_the_readme_links_to_supported_skill_hubs(readme):
+    """Listing pages are additional distribution paths, so docs must not drift."""
+    text = readme.read_text(encoding="utf-8")
+    for url in HUB_LISTINGS:
+        assert url in text, f"{readme.name} omits {url}"
 
 
 def test_the_repository_url_matches_the_documented_install_target():

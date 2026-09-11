@@ -58,7 +58,7 @@ Agent 会先确认你想做什么、准备在哪个地区求职，再补问需�
 
 ## 安装
 
-需要能够运行本地命令、读写文件的 Agent 环境，以及 **Python 3.10+**。使用 `npx` 安装时还需要 Node.js/npm。下面三种安装方式任选一种。
+需要能够运行本地命令、读写文件的 Agent 环境，以及 **Python 3.10+**。使用 `npx` 安装时还需要 Node.js/npm。下面四种安装方式任选一种。
 
 ### 方式一：通过 `npx skills` 安装
 
@@ -92,6 +92,10 @@ ln -s "$PWD" ~/.claude/skills/job-hunt
 ```
 
 使用 Codex 时，将最后两行的 `~/.claude/skills` 换成 `~/.codex/skills`。目标位置已经存在时，先检查已有安装。
+
+### 方式四：通过 SkillHub 或 ClawHub 安装
+
+在 [SkillHub](https://skillhub.cn/skills/user_f486c577/best-job-hunt) 或 [ClawHub](https://clawhub.ai/dong845/skills/job-hunt) 打开 job-hunt 的页面，按平台提示安装。
 
 ### 首次使用：让 Agent 完成环境配置
 

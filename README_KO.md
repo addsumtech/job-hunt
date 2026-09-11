@@ -58,7 +58,7 @@ Agent는 먼저 이번 작업과 지원 지역을 확인한 뒤 필요한 자료
 
 ## 설치
 
-로컬 명령을 실행하고 파일을 읽고 쓸 수 있는 에이전트 환경과 **Python 3.10+**가 필요합니다. `npx` 설치에는 Node.js/npm도 필요합니다. 아래 세 가지 중 하나를 선택하세요.
+로컬 명령을 실행하고 파일을 읽고 쓸 수 있는 에이전트 환경과 **Python 3.10+**가 필요합니다. `npx` 설치에는 Node.js/npm도 필요합니다. 아래 네 가지 중 하나를 선택하세요.
 
 ### 방법 1: `npx skills`로 설치
 
@@ -92,6 +92,10 @@ ln -s "$PWD" ~/.claude/skills/job-hunt
 ```
 
 Codex에서는 마지막 두 줄의 `~/.claude/skills`를 `~/.codex/skills`로 바꿉니다. 대상 경로가 이미 존재하면 기존 설치를 먼저 확인하세요.
+
+### 방법 4: SkillHub 또는 ClawHub에서 설치
+
+[SkillHub](https://skillhub.cn/skills/user_f486c577/best-job-hunt) 또는 [ClawHub](https://clawhub.ai/dong845/skills/job-hunt)에서 job-hunt 등록 페이지를 열고 해당 플랫폼의 설치 안내를 따르세요.
 
 ### 처음 사용: 환경 설정은 Agent에게 맡기세요
 
