@@ -44,15 +44,67 @@ Keep a collection manifest with the requested count, maximum rounds, completed
 round workspaces, deduplicated posting URLs/IDs, and shortfall reasons. Continue
 independent sources while a site awaits login or recovery. Refusal locks and
 per-consultation limits survive round changes; a new folder never resets them.
-Stop when the target is met, the agreed rounds are exhausted, or available sources
-cannot add useful evidence. Report the actual count and remaining gap honestly.
+Reaching the collection target ends lead gathering, not the consultation. Before
+final delivery, read the full description for every retained posting, including
+each city/ID under a grouped title. Continue within the existing source caps;
+never reset a stop lock or raise a cap to finish. If agreed rounds are exhausted,
+report that the work is incomplete rather than calling unread leads complete.
 
 Each round still passes its own shortlist and evidence gates. The final client
 report combines unique roles across those verified rounds, explains priorities
 and tradeoffs, gives concrete application actions and role-specific interview
-preparation, and distinguishes card-only leads from detail-reviewed candidates.
+preparation. A complete report contains detail-reviewed postings; a genuinely
+unavailable detail can remain only as an explicitly unresolved lead with a
+captured access failure and a visible reason. Unattempted cards belong in the
+research workspace, not a finished report. An explicitly requested preliminary
+shortlist may include them; record the user request as described below.
 Undisclosed or overlapping salary ranges are confirmation items, not proof that
 a pay floor is satisfied. Do not create a tailored CV for every lead by default.
+
+### Final detail coverage and collection delivery
+
+`brief.report_scope` defaults to `complete`. Use `preliminary` only when the user
+explicitly asks for an initial/partial list or chooses to publish the current
+partial report; record their request in `brief.preliminary_request` and explain
+which requirements remain unchecked. Do not choose this mode to avoid more work.
+
+Read every retained description before completing the report. The 1–5
+`max_match_reviews` cap limits **requirement-by-requirement CV mappings**, not the
+number of retained descriptions to read. Once a full description is read, a row
+outside that mapping batch uses `basis: detail_unmapped`, `recommendation: review`,
+empty `requirements`, no `alignment`, and `job_evidence` quoting its duties and
+requirements from the journaled detail. It does not count against the mapping cap
+and cannot become a default recommendation. Use later bounded rounds for more
+CV mappings when the request requires them. Never infer that an unmapped row is
+unsuitable; say what has and has not been checked.
+
+If a genuine access failure prevents a read, preserve the failed capture and add
+`shortlist.yaml.detail_unavailable: [{id: site-id, reason: <reader-facing reason>,
+capture: raw/<failed-capture>}]`. Show that exact reason beside the job in the
+report. A site-level login or risk-control stop can explain affected rows without
+retrying each one. Time spent, a reached job count or the mapping cap is not an
+access failure. Do not recommend an unresolved row. Closed roles stay out of the
+client report as required by `references/report-writing.md`.
+
+For one round, `deliver.py` checks every row in its shortlist. For a consultation
+spanning several rounds, put `report.md` and this manifest in a delivery workspace:
+
+```yaml
+# collection.yaml — private delivery inputs; not a client artifact
+report_scope: complete
+rounds:
+  - workspace: ../round-01
+    ids: [site-123, site-456]  # only final retained rows; omit ids to include all
+  - workspace: ../round-02
+    ids: [site-789]
+```
+
+Use existing round workspaces with passing, current shortlist checks. The manifest
+selects the final set without deleting earlier search evidence. `deliver.py`
+checks each selected ID, its full-description evidence (or captured failure), and
+its link in the aggregate report. It refuses an unread card even if every search
+round previously passed. The collection's report scope governs all its rounds;
+a preliminary collection also needs its own `preliminary_request`.
 
 Mock interview remains opt-in: include preparation in the report, then enter the
 interview mode and its interactive coaching workflow only when the user asks to
@@ -680,15 +732,17 @@ second, so it belongs in the shortfall, not in the list.
 
 ## Step 8 — detail fetch and CV mapping, bounded
 
-Fetch detail pages **only** for rows in the top three verdict bands
+For initial triage, fetch detail pages **only** for rows in the top three verdict bands
 (`strong_apply`, `worth_applying`, `stretch`), and no more than
 `brief.max_match_reviews` rows may enter CV matching. Select the most promising card
 leads first; a `stretch` card is a valid detail candidate precisely because its
 requirements are still unknown. `likely_screen_out` and `blocked` rows stay card-level
-and are labelled **未取详情** (English round: **no detail fetched**) in `shortlist.md`.
-The user can name one to fetch anyway, which is recorded in
-`shortlist.yaml.detail_fetch_exceptions` with a reason, but it does not bypass the
-matching-review cap.
+and are labelled **未取详情** (English round: **no detail fetched**) in an initial `shortlist.md`.
+Before complete-report delivery, either exclude such a row or read its description
+if it is still useful to retain. A final-report completeness read, like a user-named
+fetch, is recorded in
+`shortlist.yaml.detail_fetch_exceptions` with a reason, but it does not bypass source limits or the
+matching-review cap. Unmapped reads use `detail_unmapped` as described above.
 
 Each detail call goes through `scripts/check_opencli_result.py` too, and its stdout
 lands in `raw/<site>-detail-<id>.json`. For every fetched detail selected for mapping,
@@ -739,7 +793,7 @@ quotes verbatim; the schema is deliberately compact so it can be audited:
 profile_snapshot: candidate-profile.yaml
 rows:
   - id: 51job-173199597
-    basis: detail                    # detail | card
+    basis: detail                    # detail | detail_unmapped | card
     recommendation: recommend        # recommend | review
     requirements:
       - id: M1
@@ -967,8 +1021,9 @@ Do not automatically start a mock interview or another mode.
       verdict and effort within the remaining order.
 - [ ] Cards that could not support any level were dropped and named in
       `shortfall_reason` — not listed as `insufficient_evidence` rows.
-- [ ] Detail fetched only for `strong_apply` / `worth_applying` / `stretch`, and no
-      more than `max_match_reviews` entries have CV mappings.
+- [ ] Detail reads outside `strong_apply` / `worth_applying` / `stretch` have a
+      documented user-named or final-report completeness exception, and no more
+      than `max_match_reviews` entries have CV mappings.
 - [ ] Every high verdict has a complete `candidate-match.yaml` entry, raw-detail
       quotes, frozen-profile pointers, and its exact localized summary beside the link.
 - [ ] `references/source-policy.md` re-read if any action felt like it might be
@@ -978,6 +1033,9 @@ Do not automatically start a mock interview or another mode.
 - [ ] `scripts/check_no_write.py`, `scripts/check_candidate_match.py`,
       `scripts/lint_no_prediction.py`, and `scripts/check_shortlist.py` all exited 0,
       and the completion message cites their `journal.jsonl` receipts.
+- [ ] Every final retained posting has a full description or a captured access-failure
+      exception with its reason visible; `deliver.py` checked all collection rounds.
+      Preliminary delivery is based on an explicit user request, not a reached cap.
 - [ ] No chaining into `apply`. The shortlist is handed back for a person to choose.
 
 **Voice.** The shortlist is a document the user reads, not a dump. `SKILL.md`, "How this skill writes to the user", governs its prose — every row's provenance visible, what was not searched said out loud, no closing offer to help further.

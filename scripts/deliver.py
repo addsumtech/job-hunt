@@ -23,6 +23,7 @@ from urllib.parse import unquote, urlsplit
 
 import journal
 import lint_no_prediction
+import vocab
 from render_cv import has_rtl
 from pdf_glyphs import glyph_findings
 
@@ -245,42 +246,137 @@ def writable(directory: pathlib.Path) -> tuple[bool, str]:
         return False, str(exc)
 
 
-def _discover_handoff_problem(workspace: pathlib.Path) -> str:
-    """Refuse a discover report that skipped its machine-readable shortlist.
-
-    Delivery is deliberately not a general gate runner. Discover is the one
-    exception worth recognising here: without a checked `shortlist.yaml` and
-    `shortlist.md`, the report can look complete while omitting the actionable
-    per-posting URLs and the evidence chain behind them.
-    """
-    if journal.current_mode(workspace) != "discover":
-        return ""
+def _checked_discover_round(workspace: pathlib.Path) -> tuple[dict, str]:
     missing = [name for name in ("shortlist.yaml", "shortlist.md")
                if not (workspace / name).is_file()]
     if missing:
-        return "discover requires " + ", ".join(missing)
+        return {}, "discover requires " + ", ".join(missing)
     receipts = journal.read_receipts(workspace, "check_shortlist")
     if not receipts:
-        return "discover requires a check_shortlist receipt before delivery"
+        return {}, "discover requires a check_shortlist receipt before delivery"
     last = receipts[-1]
     if not journal.receipt_intact(last) or last.get("verdict") != "pass":
-        return "discover requires the latest intact check_shortlist receipt to pass"
+        return {}, "discover requires the latest intact check_shortlist receipt to pass"
+    for name, expected in last.get("input_hashes", {}).items():
+        if pathlib.Path(name).name == "journal.jsonl":
+            continue  # Appending the receipt changes its own journal, as in check_shortlist.
+        if pathlib.Path(name).is_absolute() or ".." in pathlib.Path(name).parts:
+            return {}, f"discover receipt input is outside the round: {name}"
+        path = workspace / name
+        if not path.is_file() or journal.sha256_file(path) != expected:
+            return {}, f"discover check_shortlist receipt is stale: {name}"
     try:
-        shortlist = journal.load_yaml(workspace / "shortlist.yaml", dict)
+        return journal.load_yaml(workspace / "shortlist.yaml", dict), ""
     except journal.YamlUnreadable as exc:
-        return f"discover shortlist.yaml cannot be read: {exc.reason}"
-    required = {
-        stem for row in (shortlist.get("rows") or []) if isinstance(row, dict)
-        if (stem := _url_stem(str(row.get("url") or "")))
-    }
+        return {}, f"discover shortlist.yaml cannot be read: {exc.reason}"
+
+
+def _unavailable_detail_supported(workspace: pathlib.Path, row: dict,
+                                  exception: dict, report: str) -> bool:
+    """An access failure is a traceable exception, not a substitute for doing the read."""
+    from check_candidate_match import _safe_path, _record_mentions_row
+    from record_browser_capture import read_retrieval_calls, STOP_CLASSES
+    reason, name = exception.get("reason"), exception.get("capture")
+    if not isinstance(reason, str) or not reason.strip() or reason not in report:
+        return False
+    path = _safe_path(workspace, name, raw=True)
+    if path is None:
+        return False
+    source = path.read_text(encoding="utf-8")
+    for call in read_retrieval_calls(workspace):
+        if (call.get("site") != row.get("source_site")
+                or call.get("classification") in (None, "ok")
+                or name not in [call.get(k) for k in ("stdout_file", "stderr_file", "snapshot_file")]):
+            continue
+        if call.get("classification") in STOP_CLASSES:
+            return True  # A site-level stop prohibits another attempt for each row.
+        if (call.get("command") in ("detail", "job-detail", "job")
+                and _record_mentions_row(call, row, source)):
+            return True
+    return False
+
+
+def _discover_detail_problem(workspace: pathlib.Path, shortlist: dict,
+                             rows: list[dict], report: str, scope_config: dict | None = None) -> str:
+    if not rows:
+        return ""
+    import check_candidate_match as match_gate
+    try:
+        brief = journal.load_yaml(workspace / "brief.yaml", dict)
+    except (OSError, journal.YamlUnreadable) as exc:
+        return f"discover requires readable brief.yaml: {exc}"
+    config = brief if scope_config is None else scope_config
+    scope = config.get("report_scope", "complete")
+    if scope == "preliminary":
+        if not isinstance(config.get("preliminary_request"), str) or not config["preliminary_request"].strip():
+            return "a preliminary report requires the user's explicit request in preliminary_request"
+        return ""
+    if scope != "complete":
+        return f"unknown discover report_scope: {scope!r}"
+    exceptions = {entry.get("id"): entry for entry in shortlist.get("detail_unavailable", [])
+                  if isinstance(entry, dict)} if isinstance(shortlist.get("detail_unavailable", []), list) else {}
+    for row in rows:
+        if row.get("quality") == "complete":
+            continue
+        exception = exceptions.get(row.get("id"), {})
+        if row.get("verdict") in vocab.VERDICTS[:2] or not _unavailable_detail_supported(
+                workspace, row, exception, report):
+            return (f"full description not reviewed for {row.get('id') or row.get('url')}; "
+                    "finish the read, remove the lead from this delivery, or record a "
+                    "captured access failure with its reason visible in the report")
+    try:
+        match, profile, all_rows, brief, _ = match_gate._load_workspace(workspace, need_markdown=False)
+        findings, _ = match_gate.check(workspace, match, profile, all_rows, brief,
+                                       verify_rendered=False)
+    except (OSError, ValueError, journal.YamlUnreadable) as exc:
+        return f"discover detail evidence cannot be checked: {exc}"
+    if findings:
+        return "discover detail evidence is incomplete: " + "; ".join(findings)
+    return ""
+
+
+def _discover_handoff_problem(workspace: pathlib.Path) -> str:
+    """Check every retained posting, including all rounds in a collection report."""
+    collection_path = workspace / "collection.yaml"
+    if journal.current_mode(workspace) != "discover" and not collection_path.exists():
+        return ""
     try:
         report_source = (workspace / "report.md").read_text(encoding="utf-8")
-    except OSError as exc:
-        return f"discover report.md cannot be read: {exc}"
-    missing = sorted(required - clickable_urls(report_source))
-    if missing:
-        return ("discover report.md omits clickable direct posting link(s): "
-                + ", ".join(missing))
+        if collection_path.exists():
+            collection = journal.load_yaml(collection_path, dict)
+            rounds = collection.get("rounds")
+            if not isinstance(rounds, list) or not rounds:
+                return "collection.yaml requires a nonempty rounds list"
+        else:
+            rounds = [{"workspace": "."}]
+        required = set()
+        for item in rounds:
+            if not isinstance(item, dict) or not isinstance(item.get("workspace"), str):
+                return "each collection round requires a workspace path"
+            source = (workspace / item["workspace"]).expanduser().resolve()
+            shortlist, problem = _checked_discover_round(source)
+            if problem:
+                return f"{source.name}: {problem}"
+            rows = shortlist.get("rows")
+            if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+                return "discover shortlist rows must be a list of mappings"
+            if "ids" in item:
+                ids = item["ids"]
+                available = {row.get("id") for row in rows}
+                if (not isinstance(ids, list) or not ids or any(not isinstance(i, str) for i in ids)
+                        or len(set(ids)) != len(ids) or not set(ids) <= available):
+                    return "collection round ids must select distinct existing shortlist rows"
+                rows = [row for row in rows if row.get("id") in ids]
+            required.update(stem for row in rows if (stem := _url_stem(str(row.get("url") or ""))))
+            missing = sorted(required - clickable_urls(report_source))
+            if missing:
+                return "discover report.md omits clickable direct posting link(s): " + ", ".join(missing)
+            problem = _discover_detail_problem(source, shortlist, rows, report_source,
+                                               collection if collection_path.exists() else None)
+            if problem:
+                return f"{source.name}: {problem}"
+    except (OSError, UnicodeError, journal.YamlUnreadable) as exc:
+        return f"discover delivery sources cannot be read: {exc}"
     return ""
 
 

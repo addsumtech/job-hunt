@@ -41,13 +41,16 @@ Allowed, capped, and disclosed. Say plainly that account risk is not zero.
   25, 51job at 50, linkedin at 100, upwork at 50.
 - **Detail-page fetch**, and only for rows whose provisional verdict is
   `strong_apply`, `worth_applying` or `stretch`. `likely_screen_out` and `blocked`
-  rows stay card-level and are labelled 未取详情. The user may name an individual
-  row to fetch anyway; that goes in `shortlist.yaml` `detail_fetch_exceptions` with
+  rows stay card-level during initial triage and are labelled 未取详情. Before a
+  complete report, exclude them or read them if they are retained. A user-named
+  fetch or a read needed to complete a retained row goes in `shortlist.yaml` `detail_fetch_exceptions` with
   a reason. `check_shortlist.py` enforces this with `DETAIL_FETCH_OUT_OF_BAND` —
   the cap is a check, not a promise. A separate `brief.yaml.max_match_reviews`
   value from 1 to 5 caps how many fetched details can enter the CV-to-JD matching
   review; `check_candidate_match.py` enforces it. A named fetch does not turn that
-  bounded review into an unbounded one.
+  bounded review into an unbounded one. Full-description reading is separate:
+  `detail_unmapped` retains a verified description without doing a CV mapping.
+  A report target never overrides site caps, stop signals or user recovery.
 - Small-volume capture for the user's own analysis, with source, timestamp and
   read-quality retained on every row.
 - **Stop on any risk-control signal**, for that site, for that round. Do not retry.

@@ -277,3 +277,9 @@ assertion carries a `falsifier` — what a failing output would look like, writt
 down before the run. And each discover fixture replays a capture measured on
 2026-08-09: it shows how the skill reacts to that body, and says nothing about
 what the site returns today.
+
+Complete discovery reports use `modes/discover.md`'s final detail-coverage contract.
+`deliver.py` accepts a private `collection.yaml` with round workspaces and retained
+IDs, checks their current shortlist receipts, and requires full detail evidence or
+captured access failures. `detail_unmapped` separates a verified full read from a
+CV mapping; the per-round mapping cap does not excuse unread final entries.

@@ -30,7 +30,7 @@ Create exactly one `candidate-match.yaml` entry for every `shortlist.yaml` row.
 profile_snapshot: candidate-profile.yaml
 rows:
   - id: site-source-id
-    basis: detail                       # detail | card
+    basis: detail                       # detail | detail_unmapped | card
     recommendation: recommend           # recommend | review
     requirements:
       - id: M1
@@ -109,8 +109,15 @@ not placed ahead of evidence-backed defaults.
 
 `brief.yaml.max_match_reviews` is an integer from 1 to 5. It limits how many full
 details can receive a mapping in one discover round. Follow the source policy's
-separate page and row caps too. A user-named extra detail may be fetched under the
-documented exception process, but it does not permit an unbounded mapping pass.
+separate page and row caps too. Reading a description is separate from mapping it to the CV. Read every posting
+retained in a complete report, within the source caps. A full description awaiting
+that deeper mapping uses `basis: detail_unmapped`, `recommendation: review`, empty
+`requirements`, no `alignment`, and `job_evidence` quotes from the successful
+row-specific detail capture. The gate checks that evidence without counting the
+entry as a mapping or allowing a recommendation. A user-named or final-report
+completeness fetch can use the documented exception process; neither bypasses
+source limits or the mapping cap. See discover mode for complete versus
+explicitly requested preliminary delivery and collection manifests.
 
 Run the render form before writing the shortlist:
 

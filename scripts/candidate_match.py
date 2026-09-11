@@ -13,7 +13,7 @@ import report_locales as locales
 import vocab
 
 
-BASES = ("card", "detail")
+BASES = ("card", "detail_unmapped", "detail")
 RECOMMENDATIONS = ("recommend", "review")
 
 # A recommendation with a full description is more useful than an attractive
@@ -27,6 +27,7 @@ DEFAULT_RECOMMENDATION_VERDICTS = vocab.VERDICTS[:2]
 
 MATCH_TEXT = {
     "zh": {
+        "detail_unmapped": ("完整职位描述已核对；尚未逐项匹配简历，暂不作为推荐投递。"),
         "card": ("简历匹配：仅有职位卡，尚未读取完整要求；"
                  "这是一条待核实线索，不是推荐。"),
         "detail": ("简历匹配（已读取详情）：必备要求强证据 {strong} of {must_total}"
@@ -34,6 +35,8 @@ MATCH_TEXT = {
                    "核心职责已证实 {responsibilities} of {responsibility_total}。"),
     },
     "en": {
+        "detail_unmapped": ("Full job description reviewed; the CV has not yet been mapped "
+                            "requirement by requirement. Not a default recommendation."),
         "card": ("CV match: card data only; the full requirements were not read. "
                  "This is a lead to review, not a recommendation."),
         "detail": ("CV match (detail reviewed): {strong} of {must_total} must-haves "
@@ -42,6 +45,8 @@ MATCH_TEXT = {
                    "responsibilities demonstrated."),
     },
     "ja": {
+        "detail_unmapped": ("求人の全文を確認済みです。CVとの要件別の照合は未実施のため、"
+                            "現時点では応募を推薦していません。"),
         "card": ("履歴書との照合：求人カードのみで、完全な要件は未確認です。"
                  "これは確認対象の候補であり、推薦ではありません。"),
         "detail": ("履歴書との照合（詳細確認済み）：必須条件の強い根拠は全{must_total}項目中"
@@ -50,6 +55,8 @@ MATCH_TEXT = {
                    "{responsibilities}項目。"),
     },
     "ko": {
+        "detail_unmapped": ("전체 채용 공고를 확인했습니다. 이력서와 요건별 대조는 아직 "
+                            "진행하지 않았으므로 현재 지원 추천 대상은 아닙니다."),
         "card": ("이력서 대조: 채용 카드만 있으며 전체 요건은 읽지 않았습니다. "
                  "이는 확인할 후보일 뿐 추천이 아닙니다."),
         "detail": ("이력서 대조(상세 확인): 필수 요건의 강한 근거는 총 {must_total}개 중 "
@@ -58,6 +65,8 @@ MATCH_TEXT = {
                    "{responsibility_total}개 중 {responsibilities}개."),
     },
     "es": {
+        "detail_unmapped": ("Descripción completa revisada; todavía no se ha contrastado "
+                            "el CV requisito por requisito. No es una recomendación de candidatura."),
         "card": ("Correspondencia con el CV: solo hay datos de la ficha; no se han "
                  "leído los requisitos completos. Es una pista para revisar, no una "
                  "recomendación."),
@@ -195,7 +204,7 @@ def render_summary(match: dict, lang: str) -> str:
         raise ValueError(f"unsupported report language: {lang!r}")
     match = match if isinstance(match, dict) else {}
     basis = match.get("basis")
-    template = MATCH_TEXT[lang]["detail" if basis == "detail" else "card"]
+    template = MATCH_TEXT[lang][basis if basis in BASES else "card"]
     if basis != "detail":
         return template
     counts = requirement_counts(match)

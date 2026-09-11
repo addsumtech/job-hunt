@@ -51,6 +51,14 @@ section names and working page links. Put comparable jobs in a table or use
 consistent field labels. Explain each count's unit and exclusions once near the
 count; do not make the reader reconcile postings, grouped roles and closed jobs.
 
+Before calling a consultation complete, read every retained posting in full.
+The initial shortlist and the final report have different completeness standards:
+unattempted summary cards are research leads, not completed report entries.
+Keep an unavailable description only with a captured access failure, its visible
+reason and an unresolved status. An explicitly requested preliminary delivery
+may retain cards. Follow discover mode and `deliver.py` for the checked inputs;
+reading a description does not imply a completed CV-to-requirement mapping.
+
 Deduplicate repeated captures of the same source ID. In the reading directory,
 exact company-and-full-title matches may share one row: list all cities and keep
 every distinct posting link, labeled with its city and posting ID. Keep the source

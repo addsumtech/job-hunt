@@ -252,3 +252,67 @@ def test_partial_knockout_cannot_be_treated_as_a_small_core_gap():
     match["requirements"][0].update(
         screening="knockout", match="partial", recency="current", effort="quick")
     assert "knockout_not_strong" in matching.recommendation_failures(row, match)
+
+
+def test_full_description_without_cv_mapping_has_its_own_verified_state(tmp_path, capsys):
+    workspace = fx.build_workspace(tmp_path)
+    document = load_match(workspace)
+    entry = document["rows"][0]
+    evidence = entry["requirements"][0]["job_evidence"]
+    entry.update(basis="detail_unmapped", recommendation="review", requirements=[], job_evidence=evidence)
+    entry.pop("alignment")
+    save_match(workspace, document)
+    shortlist = yaml.safe_load((workspace / "shortlist.yaml").read_text())
+    shortlist["rows"][0]["verdict"] = "stretch"
+    (workspace / "shortlist.yaml").write_text(yaml.safe_dump(shortlist, allow_unicode=True))
+    brief = yaml.safe_load((workspace / "brief.yaml").read_text())
+    brief["max_match_reviews"] = 1
+    (workspace / "brief.yaml").write_text(yaml.safe_dump(brief))
+    code, captured = run(workspace, capsys, "--render", "--lang", "en")
+    assert code == 0, captured.out
+    assert matching.render_summary(entry, "en") in captured.out
+    assert "Full job description reviewed" in captured.out
+    for lang in ("zh", "en", "ja", "ko", "es"):
+        assert prediction.scan_text(matching.render_summary(entry, lang), "shortlist.md") == []
+
+    entry["job_evidence"] = [{"file": "raw/51job-1.json", "quote": "高级算法工程师"}]
+    save_match(workspace, document)
+    code, captured = run(workspace, capsys, "--render")
+    assert code == 1 and "JOB_EVIDENCE_NOT_DETAIL" in captured.out
+
+
+def test_unmapped_detail_cannot_claim_a_recommendation_or_cv_alignment(tmp_path, capsys):
+    workspace = fx.build_workspace(tmp_path)
+    document = load_match(workspace)
+    document["rows"][0]["basis"] = "detail_unmapped"
+    document["rows"][0]["job_evidence"] = document["rows"][0]["requirements"][0]["job_evidence"]
+    save_match(workspace, document)
+    code, captured = run(workspace, capsys, "--render")
+    assert code == 1
+    assert "UNMAPPED_DETAIL_HAS_MATCH" in captured.out
+    assert "RECOMMENDATION_NOT_READY" in captured.out
+
+
+def test_read_descriptions_do_not_consume_the_cv_mapping_cap(tmp_path):
+    workspace = fx.build_workspace(tmp_path)
+    document = load_match(workspace)
+    shortlist = yaml.safe_load((workspace / "shortlist.yaml").read_text())
+    profile = yaml.safe_load((workspace / "candidate-profile.yaml").read_text())
+    brief = yaml.safe_load((workspace / "brief.yaml").read_text())
+    brief["max_match_reviews"] = 1
+    row = shortlist["rows"][0]
+    entry = document["rows"][0]
+    # Six separate retained records, each quoting the same fixture role's full
+    # retrieval. This isolates the mapping budget from network/site row budgets.
+    shortlist["rows"] = []
+    document["rows"] = []
+    for index in range(6):
+        r, m = copy.deepcopy(row), copy.deepcopy(entry)
+        r.update(id=f"51job-copy{index}", verdict="stretch")
+        m.update(id=r["id"], basis="detail_unmapped", recommendation="review", requirements=[],
+                 job_evidence=entry["requirements"][0]["job_evidence"])
+        m.pop("alignment")
+        shortlist["rows"].append(r)
+        document["rows"].append(m)
+    findings, _ = gate.check(workspace, document, profile, shortlist, brief, verify_rendered=False)
+    assert findings == []

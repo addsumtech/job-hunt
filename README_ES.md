@@ -30,7 +30,7 @@ Dale al agente tus objetivos, tu CV o el enlace de una oferta. Comparará los re
 |---|---|---|
 | **discover · Buscar ofertas** | Quieres encontrar puestos en tu área de interés | Lista de ofertas, enlaces originales y orientación inicial |
 | **assess · Valorar la candidatura** | Tienes una oferta y quieres decidir si merece dedicarle tiempo | Requisitos vinculados a evidencias, condiciones excluyentes, carencias y orientación |
-| **apply · Preparar documentos** | Has elegido un puesto y necesitas materiales adaptados | CV, carta de presentación opcional, registros de revisión y guía de preparación para la entrevista |
+| **apply · Crear el CV y preparar la candidatura** | Has elegido un puesto y necesitas materiales adaptados | CV, carta de presentación opcional, registros de revisión y guía de preparación para la entrevista |
 | **interview · Practicar** | Tienes una oferta y un CV y quieres ensayar tus respuestas | Una ronda de entrevista, transcripción, dos evaluaciones independientes y cuestiones pendientes |
 
 Puedes usar cada modo por separado. Al terminar una ronda, el agente propone los siguientes pasos y tú decides si continúas. Tú presentas la candidatura con los documentos terminados.
@@ -46,7 +46,11 @@ Usa job-hunt para hacer una entrevista técnica simulada a partir de esta oferta
 
 El agente confirma primero la tarea y el mercado de destino, y después pide los materiales y las preferencias que falten.
 
-## Cómo prepara tu candidatura
+## Crea tu CV en chino o inglés y prepara tu candidatura
+
+Puedes partir de un CV existente o facilitar tu formación, experiencia laboral y proyectos para que el agente organice un primer borrador. Después adapta el contenido al puesto elegido. Ofrece chino, inglés y los demás idiomas compatibles, con archivos Word editables y PDF maquetados.
+
+Un informe completo comprueba la descripción íntegra de cada oferta que conserva. Si no se puede acceder a ella, indica el motivo y deja la oferta pendiente de verificar. Los resúmenes sirven para la selección inicial; alcanzar un número de ofertas no completa la investigación. Puedes pedir expresamente una lista preliminar.
 
 Antes de editar el CV, el agente comprueba tu experiencia en el perfil, tus respuestas, artículos y proyectos. Ajusta el orden y la redacción, y enumera los puntos que necesitan más información. Trabaja sobre una copia y conserva el perfil original.
 
@@ -57,6 +61,25 @@ Un CV convencional pasa por tres revisiones independientes de IA. El revisor ATS
 Antes de entregar los documentos, el agente revisa todas las páginas de Word/PDF frente a la plantilla proporcionada y tus cambios posteriores: fuentes y tamaños, márgenes, líneas de los títulos, alineación de fechas, espaciado, orden del contenido y paginación. Las páginas sin revisar o las diferencias de formato pendientes impiden dar el trabajo por terminado; los archivos modificados se revisan de nuevo.
 
 Después de una entrevista simulada, dos evaluaciones independientes revisan la calidad de las respuestas y su respaldo factual. La devolución indica qué detalles conviene añadir y qué frases del CV necesitan cambios.
+
+## Ejemplos de CV e informe
+
+### CV en inglés
+
+Imagen obtenida de un CV ficticio en PDF. Los nombres, centros, empresas, proyectos y cifras son ilustrativos. La versión china aparece en el [README en chino](README.md).
+
+<p align="center">
+  <a href="docs/assets/examples/cv-en.png"><img src="docs/assets/examples/cv-en.png" width="680" alt="CV ficticio en inglés con formación, experiencia, prácticas, proyectos y habilidades"></a>
+</p>
+
+### Extracto del informe de búsqueda（en inglés）
+
+Extracto anonimizado y traducido al inglés de una búsqueda real del 11 de septiembre de 2026. Muestra prioridades, experiencia relevante, evidencias pendientes y preparación. Conserva el ejemplo histórico, con algunas ofertas que solo tenían un resumen; el proceso actual exige comprobar cada descripción antes de una entrega completa. La experiencia del CV ficticio no se utilizó para estas valoraciones. Haz clic en una imagen para verla a tamaño completo.
+
+<p align="center">
+  <a href="docs/assets/examples/report-en-01.png"><img src="docs/assets/examples/report-en-01.png" width="49%" alt="Informe anonimizado en inglés: prioridades y puestos seleccionados"></a>
+  <a href="docs/assets/examples/report-en-02.png"><img src="docs/assets/examples/report-en-02.png" width="49%" alt="Informe anonimizado en inglés: análisis de puestos, carencias y preparación"></a>
+</p>
 
 ## Instalación
 

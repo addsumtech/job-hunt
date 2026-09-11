@@ -41,8 +41,14 @@ history. Do not put a user's original reference in the repository when adapting
 this layout. Inspect the final export, not only the Word editing view: paragraph
 markers and pagination squares are non-printing UI aids, not resume bullets.
 
-A supplied template takes precedence over these default fonts and sizes. Inspect
-its document defaults, styles and direct run formatting, including the name font
+A supplied template takes precedence over these default fonts and sizes.
+For translated versions of the same example, reuse its approved template, section
+order, paragraph styles, margins, rules and date columns. Translate the content
+inside that layout; do not switch the English version to a different default
+template. Use concise, faithful wording where English runs longer and inspect
+both final exports together without stretching preview images or shrinking text.
+
+Inspect its document defaults, styles and direct run formatting, including the name font
 and mixed body sizes. Preserve the actual font families (Songti SC is not SimSun)
 and remove inherited theme overrides when setting them. Verify the fonts embedded
 in the exported PDF; readable Chinese alone does not prove template fidelity.

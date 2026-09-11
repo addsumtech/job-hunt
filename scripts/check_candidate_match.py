@@ -437,6 +437,9 @@ def check(workspace: pathlib.Path, match_document: dict, profile: dict, shortlis
             findings.append(f"MATCH_REQUIREMENTS_INVALID: {identifier!r} requirements must be a list")
             requirements = []
         if basis == "card":
+            if row.get("quality") == "complete":
+                findings.append(f"CARD_BASIS_STALE: {identifier!r} has a full description; "
+                                "use detail_unmapped or a complete detail mapping")
             if recommendation == "recommend":
                 findings.append(f"CARD_CANNOT_RECOMMEND: {identifier!r} has only card data; "
                                 "read a full detail before making it a default recommendation")
@@ -446,6 +449,14 @@ def check(workspace: pathlib.Path, match_document: dict, profile: dict, shortlis
             if match.get("alignment") is not None:
                 findings.append(f"CARD_ALIGNMENT_UNVERIFIED: {identifier!r} has role alignment "
                                 "without a full job description")
+        elif basis == "detail_unmapped":
+            if row.get("quality") != "complete":
+                findings.append(f"DETAIL_MATCH_INCOMPLETE: {identifier!r} has no complete description")
+            if recommendation != "review" or requirements or match.get("alignment") is not None:
+                findings.append(f"UNMAPPED_DETAIL_HAS_MATCH: {identifier!r} must remain review "
+                                "with no requirement matches or alignment until mapped")
+            findings.extend(_check_job_evidence(match.get("job_evidence"), None, context,
+                                                row, f"{identifier!r} full description"))
         elif basis == "detail":
             if row.get("quality") != "complete":
                 findings.append(f"DETAIL_MATCH_INCOMPLETE: {identifier!r} is detail-matched but "

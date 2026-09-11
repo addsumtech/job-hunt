@@ -30,7 +30,7 @@ Give the agent your goals, CV or a job link. It checks the requirements against 
 |---|---|---|
 | **discover** | You have a direction and want roles worth exploring | A shortlist with original posting links and initial advice |
 | **assess** | You have a posting and want to decide whether to invest time | Requirements mapped to evidence, hard barriers, gaps, and application advice |
-| **apply** | You have chosen a role and need targeted materials | A tailored CV, optional cover letter, review records, and an interview brief |
+| **apply · Create your CV and application** | You have chosen a role and need targeted materials | A Chinese or English CV in Word/PDF, optional cover letter, review records, and an interview brief |
 | **interview** | You have a posting and CV and want to practise | One mock round, a transcript, two independent assessment passes, and open questions |
 
 Use each mode on its own. After a round, the agent suggests next steps and you choose whether to continue. You submit the finished application.
@@ -46,7 +46,11 @@ Use job-hunt. Run a technical mock interview based on this posting and my CV.
 
 The agent first confirms your task and target market, then asks for any missing materials or preferences.
 
-## Preparing your application
+## Create a Chinese or English CV and prepare your application
+
+Start with an existing CV, or provide your education, work and project experience so the agent can organize a first draft. It then tailors the content to your target role. Chinese, English and the other supported languages are available, with editable Word files and typeset PDFs.
+
+A complete career report checks the full description of every retained posting. If a description cannot be accessed, the report states the reason and marks the lead unresolved. List summaries support initial screening; reaching a target count does not make them complete research. You can explicitly request a preliminary shortlist first.
 
 The agent checks your experience against your profile, answers, papers and projects before editing the CV. It adjusts the order and wording, and lists claims that need more evidence. Edits use a copy of your profile; the original stays available.
 
@@ -57,6 +61,25 @@ A standard CV receives three independent AI reviews. The ATS reviewer checks key
 Before delivery, the agent reviews every Word/PDF page against any supplied template and your later changes: fonts and sizes, margins, heading rules, date alignment, spacing, content order and pagination. Unreviewed pages or unresolved layout differences prevent completion; changed files must be reviewed again.
 
 After a mock interview, two independent assessments review the quality of your answers and their factual support. The feedback identifies details to add and CV wording to revise.
+
+## CV and report examples
+
+### English CV
+
+This image is rendered from a fictional CV PDF. Names, institutions, employers, projects and figures are illustrative. The [Chinese README](README.md) shows the Chinese version.
+
+<p align="center">
+  <a href="docs/assets/examples/cv-en.png"><img src="docs/assets/examples/cv-en.png" width="680" alt="Fictional English CV with education, work experience, internships, projects and skills"></a>
+</p>
+
+### Career report excerpt
+
+An anonymized English excerpt from a real job search on 11 September 2026, showing priorities, relevant experience, missing evidence and preparation. This historical example preserves some summary-only leads; the current complete-delivery workflow now requires posting-by-posting detail checks. The fictional CV was not used for the report judgments. Click an image for full size.
+
+<p align="center">
+  <a href="docs/assets/examples/report-en-01.png"><img src="docs/assets/examples/report-en-01.png" width="49%" alt="Anonymized English career report with priorities and selected roles"></a>
+  <a href="docs/assets/examples/report-en-02.png"><img src="docs/assets/examples/report-en-02.png" width="49%" alt="Anonymized English career report with role analysis, gaps and preparation"></a>
+</p>
 
 ## Install
 
