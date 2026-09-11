@@ -5,6 +5,7 @@ where a person looks. These tests pin what gets handed over, what deliberately
 does not, and the one thing a PDF pipeline must never do quietly: drop the
 characters it could not render.
 """
+import json
 import pathlib
 import shutil
 import subprocess
@@ -108,6 +109,41 @@ def test_a_pdf_that_dropped_characters_is_deleted_not_delivered(tmp_path, monkey
     assert run(ws, dest) == 2
     assert not (dest / "报告" / "求职建议报告.pdf").exists()
     assert (dest / "报告" / "求职建议报告.md").is_file(), "the Markdown still ships"
+
+
+def test_pdf_symbol_conversion_changes_only_pandoc_text_nodes():
+    document = {
+        "blocks": [{"t": "Para", "c": [
+            {"t": "Str", "c": "\u26a0\ufe0f Warning"},
+            {"t": "Code", "c": [["", [], []], "\u26a0 keep code exact"]},
+            {"t": "Link", "c": [
+                ["", [], []], [{"t": "Str", "c": "\u26a0 link"}],
+                ["https://example.test/\u26a0", ""],
+            ]},
+        ]}],
+    }
+    assert deliver._replace_unsupported_pdf_symbols(document)
+    para = document["blocks"][0]["c"]
+    assert para[0]["c"] == "[!] Warning"
+    assert para[1]["c"][1] == "\u26a0 keep code exact"
+    assert para[2]["c"][1][0]["c"] == "[!] link"
+    assert para[2]["c"][2][0] == "https://example.test/\u26a0"
+
+
+def test_pandoc_symbol_ast_keeps_a_warning_used_only_as_code(tmp_path, monkeypatch):
+    md = tmp_path / "code.md"
+    md.write_text("`\u26a0 keep code exact`\n", encoding="utf-8")
+    document = {"blocks": [{"t": "Para", "c": [
+        {"t": "Code", "c": [["", [], []], "\u26a0 keep code exact"]},
+    ]}]}
+
+    def pandoc_json(cmd, **kwargs):
+        return subprocess.CompletedProcess(cmd, 0, json.dumps(document).encode(), b"")
+
+    monkeypatch.setattr(deliver.subprocess, "run", pandoc_json)
+    ast = deliver._pandoc_json_with_readable_symbols(md)
+    assert ast is not None
+    assert json.loads(ast)["blocks"][0]["c"][0]["c"][1] == "\u26a0 keep code exact"
 
 
 def test_chinese_report_uses_bundled_cjk_renderer_when_pandoc_has_no_cjk_font(tmp_path, monkeypatch):

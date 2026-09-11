@@ -12,6 +12,7 @@ from collections import Counter
 import argparse
 import datetime
 import html
+import json
 import pathlib
 import re
 import shutil
@@ -48,6 +49,60 @@ _MD_BOLD = re.compile(r"\*\*(.+?)\*\*")
 _MD_CODE = re.compile(r"`([^`]+)`")
 _ANGLE_URL = re.compile(r"&lt;(https?://[^\s]+?)&gt;")
 _RAW_ANGLE_URL = re.compile(r"<(https?://[^\s>]+)>")
+_PDF_WARNING = "\u26a0"
+
+
+def _replace_unsupported_pdf_symbols(document: object) -> bool:
+    """Apply the former Pandoc filter to text nodes without changing Markdown.
+
+    Some TeX font stacks cannot render the warning glyph. Pandoc's JSON AST lets
+    this stay exactly scoped to ordinary text (`Str`) nodes: code, URLs and the
+    source Markdown retain their original bytes.
+    """
+    changed = False
+
+    def visit(value: object) -> None:
+        nonlocal changed
+        if isinstance(value, dict):
+            if value.get("t") == "Str" and isinstance(value.get("c"), str):
+                text = value["c"]
+                rendered = text.replace("\u26a0\ufe0f", "[!]").replace(
+                    _PDF_WARNING, "[!]")
+                if rendered != text:
+                    value["c"] = rendered
+                    changed = True
+            for child in value.values():
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+
+    visit(document)
+    return changed
+
+
+def _pandoc_json_with_readable_symbols(md: pathlib.Path) -> bytes | None:
+    """Return a Pandoc AST with unsupported warning symbols made readable."""
+    try:
+        parsed = subprocess.run(
+            ["pandoc", str(md), "-t", "json"], capture_output=True,
+            timeout=180, check=False, cwd=str(md.parent))
+        if parsed.returncode != 0:
+            return None
+        output = parsed.stdout
+        if isinstance(output, bytes):
+            payload = output.decode("utf-8")
+        elif isinstance(output, str):
+            payload = output
+        else:
+            return None
+        document = json.loads(payload)
+        if not isinstance(document, dict):
+            return None
+        _replace_unsupported_pdf_symbols(document)
+        return json.dumps(document, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    except (OSError, UnicodeError, json.JSONDecodeError, subprocess.SubprocessError):
+        return None
 
 
 def has_cjk(text: str) -> bool:
@@ -230,12 +285,13 @@ def _discover_handoff_problem(workspace: pathlib.Path) -> str:
 
 
 def _pandoc(md: pathlib.Path, pdf: pathlib.Path, font: str | dict | None) -> bool:
+    md = md.resolve()
+    pdf = pdf.resolve()
     pdf.unlink(missing_ok=True)
     engine = next((e for e in REPORT_ENGINES if shutil.which(e)), None)
     if engine is None:
         return False
     cmd = ["pandoc", str(md), "-o", str(pdf), f"--pdf-engine={engine}",
-           "--lua-filter", str(pathlib.Path(__file__).with_name("pdf_symbols.lua")),
            "-V", "mainfont=Times New Roman", "-V", "papersize=a4",
            "-V", "geometry:margin=20mm", "-V", "fontsize=12pt"]
     if font:
@@ -248,8 +304,16 @@ def _pandoc(md: pathlib.Path, pdf: pathlib.Path, font: str | dict | None) -> boo
             cmd += ["-V", "header-includes=" +
                     r"\xeCJKsetup{AutoFallBack=true}\setCJKfallbackfamilyfont{\CJKrmdefault}{" + fallback + "}"]
     try:
-        result = subprocess.run(cmd, capture_output=True, timeout=180, check=False)
-    except (OSError, subprocess.SubprocessError):
+        source = md.read_text(encoding="utf-8")
+        kwargs = {"capture_output": True, "timeout": 180, "check": False}
+        if _PDF_WARNING in source:
+            ast = _pandoc_json_with_readable_symbols(md)
+            if ast is None:
+                return False
+            cmd[1:1] = ["--from=json"]
+            kwargs.update(input=ast, cwd=str(md.parent))
+        result = subprocess.run(cmd, **kwargs)
+    except (OSError, UnicodeError, subprocess.SubprocessError):
         return False
     return result.returncode == 0 and pdf.is_file() and pdf.stat().st_size > 0
 
