@@ -29,6 +29,10 @@ HUB_LISTINGS = (
     "https://skillhub.cn/skills/user_f486c577/best-job-hunt",
     "https://clawhub.ai/dong845/skills/job-hunt",
 )
+HUB_BADGES = (
+    "https://img.shields.io/badge/SkillHub-best--job--hunt-e8590c",
+    "https://img.shields.io/badge/ClawHub-job--hunt-0f766e",
+)
 
 
 def _json(p):
@@ -113,9 +117,10 @@ def test_the_readme_links_to_supported_skill_hubs(readme):
     text = readme.read_text(encoding="utf-8")
     release = "https://github.com/addsumtech/job-hunt/releases"
     hero = "docs/assets/hero.jpg"
-    for url in HUB_LISTINGS:
+    for url, badge in zip(HUB_LISTINGS, HUB_BADGES):
         assert url in text, f"{readme.name} omits {url}"
-        assert text.index(release) < text.index(url) < text.index(hero), (
+        assert badge in text, f"{readme.name} does not render {url} as a badge"
+        assert text.index(release) < text.index(badge) < text.index(hero), (
             f"{readme.name} does not place {url} after the release block")
 
 

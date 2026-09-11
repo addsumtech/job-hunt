@@ -12,11 +12,8 @@
   <a href="LICENSE"><img alt="라이선스: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg"></a>
   <img alt="Claude Code 및 Codex용" src="https://img.shields.io/badge/agents-Claude_Code_·_Codex-5b5bd6">
   <a href="https://github.com/addsumtech/job-hunt/releases"><img alt="버전: v1.0.0" src="https://img.shields.io/badge/release-v1.0.0-1f883d"></a>
-</p>
-
-<p align="center">
-  <a href="https://skillhub.cn/skills/user_f486c577/best-job-hunt">SkillHub</a> ·
-  <a href="https://clawhub.ai/dong845/skills/job-hunt">ClawHub</a>
+  <a href="https://skillhub.cn/skills/user_f486c577/best-job-hunt"><img alt="SkillHub: best-job-hunt" src="https://img.shields.io/badge/SkillHub-best--job--hunt-e8590c"></a>
+  <a href="https://clawhub.ai/dong845/skills/job-hunt"><img alt="ClawHub: job-hunt" src="https://img.shields.io/badge/ClawHub-job--hunt-0f766e"></a>
 </p>
 
 <p align="center">
