@@ -39,6 +39,13 @@ is uncertain. If useful, describe the field difference briefly in a note rather
 than attaching “待确认” to the location. Reserve uncertainty labels for a real
 unresolved conflict or missing information that affects the client's decision.
 
+Explain the basis of an ordering instead of only saying “再看某类岗位”. Tie the
+priority to the actual requirements, documented experience and preparation effort.
+Do not infer that a client is mainly To C, or unsuitable for To B/platform work,
+from personal apps or content projects alone. Distinguish using an API from owning
+a platform product's requirements, release, compatibility and enterprise use cases;
+describe which responsibilities are documented and which are still missing.
+
 For a long report, use a short decision summary and a contents page with useful
 section names and working page links. Put comparable jobs in a table or use
 consistent field labels. Explain each count's unit and exclusions once near the
@@ -81,6 +88,40 @@ compressed fragments and smaller type merely to fit more on a page. Check page
 balance, table wrapping, link labels, contents targets and all report versions.
 Paginate directories by the rendered height of whole entries, including their
 links, rather than imposing a fixed number of rows that leaves large blank areas.
+
+Default to a conventional written report, not a presentation deck. Use continuous
+sections and ordinary paragraphs; a new section does not automatically need a new
+page. As a starting point, use 12 pt body text, 14 pt section headings, a 16–18 pt
+document title, 1.35–1.5 line spacing and modest paragraph spacing. Tables may use
+11–12 pt when readable. A later explicit size or supplied report template wins.
+In Markdown, use one H1 for the document title, H2 for sections and H3 for roles
+or subtopics, so the renderer can preserve that visual hierarchy.
+Write contents entries as Markdown links to heading anchors; the bundled renderer
+resolves them after pagination. Do not hard-code page numbers into the source.
+Keep figures at reading size rather than turning counts into oversized statistic
+cards. Use comparison tables where they help, with no card frame around every
+recommendation. A compact linked contents block can share the opening page.
+
+Remove subtitles and lead-ins that explain the document instead of the jobs.
+For example, delete “这些岗位也已读完整要求。表中说明了哪些可以继续了解，哪些暂时不值得
+优先准备。” and “每个方向都给出准备材料与需要回答的问题。” Start with the actual
+judgment, requirement or preparation material. Do not systematically add a gray
+explanatory sentence beneath every heading. Keep dates, genuine evidence-status
+labels and useful source qualifications; they carry information.
+
+If the reader says the type looks large, measure the current body and heading
+sizes before changing them. Reduce oversized headings, card padding and forced
+page breaks first. A proposed larger point size will not make a report denser;
+explain that briefly and use a sensible standard size when the user's number was
+only an example. Preserve substantive analysis during reflow rather than cutting
+it to fit. Inspect the new pages at normal reading scale.
+
+For a revision, maintain a private acceptance list covering every explicit user
+correction, not just the latest one. Check that list against every final PDF and
+the shared skill instructions: prose, layout, fonts, palette, source titles,
+grouped cities and links, excluded closed roles, and justified uncertainty. Rerun
+relevant repository checks and actual report generation; passing text-based tests
+alone cannot establish that the output meets the user's layout requirements.
 
 ## Replace abstraction with something the reader can identify
 
