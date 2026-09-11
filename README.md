@@ -15,6 +15,11 @@
 </p>
 
 <p align="center">
+  <a href="https://skillhub.cn/skills/user_f486c577/best-job-hunt">SkillHub</a> ·
+  <a href="https://clawhub.ai/dong845/skills/job-hunt">ClawHub</a>
+</p>
+
+<p align="center">
   <img src="docs/assets/hero.jpg" alt="简历中的条目分别连接到论文、笔记、证书和项目等来源">
 </p>
 

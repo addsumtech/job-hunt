@@ -15,6 +15,11 @@
 </p>
 
 <p align="center">
+  <a href="https://skillhub.cn/skills/user_f486c577/best-job-hunt">SkillHub</a> ·
+  <a href="https://clawhub.ai/dong845/skills/job-hunt">ClawHub</a>
+</p>
+
+<p align="center">
   <img src="docs/assets/hero.jpg" alt="CV の各記述が、論文、ノート、証明書、プロジェクトなどの根拠につながっている図">
 </p>
 

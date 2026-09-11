@@ -15,6 +15,11 @@
 </p>
 
 <p align="center">
+  <a href="https://skillhub.cn/skills/user_f486c577/best-job-hunt">SkillHub</a> ·
+  <a href="https://clawhub.ai/dong845/skills/job-hunt">ClawHub</a>
+</p>
+
+<p align="center">
   <img src="docs/assets/hero.jpg" alt="CV entries connected to their sources: a paper, notes, certificates and project work">
 </p>
 

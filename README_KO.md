@@ -15,6 +15,11 @@
 </p>
 
 <p align="center">
+  <a href="https://skillhub.cn/skills/user_f486c577/best-job-hunt">SkillHub</a> ·
+  <a href="https://clawhub.ai/dong845/skills/job-hunt">ClawHub</a>
+</p>
+
+<p align="center">
   <img src="docs/assets/hero.jpg" alt="이력서의 각 문장이 논문, 메모, 자격 증명, 프로젝트 등 근거 자료와 연결된 그림">
 </p>
 

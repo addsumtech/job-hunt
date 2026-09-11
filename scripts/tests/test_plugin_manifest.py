@@ -109,10 +109,14 @@ def test_both_install_paths_are_documented(readme):
 
 @pytest.mark.parametrize("readme", READMES, ids=lambda p: p.name)
 def test_the_readme_links_to_supported_skill_hubs(readme):
-    """Listing pages are additional distribution paths, so docs must not drift."""
+    """Listing pages follow the release badge and precede the project image."""
     text = readme.read_text(encoding="utf-8")
+    release = "https://github.com/addsumtech/job-hunt/releases"
+    hero = "docs/assets/hero.jpg"
     for url in HUB_LISTINGS:
         assert url in text, f"{readme.name} omits {url}"
+        assert text.index(release) < text.index(url) < text.index(hero), (
+            f"{readme.name} does not place {url} after the release block")
 
 
 def test_the_repository_url_matches_the_documented_install_target():
