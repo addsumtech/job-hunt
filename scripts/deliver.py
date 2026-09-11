@@ -18,7 +18,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 import journal
 import lint_no_prediction
@@ -236,7 +236,8 @@ def _pandoc(md: pathlib.Path, pdf: pathlib.Path, font: str | dict | None) -> boo
         return False
     cmd = ["pandoc", str(md), "-o", str(pdf), f"--pdf-engine={engine}",
            "--lua-filter", str(pathlib.Path(__file__).with_name("pdf_symbols.lua")),
-           "-V", "mainfont=Times New Roman"]
+           "-V", "mainfont=Times New Roman", "-V", "papersize=a4",
+           "-V", "geometry:margin=20mm", "-V", "fontsize=12pt"]
     if font:
         main = font["main"] if isinstance(font, dict) else font
         cmd += ["-V", f"CJKmainfont={main}"]
@@ -295,13 +296,17 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
 
     page_width, page_height = 595.28, 841.89  # A4 in PDF points
     left, right, top, bottom = 56, 539, 64, 770
-    body_color = (0.14, 0.23, 0.33)
-    heading_color = (0.06, 0.16, 0.26)
-    link_color = (0.11, 0.31, 0.85)
+    body_color = (0.09, 0.10, 0.13)
+    heading_color = (27 / 255, 69 / 255, 194 / 255)
+    link_color = heading_color
     font = pymupdf.Font(style["font"])
     document = pymupdf.open()
     page = None
     cursor = top
+    anchors: dict[str, tuple[int, float]] = {}
+    anchor_counts: dict[str, int] = {}
+    internal_links = []
+    outline = []
 
     def text_width(value: str, size: float) -> float:
         return font.text_length(value, fontsize=size)
@@ -315,9 +320,14 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
                 if text_width(rest, size) <= width:
                     result.append(rest)
                     break
-                end = len(rest)
-                while end > 1 and text_width(rest[:end], size) > width:
-                    end -= 1
+                low, high = 1, len(rest)
+                while low < high:
+                    middle = (low + high + 1) // 2
+                    if text_width(rest[:middle], size) <= width:
+                        low = middle
+                    else:
+                        high = middle - 1
+                end = low
                 split_at = rest.rfind(" ", 1, end + 1)
                 if split_at > 0:
                     result.append(rest[:split_at].rstrip())
@@ -335,25 +345,32 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
         """Paint text through TextWriter, whose CJK metrics stay compact."""
         nonlocal cursor
         height = len(lines) * leading
-        if cursor + height > bottom:
+        if height <= bottom - top and cursor + height > bottom:
             new_page()
-        if cursor + height > bottom:
-            return False
-        assert page is not None
-        writer = pymupdf.TextWriter(page.rect)
-        start = cursor
-        for line in lines:
-            writer.append(pymupdf.Point(x, cursor + size), line, font=font,
-                          fontsize=size)
-            cursor += leading
-        writer.write_text(page, color=color)
-        if link:
-            width = min(right - x, max(text_width(line, size) for line in lines))
-            page.insert_link({
-                "kind": pymupdf.LINK_URI,
-                "from": pymupdf.Rect(x, start, x + width, cursor),
-                "uri": link,
-            })
+        remaining = lines[:]
+        while remaining:
+            count = min(len(remaining), int((bottom - cursor) / leading))
+            if count < 1:
+                new_page()
+                continue
+            chunk, remaining = remaining[:count], remaining[count:]
+            assert page is not None
+            writer = pymupdf.TextWriter(page.rect)
+            start = cursor
+            for line in chunk:
+                writer.append(pymupdf.Point(x, cursor + size), line, font=font,
+                              fontsize=size)
+                cursor += leading
+            writer.write_text(page, color=color)
+            if link:
+                width = min(right - x, max(text_width(line, size) for line in chunk))
+                rect = pymupdf.Rect(x, start, x + width, cursor)
+                if link.startswith("#"):
+                    internal_links.append((page.number, rect, unquote(link[1:])))
+                else:
+                    page.insert_link({"kind": pymupdf.LINK_URI, "from": rect, "uri": link})
+            if remaining:
+                new_page()
         return True
 
     def new_page():
@@ -389,74 +406,113 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
     def add_block(value: str, size: float, color: tuple[float, float, float], gap: float) -> bool:
         nonlocal cursor
         display, links = text_and_links(value)
-        if not write_lines(wrap(display, size, right - left), left, size, color,
-                           size * 1.55):
-            return False
-        cursor += gap
+        standalone_link = _MD_LINK.fullmatch(value.strip()) or _RAW_ANGLE_URL.fullmatch(value.strip())
+        if not standalone_link:
+            if not write_lines(wrap(display, size, right - left), left, size, color,
+                               size * 1.35):
+                return False
+            cursor += gap
         for label, url in links:
-            if not write_lines(wrap(f"{style['link']}{label}", 9.2, right - left), left,
-                               9.2, link_color, 14.5, url):
+            link_label = label if url.startswith("#") else f"{style['link']}{label}"
+            if not write_lines(wrap(link_label, 10.5, right - left), left,
+                               10.5, link_color, 14.5, url):
                 return False
             cursor += 3
         return True
 
-    def add_card(title: str, fields: list[tuple[str, str]]) -> bool:
-        """Draw a short-list row as a card rather than a cramped wide table."""
+    def add_entry(title: str, fields: list[tuple[str, str]]) -> bool:
+        """Flow a wide table entry as labeled paragraphs, without a card frame."""
         nonlocal cursor
-        title_display, title_links = text_and_links(title)
-        title_lines = wrap(title_display, 11, right - left - 18)
-        entries: list[tuple[list[str], str | None]] = []
-        for label, value in fields:
-            display, links = text_and_links(value)
-            entries.append((wrap(f"{label}{style['separator']}{display}", 9.4,
-                                 right - left - 18), None))
-            entries.extend((wrap(f"{style['link']}{link_label}", 9.2, right - left - 18), url)
-                           for link_label, url in links)
-        entries.extend((wrap(f"{style['link']}{link_label}", 9.2, right - left - 18), url)
-                       for link_label, url in title_links)
-        title_height = len(title_lines) * 17
-        body_height = sum(len(lines) * 14.5 + 3 for lines, _ in entries)
-        height = 10 + title_height + 7 + body_height + 8
-        if height > bottom - top:
-            # A single unusually long evidence field still ships, just without
-            # a visual frame that could not fit on one page.
-            if not add_block(title, 11, heading_color, 4):
-                return False
-            return all(add_block(f"{label}{style['separator']}{value}", 9.4, body_color, 3)
-                       for label, value in fields)
-        if cursor + height > bottom:
+        title_display, _ = text_and_links(title)
+        title_height = len(wrap(title_display, 12.6, right - left)) * 17
+        if cursor + title_height + 36 > bottom:
             new_page()
-        assert page is not None
-        start = cursor
-        page.draw_rect(pymupdf.Rect(left, start, right, start + height),
-                       color=(0.79, 0.84, 0.89), fill=(0.98, 0.99, 1.0), width=0.5)
-        page.draw_rect(pymupdf.Rect(left, start, right, start + 10 + title_height),
-                       color=(0.79, 0.84, 0.89), fill=(0.92, 0.95, 0.98), width=0.5)
-        cursor += 7
-        if not write_lines(title_lines, left + 9, 11, heading_color, 17):
+        if not add_block(title, 12.6, heading_color, 5):
             return False
-        cursor += 4
-        for lines, url in entries:
-            color = link_color if url else body_color
-            size = 9.2 if url else 9.4
-            if not write_lines(lines, left + 9, size, color, 14.5, url):
+        for label, value in fields:
+            if not add_block(f"{label}{style['separator']}{value}", 12, body_color, 4):
                 return False
-            cursor += 3
-        cursor = start + height + 10
+        cursor += 6
         return True
 
     def add_table(block: list[str]) -> bool:
+        nonlocal cursor
         rows = [_table_cells(line) for line in block]
         if len(rows) < 3 or not _is_table_rule(rows[1]):
-            return all(add_block(" | ".join(row), 9.6, body_color, 6) for row in rows)
+            return all(add_block(" | ".join(row), 12, body_color, 6) for row in rows)
         header, rows = rows[0], rows[2:]
+        if len(header) > 3:
+            for row in rows:
+                if len(row) != len(header):
+                    continue
+                title = " ".join(piece for piece in row[:2] if piece)
+                fields = [(label, value) for label, value in zip(header[2:], row[2:]) if value]
+                if not add_entry(title, fields):
+                    return False
+            return True
+
+        widths = ([0.32, 0.68] if len(header) == 2 else
+                  [1 / len(header)] * len(header))
+        widths = [fraction * (right - left) for fraction in widths]
+        size, leading = 11.5, 15.5
+
+        def cell_data(values):
+            cells = []
+            for value, width in zip(values, widths):
+                display, links = text_and_links(value)
+                entries = [(wrap(display, size, width - 12), None)]
+                entries.extend((wrap(f"{style['link']}{label}", size, width - 12), url)
+                               for label, url in links)
+                cells.append(entries)
+            return cells
+
+        def row_height(cells):
+            return max(sum(len(lines) * leading for lines, _ in entries)
+                       for entries in cells) + 10
+
+        def draw_row(cells, heading=False):
+            nonlocal cursor
+            assert page is not None
+            start, height, x = cursor, row_height(cells), left
+            if heading:
+                page.draw_rect(pymupdf.Rect(left, start, right, start + height),
+                               fill=(245 / 255, 247 / 255, 253 / 255), color=None)
+            for entries, width in zip(cells, widths):
+                cursor = start + 5
+                for lines, url in entries:
+                    if not write_lines(lines, x + 6, size,
+                                       link_color if url else body_color, leading, url):
+                        return False
+                x += width
+            cursor = start + height
+            page.draw_line(pymupdf.Point(left, cursor), pymupdf.Point(right, cursor),
+                           color=(197 / 255, 210 / 255, 227 / 255), width=0.5)
+            return True
+
+        header_cells = cell_data(header)
+        header_height = row_height(header_cells)
+        needs_header = True
         for row in rows:
             if len(row) != len(header):
                 continue
-            title = " ".join(piece for piece in row[:2] if piece)
-            fields = [(label, value) for label, value in zip(header[2:], row[2:]) if value]
-            if not add_card(title, fields):
+            cells = cell_data(row)
+            height = row_height(cells)
+            if height + header_height > bottom - top:
+                # Keep all evidence from an unusually tall row; fields can span pages.
+                if not add_entry(row[0], list(zip(header[1:], row[1:]))):
+                    return False
+                needs_header = True
+                continue
+            if cursor + height + (header_height if needs_header else 0) > bottom:
+                new_page()
+                needs_header = True
+            if needs_header:
+                if not draw_row(header_cells, heading=True):
+                    return False
+                needs_header = False
+            if not draw_row(cells):
                 return False
+        cursor += 6
         return True
 
     try:
@@ -478,15 +534,29 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
                     return False, "report block does not fit on a page"
                 continue
             if line.startswith("# "):
-                value, size, color, gap = line[2:], 18, heading_color, 15
-            elif line.startswith(("## ", "### ")):
-                value, size, color, gap = line.lstrip("# "), 13, heading_color, 9
+                value, size, color, gap = line[2:], 18, heading_color, 8
+            elif line.startswith("## "):
+                value, size, color, gap = line.lstrip("# "), 14, heading_color, 6
+            elif line.startswith("### "):
+                value, size, color, gap = line.lstrip("# "), 12.6, heading_color, 5
             elif line.startswith(("- ", "* ")):
-                value, size, color, gap = "- " + line[2:], 9.6, body_color, 5
+                value, size, color, gap = "- " + line[2:], 12, body_color, 5
             elif line.startswith("> "):
-                value, size, color, gap = line[2:], 9.6, body_color, 5
+                value, size, color, gap = line[2:], 12, body_color, 5
             else:
-                value, size, color, gap = line, 9.6, body_color, 7
+                value, size, color, gap = line, 12, body_color, 6
+            if line.startswith("#"):
+                heading_text, _ = text_and_links(value)
+                heading_height = len(wrap(heading_text, size, right - left)) * size * 1.35
+                if cursor + heading_height + gap + 32 > bottom:
+                    new_page()
+                slug = re.sub(r"[^\w -]", "", heading_text.lower()).replace(" ", "-")
+                duplicate = anchor_counts.get(slug, 0)
+                anchor_counts[slug] = duplicate + 1
+                anchor = f"{slug}-{duplicate}" if duplicate else slug
+                anchors[anchor] = (page.number, cursor)
+                if line.startswith("## "):
+                    outline.append([1, heading_text, page.number + 1])
             if not add_block(value, size, color, gap):
                 return False, "report block does not fit on a page"
         for number, current_page in enumerate(document, start=1):
@@ -495,6 +565,16 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
             footer.append(pymupdf.Point(right - text_width(label, 8), 811), label,
                           font=font, fontsize=8)
             footer.write_text(current_page, color=(0.38, 0.49, 0.60))
+        for page_number, rect, anchor in internal_links:
+            if anchor not in anchors:
+                return False, f"unresolved report section link: #{anchor}"
+            target_page, target_y = anchors[anchor]
+            document[page_number].insert_link({
+                "kind": pymupdf.LINK_GOTO, "from": rect, "page": target_page,
+                "to": pymupdf.Point(left, max(top, target_y - 6)),
+            })
+        if outline:
+            document.set_toc(outline)
         document.save(pdf, garbage=4, deflate=True)
     except (OSError, RuntimeError, ValueError) as exc:
         pdf.unlink(missing_ok=True)
@@ -632,8 +712,16 @@ def render_pdf(md: pathlib.Path, pdf: pathlib.Path,
                        "Markdown and .docx still ship")
     needs_cjk = has_cjk(source)
 
+    # A selected font is a typography requirement, not a fallback hint.
+    # Never silently replace it with a readable but different bundled face.
+    if font is not None:
+        if not _pandoc(md, pdf, font if needs_cjk else None):
+            pdf.unlink(missing_ok=True)
+            return False, "could not render the selected report font with pandoc/TeX"
+        return _verify_pdf(pdf, source, needs_cjk)
+
     style = _portable_report_style(source)
-    # Every supported left-to-right report uses a bundled, embedded font first.
+    # Without an explicit selection, prefer bundled, embedded report fonts.
     # This keeps Chinese, English, Japanese, Korean and Spanish layout identical
     # across machines, while the explicit RTL refusal above remains unchanged.
     if style:
@@ -660,6 +748,20 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
             make_pdf: bool = True) -> tuple[list[pathlib.Path], list[str]]:
     written, notes = [], []
     fonts = {}
+    report_font = None
+    if make_pdf:
+        for name in ("tailored-profile.yaml", "profile.yaml"):
+            profile_path = workspace / name
+            if not profile_path.is_file():
+                continue
+            try:
+                profile = journal.load_yaml(profile_path, dict)
+            except journal.InputProblem as exc:
+                return [], [f"cannot read report typography from {name}: {exc.reason}"]
+            meta = profile.get("meta") or {}
+            if isinstance(meta, dict) and meta.get("cjk_font"):
+                report_font = meta["cjk_font"]
+                break
     sources = [p for p in sorted(workspace.rglob("*"))
                if p.is_file() and is_deliverable(p, workspace)
                and not (make_pdf and p.name == "report.pdf")]
@@ -701,9 +803,11 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
             try:
                 source = visible_markdown(src)
                 glyphs = frozenset(_CJK.findall(source))
-                # Bundled report fonts take precedence whenever every visible
-                # glyph is covered, so a Tectonic probe cannot delay delivery.
-                if glyphs and not _portable_report_style(source) and glyphs not in fonts:
+                # A user-selected font wins; otherwise covered bundled glyphs
+                # keep delivery independent of a Tectonic font probe.
+                if glyphs and report_font is not None:
+                    fonts[glyphs] = report_font
+                elif glyphs and not _portable_report_style(source) and glyphs not in fonts:
                     fonts[glyphs] = pick_cjk_font(source)
                 ok, why = render_pdf(src, pdf, fonts.get(glyphs))
             except OSError as exc:

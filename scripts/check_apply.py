@@ -63,7 +63,7 @@ REQUIRED_GATES = ("check_personal_data", "check_claims", "check_render_freshness
 # is pinned against BOTH lists: a heading that promises "check_apply requires all
 # of these" over a gate it does not require converts "I skipped it" into
 # "check_apply covered it", which is worse than no checklist line at all.
-CONDITIONAL_GATES = ("check_letter", "check_pages", "check_word_limits")
+CONDITIONAL_GATES = ("check_layout", "check_letter", "check_pages", "check_word_limits")
 CLASSIFICATIONS = ("poorly_built", "honest_stretch")
 VERDICTS = vocab.VERDICTS
 # What a gate receipt has to say for this composer to accept it. "recorded" is
@@ -116,7 +116,19 @@ def _stale_inputs(ws: pathlib.Path, gate: str, receipt: dict) -> list:
         if pathlib.Path(label).name == "journal.jsonl":
             continue
         candidate = pathlib.Path(label)
-        if candidate.is_absolute() or ".." in candidate.parts:
+        external_template = False
+        if gate == "check_layout" and candidate.is_absolute():
+            # The supplied template is a source document, not a deliverable.
+            # Only the exact reference fingerprint in the bound review may live
+            # outside this workspace; output and preview paths remain local.
+            try:
+                review = journal.load_yaml(ws / "layout-review.yaml", dict)
+                reference = journal.as_mapping(review.get("reference"))
+                external_template = (pathlib.Path(reference.get("path", "")).resolve() == candidate.resolve()
+                                     and reference.get("sha256") == recorded)
+            except (journal.InputProblem, TypeError, ValueError):
+                pass
+        if (candidate.is_absolute() or ".." in candidate.parts) and not external_template:
             findings.append(
                 f"RECEIPT_INPUT_OUTSIDE_WORKSPACE: {gate} recorded {label!r}, which "
                 f"is not inside the workspace — a gate's proof has to be about a "
@@ -169,6 +181,8 @@ def conditional_gates(ws: pathlib.Path) -> list:
     off the workspace, requiring it would fire on runs where it does not apply.
     """
     out = []
+    if (ws / "cv.docx").is_file() or (ws / "cv.pdf").is_file():
+        out.append(("check_layout", "a rendered CV exists"))
     if (ws / "letter.yaml").exists():
         out.append(("check_letter", "letter.yaml exists"))
     # BOTH of check_pages' inputs, not just the PDF. With tailored-profile.yaml
@@ -374,6 +388,13 @@ def main(argv=None) -> int:
                             f"({detail})")
         else:
             findings.extend(_stale_inputs(ws, gate, last))
+            if gate == "check_layout":
+                expected = {"layout-review.yaml"}
+                expected.update(name for name in ("cv.docx", "cv.pdf") if (ws / name).is_file())
+                missing = expected - set(last.get("input_hashes") or {})
+                if missing:
+                    findings.append("LAYOUT_NOT_REVIEWED: the layout receipt does not cover " +
+                                    ", ".join(sorted(missing)) + " — inspect every final output and re-run check_layout")
             if statement_only and gate == "check_render_freshness":
                 expected = {"supporting-statement.md", "posting.yaml", *plan_hashes}
                 missing = expected - set(last.get("input_hashes") or {})

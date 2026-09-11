@@ -125,9 +125,11 @@ def _detail_files(calls: list[dict]) -> dict[str, list[dict]]:
     for raw_record in calls:
         record = journal.as_mapping(raw_record)
         # Browser captures normalize this operation to ``detail``; some
-        # OpenCLI adapters expose it under a public command such as
-        # ``job-detail``. Both are detail retrievals, unlike a search card.
-        if record.get("command") not in ("detail", "job-detail"):
+        # OpenCLI adapters expose it as ``job-detail`` (LinkedIn) or ``job``
+        # (Indeed). These are detail retrievals, unlike a search card.
+        command = record.get("command")
+        if command not in ("detail", "job-detail") and not (
+                record.get("site") == "indeed" and command == "job"):
             continue
         if record.get("classification") != "ok" or record.get("exit_code") != 0:
             continue

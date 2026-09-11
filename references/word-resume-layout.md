@@ -7,6 +7,13 @@ Body text defaults to 11 pt: Times New Roman for English and SimSun (宋体)
 for Chinese, including Chinese titles. English body text is
 left-aligned so justification cannot stretch word spacing.
 Rules are native paragraph borders, not underlined trailing spaces or pictures.
+Within a bullet, bold only an explicit opening label ending in a colon
+(`Label:` or `标签：`). Leave the remaining text plain. If there is no opening
+label and colon, leave the entire bullet plain; do not infer emphasis from its
+first clause, keywords or numbers. Do not add labels merely to enable bolding.
+The label must describe the entire bullet, not just its first fact. For example,
+leave `GPA: ...; courses ...; research ...` wholly plain: the rest of the bullet
+is not an explanation of GPA. A colon alone does not justify bold emphasis.
 
 The page size, section order, translated/custom headings, links and personal-data
 rules still come from the existing profile contract. Internships remain entries
@@ -49,3 +56,7 @@ fill the page. Verify pagination after adjusting spacing. These conventions
 apply to report PDFs too: English Times New Roman, Chinese SimSun; verify actual
 exported fonts and use the installed office-suite font when available. A newer
 explicit user typography request overrides the reference template.
+Record a requested Chinese font in `meta.cjk_font` of the workspace profile.
+Delivery honors that selection before its bundled report fonts; a missing selected
+font is reported instead of silently substituted. Without an explicit selection,
+the bundled report renderer remains available without a TeX installation.

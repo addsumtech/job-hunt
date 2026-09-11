@@ -64,9 +64,10 @@ adapter incompatibility** prevents extraction, use `unsupported_extraction` unde
 and the evidence for the incompatibility. A patch is optional, not a required
 step before browser use. Read and import the actual page results with their
 URLs, timestamps and verbatim text; do not pass a browser capture off as an
-adapter response. This usually means typing into the job site's own search box
-and reading its results. Google/search-engine discovery is a separate source
-strategy, not the definition of web-access and not a substitute for a site's
+adapter response. The bundled fallback reads known URLs and links. If the site needs an
+interactive search that its adapter cannot execute, request the result URL or
+original JD from the user; do not claim that a known-URL capture tested its search box. Google/search-engine discovery is a separate source
+strategy, not the definition of built-in CDP and not a substitute for a site's
 search acceptance test.
 
 One timeout or blank field alone is not that diagnosis. A login wall, CAPTCHA,

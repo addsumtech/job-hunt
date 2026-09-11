@@ -11,6 +11,193 @@ import deliver
 import render_cv
 
 
+@pytest.mark.parametrize('body', [
+    '正文说明保留真实经历与岗位要求。',
+    'Describe the actual project and the role requirements.',
+    '実際の経験と応募要件を説明します。',
+    '실제 경험과 채용 요건을 설명합니다.',
+    'Describe la experiencia real y los requisitos del puesto.',
+])
+def test_portable_report_uses_reading_size_body_across_languages(tmp_path, body):
+    import pymupdf
+    md, pdf = tmp_path / 'report.md', tmp_path / 'report.pdf'
+    md.write_text('# Report\n\n## Analysis\n\n' + body, encoding='utf-8')
+    style = deliver._portable_report_style(md.read_text(encoding='utf-8'))
+    assert style
+    assert deliver._render_portable_report(md, pdf, style) == (True, '')
+    with pymupdf.open(pdf) as document:
+        spans = [span for page in document for block in page.get_text('dict')['blocks']
+                 for line in block.get('lines', []) for span in line['spans']]
+        matching = [span for span in spans if body[:5] in span['text']]
+        assert matching and all(span['size'] == pytest.approx(12) for span in matching)
+        assert max(span['size'] for span in spans) <= 18
+
+
+def test_portable_report_flows_a_long_paragraph_without_losing_evidence(tmp_path):
+    import pymupdf
+    md, pdf = tmp_path / 'report.md', tmp_path / 'report.pdf'
+    tokens = [f'evidence{i:04d}' for i in range(800)]
+    md.write_text('# Detailed report\n\n' + ' '.join(tokens), encoding='utf-8')
+    style = deliver._portable_report_style(md.read_text(encoding='utf-8'))
+    assert deliver._render_portable_report(md, pdf, style) == (True, '')
+    with pymupdf.open(pdf) as document:
+        assert len(document) > 1
+        text = '\n'.join(page.get_text() for page in document)
+        assert all(token in text for token in tokens)
+        for page in document:
+            assert all(page.rect.contains(block[:4]) for block in page.get_text('blocks'))
+
+
+def test_standalone_official_link_is_not_printed_twice(tmp_path):
+    import pymupdf
+    md, pdf = tmp_path / 'report.md', tmp_path / 'report.pdf'
+    md.write_text('# Roles\n\n[Beijing official posting](https://example.com/beijing)\n',
+                  encoding='utf-8')
+    style = deliver._portable_report_style(md.read_text(encoding='utf-8'))
+    assert deliver._render_portable_report(md, pdf, style) == (True, '')
+    with pymupdf.open(pdf) as document:
+        assert document[0].get_text().count('Beijing official posting') == 1
+        assert document[0].get_links()[0]['uri'] == 'https://example.com/beijing'
+
+
+@pytest.mark.parametrize('title,anchor', [('Role analysis', 'role-analysis'),
+                                         ('岗位分析', '岗位分析')])
+def test_contents_resolves_forward_heading_links_after_pagination(tmp_path, title, anchor):
+    import pymupdf
+    md, pdf = tmp_path / 'report.md', tmp_path / 'report.pdf'
+    md.write_text(f'# Report\n\n[First](#{anchor})\n\n[Second](#{anchor}-1)\n\n'
+                  + ' '.join(f'evidence{i:04d}' for i in range(600)) +
+                  f'\n\n## {title}\n\nFirst role.\n\n## {title}\n\nSecond role.', encoding='utf-8')
+    style = deliver._portable_report_style(md.read_text(encoding='utf-8'))
+    assert deliver._render_portable_report(md, pdf, style) == (True, '')
+    with pymupdf.open(pdf) as document:
+        links = document[0].get_links()
+        assert len(links) == 2 and all(link['kind'] == pymupdf.LINK_GOTO for link in links)
+        assert all(link['page'] > 0 for link in links)
+        assert [link['page'] + 1 for link in links] == [entry[2] for entry in document.get_toc()]
+        assert links[0]['to'].y < links[1]['to'].y
+
+
+def test_unresolved_contents_link_is_not_delivered_as_a_broken_link(tmp_path):
+    md, pdf = tmp_path / 'report.md', tmp_path / 'report.pdf'
+    md.write_text('# Report\n\n[Missing section](#missing)', encoding='utf-8')
+    style = deliver._portable_report_style(md.read_text(encoding='utf-8'))
+    ok, reason = deliver._render_portable_report(md, pdf, style)
+    assert not ok and 'unresolved report section link' in reason
+    assert not pdf.exists()
+
+
+def test_compact_comparison_table_keeps_columns_headers_and_links_across_pages(tmp_path):
+    import pymupdf
+    md, pdf = tmp_path / 'report.md', tmp_path / 'report.pdf'
+    urls = {f'https://example.com/jobs/{i}' for i in range(26)}
+    rows = [f'| Role{i:02d} | Specific requirement {i}. [Official](https://example.com/jobs/{i}) |'
+            for i in range(26)]
+    md.write_text('# Roles\n\n| Role | Reason |\n|---|---|\n' + '\n'.join(rows),
+                  encoding='utf-8')
+    style = deliver._portable_report_style(md.read_text(encoding='utf-8'))
+    assert deliver._render_portable_report(md, pdf, style) == (True, '')
+    with pymupdf.open(pdf) as document:
+        assert len(document) > 1
+        actual = {link['uri'] for page in document for link in page.get_links()
+                  if link['kind'] == pymupdf.LINK_URI}
+        assert actual == urls
+        for page in document:
+            assert 'Reason' in page.get_text(), 'continued table lost its column header'
+            reason = page.search_for('Reason')[0]
+            role = page.search_for('Role')[0]
+            assert reason.x0 > role.x0 + 100, 'comparison collapsed into a card title'
+            fills = [drawing for drawing in page.get_drawings() if drawing.get('fill')]
+            assert all(drawing['rect'].height < 50 for drawing in fills)
+
+
+def test_wide_table_preserves_long_fields_and_city_links_without_card_frames(tmp_path):
+    import pymupdf
+    md, pdf = tmp_path / 'report.md', tmp_path / 'report.pdf'
+    tokens = [f'fact{i:04d}' for i in range(600)]
+    urls = {'https://example.com/beijing', 'https://example.com/shanghai'}
+    md.write_text('# Roles\n\n| Rank | Role | Evidence | Cities |\n|---|---|---|---|\n'
+                  '| 1 | Agent PM | ' + ' '.join(tokens) +
+                  ' | [Beijing](https://example.com/beijing), '
+                  '[Shanghai](https://example.com/shanghai) |\n', encoding='utf-8')
+    style = deliver._portable_report_style(md.read_text(encoding='utf-8'))
+    assert deliver._render_portable_report(md, pdf, style) == (True, '')
+    with pymupdf.open(pdf) as document:
+        text = '\n'.join(page.get_text() for page in document)
+        assert all(token in text for token in tokens)
+        assert {link['uri'] for page in document for link in page.get_links()
+                if link['kind'] == pymupdf.LINK_URI} == urls
+        assert not any(drawing.get('fill') for page in document for drawing in page.get_drawings())
+
+
+@pytest.mark.parametrize('layout', ['paragraph', 'compact_table', 'wide_table'])
+def test_grouped_posting_links_each_occupy_their_own_line(tmp_path, layout):
+    import pymupdf
+    md, pdf = tmp_path / 'report.md', tmp_path / 'report.pdf'
+    urls = [f'https://example.com/jobs/{i}' for i in range(6)]
+    links = ' '.join(f'[Beijing ID{i}]({url})' for i, url in enumerate(urls))
+    if layout == 'compact_table':
+        source = '| Role | Official entries |\n|---|---|\n| AI PM | ' + links + ' |'
+    elif layout == 'wide_table':
+        source = '| Rank | Role | Evidence | Links |\n|---|---|---|---|\n| 1 | AI PM | Summary | ' + links + ' |'
+    else:
+        source = links
+    md.write_text('# Roles\n\n' + source, encoding='utf-8')
+    style = deliver._portable_report_style(source)
+    assert deliver._render_portable_report(md, pdf, style) == (True, '')
+    with pymupdf.open(pdf) as document:
+        positions = {}
+        for page in document:
+            for link in page.get_links():
+                if link['kind'] == pymupdf.LINK_URI:
+                    positions.setdefault(link['uri'], []).append((page.number, link['from']))
+        assert set(positions) == set(urls)
+        assert all(len(items) == 1 for items in positions.values())
+        for first, second in zip(urls, urls[1:]):
+            page_a, rect_a = positions[first][0]
+            page_b, rect_b = positions[second][0]
+            assert page_b > page_a or (page_b == page_a and rect_b.y0 >= rect_a.y1)
+
+
+def test_selected_report_font_is_not_replaced_by_bundled_font(tmp_path, monkeypatch):
+    md, pdf = tmp_path / 'report.md', tmp_path / 'report.pdf'
+    md.write_text('中文报告', encoding='utf-8')
+    seen = []
+    monkeypatch.setattr(deliver, '_pandoc',
+                        lambda m, p, f: (seen.append(f), p.write_bytes(b'PDF'), True)[-1])
+    monkeypatch.setattr(deliver, '_verify_pdf', lambda *args: (True, ''))
+    monkeypatch.setattr(deliver, '_render_portable_report',
+                        lambda *args: pytest.fail('selected font was replaced'))
+    assert deliver.render_pdf(md, pdf, 'SimSun') == (True, '')
+    assert seen == ['SimSun']
+
+
+def test_selected_report_font_failure_does_not_silently_substitute(tmp_path, monkeypatch):
+    md, pdf = tmp_path / 'report.md', tmp_path / 'report.pdf'
+    md.write_text('中文报告', encoding='utf-8')
+    monkeypatch.setattr(deliver, '_pandoc', lambda *args: False)
+    monkeypatch.setattr(deliver, '_render_portable_report',
+                        lambda *args: pytest.fail('selected font was replaced'))
+    ok, reason = deliver.render_pdf(md, pdf, 'Missing Font')
+    assert not ok and 'selected report font' in reason and not pdf.exists()
+
+
+def test_delivery_carries_profile_font_to_report(tmp_path, monkeypatch):
+    ws, dest = tmp_path / 'workspace', tmp_path / 'delivery'
+    ws.mkdir()
+    (ws / 'report.md').write_text('中文报告', encoding='utf-8')
+    (ws / 'tailored-profile.yaml').write_text('meta:\n  cjk_font: SimSun\n', encoding='utf-8')
+    seen = []
+    def render(md, pdf, font):
+        seen.append(font)
+        pdf.write_bytes(b'PDF')
+        return True, ''
+    monkeypatch.setattr(deliver, 'render_pdf', render)
+    written, notes = deliver.deliver(ws, dest, 'candidate')
+    assert not notes and len(written) == 2
+    assert seen == ['SimSun']
+
+
 @pytest.mark.parametrize('language,label', render_cv._PRESENT.items())
 def test_current_dates_are_localized_without_changing_expected_graduation(language, label):
     profile = {'meta': {'name': 'Test Person', 'language': language},

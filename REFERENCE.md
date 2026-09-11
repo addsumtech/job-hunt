@@ -6,17 +6,18 @@ the test and eval numbers do and do not prove.
 
 ## Install
 
-```bash
-pip install -r requirements.txt   # PyYAML, python-docx
-```
+The agent runs `scripts/setup_dependencies.py` using Python 3.10+, adding
+`--discovery --browser chrome` (or `edge`) when live research is needed. It
+prepares a private Python environment, Node and CDP-only OpenCLI; AnySearch and
+the browser reader are bundled. Use `scripts/run_tool.py` for subsequent commands.
+See [agent setup](references/agent-setup.md) for exact paths and conditional tools.
 
-**PDF output** requires a LaTeX engine. `tectonic` is recommended:
-
-```bash
-brew install tectonic   # macOS
-```
-
-Without a LaTeX engine, Markdown and .docx outputs still work normally. The renderer emits a `.tex` file and prints a warning so you can compile it later once a LaTeX engine is available.
+Report PDFs use PyMuPDF and bundled fonts by default. An explicitly selected
+`meta.cjk_font` is honored through the installed Pandoc/TeX path rather than
+silently substituted. Template-based CV/letter PDFs need
+Pandoc and a compatible XeTeX engine; prepare those only when requested. Without
+that toolchain, Markdown, Word and supported report PDFs still work. CV/letter
+renderers can retain a `.tex` file for later compilation.
 
 ---
 
@@ -77,6 +78,7 @@ job-hunt/
 │   ├── candidate-situations.md      # Non-standard candidates (gap, switch, exec, military, intl)
 │   ├── cv-craft.md                  # CV writing conventions (markets, links, bullets, ordering)
 │   ├── word-resume-layout.md        # Reviewed Word layout and fictional bilingual examples
+│   ├── layout-review.md             # Mandatory visual comparison with the user's template
 │   ├── browser-fallback.md          # Read-only browser capture and fallback
 │   ├── daily-browser.md            # Daily-browser CDP and bounded parallel sources
 │   ├── network-recovery.md         # Bounded retries and authorized route diagnostics
@@ -95,6 +97,7 @@ job-hunt/
 │   ├── rirekisho.md                 # Japanese 履歴書 form guide
 │   ├── portability.md               # running this skill on codex or another agent
 │   ├── report-localization.md       # five-language assess/discover report templates
+│   ├── report-writing.md            # Plain, concrete client reports and readability review
 │   ├── risk-control-signals.yaml    # Platform stop-signals discover must obey
 │   ├── role-families.md             # Non-tech / regulated role conventions (clinical, sales, legal…)
 │   ├── source-policy.md             # What discover may and may not do to a platform
@@ -107,8 +110,10 @@ job-hunt/
 │   ├── mock-assessor-transcript.md  # interview pass 1 — what the answers did
 │   └── mock-assessor-provenance.md  # interview pass 2 — where the facts came from
 ├── assets/
+│   ├── opencli-cdp/                 # Versioned CDP-only patches, hashes and license
 │   ├── profile.example.yaml        # canonical profile schema
 │   └── claims.example.yaml         # the provenance ledger, with a retracted row
+├── third_party/anysearch/           # Bundled HTTP client, CLI docs and license
 ├── docs/                           # spec, plans, research — outside the skill corpus
 └── scripts/
     ├── check_apply.py               # the composing gate: every receipt present, and about current bytes
@@ -124,6 +129,7 @@ job-hunt/
     ├── check_opencli_result.py      # adapter result classifier (wrapper, not a gate)
     ├── opencli_compat.py            # Check/apply/revert known local adapter fixes
     ├── check_pages.py               # page count + the text actually inside the delivered PDF
+    ├── check_layout.py              # Current template/page review and artifact fingerprints
     ├── check_personal_data.py       # Cluster-1 personal-data interlock
     ├── check_render_freshness.py    # the judges read the files still on disk
     ├── check_shortlist.py           # discover's gate: row provenance, caps, md↔yaml agreement
@@ -132,6 +138,9 @@ job-hunt/
     ├── consistency.py               # contradictions between assessment fields — reports, never repairs
     ├── count_coverage.py            # the ONLY path that produces coverage counts
     ├── doctor.py                    # first-run environment check; --install for pip only
+    ├── setup_dependencies.py         # Private Python/Node/OpenCLI installation
+    ├── run_tool.py                   # Invoke the prepared runtime and bundled clients
+    ├── browser_cdp.mjs               # Direct CDP read capture; no npm packages/extensions
     ├── pdf_glyphs.py                # inspect painted PDF glyph IDs, including missing CJK
     ├── deliver.py                   # hand-off: the round's readable artifacts land
     │                                #   in ~/Downloads/<workspace>/; requires a client report PDF

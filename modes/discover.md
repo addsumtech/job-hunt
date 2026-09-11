@@ -32,6 +32,32 @@ language contract; no invented retrieval or login state):
 | Real postings obtained | 実際の求人の取得： | 실제 채용 공고 확보: | Ofertas reales obtenidas: |
 | Degraded output | 代替出力の種類： | 대체 출력 유형: | Tipo de salida alternativa: |
 
+## A complete job-search consultation
+
+When the user requests a broad search and recommendations, a single application
+example is not a complete delivery. Agree or infer a practical collection target
+from the request and retain it separately from each round's safety caps. A target
+of dozens of jobs may require multiple bounded rounds; never increase a site's
+read budget or invent listings to reach that target.
+
+Keep a collection manifest with the requested count, maximum rounds, completed
+round workspaces, deduplicated posting URLs/IDs, and shortfall reasons. Continue
+independent sources while a site awaits login or recovery. Refusal locks and
+per-consultation limits survive round changes; a new folder never resets them.
+Stop when the target is met, the agreed rounds are exhausted, or available sources
+cannot add useful evidence. Report the actual count and remaining gap honestly.
+
+Each round still passes its own shortlist and evidence gates. The final client
+report combines unique roles across those verified rounds, explains priorities
+and tradeoffs, gives concrete application actions and role-specific interview
+preparation, and distinguishes card-only leads from detail-reviewed candidates.
+Undisclosed or overlapping salary ranges are confirmation items, not proof that
+a pay floor is satisfied. Do not create a tailored CV for every lead by default.
+
+Mock interview remains opt-in: include preparation in the report, then enter the
+interview mode and its interactive coaching workflow only when the user asks to
+practise. Never invent an interview transcript or start a mock on their behalf.
+
 ## Supplementary public research
 
 Use `references/supplementary-sources.md` when official web/news, GitHub,
@@ -323,7 +349,7 @@ and set an integer from 1 to 5. It is the maximum number of fetched full descrip
 that can receive a CV-to-JD mapping in this round. It does not raise the source-policy
 page or row caps, and it is not a target count.
 
-## Retrieval backend — OpenCLI first; one-way web-access fallback
+## Retrieval backend — OpenCLI first; one-way built-in CDP fallback
 
 Before using OpenCLI for the first Indeed or 51job read, follow `references/opencli-compat.md`:
 check and automatically apply only the known version/hash-matched local repairs
@@ -332,56 +358,52 @@ onto another version. This local preparation performs no site reads and cannot
 reset a site's refusal. Browser fallback can use the site's own search box;
 it is not limited to Google or other search engines.
 
-Before Step 1, run `opencli doctor` with a bounded timeout and inspect the
-adapter's documented read help. **OpenCLI is the initial backend:** when its
-read adapter and connection are usable, perform the round through OpenCLI; do
-not choose web-access for convenience or richer-looking results. Only a
-diagnosed `cli_missing`, `bridge_disconnected`, or `unsupported_extraction`
-permits the one-way fallback in `references/browser-fallback.md` to an available
-web-access skill. On that path skip OpenCLI-only auth/help commands and retain
-the same source selection, query, page, row, detail and disclosure rules. There
-is no web-access-to-OpenCLI fallback for the same round: if web-access is also
-unavailable after the initial OpenCLI capability diagnosis, disclose the gap.
-Do not stop merely because an optional adapter executable is absent.
+Before Step 1, run `python3 scripts/doctor.py` and inspect the adapter's
+read help and actual transport. **OpenCLI is the initial backend, in CDP mode
+only.** The diagnostic probes the installed website browser factory offline;
+it never connects to an extension. Verify the selected live CDP endpoint and
+adapter path separately before reading a site. Do not run an extension-backed
+adapter merely to obtain a failure first.
 
-### Local browser bridge versus a sandbox boundary
+Never use browser extensions, including already-connected ones. The presence of
+a CDP class, an endpoint environment variable, or a successful generic health
+check does not prove the website adapter uses CDP. When the installed website
+factory still selects Browser Bridge, record `unsupported_extraction` with the
+version and routing evidence, then use built-in CDP.
 
-`BROWSER_CONNECT`, `Failed to start opencli daemon`, or an `EPERM` listener error
-on `127.0.0.1:19825` can mean the **agent runner** cannot reach the user's local
-OpenCLI bridge, not that OpenCLI or the site is unavailable. Before selecting
-web-access, preserve the failed transport output and run one bounded `opencli
-doctor` through the platform's approved host-local or unsandboxed execution path
-(ask for the required permission). This is a local capability probe; it does not
-read a job site. Save both diagnostic outputs under `raw/`.
+Only a diagnosed `cli_missing`, `bridge_disconnected` (a failed CDP connection),
+or `unsupported_extraction` permits the one-way fallback in
+`references/browser-fallback.md`. On that path skip OpenCLI-only auth/help
+commands and retain source selection, query, page, row, detail and disclosure
+rules. There is no built-in-CDP-to-OpenCLI fallback for the same round: if that
+CDP fallback is unavailable too, disclose the gap. Do not stop merely because
+an optional adapter executable is absent.
 
-- If that host-level doctor reports both daemon and extension connected, repeat
-  the same single bounded, read-only OpenCLI call through that path. Keep the
-  earlier `transport` record; this is recovery from an execution boundary, not a
-  retry after a site refusal.
-- If the host-level doctor still cannot connect, diagnose `bridge_disconnected`
-  and take the one-way web-access fallback. Do not infer the cause from the
-  extension's visual “running” indicator alone.
-- `EADDRINUSE` while starting a daemon means a process already owns the port:
-  inspect with `opencli doctor` through the host path. Do not kill a process,
-  change the port, reinstall, update, or restart the user's browser as a search
-  workaround.
+### Local CDP connection versus a sandbox boundary
 
-This exception is only for a local bridge failure observed before the site returned
-a refusal. It never permits a different execution path to bypass captcha, login,
-an HTTP refusal, or a platform limit.
+An `EPERM`, timeout or connection refusal at a local CDP endpoint can come from
+the agent runner. Preserve the error and verify the already-selected CDP
+connection through an available approved host-local or unsandboxed path, only
+when the platform requires it. Existing authorization is sufficient; do not
+request permissions that the host does not support. Never use a daemon's
+extension connectivity as this check.
 
-For another generic timeout, blank extraction, or unclassified transport error,
-follow `references/network-recovery.md` before recording an OpenCLI fallback
-reason. Use `references/daily-browser.md` only after the documented OpenCLI
-diagnosis permits web-access; it selects the browser route and preserves the
-same source, query, page, row, detail, and disclosure rules. Site login remains
-a user action when a real login wall is encountered.
+If that same CDP route is verified, repeat the single bounded read on it. If it
+still fails, retain `bridge_disconnected` and try the one-way browser CDP
+fallback. `EADDRINUSE` does not authorize killing a shared process, changing its
+port, reinstalling tools or restarting the user's browser. This is only local
+connection recovery before a site refusal, never a way around a site stop.
+
+For an unexplained page failure, follow `references/network-recovery.md` before
+choosing a fallback reason. Use `references/daily-browser.md` after the OpenCLI
+CDP diagnosis permits built-in CDP; keep the same source, query, page, row, detail
+and disclosure rules. Site login remains a user action.
 
 Browser captures use `scripts/record_browser_capture.py`, `browser_call` journal
 records and `extraction_method: browser_page`. They are not adapter responses.
 Both `check_no_write.py` and `check_shortlist.py` consume these records. A captcha,
 403, login wall or platform limit is a **site refusal**, not a backend-capability
-failure: it stops the site across tools for this round. Never try web-access to
+failure: it stops the site across tools for this round. Never try built-in CDP to
 route around an OpenCLI site refusal, or vice versa.
 A stop is a pause for [user recovery](../references/user-recovery.md), not a
 reason to abandon the requested search. Explain the actual obstacle and wait for
@@ -513,7 +535,7 @@ The wrapper returns one of five classifications, each with an action:
 | `not_logged_in` | login wall, and auth says the session is absent or unknown | cross-check auth; hand `opencli <site> login` **to the user** — it is a write command. Pause for [user recovery](../references/user-recovery.md); no read retry while logged out. **Do not treat `strategy: public` as evidence that no login is needed** — 1point3acres' public-strategy `forum` still 403s. |
 | `no_auth_adapter` | login wall on a site with no login concept | no CLI login command is available. Pause and ask the user to inspect the browser page; do not invent a login command or infer a missing session. |
 | `platform_limit` | a stop-signal from `references/risk-control-signals.yaml`, or a refusal while auth says logged in | **立即停止。不重试、不改参数重试、不绕过。** Pause this source, not the whole task. Explain whether it is verification, rate limiting or an unknown refusal; follow [user recovery](../references/user-recovery.md) before offering degraded output. |
-| `transport` | unrecognised failure, or exit 0 with unparsable stdout | Check the actual selected connection (`opencli doctor` when using OpenCLI), then follow [bounded network recovery](../references/network-recovery.md). Distinguish a disconnected browser from a site loading or route failure; a timeout alone is not evidence that a VPN caused it. |
+| `transport` | unrecognised failure, or exit 0 with unparsable stdout | Check the actual selected CDP connection and offline routing diagnostic, then follow [bounded network recovery](../references/network-recovery.md). Distinguish a disconnected browser from a site loading or route failure; a timeout alone is not evidence that a VPN caused it. |
 
 ## Step 5 — row integrity, before anything else
 
@@ -892,6 +914,10 @@ constraints or facts still to confirm, and practical next steps. Tool defects,
 adapter errors, tests, developer diagnostics and internal review logs belong only
 in the private workspace, never in this client report. Do not copy an internal
 `completion.md` into it. A general question still receives a PDF reply report.
+
+Before drafting, read `references/report-writing.md`; revise the report for clear
+recommendations, specific reasons and actionable advice, then inspect the rendered
+pages. Preserve source facts, required labels and the user's approved formatting.
 
 After authoring `report.md`, run `lint_no_prediction.py --workspace <ws>`.
 Delivery also refuses prediction language in the report.

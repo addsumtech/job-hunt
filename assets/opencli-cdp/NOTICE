@@ -1,0 +1,5 @@
+OpenCLI CDP compatibility patch, based on @jackwener/opencli 1.8.7.
+Upstream: https://github.com/jackwener/opencli (Apache-2.0).
+Modified by job-hunt on 2026-09-11: direct CDP routing, daily-Chrome discovery,
+task-owned browser sessions and cleanup, CDP diagnostics, extension notice removal.
+Only apply to the exact version and original file hashes in manifest.json.

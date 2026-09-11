@@ -165,6 +165,18 @@ Read `references/motivation-letter.md` and follow it.
 
 ## Step 6 — Hiring-pipeline review loop (non-negotiable)
 
+**Layout review is mandatory before the content judges and after any re-render.**
+Read `references/layout-review.md`. Open every final Word/PDF page and compare
+it with the actual user-supplied template, honoring the user's later changes.
+Check fonts and sizes, page geometry, full-width heading rules, date alignment,
+paragraph spacing, section/entry/bullet order, and pagination/clipping. A matching
+section order or a readable PDF alone does not establish template fidelity.
+Fix unapproved differences before delivery. Record the comparison, template and
+final-file hashes, and inspected page previews in `layout-review.yaml`; run
+`python scripts/check_layout.py --workspace <workspace>`. `check_apply.py` requires
+its current passing receipt whenever a Word or PDF CV exists. Keep this record
+in the workspace; the client receives their CV and career advice, not this audit.
+
 **Three independent judges** must **all** return `PASS` before the package is interview-ready. They model the real hiring funnel — **ATS → Recruiter/HR → Hiring Manager** — and fail in *different* directions, so the CV must be **machine-findable, recruiter-skimmable & eligible, and genuinely strong** to clear all three:
 
 **This is an actor–critic loop.** Each round: the three critics judge **in parallel** (one message, three `Agent` calls); if any rejects, the **actor — you, the orchestrator — applies targeted edits** addressing only the flagged points, re-renders, and re-judges **all three**. The actor stays inline (not a separate subagent) because it already holds full context and is the only party that can ask the candidate honest supplementary questions. **Stop the moment all three pass (early exit — often round 1).** The speed comes from parallel critics + targeted edits, not from spawning more agents. (Conceptually the funnel is sequential — ATS gates first — but requiring *all three* to pass yields the same end state, so run them concurrently.)
@@ -242,6 +254,10 @@ not less, because the gaps are known going in.
 Produce the brief in `references/interview-prep.md` (write it to `<workspace>/interview-brief.md`). It is **near-free** — you already hold everything it needs: the claim-provenance map (every reframed claim → its real source), the judges' `SUPPLEMENTARY_QUESTIONS_FOR_CANDIDATE`, and the HONEST-GAPS. For each REFRAMED/AMPLIFIED claim, give the source fact and a "be ready to explain…" prompt; for each honest gap, the truthful framing if asked; and carry over the recruiter/manager questions. Honest only — if a claim can't be truthfully defended, that's a tailoring error: walk it back on the CV.
 
 ## Toolchain note
+
+This note concerns template-based CV/letter rendering. Run the private setup in
+`references/agent-setup.md` and use its recorded interpreter; it also installs
+PyMuPDF. Consultation report PDFs use bundled fonts and do not require TeX.
 
 - Scripts need their dependencies: `pip install -r requirements.txt` (PyYAML, python-docx).
 - PDF output needs a LaTeX engine — `tectonic` is recommended. Without it, **Markdown and .docx still work**, and the renderer emits a `.tex` file you can compile later.
@@ -403,6 +419,10 @@ constraints or facts still to confirm, and practical next steps. Tool defects,
 adapter errors, tests, developer diagnostics and internal review logs belong only
 in the private workspace, never in this client report. Do not copy an internal
 `completion.md` into it. A general question still receives a PDF reply report.
+
+Before drafting, read `references/report-writing.md`; revise the report for clear
+recommendations, specific reasons and actionable advice, then inspect the rendered
+pages. Preserve source facts, required labels and the user's approved formatting.
 
 After authoring `report.md`, run `lint_no_prediction.py --workspace <ws>`.
 Delivery also refuses prediction language in the report.

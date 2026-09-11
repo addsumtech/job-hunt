@@ -138,6 +138,18 @@ def test_job_evidence_must_come_from_a_successful_detail_capture(tmp_path, capsy
     assert "JOB_EVIDENCE_NOT_DETAIL" in captured.out
 
 
+def test_indeed_job_command_is_accepted_as_detail_evidence():
+    capture = "raw/indeed-detail-job1234.json"
+    call = {"action": "adapter_call", "site": "indeed", "command": "job",
+            "classification": "ok", "exit_code": 0, "stdout_file": capture}
+    assert gate._detail_files([call]) == {capture: [call]}
+    # Search cards and unrelated commands must not acquire detail status.
+    assert gate._detail_files([{**call, "command": "search"}]) == {}
+    assert gate._detail_files([{**call, "site": "unrelated"}]) == {}
+    assert gate._detail_files([{**call, "classification": "platform_limit",
+                               "exit_code": 1}]) == {}
+
+
 def test_rendered_summary_order_and_review_cap_are_checked(tmp_path, capsys):
     workspace = fx.build_workspace(tmp_path / "missing-summary")
     markdown = (workspace / "shortlist.md").read_text(encoding="utf-8")

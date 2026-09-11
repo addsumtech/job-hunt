@@ -45,6 +45,7 @@ GATE_ARGS = {
     "lint_cv": [],
     "check_letter": [],
     "check_pages": [],
+    "check_layout": [],
     "check_word_limits": [],
 }
 
@@ -547,6 +548,21 @@ def test_check_pages_is_required_once_there_is_a_pdf_to_measure(tmp_path, capsys
     assert "MISSING_RECEIPT: check_pages" in out and "cv.pdf" in out
 
 
+def test_layout_receipt_must_cover_a_newly_added_output(tmp_path, capsys):
+    root = _skill_root(tmp_path)
+    ws = _good_workspace(tmp_path, root)
+    (ws / "cv.docx").write_bytes(b"previously reviewed document")
+    (ws / "layout-review.yaml").write_text("reviewer: example\n", encoding="utf-8")
+    journal.receipt(ws, "check_layout", {
+        name: journal.sha256_file(ws / name)
+        for name in ("cv.docx", "layout-review.yaml")
+    }, "pass")
+    _pdf(ws / "cv.pdf")
+    assert check_apply.main(_argv(ws, root)) == 1
+    out = capsys.readouterr().out
+    assert "LAYOUT_NOT_REVIEWED" in out and "cv.pdf" in out
+
+
 def test_check_pages_is_not_demanded_without_the_profile_it_measures_against(
         tmp_path, capsys):
     """Both files are its inputs. Demanding the receipt when tailored-profile.yaml
@@ -555,8 +571,12 @@ def test_check_pages_is_not_demanded_without_the_profile_it_measures_against(
     root = _skill_root(tmp_path)
     ws = _good_workspace(tmp_path, root)
     _pdf(ws / "cv.pdf")
-    assert check_apply.main(_argv(ws, root)) == 0
-    assert capsys.readouterr().out.strip() == ""
+    # A rendered PDF still requires visual review, independently of the profile
+    # that check_pages needs to calculate its page budget.
+    assert check_apply.main(_argv(ws, root)) == 1
+    out = capsys.readouterr().out
+    assert "MISSING_RECEIPT: check_layout" in out
+    assert "check_pages" not in out
 
 
 def test_a_check_pages_receipt_that_could_not_run_does_not_satisfy_it(tmp_path, capsys):

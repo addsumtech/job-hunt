@@ -42,6 +42,11 @@ adapter errors, tests, developer diagnostics and internal review logs belong onl
 in the private workspace, never in this client report. Do not copy an internal
 `completion.md` into it. A general question still receives a PDF reply report.
 
+Before drafting, read `references/report-writing.md`. After drafting, perform its
+reader-focused revision and rendered-report review: concrete recommendations,
+plain explanations, usable next steps and preserved evidence. This applies to
+all four modes; a clean vocabulary lint alone does not establish readability.
+
 After authoring `report.md`, run `lint_no_prediction.py --workspace <ws>`.
 Delivery also refuses prediction language in the report.
 
@@ -129,12 +134,16 @@ holds both halves: that apply mode ends by offering the next modes, and that
 
 The CV and the letter have a gate for machine-sounding prose (`AI_VOCABULARY`,
 `EM_DASH_DENSITY`, `NOT_JUST_PIVOT`, `TRICOLON_DENSITY` — `scripts/prose_tells.py`).
-The documents this skill writes to the *reader* — `shortlist.md`,
-`fit-assessment.md`, the completion message — have none, and cannot: measured
-across all eight of them from the iteration-2 runs, the vocabulary check found
+The documents this skill writes to the *reader* — `report.md`, `shortlist.md`,
+`fit-assessment.md`, the completion message — have no mechanical style gate:
+measured across all eight of them from the iteration-2 runs, the vocabulary check found
 nothing and every structural finding was a false positive on a table or a list.
 So the rules below are rules, not a check, and the artifact is the only place to
 verify them.
+
+Use `references/report-writing.md` for the concrete revision method, examples
+and final reader review. It covers report structure and readability as well as
+formulaic phrasing; it is not a blacklist or an AI-authorship detector.
 
 - **Address the reader as "you", and say who said what.** "You told me you are on
   a search-year permit with eleven months left" is auditable; "the candidate has
@@ -520,7 +529,8 @@ render a PDF when a PDF failed to appear. A capability that does not enter the
 scaffolding is a capability nobody uses.
 
 The fast check is sound about what is MISSING and silent about what works — no
-pandoc on PATH means no PDF, full stop, while pandoc plus an engine can both be
+pandoc on PATH means no template-based CV PDF; bundled report PDFs still work.
+Pandoc plus an engine can both be
 present and still fail. Confirming a capability stays with `doctor.py`, which
 renders one. A warning may only fire when it is sure, or it becomes the line
 everyone filters out.
@@ -532,11 +542,12 @@ before the user hits it, instead of discovering it when a PDF does not appear.
 
 **The agent owns first-run setup.** Follow [references/agent-setup.md](references/agent-setup.md)
 when a required capability is missing: install the necessary dependencies,
-prepare OpenCLI, AnySearch and web-access as needed, and verify daily-browser
-CDP access. No extension installation is required. Browser connection consent,
+run `scripts/setup_dependencies.py` (add `--discovery` for Node/OpenCLI),
+use the bundled AnySearch client and CDP reader, and verify daily-browser
+CDP access. Never use browser extensions. Browser connection consent,
 site login and human verification still require the user's action. Reuse working tools and continue the
 original task after setup. `doctor.py --install` covers Python packages only;
-the agent handles other installation commands under the setup workflow.
+use `scripts/run_tool.py` to invoke the prepared runtime. No additional skill is required.
 
 ## Mode entry
 
@@ -673,6 +684,7 @@ a fabrication the candidate then repeats back), and the shortlist's `why_matched
 | CV lint | `scripts/lint_cv.py` | clichés, weak openers, over-long bullets, repeated verbs; the 2026 AI vocabulary from `scripts/prose_tells.py` (`AI_VOCABULARY`). The cliché and vocabulary scans run over the WHOLE document, not only the bullets — the summary is the line a recruiter reads first, and it used to be the one line nothing checked. Headings and the contact line are skipped, so an employer called "Robust Systems" is not reported as a cliché. A CV is exempt from the structural checks: a skills line reads "Python, C++, MATLAB" and would fire the tricolon check on every correct CV |
 | Letter | `scripts/check_letter.py` | machine-prose tells over the whole body — the 2026 AI vocabulary (`AI_VOCABULARY`), em-dash density (`EM_DASH_DENSITY`), the "not just X, but Y" pivot (`NOT_JUST_PIVOT`) and tricolon density (`TRICOLON_DENSITY`), all from `scripts/prose_tells.py`, whose thresholds are calibrated against real letters including this skill's own; markdown in a body string, length, duplicated name, wrong company/role; a missing salutation or sign-off in a language this skill has no sourced default for (`NO_SALUTATION` / `NO_CLOSING`) — the renderer no longer prints an English one onto a non-English letter, so the gate is what stops it shipping with none. The 250–350 band is an ENGLISH word count, so a CJK-dominant letter is reported (`NOTICE_CJK_LENGTH_UNSCORED`, stderr) rather than scored — this skill has no sourced length convention for one, and the one-page constraint behind the band is measured directly by `check_pages` on the rendered PDF |
 | Page count and PDF text | `scripts/check_pages.py` | a PDF longer than the market's table allows; a letter over one page; an unreadable PDF; a PDF whose text is missing `meta.name` or an `experience[].org`, or whose text cannot be read at all (`UNVERIFIED_PDF_TEXT` — not a pass); a start date in a calendar it cannot read (`START_DATE_UNREAD` — years of experience is then *unknown*, not zero, and the permissive budget is used rather than the strictest) |
+| Template layout review | `scripts/check_layout.py` | a missing or stale page-by-page visual review; missing template or artifact fingerprints; an uninspected page; an unresolved template difference. The agent must inspect the actual rendered pages; this gate validates that review record, not visual similarity by itself. See `references/layout-review.md`. |
 | Word limits | `scripts/check_word_limits.py` | a supporting-statement criterion over its stated limit, empty, or with no limit recorded; and the machine-prose tells from `scripts/prose_tells.py`, measured per criterion so the finding names which answer to rewrite. This is the artifact that is actually MARKED — the three CV judges are routed away from a structured application by design — and it had no reader for its prose at all |
 | Apply completion | `scripts/check_apply.py` | a missing receipt; a receipt that does not match its own `receipt_hash`, i.e. hand-written or edited rather than produced by a gate (`RECEIPT_UNVERIFIED`); a gate that only ran its `--record` setup (`NOT_VERIFIED`); ANY gate left failing, named or not; an unclassified stop; a missing brief. `RECEIPT_UNVERIFIED` and `MODE_FILE_MISSING` are checked by every composer — apply, assess, discover and interview — not just this one |
 | Mock interview | `scripts/check_mock.py` | an invented tag or band; a tag with no quote, or a quote that is not in the transcript; a pass emitting the other pass's tags; a scraped question with no id, no date, or the wrong country; an answer-bank entry with no source; a collapsed claim with no walk-back; an unsourced fact neither promoted nor walked back |
@@ -700,16 +712,24 @@ a fabrication the candidate then repeats back), and the shortlist's `why_matched
 
 ### OpenCLI-first fallback for discovery
 
-Begin every discovery round with OpenCLI's read adapter and connection probe.
-Use OpenCLI when it works. Only when it diagnoses a missing CLI, disconnected
-bridge, or unsupported extraction, follow [the one-way browser
-fallback](references/browser-fallback.md) with an available web-access skill.
+Apply the fixed source-to-tool routes in [supplementary-sources.md](references/supplementary-sources.md):
+WeChat (Sogou WeChat), Xiaohongshu, Douyin and Toutiao use OpenCLI. Do not
+reconsider that tool choice. AnySearch search uses its HTTP API.
+
+Begin every discovery round with OpenCLI's offline CDP routing and read-adapter
+capability checks in `scripts/doctor.py`. Use OpenCLI only after its actual
+website adapter is verified to use CDP. Never use browser extensions, even when
+already installed or reported connected. A generic OpenCLI health result is not
+proof of CDP routing. Only when the checks diagnose a missing CLI, disconnected
+CDP connection, or unsupported CDP extraction, follow [the one-way browser
+fallback](references/browser-fallback.md) with an available built-in CDP route.
 If that fallback is unavailable too, disclose the gap; do not switch back to
 OpenCLI for the same round. Keep browser evidence and gate receipts; a site
 refusal is not a fallback reason and stops reads across both tools. Neither
 backend submits applications.
-Use [daily-browser routing](references/daily-browser.md) only on that fallback
-path, and use [network recovery](references/network-recovery.md) for a generic
+Both OpenCLI and its fallback use the customer's daily browser unless they
+explicitly request a separate one; follow [daily-browser routing](references/daily-browser.md).
+Use [network recovery](references/network-recovery.md) for a generic
 transport failure that has not yet established a fallback reason.
 
 
@@ -868,6 +888,10 @@ believing you vetted it.
 
 ## Self-check — run through this before reporting the package as done
 
+- [ ] Drafting or revising a client report? Read `references/report-writing.md`,
+      apply its readability revision, preserve every grouped posting's city and
+      link, and inspect the final pages, navigation and approved typography.
+
 - [ ] On a site refusal, follow `references/user-recovery.md`: explain the reason,
       preserve partial results, wait for explicit user confirmation before a new
       linked round; do not clear the stopped journal.
@@ -879,6 +903,7 @@ believing you vetted it.
       Use `browser_page` evidence and stop across tools after a site refusal.
 
 Read-when:
+- [ ] Reviewing a Word or PDF CV? Follow `references/layout-review.md` and compare every rendered page with the supplied template and the user's later changes.
 - [ ] Page unavailable? Follow `references/network-recovery.md`: classify first,
       use bounded retries, and inspect relevant VPN/split-routing evidence.
 - [ ] Diagnosed OpenCLI adapter incompatibility? Read `references/opencli-compat.md`;
@@ -937,6 +962,7 @@ unconditionally:
 Required too, but only when the artifact they read is on disk — `check_apply` keys each
 one on the file, so "it did not apply" is never guesswork:
 - [ ] `scripts/check_letter.py` (when `letter.yaml` exists)
+- [ ] `scripts/check_layout.py` (when `cv.docx` or `cv.pdf` exists; inspect all pages against the supplied template first)
 - [ ] `scripts/check_pages.py` (when `cv.pdf` AND `tailored-profile.yaml` exist — both
       are its inputs, and a `could_not_run` receipt does not satisfy it)
 - [ ] `scripts/check_word_limits.py` (when `supporting-statement.md` exists, or
@@ -967,6 +993,10 @@ Ran, leaving nothing in the journal (they render; they do not judge):
 - [ ] `scripts/doctor.py` — once per machine, before the first mode. Reports
       capabilities by using them; `--install` covers the Python packages only. Follow
       `references/agent-setup.md` to install required tools and prepare daily-browser CDP.
+- [ ] `scripts/setup_dependencies.py` — prepare the private runtime when required;
+      `scripts/run_tool.py` invokes it without depending on global executables.
+- [ ] `scripts/browser_cdp.mjs` — diagnosed fallback reads only; import the capture
+      through `scripts/record_browser_capture.py` before the next same-site read.
 - [ ] `scripts/save_profile.py` — every master save goes through it. One CV per
       language, and a new language never overwrites another's file.
 

@@ -177,7 +177,7 @@ def test_the_fast_check_is_sound_about_missing(monkeypatch):
     machine is the line everyone filters out."""
     monkeypatch.setattr(doctor.shutil, "which", lambda b: None)
     missing = doctor.fast_capabilities()
-    assert "PDF rendering (pandoc + a LaTeX engine)" in missing
+    assert "Template CV PDF rendering (pandoc + a LaTeX engine; optional for reports)" in missing
     assert "pdftotext" in missing and "opencli" in missing
 
 
