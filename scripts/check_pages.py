@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import pathlib
+import platform
 import re
 import shutil
 import subprocess
@@ -404,6 +405,36 @@ def findings_for(cv_pdf, profile, today_year: int, letter_pdf=None) -> list:
     return out
 
 
+def _macos_libreoffice_app():
+    """The app bundle to launch on macOS, if this host has one.
+
+    Recent LibreOffice builds can abort when their executable is started directly
+    with ``--headless`` on macOS. LaunchServices starts the same app
+    with the same private profile without that AppKit initialization crash.
+    Keep the direct command as a fallback: a custom or older installation may
+    not have an app bundle but can still export successfully.
+    """
+    if platform.system() != "Darwin":
+        return None
+    for app in (pathlib.Path("/Applications/LibreOffice.app"),
+                pathlib.Path.home() / "Applications" / "LibreOffice.app"):
+        if app.is_dir():
+            return app
+    return None
+
+
+def _office_export_commands(office, profile, folder, docx):
+    """Ordered export commands, preferring the stable macOS app entry point."""
+    args = ["-env:UserInstallation=" + pathlib.Path(profile).as_uri(),
+            "--headless", "--convert-to", "pdf", "--outdir", str(folder),
+            str(pathlib.Path(docx).resolve())]
+    direct = [str(office), *args]
+    app = _macos_libreoffice_app()
+    if app and shutil.which("open"):
+        return [["open", "-W", "-n", "-a", str(app), "--args", *args], direct]
+    return [direct]
+
+
 def docx_findings(cv_docx, profile, today_year, letter_docx=None):
     """Measure an independent Office render, never infer DOCX pages from LaTeX.
 
@@ -424,15 +455,32 @@ def docx_findings(cv_docx, profile, today_year, letter_docx=None):
         for index, (docx, is_letter) in enumerate(documents):
             folder = root / str(index)
             folder.mkdir()
+            pdf = folder / (docx.stem + ".pdf")
+            export_error = None
             try:
-                result = subprocess.run(
-                    [office, "-env:UserInstallation=" + (root / "profile").as_uri(),
-                     "--headless", "--convert-to", "pdf", "--outdir", str(folder),
-                     str(docx.resolve())], capture_output=True, text=True, encoding="utf-8",
-                    timeout=60, check=False)
-                pdf = folder / (docx.stem + ".pdf")
-                if result.returncode or not pdf.is_file():
-                    out.append(f"DOCX_NOT_MEASURED: {docx.name} could not be exported by LibreOffice")
+                converted = False
+                for command in _office_export_commands(office, root / "profile", folder, docx):
+                    # A failed converter may leave a partial PDF. Remove it before
+                    # the next fallback so a later zero exit cannot validate stale
+                    # bytes from the failed attempt.
+                    try:
+                        pdf.unlink()
+                    except FileNotFoundError:
+                        pass
+                    try:
+                        result = subprocess.run(command, capture_output=True, text=True,
+                                                encoding="utf-8", timeout=60, check=False)
+                    except (OSError, UnicodeError, subprocess.SubprocessError) as exc:
+                        export_error = exc
+                        continue
+                    if result.returncode == 0 and pdf.is_file():
+                        converted = True
+                        break
+                if not converted:
+                    if export_error:
+                        out.append(f"DOCX_NOT_MEASURED: {docx.name}: {export_error}")
+                    else:
+                        out.append(f"DOCX_NOT_MEASURED: {docx.name} could not be exported by LibreOffice")
                     continue
                 if is_letter:
                     from pdf_glyphs import glyph_findings

@@ -106,6 +106,20 @@ does not block a task that does not need it. `doctor.py --install` still only
 installs Python packages; the setup entry above owns the broader common runtime,
 and the agent prepares conditional tools as needed.
 
+## Restricted renderer processes
+
+An installed renderer can work on the host but fail inside an agent's restricted
+subprocess. When `doctor.py` or a renderer reports `HOST_EXECUTION_REQUIRED`,
+rerun only the document conversion/TeX render and its PDF verification using the
+host's approved trusted or elevated execution route, then rerun the normal
+gates. Keep the same source and output paths. Do not reinstall the renderer,
+substitute a previous PDF, or claim the PDF was delivered before that rerun
+passes. This diagnosis is independent of document language.
+
+On macOS, `check_pages.py` automatically launches an installed LibreOffice app
+through LaunchServices before falling back to its direct command, because recent
+LibreOffice releases can abort when started directly with `--headless`.
+
 ## Finish and resume
 
 Before the first Indeed or 51job read, follow [opencli-compat.md](opencli-compat.md)

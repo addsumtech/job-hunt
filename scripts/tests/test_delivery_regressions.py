@@ -235,6 +235,13 @@ def test_korean_probe_rejects_a_font_that_only_renders_chinese(tmp_path, monkeyp
     assert deliver.pick_cjk_font('한국어 문서') is None
 
 
+def test_cjk_font_probe_stops_when_the_tex_engine_is_unavailable(monkeypatch):
+    calls = []
+    monkeypatch.setattr(deliver, '_pandoc', lambda *args: calls.append(args) or False)
+    assert deliver.pick_cjk_font('中文报告') is None
+    assert len(calls) == 1, "a broken engine must not be retried for every font"
+
+
 def test_word_check_reports_missing_office_instead_of_passing(tmp_path, monkeypatch):
     doc = tmp_path / 'cv.docx'
     doc.write_bytes(b'not used')
@@ -257,17 +264,15 @@ def test_word_page_limit_measures_the_actual_word_file(tmp_path):
     assert any('CV_TOO_LONG' in f and 'Word file cv.docx' in f for f in findings), findings
 
 
-@pytest.mark.skipif(not all(shutil.which(t) for t in ('pandoc', 'tectonic', 'pdftotext')),
-                    reason='requires PDF toolchain')
 @pytest.mark.parametrize('text', ['한국어 문서 경력 기술 경험', '日本語の履歴書と経験',
                                  '中文报告与工作经历', '中文报告 日本語の履歴書 한국어 문서'])
-def test_native_and_mixed_reports_really_round_trip(tmp_path, text):
+def test_native_and_mixed_reports_really_round_trip_with_bundled_fonts(
+        tmp_path, text, monkeypatch):
     md, pdf = tmp_path / 'report.md', tmp_path / 'report.pdf'
     md.write_text(text + '\n', encoding='utf-8')
-    font = deliver.pick_cjk_font(text)
-    if font is None:
-        pytest.skip('no installed font covering the requested script')
-    ok, reason = deliver.render_pdf(md, pdf, font)
+    monkeypatch.setattr(deliver, '_pandoc',
+                        lambda *args: pytest.fail('bundled CJK report took the TeX path'))
+    ok, reason = deliver.render_pdf(md, pdf, None)
     assert ok, reason
     assert set(deliver._CJK.findall(text)) <= set(deliver._CJK.findall(deliver.pdf_text(pdf)))
 

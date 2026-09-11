@@ -701,6 +701,15 @@ def pick_cjk_font(source: str = "测试中文渲染") -> str | dict | None:
     """The first candidate that survives a render-and-read-back round trip."""
     with tempfile.TemporaryDirectory() as tmp:
         d = pathlib.Path(tmp)
+        # Font probes are a fallback only when the bundled report renderer has
+        # no face for the source. Prove the TeX engine can render plain ASCII
+        # once before trying every candidate: a sandboxed/crashed engine makes
+        # every font fail identically, and repeating a 180-second probe for each
+        # one neither finds a font nor gives the caller a better answer.
+        engine_md, engine_pdf = d / "engine.md", d / "engine.pdf"
+        engine_md.write_text("PDF engine probe\n", encoding="utf-8")
+        if not _pandoc(engine_md, engine_pdf, None):
+            return None
         probe_md = d / "probe.md"
         glyphs = set(_CJK.findall(source))
         probe_md.write_text("".join(sorted(glyphs)) + "\n", encoding="utf-8")

@@ -75,6 +75,32 @@ def test_an_engine_that_produces_no_pdf_is_not_a_capability(monkeypatch):
     assert ok is False
 
 
+def test_tectonic_system_configuration_panic_names_host_execution_recovery(monkeypatch):
+    monkeypatch.setattr(doctor.shutil, "which",
+                        lambda b: "/x/" + b if b in ("pandoc", "tectonic") else None)
+    panic = ("thread 'reqwest-internal-sync-runtime' panicked\n"
+             "system-configuration-0.6.1/src/dynamic_store.rs:154: "
+             "Attempted to create a NULL object.")
+    monkeypatch.setattr(doctor.subprocess, "run",
+                        lambda cmd, **kw: subprocess.CompletedProcess(cmd, 101, b"", panic.encode()))
+    ok, detail = doctor.can_render_pdf()
+    assert not ok
+    assert detail.startswith("HOST_EXECUTION_REQUIRED:")
+    assert "reinstall" not in detail
+
+
+def test_host_execution_diagnostic_does_not_offer_reinstall(monkeypatch):
+    monkeypatch.setattr(doctor, "requirements", lambda: [])
+    monkeypatch.setattr(doctor, "can_render_report", lambda: (True, "ok"))
+    monkeypatch.setattr(doctor, "can_render_pdf",
+                        lambda: (False, "HOST_EXECUTION_REQUIRED: restricted host"))
+    monkeypatch.setattr(doctor.shutil, "which", lambda name: "/x/" + name)
+    pdf_check = next(c for c in doctor.checks()
+                     if c["what"].startswith("template-based CV/letter"))
+    assert "reinstall" in pdf_check["fix"]
+    assert "brew install" not in pdf_check["fix"]
+
+
 # ---- what a missing thing costs -------------------------------------------
 
 def test_every_check_says_what_it_costs_and_how_to_fix_it():

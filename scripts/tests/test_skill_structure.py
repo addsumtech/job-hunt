@@ -119,7 +119,10 @@ def test_the_self_check_names_every_script():
             # Discovery matching is shared policy and rendering logic. The gate
             # invokes it; a run must invoke `check_candidate_match.py`, not this
             # import-only module.
-            "candidate_match.py"}
+            "candidate_match.py",
+            # Renderer host diagnostics are shared by doctor and render_cv;
+            # there is no standalone run step for a user to invoke.
+            "host_execution.py"}
     section = _self_check_items()
     for f in sorted((ROOT / "scripts").glob("*.py")):
         if f.name in skip:

@@ -36,6 +36,7 @@ import unicodedata
 # "this file is not usable" across the whole skill is the point of having one reader.
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import journal  # noqa: E402
+from host_execution import HOST_EXECUTION_REQUIRED, tectonic_needs_host_execution  # noqa: E402
 
 
 # ── i18n headings ────────────────────────────────────────────────────────────
@@ -2262,6 +2263,13 @@ def compile_latex(engine, tex_path, out_path, reasons=None):
               f"Any PDF from a previous run at {out_path} has been removed so it "
               f"cannot be sent by mistake. LaTeX source is at: {tex_path}",
               file=sys.stderr)
+        if tectonic_needs_host_execution(engine, log):
+            print(f"NOTICE_{HOST_EXECUTION_REQUIRED}: Tectonic is installed, but "
+                  "this restricted macOS process cannot initialize "
+                  "SystemConfiguration. Rerun only TeX rendering and PDF "
+                  "verification through the host's approved trusted or elevated "
+                  "execution route. Do not reinstall Tectonic or reuse an older PDF.",
+                  file=sys.stderr)
         for line in log.strip().splitlines()[-15:]:
             print(f"  | {line}", file=sys.stderr)
         return _note(reasons, COMPILE_FAILED)

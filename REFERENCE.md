@@ -138,6 +138,7 @@ job-hunt/
     ├── consistency.py               # contradictions between assessment fields — reports, never repairs
     ├── count_coverage.py            # the ONLY path that produces coverage counts
     ├── doctor.py                    # first-run environment check; --install for pip only
+    ├── host_execution.py            # shared renderer host/sandbox diagnostics (library)
     ├── setup_dependencies.py         # Private Python/Node/OpenCLI installation
     ├── run_tool.py                   # Invoke the prepared runtime and bundled clients
     ├── browser_cdp.mjs               # Direct CDP read capture; no npm packages/extensions

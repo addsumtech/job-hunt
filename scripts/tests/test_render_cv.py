@@ -702,6 +702,30 @@ def test_a_compile_that_drops_glyphs_deletes_the_pdf_and_fails(tmp_path, monkeyp
     assert tex.exists()                            # the .tex is still delivered
 
 
+def test_tectonic_sandbox_panic_is_actionable_and_cannot_leave_a_stale_pdf(
+        tmp_path, monkeypatch, capsys):
+    tex, out = tmp_path / "cv.tex", tmp_path / "cv.pdf"
+    tex.write_text("x", encoding="utf-8")
+    out.write_bytes(b"%PDF stale")
+
+    class Failed:
+        returncode = 101
+        stdout = "thread 'reqwest-internal-sync-runtime' panicked\n"
+        stderr = ("system-configuration-0.6.1/src/dynamic_store.rs:154: "
+                  "Attempted to create a NULL object.")
+
+    monkeypatch.setattr(render_cv.subprocess, "run", lambda *args, **kwargs: Failed())
+    reasons = []
+    assert render_cv.compile_latex("/opt/homebrew/bin/tectonic", tex, out,
+                                   reasons=reasons) is False
+    assert reasons == [render_cv.COMPILE_FAILED]
+    assert not out.exists()
+    err = capsys.readouterr().err
+    assert "NOTICE_HOST_EXECUTION_REQUIRED" in err
+    assert "Do not reinstall Tectonic" in err
+    assert not render_cv.tectonic_needs_host_execution("xelatex", Failed.stderr)
+
+
 def test_the_cli_exits_nonzero_when_a_compilable_machine_produced_no_pdf(
         tmp_path, monkeypatch, sample_profile_path):
     """`Wrote cv.pdf` + exit 0 is how the wrong artifact got delivered. A missing

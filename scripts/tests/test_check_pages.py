@@ -76,6 +76,30 @@ def test_page_count_reads_a_compressed_object_stream(tmp_path):
     assert check_pages.page_count(_pdf(tmp_path / "b.pdf", 1)) == 1
 
 
+def test_macos_office_export_prefers_launchservices_then_keeps_direct_fallback(
+        tmp_path, monkeypatch):
+    """Recent LibreOffice aborts when directly headless on macOS; `open` does not."""
+    app = pathlib.Path("/Applications/LibreOffice.app")
+    monkeypatch.setattr(check_pages, "_macos_libreoffice_app", lambda: app)
+    monkeypatch.setattr(check_pages.shutil, "which",
+                        lambda name: "/usr/bin/open" if name == "open" else None)
+    profile, folder, docx = tmp_path / "profile", tmp_path / "out", tmp_path / "cv.docx"
+    commands = check_pages._office_export_commands("/opt/homebrew/bin/soffice",
+                                                    profile, folder, docx)
+    assert commands[0][:7] == ["open", "-W", "-n", "-a", str(app), "--args",
+                               "-env:UserInstallation=" + profile.as_uri()]
+    assert commands[0][7:] == ["--headless", "--convert-to", "pdf", "--outdir",
+                                str(folder), str(docx.resolve())]
+    assert commands[1] == ["/opt/homebrew/bin/soffice", *commands[0][6:]]
+
+
+def test_office_export_stays_direct_without_a_macos_app(tmp_path, monkeypatch):
+    monkeypatch.setattr(check_pages, "_macos_libreoffice_app", lambda: None)
+    commands = check_pages._office_export_commands("soffice", tmp_path / "profile",
+                                                    tmp_path / "out", tmp_path / "cv.docx")
+    assert len(commands) == 1 and commands[0][0] == "soffice"
+
+
 def test_a_two_page_cv_for_a_mid_career_candidate_is_silent(tmp_path, capsys):
     """The quiet case. Two pages at eight years is exactly what cv-craft.md's
     table prescribes; firing here would teach the reader to skip this gate."""

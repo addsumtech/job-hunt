@@ -29,6 +29,7 @@ import sys
 import tempfile
 
 from opencli_compat import installed_package
+from host_execution import HOST_EXECUTION_REQUIRED, tectonic_needs_host_execution
 
 # Keep diagnostics importable before requirements.txt has been installed.
 REPORT_ENGINES = ("tectonic", "xelatex")
@@ -63,6 +64,15 @@ def importable(module: str) -> bool:
         return False
 
 
+def _process_output(result) -> str:
+    """Decode a subprocess result without assuming a particular capture mode."""
+    def text(value):
+        if isinstance(value, bytes):
+            return value.decode("utf-8", "replace")
+        return str(value or "")
+    return text(getattr(result, "stdout", "")) + text(getattr(result, "stderr", ""))
+
+
 def can_render_pdf() -> tuple[bool, str]:
     """Check the optional Pandoc/template PDF path by rendering one."""
     if not shutil.which("pandoc"):
@@ -85,6 +95,11 @@ def can_render_pdf() -> tuple[bool, str]:
             return False, f"pandoc + {engines[0]} failed to run: {exc}"
         if result.returncode == 0 and pdf.is_file() and pdf.stat().st_size > 0:
             return True, f"pandoc + {engines[0]} (report font configuration)"
+        if tectonic_needs_host_execution(engines[0], _process_output(result)):
+            return False, (f"{HOST_EXECUTION_REQUIRED}: Tectonic is installed, but this "
+                           "restricted macOS process cannot initialize SystemConfiguration; "
+                           "rerun PDF rendering and verification through the host's approved "
+                           "trusted or elevated execution route")
     return False, f"pandoc + {engines[0]} produced no PDF"
 
 
@@ -216,12 +231,16 @@ def checks() -> list[dict]:
         "auto": False, "detail": detail,
     })
     ok, detail = can_render_pdf()
+    pdf_fix = ("rerun only the PDF render and verification through the host's approved "
+               "trusted or elevated execution route; do not reinstall Tectonic"
+               if detail.startswith(HOST_EXECUTION_REQUIRED) else
+               f"{install_hint('pandoc')} && {install_hint('tectonic')}")
     out.append({
         "what": "template-based CV/letter PDF (optional for reports)", "ok": ok,
         "cost": "template-based PDF CVs and letters are unavailable; "
                 "bundled report PDFs, Markdown and .docx use separate capabilities",
-        "fix": f"{install_hint('pandoc')} && {install_hint('tectonic')}",
-        "auto": False, "detail": detail if ok else "",
+        "fix": pdf_fix,
+        "auto": False, "detail": detail,
     })
     out.append({
         "what": "read text back out of a PDF (pdftotext)",
@@ -280,7 +299,7 @@ def main(argv: list[str] | None = None) -> int:
           f"{sys.version.split()[0]}\n")
     for c in results:
         mark = "OK  " if c["ok"] else "MISS"
-        extra = f"  ({c['detail']})" if c["ok"] and c.get("detail") else ""
+        extra = f"  ({c['detail']})" if c.get("detail") else ""
         print(f"  [{mark}] {c['what']}{extra}")
 
     missing = [c for c in results if not c["ok"]]
