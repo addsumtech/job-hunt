@@ -11,6 +11,45 @@ import deliver
 import render_cv
 
 
+def test_selected_report_font_is_not_replaced_by_bundled_font(tmp_path, monkeypatch):
+    md, pdf = tmp_path / 'report.md', tmp_path / 'report.pdf'
+    md.write_text('中文报告', encoding='utf-8')
+    seen = []
+    monkeypatch.setattr(deliver, '_pandoc',
+                        lambda m, p, f: (seen.append(f), p.write_bytes(b'PDF'), True)[-1])
+    monkeypatch.setattr(deliver, '_verify_pdf', lambda *args: (True, ''))
+    monkeypatch.setattr(deliver, '_render_portable_report',
+                        lambda *args: pytest.fail('selected font was replaced'))
+    assert deliver.render_pdf(md, pdf, 'SimSun') == (True, '')
+    assert seen == ['SimSun']
+
+
+def test_selected_report_font_failure_does_not_silently_substitute(tmp_path, monkeypatch):
+    md, pdf = tmp_path / 'report.md', tmp_path / 'report.pdf'
+    md.write_text('中文报告', encoding='utf-8')
+    monkeypatch.setattr(deliver, '_pandoc', lambda *args: False)
+    monkeypatch.setattr(deliver, '_render_portable_report',
+                        lambda *args: pytest.fail('selected font was replaced'))
+    ok, reason = deliver.render_pdf(md, pdf, 'Missing Font')
+    assert not ok and 'selected report font' in reason and not pdf.exists()
+
+
+def test_delivery_carries_profile_font_to_report(tmp_path, monkeypatch):
+    ws, dest = tmp_path / 'workspace', tmp_path / 'delivery'
+    ws.mkdir()
+    (ws / 'report.md').write_text('中文报告', encoding='utf-8')
+    (ws / 'tailored-profile.yaml').write_text('meta:\n  cjk_font: SimSun\n', encoding='utf-8')
+    seen = []
+    def render(md, pdf, font):
+        seen.append(font)
+        pdf.write_bytes(b'PDF')
+        return True, ''
+    monkeypatch.setattr(deliver, 'render_pdf', render)
+    written, notes = deliver.deliver(ws, dest, 'candidate')
+    assert not notes and len(written) == 2
+    assert seen == ['SimSun']
+
+
 @pytest.mark.parametrize('language,label', render_cv._PRESENT.items())
 def test_current_dates_are_localized_without_changing_expected_graduation(language, label):
     profile = {'meta': {'name': 'Test Person', 'language': language},

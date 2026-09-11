@@ -54,6 +54,7 @@ GATES = [
     ("check_letter.py", [], "letter.yaml"),
     ("check_word_limits.py", [], "supporting-statement.md"),
     ("check_pages.py", [], "cv.pdf"),
+    ("check_layout.py", [], "rendered CV"),
     ("lint_cv.py", [], "cv.md"),
     ("consistency.py", [], "fit-assessment.yaml"),
     ("count_coverage.py", [], "fit-assessment.yaml"),

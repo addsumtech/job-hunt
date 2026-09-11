@@ -52,6 +52,8 @@ For each role, the agent compares the requirements with your experience and show
 
 A standard CV receives three independent AI reviews. The ATS reviewer checks keywords and file parsing. The recruiter reviewer checks readability and basic eligibility. The hiring manager reviewer checks experience and responsibilities. The agent edits and reviews again for up to three rounds, listing any gaps that need additional experience or evidence.
 
+Before delivery, the agent reviews every Word/PDF page against any supplied template and your later changes: fonts and sizes, margins, heading rules, date alignment, spacing, content order and pagination. Unreviewed pages or unresolved layout differences prevent completion; changed files must be reviewed again.
+
 After a mock interview, two independent assessments review the quality of your answers and their factual support. The feedback identifies details to add and CV wording to revise.
 
 ## Install
@@ -95,7 +97,7 @@ For Codex, replace `~/.claude/skills` with `~/.codex/skills` in the last two lin
 
 After installation, say: "Set up job-hunt and start my task using my everyday browser."
 
-Install only this skill. The AnySearch client and browser reader are bundled. A single setup entry lets the agent prepare Python packages, Node.js and OpenCLI with its CDP patches; no other skill or browser extension needs a separate installation. Consultation report PDFs use bundled fonts, while CV layout tools are prepared when needed. **Browser access uses CDP.** The agent verifies OpenCLI first and uses the bundled CDP reader only after diagnosing an incompatibility.
+Install only this skill. The AnySearch client and browser reader are bundled. A single setup entry lets the agent prepare Python packages, Node.js and OpenCLI with its CDP patches; no other skill or browser extension needs a separate installation. Consultation report PDFs use bundled fonts by default and honor explicitly selected fonts without silent substitution, while CV layout tools are prepared when needed. **Browser access uses CDP.** The agent verifies OpenCLI first and uses the bundled CDP reader only after diagnosing an incompatibility.
 
 
 The agent connects to your everyday browser where supported and reuses its login state. On first use, you may need to enable remote debugging at `chrome://inspect/#remote-debugging` and accept Chrome's connection request. The agent checks support and explains any steps you need to take.

@@ -52,6 +52,8 @@ Para valorar una oferta, compara cada requisito con tu experiencia e indica cuá
 
 Un CV convencional pasa por tres revisiones independientes de IA. El revisor ATS comprueba las palabras clave y la lectura del archivo; el de selección, la claridad y los requisitos básicos; y el responsable de contratación, la experiencia y las funciones. El agente corrige y vuelve a revisar hasta un máximo de tres rondas, y señala los puntos que requieren más experiencia o documentación.
 
+Antes de entregar los documentos, el agente revisa todas las páginas de Word/PDF frente a la plantilla proporcionada y tus cambios posteriores: fuentes y tamaños, márgenes, líneas de los títulos, alineación de fechas, espaciado, orden del contenido y paginación. Las páginas sin revisar o las diferencias de formato pendientes impiden dar el trabajo por terminado; los archivos modificados se revisan de nuevo.
+
 Después de una entrevista simulada, dos evaluaciones independientes revisan la calidad de las respuestas y su respaldo factual. La devolución indica qué detalles conviene añadir y qué frases del CV necesitan cambios.
 
 ## Instalación
@@ -95,7 +97,7 @@ Para Codex, sustituye `~/.claude/skills` por `~/.codex/skills` en las dos últim
 
 Tras la instalación, dile al agente: «Configura job-hunt y empieza mi tarea con mi navegador habitual».
 
-Solo tienes que instalar este skill. Incluye el cliente de AnySearch y el lector del navegador. El agente prepara los paquetes de Python, Node.js y OpenCLI con sus parches CDP desde una única herramienta de configuración; no necesitas instalar otro skill ni extensiones del navegador. Los informes PDF usan fuentes incluidas y las herramientas de maquetación del CV se preparan cuando hacen falta. **El navegador se conecta mediante CDP.** El agente verifica primero OpenCLI y recurre al lector CDP incluido tras diagnosticar una incompatibilidad.
+Solo tienes que instalar este skill. Incluye el cliente de AnySearch y el lector del navegador. El agente prepara los paquetes de Python, Node.js y OpenCLI con sus parches CDP desde una única herramienta de configuración; no necesitas instalar otro skill ni extensiones del navegador. Los informes PDF usan por defecto fuentes incluidas y respetan las fuentes elegidas expresamente, sin sustituirlas de forma silenciosa; las herramientas de maquetación del CV se preparan cuando hacen falta. **El navegador se conecta mediante CDP.** El agente verifica primero OpenCLI y recurre al lector CDP incluido tras diagnosticar una incompatibilidad.
 
 
 Cuando el entorno lo permite, el agente conecta con tu navegador habitual y aprovecha la sesión abierta. La primera vez puede que tengas que activar la depuración remota en `chrome://inspect/#remote-debugging` y aceptar la solicitud de Chrome. El agente comprueba la compatibilidad y te explica los pasos necesarios.

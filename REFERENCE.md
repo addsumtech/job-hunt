@@ -12,7 +12,9 @@ prepares a private Python environment, Node and CDP-only OpenCLI; AnySearch and
 the browser reader are bundled. Use `scripts/run_tool.py` for subsequent commands.
 See [agent setup](references/agent-setup.md) for exact paths and conditional tools.
 
-Report PDFs use PyMuPDF and bundled fonts. Template-based CV/letter PDFs need
+Report PDFs use PyMuPDF and bundled fonts by default. An explicitly selected
+`meta.cjk_font` is honored through the installed Pandoc/TeX path rather than
+silently substituted. Template-based CV/letter PDFs need
 Pandoc and a compatible XeTeX engine; prepare those only when requested. Without
 that toolchain, Markdown, Word and supported report PDFs still work. CV/letter
 renderers can retain a `.tex` file for later compilation.
@@ -76,6 +78,7 @@ job-hunt/
 │   ├── candidate-situations.md      # Non-standard candidates (gap, switch, exec, military, intl)
 │   ├── cv-craft.md                  # CV writing conventions (markets, links, bullets, ordering)
 │   ├── word-resume-layout.md        # Reviewed Word layout and fictional bilingual examples
+│   ├── layout-review.md             # Mandatory visual comparison with the user's template
 │   ├── browser-fallback.md          # Read-only browser capture and fallback
 │   ├── daily-browser.md            # Daily-browser CDP and bounded parallel sources
 │   ├── network-recovery.md         # Bounded retries and authorized route diagnostics
@@ -125,6 +128,7 @@ job-hunt/
     ├── check_opencli_result.py      # adapter result classifier (wrapper, not a gate)
     ├── opencli_compat.py            # Check/apply/revert known local adapter fixes
     ├── check_pages.py               # page count + the text actually inside the delivered PDF
+    ├── check_layout.py              # Current template/page review and artifact fingerprints
     ├── check_personal_data.py       # Cluster-1 personal-data interlock
     ├── check_render_freshness.py    # the judges read the files still on disk
     ├── check_shortlist.py           # discover's gate: row provenance, caps, md↔yaml agreement

@@ -49,3 +49,7 @@ fill the page. Verify pagination after adjusting spacing. These conventions
 apply to report PDFs too: English Times New Roman, Chinese SimSun; verify actual
 exported fonts and use the installed office-suite font when available. A newer
 explicit user typography request overrides the reference template.
+Record a requested Chinese font in `meta.cjk_font` of the workspace profile.
+Delivery honors that selection before its bundled report fonts; a missing selected
+font is reported instead of silently substituted. Without an explicit selection,
+the bundled report renderer remains available without a TeX installation.

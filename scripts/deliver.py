@@ -236,7 +236,8 @@ def _pandoc(md: pathlib.Path, pdf: pathlib.Path, font: str | dict | None) -> boo
         return False
     cmd = ["pandoc", str(md), "-o", str(pdf), f"--pdf-engine={engine}",
            "--lua-filter", str(pathlib.Path(__file__).with_name("pdf_symbols.lua")),
-           "-V", "mainfont=Times New Roman"]
+           "-V", "mainfont=Times New Roman", "-V", "papersize=a4",
+           "-V", "geometry:margin=20mm", "-V", "fontsize=11pt"]
     if font:
         main = font["main"] if isinstance(font, dict) else font
         cmd += ["-V", f"CJKmainfont={main}"]
@@ -632,8 +633,16 @@ def render_pdf(md: pathlib.Path, pdf: pathlib.Path,
                        "Markdown and .docx still ship")
     needs_cjk = has_cjk(source)
 
+    # A selected font is a typography requirement, not a fallback hint.
+    # Never silently replace it with a readable but different bundled face.
+    if font is not None:
+        if not _pandoc(md, pdf, font if needs_cjk else None):
+            pdf.unlink(missing_ok=True)
+            return False, "could not render the selected report font with pandoc/TeX"
+        return _verify_pdf(pdf, source, needs_cjk)
+
     style = _portable_report_style(source)
-    # Every supported left-to-right report uses a bundled, embedded font first.
+    # Without an explicit selection, prefer bundled, embedded report fonts.
     # This keeps Chinese, English, Japanese, Korean and Spanish layout identical
     # across machines, while the explicit RTL refusal above remains unchanged.
     if style:
@@ -660,6 +669,20 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
             make_pdf: bool = True) -> tuple[list[pathlib.Path], list[str]]:
     written, notes = [], []
     fonts = {}
+    report_font = None
+    if make_pdf:
+        for name in ("tailored-profile.yaml", "profile.yaml"):
+            profile_path = workspace / name
+            if not profile_path.is_file():
+                continue
+            try:
+                profile = journal.load_yaml(profile_path, dict)
+            except journal.InputProblem as exc:
+                return [], [f"cannot read report typography from {name}: {exc.reason}"]
+            meta = profile.get("meta") or {}
+            if isinstance(meta, dict) and meta.get("cjk_font"):
+                report_font = meta["cjk_font"]
+                break
     sources = [p for p in sorted(workspace.rglob("*"))
                if p.is_file() and is_deliverable(p, workspace)
                and not (make_pdf and p.name == "report.pdf")]
@@ -701,9 +724,11 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
             try:
                 source = visible_markdown(src)
                 glyphs = frozenset(_CJK.findall(source))
-                # Bundled report fonts take precedence whenever every visible
-                # glyph is covered, so a Tectonic probe cannot delay delivery.
-                if glyphs and not _portable_report_style(source) and glyphs not in fonts:
+                # A user-selected font wins; otherwise covered bundled glyphs
+                # keep delivery independent of a Tectonic font probe.
+                if glyphs and report_font is not None:
+                    fonts[glyphs] = report_font
+                elif glyphs and not _portable_report_style(source) and glyphs not in fonts:
                     fonts[glyphs] = pick_cjk_font(source)
                 ok, why = render_pdf(src, pdf, fonts.get(glyphs))
             except OSError as exc:

@@ -165,6 +165,18 @@ Read `references/motivation-letter.md` and follow it.
 
 ## Step 6 — Hiring-pipeline review loop (non-negotiable)
 
+**Layout review is mandatory before the content judges and after any re-render.**
+Read `references/layout-review.md`. Open every final Word/PDF page and compare
+it with the actual user-supplied template, honoring the user's later changes.
+Check fonts and sizes, page geometry, full-width heading rules, date alignment,
+paragraph spacing, section/entry/bullet order, and pagination/clipping. A matching
+section order or a readable PDF alone does not establish template fidelity.
+Fix unapproved differences before delivery. Record the comparison, template and
+final-file hashes, and inspected page previews in `layout-review.yaml`; run
+`python scripts/check_layout.py --workspace <workspace>`. `check_apply.py` requires
+its current passing receipt whenever a Word or PDF CV exists. Keep this record
+in the workspace; the client receives their CV and career advice, not this audit.
+
 **Three independent judges** must **all** return `PASS` before the package is interview-ready. They model the real hiring funnel — **ATS → Recruiter/HR → Hiring Manager** — and fail in *different* directions, so the CV must be **machine-findable, recruiter-skimmable & eligible, and genuinely strong** to clear all three:
 
 **This is an actor–critic loop.** Each round: the three critics judge **in parallel** (one message, three `Agent` calls); if any rejects, the **actor — you, the orchestrator — applies targeted edits** addressing only the flagged points, re-renders, and re-judges **all three**. The actor stays inline (not a separate subagent) because it already holds full context and is the only party that can ask the candidate honest supplementary questions. **Stop the moment all three pass (early exit — often round 1).** The speed comes from parallel critics + targeted edits, not from spawning more agents. (Conceptually the funnel is sequential — ATS gates first — but requiring *all three* to pass yields the same end state, so run them concurrently.)
