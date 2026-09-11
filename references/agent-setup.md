@@ -59,6 +59,7 @@ Python, Node and OpenCLI, including paths with spaces:
 python scripts/run_tool.py python scripts/doctor.py
 python scripts/run_tool.py opencli --version
 python scripts/run_tool.py anysearch doc
+python scripts/run_tool.py browser-session start
 python scripts/run_tool.py browser --url https://example.com --output raw/page.json
 ```
 
@@ -68,8 +69,11 @@ All `python`, `node`, `opencli` and AnySearch examples in other references refer
 to these prepared tools. For direct commands, use the exact recorded executable
 paths and the wrapper's PATH layout, not an unrelated global installation.
 
-The OpenCLI wrapper discovers the selected daily browser's current endpoint for
-each live command. `--browser edge` before `opencli` temporarily overrides the
+Start one `browser-session` before live browser reads. The wrapper sends both
+OpenCLI and the bundled reader through that persistent connection, so separate
+commands do not each trigger another consent prompt. Use `browser-session status`
+to check it and `browser-session stop` when the task finishes. The session closes
+after 30 idle minutes; a disconnected session never silently reconnects. `--browser edge` before `opencli` temporarily overrides the
 saved choice. It never launches a separate browser, reads cookies/history,
 changes settings, or operates existing tabs. Follow [daily-browser.md](daily-browser.md)
 for browser support and connection consent. Verify OpenCLI's offline website

@@ -74,3 +74,22 @@ test('only the selected daily browser endpoint is discovered',async()=>{
     await assert.rejects(dailyEndpoint('edge',{platform:'linux',home}),/Cannot find edge/);
   } finally {await rm(home,{recursive:true,force:true});}
 });
+
+test('Chrome and Edge discovery covers macOS, Windows and Linux daily profiles',async()=>{
+  const home=await mkdtemp(join(tmpdir(),'job-hunt-platforms-'));
+  const cases=[
+    ['darwin','chrome','Library/Application Support/Google/Chrome'],
+    ['darwin','edge','Library/Application Support/Microsoft Edge'],
+    ['win32','chrome','Local/Google/Chrome/User Data'],
+    ['win32','edge','Local/Microsoft/Edge/User Data'],
+    ['linux','chrome','.config/google-chrome'],
+    ['linux','edge','.config/microsoft-edge'],
+  ];
+  try {
+    for(const [platform,browser,path] of cases){
+      await mkdir(join(home,path),{recursive:true});
+      await writeFile(join(home,path,'DevToolsActivePort'),`9222\n/devtools/browser/${platform}-${browser}\n`);
+      assert.equal(await dailyEndpoint(browser,{platform,home,localAppData:join(home,'Local')}),`ws://127.0.0.1:9222/devtools/browser/${platform}-${browser}`);
+    }
+  } finally {await rm(home,{recursive:true,force:true});}
+});

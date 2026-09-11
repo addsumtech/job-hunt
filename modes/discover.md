@@ -32,6 +32,32 @@ language contract; no invented retrieval or login state):
 | Real postings obtained | 実際の求人の取得： | 실제 채용 공고 확보: | Ofertas reales obtenidas: |
 | Degraded output | 代替出力の種類： | 대체 출력 유형: | Tipo de salida alternativa: |
 
+## A complete job-search consultation
+
+When the user requests a broad search and recommendations, a single application
+example is not a complete delivery. Agree or infer a practical collection target
+from the request and retain it separately from each round's safety caps. A target
+of dozens of jobs may require multiple bounded rounds; never increase a site's
+read budget or invent listings to reach that target.
+
+Keep a collection manifest with the requested count, maximum rounds, completed
+round workspaces, deduplicated posting URLs/IDs, and shortfall reasons. Continue
+independent sources while a site awaits login or recovery. Refusal locks and
+per-consultation limits survive round changes; a new folder never resets them.
+Stop when the target is met, the agreed rounds are exhausted, or available sources
+cannot add useful evidence. Report the actual count and remaining gap honestly.
+
+Each round still passes its own shortlist and evidence gates. The final client
+report combines unique roles across those verified rounds, explains priorities
+and tradeoffs, gives concrete application actions and role-specific interview
+preparation, and distinguishes card-only leads from detail-reviewed candidates.
+Undisclosed or overlapping salary ranges are confirmation items, not proof that
+a pay floor is satisfied. Do not create a tailored CV for every lead by default.
+
+Mock interview remains opt-in: include preparation in the report, then enter the
+interview mode and its interactive coaching workflow only when the user asks to
+practise. Never invent an interview transcript or start a mock on their behalf.
+
 ## Supplementary public research
 
 Use `references/supplementary-sources.md` when official web/news, GitHub,

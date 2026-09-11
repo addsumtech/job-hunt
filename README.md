@@ -102,7 +102,7 @@ ln -s "$PWD" ~/.claude/skills/job-hunt
 
 Agent 优先连接你平时使用的浏览器，沿用已有登录状态。首次使用时，可能需要你在 `chrome://inspect/#remote-debugging` 开启远程调试，并确认 Chrome 的连接请求。Agent 会检测浏览器是否支持，说明需要你完成的操作。
 
-AnySearch 通过 HTTP API 搜索，可以匿名使用，无需申请 API Key。浏览器操作默认通过 CDP 连接你的日常浏览器，只有你明确要求时才使用独立浏览器。多个独立来源会尽可能同时检索，缩短等待时间。网站登录、验证码和浏览器授权由你完成。
+AnySearch 通过 HTTP API 搜索，可以匿名使用，无需申请 API Key。浏览器操作默认通过 CDP 连接你选择的日常 Chrome 或 Edge，并在同一任务中复用连接，避免每条命令重复弹出授权。浏览器需要提供可用的调试端点；只有你明确要求时才使用独立浏览器。多个独立来源会尽可能同时检索，缩短等待时间。网站登录、验证码和浏览器授权由你完成。
 
 详细步骤见[环境配置](references/agent-setup.md)和[浏览器连接与并行检索](references/daily-browser.md)。
 

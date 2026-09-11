@@ -14,7 +14,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--root", type=Path, default=default_root())
     ap.add_argument("--browser", choices=("chrome", "edge"))
-    ap.add_argument("tool", choices=("python", "opencli", "anysearch", "browser"))
+    ap.add_argument("tool", choices=("python", "opencli", "anysearch", "browser", "browser-session"))
     ap.add_argument("args", nargs=argparse.REMAINDER)
     args = ap.parse_args(argv)
     runtime = json.loads((args.root.expanduser() / "runtime.json").read_text())
@@ -27,25 +27,39 @@ def main(argv=None):
         command = [runtime["python"]]
     else:
         node = runtime["node"]
+        browser = args.browser or runtime.get("browser")
+
+        def session_endpoint():
+            if not browser:
+                raise ValueError("Select the user's daily browser via --browser chrome|edge")
+            probe = subprocess.run([node, str(SKILL / "scripts/browser_session.mjs"),
+                "endpoint", "--root", str(args.root.expanduser()), "--browser", browser],
+                capture_output=True, text=True)
+            if probe.returncode:
+                raise ValueError(probe.stderr.strip() + "; use run_tool.py browser-session start once, then keep that session for this task")
+            return probe.stdout.strip()
+
         if args.tool == "opencli":
-            browser = args.browser or runtime.get("browser")
             # Help/version/offline factory checks need no browser consent.
             offline = not args.args or any(x in args.args for x in ("--help", "-h", "--version", "-V")) or args.args[0] in ("list", "validate")
             if not offline:
-                if not browser:
-                    raise ValueError("Select the user's daily browser via --browser chrome|edge")
-                probe = subprocess.run([node, "--input-type=module", "-e",
-                    "const m=await import(process.argv[1]);console.log(await m.dailyEndpoint(process.argv[2]));",
-                    (SKILL / "scripts/browser_cdp.mjs").as_uri(), browser], check=True, capture_output=True, text=True)
-                env["OPENCLI_CDP_ENDPOINT"] = probe.stdout.strip()
+                env["OPENCLI_CDP_ENDPOINT"] = session_endpoint()
             command = [node, runtime["opencli"]]
         elif args.tool == "anysearch":
             command = [node, str(SKILL / "third_party/anysearch/anysearch_cli.js")]
+        elif args.tool == "browser-session":
+            if not browser:
+                raise ValueError("Select the user's daily browser via --browser chrome|edge")
+            action = args.args[0] if args.args else "status"
+            command = [node, str(SKILL / "scripts/browser_session.mjs"), action,
+                       "--root", str(args.root.expanduser()), "--browser", browser]
+            args.args = args.args[1:]
         else:
             command = [node, str(SKILL / "scripts/browser_cdp.mjs")]
-            browser = args.browser or runtime.get("browser")
             if browser:
                 command += ["--browser", browser]
+            if "--endpoint" not in args.args and "--help" not in args.args:
+                command += ["--endpoint", session_endpoint()]
     return subprocess.run(command + args.args, env=env).returncode
 
 

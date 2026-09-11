@@ -25,11 +25,17 @@ OpenCLI capability diagnosis first, following
    a task-owned tab through browser-level CDP, reads the URL, and closes that tab.
    Select `--browser chrome` or `--browser edge` from the customer's preference;
    it never falls back to another browser. `--endpoint` is only for an explicitly
-   selected browser-level WebSocket endpoint. No proxy service or extra skill is
-   needed. Do not restart the daily browser or copy a profile to establish access.
+   selected browser-level WebSocket endpoint. The bundled session service is started by the prepared runtime; no extra
+   skill or separately installed service is needed. Do not restart the daily browser or copy a profile to establish access.
 3. On supported Chrome (144+), the user enables remote debugging at
    `chrome://inspect/#remote-debugging` and accepts Chrome's connection prompt.
-   The bundled reader handles the connection. Edge must expose its selected
+   Start `python scripts/run_tool.py browser-session start` once and wait for
+   consent; use `browser-session status` instead of repeated starts while waiting.
+   OpenCLI and fallback captures reuse this connection. Close it with
+   `browser-session stop` at the end. Idle sessions expire after 30 minutes;
+   browser restarts or disconnections require a new explicit start and consent.
+   The service listens only on loopback, uses a random private endpoint, and
+   closes only client-owned tabs. It never reconnects automatically. Edge must expose its selected
    daily profile through a valid debugging endpoint too; do not promise this
    mechanism on every browser or managed machine.
 4. OpenCLI is the first extraction route to diagnose. Inspect the installed

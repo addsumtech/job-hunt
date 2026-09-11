@@ -96,5 +96,5 @@ def test_bundled_clients_run_without_installed_skills():
     result = subprocess.run([node, str(setup.SKILL/'third_party/anysearch/anysearch_cli.js'), 'doc'], capture_output=True,text=True)
     assert result.returncode == 0, result.stderr
     assert 'batch_search' in result.stdout
-    result = subprocess.run([node, '--test', str(Path(__file__).with_name('browser-cdp.test.mjs'))], capture_output=True,text=True)
+    result = subprocess.run([node, '--test', str(Path(__file__).with_name('browser-cdp.test.mjs')), str(Path(__file__).with_name('browser-session.test.mjs'))], capture_output=True,text=True)
     assert result.returncode == 0, result.stdout + result.stderr
