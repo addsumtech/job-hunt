@@ -17,6 +17,10 @@ correct page count, or readable Chinese a template match.
    career heuristic. Check the actual embedded PDF fonts. Do not shrink text to
    conceal overflow. Use at most one blank line between sections and inspect
    dates at the right edge, full-width rules, clipping, and page breaks.
+   Inspect bullet emphasis: only an explicit opening `Label:` / `标签：` may be
+   bold. Without that opening label and colon, the whole bullet stays plain.
+   Do not pick words, numbers or the first clause for emphasis, or add a label
+   just to enable bolding. Record this check under `headings_and_rules`.
 4. Fix unapproved differences and render again. After the final inspection,
    write `layout-review.yaml` using the example below, replacing every hash with
    the actual SHA-256. No supplied template means `reference: null`; it does not

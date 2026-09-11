@@ -7,6 +7,10 @@ Body text defaults to 11 pt: Times New Roman for English and SimSun (宋体)
 for Chinese, including Chinese titles. English body text is
 left-aligned so justification cannot stretch word spacing.
 Rules are native paragraph borders, not underlined trailing spaces or pictures.
+Within a bullet, bold only an explicit opening label ending in a colon
+(`Label:` or `标签：`). Leave the remaining text plain. If there is no opening
+label and colon, leave the entire bullet plain; do not infer emphasis from its
+first clause, keywords or numbers. Do not add labels merely to enable bolding.
 
 The page size, section order, translated/custom headings, links and personal-data
 rules still come from the existing profile contract. Internships remain entries
