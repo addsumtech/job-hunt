@@ -47,7 +47,12 @@ Different seniority, product, team or specialization means a different title and
 must remain a separate row. For example, Beijing and Shanghai postings named
 “AI产品经理（垂类场景）-Aime” can share a row with both links; “高级AI产品经理-飞书多维表格”
 and “高级AI产品经理（基础产品方向）-抖音” cannot. State both the grouped-role count and
-the underlying posting count, with closed records excluded from the active list.
+the underlying posting count. Exclude confirmed closed postings from the entire
+client report, including historical appendices, links and count explanations.
+Keep those records and their exclusion reasons in the private research log; only
+include them in the report if the client specifically requests historical roles.
+Client usefulness decides what earns space: explain limitations that affect the
+next decision, without turning internal query bookkeeping into report content.
 
 ## Make a detailed report easy to navigate
 
