@@ -130,6 +130,35 @@ def test_wide_table_preserves_long_fields_and_city_links_without_card_frames(tmp
         assert not any(drawing.get('fill') for page in document for drawing in page.get_drawings())
 
 
+@pytest.mark.parametrize('layout', ['paragraph', 'compact_table', 'wide_table'])
+def test_grouped_posting_links_each_occupy_their_own_line(tmp_path, layout):
+    import pymupdf
+    md, pdf = tmp_path / 'report.md', tmp_path / 'report.pdf'
+    urls = [f'https://example.com/jobs/{i}' for i in range(6)]
+    links = ' '.join(f'[Beijing ID{i}]({url})' for i, url in enumerate(urls))
+    if layout == 'compact_table':
+        source = '| Role | Official entries |\n|---|---|\n| AI PM | ' + links + ' |'
+    elif layout == 'wide_table':
+        source = '| Rank | Role | Evidence | Links |\n|---|---|---|---|\n| 1 | AI PM | Summary | ' + links + ' |'
+    else:
+        source = links
+    md.write_text('# Roles\n\n' + source, encoding='utf-8')
+    style = deliver._portable_report_style(source)
+    assert deliver._render_portable_report(md, pdf, style) == (True, '')
+    with pymupdf.open(pdf) as document:
+        positions = {}
+        for page in document:
+            for link in page.get_links():
+                if link['kind'] == pymupdf.LINK_URI:
+                    positions.setdefault(link['uri'], []).append((page.number, link['from']))
+        assert set(positions) == set(urls)
+        assert all(len(items) == 1 for items in positions.values())
+        for first, second in zip(urls, urls[1:]):
+            page_a, rect_a = positions[first][0]
+            page_b, rect_b = positions[second][0]
+            assert page_b > page_a or (page_b == page_a and rect_b.y0 >= rect_a.y1)
+
+
 def test_selected_report_font_is_not_replaced_by_bundled_font(tmp_path, monkeypatch):
     md, pdf = tmp_path / 'report.md', tmp_path / 'report.pdf'
     md.write_text('中文报告', encoding='utf-8')

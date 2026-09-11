@@ -55,7 +55,11 @@ Deduplicate repeated captures of the same source ID. In the reading directory,
 exact company-and-full-title matches may share one row: list all cities and keep
 every distinct posting link, labeled with its city and posting ID. Keep the source
 records separate underneath so this display grouping does not merge vacancies or
-evidence. If only one city's full description was read, identify that city; its
+evidence. Put each posting link on its own line, even when two short labels would
+fit side by side. Different posting IDs with the same title and substantially
+repeated descriptions are distinct official entries, not proof of independent
+vacancies or hiring headcount. Keep their links without inflating the grouped-role
+count. If only one city's full description was read, identify that city; its
 requirements or verification status do not automatically apply to the others.
 Different seniority, product, team or specialization means a different title and
 must remain a separate row. For example, Beijing and Shanghai postings named
