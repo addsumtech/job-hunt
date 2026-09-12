@@ -119,6 +119,15 @@ def test_adapter_refusal_prevents_browser_import(tmp_path):
     assert len(browser.read_retrieval_calls(ws)) == 1
 
 
+@pytest.mark.parametrize("host, expected", [("we.51job.com", 2), ("zhipin.com", 0)])
+def test_import_checks_snapshot_host_without_stopping_unrelated_sites(tmp_path, host, expected):
+    ws, _, _, _, args = setup_capture(tmp_path)
+    journal.append(ws, {"action": "browser_call", "site": "another_name",
+                        "url": f"https://{host}/security", "classification": "platform_limit"})
+    assert browser.main(args) == expected
+    assert len(browser.read_retrieval_calls(ws)) == (1 if expected == 2 else 2)
+
+
 def test_transport_failure_is_not_a_site_refusal(tmp_path):
     ws, _, _, _, args = setup_capture(tmp_path)
     journal.append(ws, dict(fx.JOURNAL[0], classification="transport", exit_code=1))
@@ -210,6 +219,45 @@ def test_captcha_in_a_legitimate_job_is_not_a_wall(tmp_path):
     dump(ws / 'raw/51job-browser-1.json', snap)
     dump(ws / 'raw/51job-browser-1-rows.json', rows)
     assert record(ws, args)['classification'] == 'ok'
+
+
+def test_live_51job_slider_page_is_a_stop_even_with_http_200(tmp_path):
+    ws, _, snap, _, args = setup_capture(tmp_path)
+    snap.update(title='滑动验证页面', http_status=200,
+                text='访问验证\n\n别离开，为了更好的访问体验，请进行验证，通过后即可继续访问网页\n\n'
+                     '请按住滑块，拖动到最右边')
+    dump(ws / 'raw/51job-browser-1.json', snap)
+    dump(ws / 'raw/51job-browser-1-rows.json', [])
+    assert record(ws, args)['classification'] == 'platform_limit'
+
+
+def test_slider_mentions_in_job_requirements_are_not_a_stop(tmp_path):
+    ws, _, snap, rows, args = setup_capture(tmp_path)
+    rows[0]['title'] = '前端开发工程师'
+    rows[0]['raw_text'] = '前端开发工程师\n负责滑块组件与访问验证界面的开发，熟悉 Vue。'
+    snap['text'] = '\n\n'.join(r['raw_text'] for r in rows)
+    dump(ws / 'raw/51job-browser-1.json', snap)
+    dump(ws / 'raw/51job-browser-1-rows.json', rows)
+    assert record(ws, args)['classification'] == 'ok'
+
+
+def test_live_boss_security_redirect_is_a_stop_while_body_still_loads(tmp_path):
+    ws, _, snap, _, args = setup_capture(tmp_path)
+    snap.update(url='https://www.zhipin.com/web/passport/zp/security.html?code=37',
+                text='BOSS\n\n正在加载中...\n\n© copyright BOSS直聘 京ICP备14013441号-5',
+                http_status=200)
+    dump(ws / 'raw/boss-browser-1.json', snap)
+    dump(ws / 'raw/boss-browser-1-rows.json', [])
+    args[args.index('--site') + 1] = 'boss'
+    args[args.index('--snapshot-file') + 1] = str(ws / 'raw/boss-browser-1.json')
+    args[args.index('--rows-file') + 1] = str(ws / 'raw/boss-browser-1-rows.json')
+    assert record(ws, args)['classification'] == 'platform_limit'
+
+
+def test_security_page_url_detection_is_scoped_to_the_observed_platform():
+    assert not browser.known_security_page('https://example.test/web/passport/zp/security.html')
+    assert not browser.known_security_page('https://www.zhipin.com.example.test/web/passport/zp/security.html')
+    assert not browser.known_security_page('https://www.zhipin.com/job_detail/security.html')
 
 
 @pytest.mark.parametrize('site,offset,page', [('indeed',0,1), ('indeed',10,2),

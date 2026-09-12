@@ -27,6 +27,7 @@ WALL = re.compile(
     r"(?:enter|complete|solve) (?:the |this |a )?captcha|verify (?:that )?you are (?:a )?human|access denied|too many requests|"
     r"please (?:sign|log) in|(?:sign|log) in (?:required|to continue|to view)|"
     r"(?:请输入|请完成|请填写).{0,12}验证码|验证您是人类|访问受限|访问过于频繁|请先登[录入]|"
+    r"请按住滑块[，,\s]*拖动到最右边|为了更好的访问体验[，,\s]*请进行验证|"
     r"認証が必要|ログインが必要|로그인이 필요|접근이 제한", re.I)
 
 
@@ -39,6 +40,14 @@ def web_url(value):
                 and parsed.username is None and parsed.password is None)
     except ValueError:
         return False
+
+
+def known_security_page(url):
+    """A confirmed platform interstitial can initially show only a loading label."""
+    parsed = urlsplit(url)
+    host = (parsed.hostname or '').lower()
+    return ((host == 'zhipin.com' or host.endswith('.zhipin.com'))
+            and parsed.path == '/web/passport/zp/security.html')
 
 
 def validate_snapshot(snapshot, rows):
@@ -64,7 +73,8 @@ def validate_snapshot(snapshot, rows):
     blocked = snapshot.get("blocked", False)
     if type(blocked) is not bool:
         raise ValueError("blocked must be boolean")
-    if blocked or status in (401, 403, 429) or WALL.search(snapshot["text"]):
+    if (blocked or status in (401, 403, 429) or WALL.search(snapshot["text"])
+            or known_security_page(snapshot["url"])):
         if rows:
             raise ValueError("site refusal must have no extracted rows")
         return "platform_limit"
@@ -113,20 +123,26 @@ def _labels(value):
 
     Applied to NAMES as well as hosts, because a name is how the two backends
     are joined and `51job` / `51job.com` / `www.51job` are one site written
-    three ways. Labels of two characters or fewer are dropped: they carry no
-    identity and would link unrelated sites.
+    three ways. Domain suffixes and labels of two characters or fewer are
+    dropped: they carry no source identity and would link unrelated sites.
     """
     value = (value or "").strip().lower()
     if value.startswith("www."):
         value = value[4:]
-    return {l for l in value.split(".") if len(l) > 2}
+    labels = value.split(".")
+    if len(labels) > 1:
+        labels.pop()  # A domain suffix does not identify a recruitment source.
+        while labels and labels[-1] in {"com", "co", "org", "net", "edu", "gov"}:
+            labels.pop()
+    return {label for label in labels if len(label) > 2}
 
 
 def _linked(a, b):
     """Do these two site identifiers plainly name the same site?
 
-    A shared LABEL, compared whole: `51job` links to `we.51job.com`, to
-    `51job.com` and to `www.51job`; `qiancheng` links to none of them.
+    A bare name matches a whole non-suffix label: `51job` links to
+    `we.51job.com`, `51job.com` and `www.51job`. Two hosts must match
+    exactly or be parent/subdomain; shared TLDs or `jobs` labels are insufficient.
 
     Substring containment was tried and removed. Measured, it bought exactly one
     hypothetical pairing (`boss` to `bossjobs.com`) and cost three plausible
@@ -140,6 +156,10 @@ def _linked(a, b):
     market before this function could be trusted at all. The journal supplies
     those pairings instead, from hosts the run actually read.
     """
+    a, b = (value.strip().lower().removeprefix("www.") for value in (a, b))
+    if "." in a and "." in b:
+        # Shared TLDs or generic subdomains such as jobs identify no common site.
+        return a == b or a.endswith("." + b) or b.endswith("." + a)
     x, y = _labels(a), _labels(b)
     return bool(x & y)
 
@@ -287,7 +307,8 @@ def main(argv=None):
         records = read_journal(root)
         if any("_unparsable" in r for r in records):
             raise ValueError("journal contains an unparsable line")
-        if check_stop_order(records + [{"action": ACTION, "site": args.site}]):
+        if check_stop_order(records + [{"action": ACTION, "site": args.site,
+                                       "url": snapshot["url"]}]):
             raise ValueError("READ_AFTER_STOP: site already stopped in this round")
         record = {
             "action": ACTION, "backend": args.backend, "operation": "snapshot",

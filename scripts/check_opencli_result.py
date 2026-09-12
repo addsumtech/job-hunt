@@ -56,7 +56,7 @@ DETAIL_COMMAND = {
 # rather than being swallowed as a generic platform limit.
 # One Chinese phrase and three English ones meant `请先登录后查看`,
 # `ログインが必要です`, `로그인이 필요합니다` and `Bitte melden Sie sich an` all fell
-# through to `classification: transport`, whose remedy is "run opencli doctor" —
+# through to `classification: transport`, whose remedy diagnoses the connection —
 # when the correct remedy is to hand the user `opencli <site> login`. A wrong
 # remedy costs more than no remedy: it sends them to debug a working adapter.
 #
@@ -294,9 +294,11 @@ def classify(site, command, exit_code, stdout_text, stderr_text,
 
         result["classification"] = "transport"
         result["remedy"] = (
-            "unrecognised failure. Run `opencli doctor` before concluding this "
-            "adapter is broken — a dead browser bridge takes out every "
-            "browser:true command on every site at once."
+            "Unrecognised failure. Check the selected daily-browser CDP session "
+            "and the offline website routing probe in `scripts/doctor.py`; "
+            "follow `references/network-recovery.md`. Preserve the error and "
+            "inspect the actual page before concluding that the adapter is broken. "
+            "Do not run an extension-oriented health probe."
         )
         return result
 
@@ -306,8 +308,10 @@ def classify(site, command, exit_code, stdout_text, stderr_text,
     except (json.JSONDecodeError, TypeError):
         result["classification"] = "transport"
         result["remedy"] = (
-            "exit 0 but stdout is not JSON. Re-run with --trace on and check "
-            "`opencli doctor`."
+            "Exit 0 but stdout is not JSON. Preserve the output and check the "
+            "selected daily-browser CDP session and offline website routing "
+            "with `scripts/doctor.py`; follow `references/network-recovery.md` "
+            "before any bounded retry. Do not run an extension-oriented health probe."
         )
         return result
     if not isinstance(rows, list):

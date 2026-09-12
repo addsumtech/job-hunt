@@ -211,7 +211,10 @@ def test_transport_is_the_default_for_an_unrecognised_failure():
         "  message: 'connect ECONNREFUSED 127.0.0.1:19825'\n  exitCode: 1\n",
     )
     assert r["classification"] == "transport"
-    assert "opencli doctor" in r["remedy"]
+    assert "scripts/doctor.py" in r["remedy"]
+    assert "daily-browser CDP" in r["remedy"]
+    assert "references/network-recovery.md" in r["remedy"]
+    assert "opencli doctor" not in r["remedy"]
 
 
 def test_exit0_with_unparsable_stdout_is_transport_not_ok():
@@ -272,7 +275,7 @@ def test_read_adapter_calls_skips_receipts_and_surfaces_bad_lines(tmp_path):
 
 # ---------------------------------------------------------------------------
 # A login wall the classifier does not recognise becomes `transport`, whose
-# remedy is "run opencli doctor" — when the correct remedy is to hand the user
+# remedy diagnoses the connection — when the correct remedy is to hand the user
 # `opencli <site> login`. A wrong remedy costs more than none: it sends them to
 # debug a working adapter. One Chinese phrase and three English ones covered it.
 # ---------------------------------------------------------------------------
