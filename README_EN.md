@@ -1,4 +1,4 @@
-# job-hunt: find jobs, tailor your CV, practise interviews
+# job-hunt: find roles, create your CV, practise interviews
 
 <p align="center">
   <a href="README.md">简体中文</a> ·
@@ -17,50 +17,87 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/hero.jpg" alt="CV entries connected to their sources: a paper, notes, certificates and project work">
+  <img src="docs/assets/hero.jpg" alt="Illustrated career workflow: find roles, assess fit, create a CV and practise interviews">
 </p>
 
-job-hunt is a career skill for Claude Code and Codex. It helps you find roles, decide where to apply, prepare a CV and cover letter, and practise interviews.
+job-hunt is a career skill for Claude Code and Codex. It helps you find roles, decide where to apply, create a Chinese or English CV and application materials, and practise interviews.
 
-Give the agent your goals, CV or a job link. It checks the requirements against your experience, edits and formats your documents, then reviews them. Guidance covers technical and research roles, career changes, employment gaps, new graduates and international applications.
+Share your goals, experience or a posting link. The agent organizes the information, checks requirements, edits your documents and reviews their layout. Guidance covers new graduates, career changes, employment gaps, technical and research roles, and international applications.
 
-## Start with the step you need
+## What it helps you do
 
-| Mode | When to use it | Main output |
+| Feature | When to use it | What the agent does |
 |---|---|---|
-| **discover** | You have a direction and want roles worth exploring | A shortlist with original posting links and initial advice |
-| **assess** | You have a posting and want to decide whether to invest time | Requirements mapped to evidence, hard barriers, gaps, and application advice |
-| **apply · Create your CV and application** | You have chosen a role and need targeted materials | A Chinese or English CV in Word/PDF, optional cover letter, review records, and an interview brief |
-| **interview** | You have a posting and CV and want to practise | One mock round, a transcript, two independent assessment passes, and open questions |
+| **discover · Find roles** | You have a direction but need suitable openings | Searches by market and preferences, reads the full details of retained postings, and organizes links and advice |
+| **assess · Decide whether to apply** | You want to evaluate a specific role | Compares requirements with your experience, identifying eligibility barriers, strengths, gaps and preparation effort |
+| **apply · Create your CV and application** | You need a CV or materials tailored to a role | Builds a draft from your experience or edits an existing CV, then formats Word/PDF files and runs independent reviews |
+| **interview · Practise interviews** | You want to rehearse answers and follow-up questions | Uses the role and CV to run a mock interview, record answers, and review delivery and factual support |
 
-Use each mode on its own. After a round, the agent suggests next steps and you choose whether to continue. You submit the finished application.
+Use the features separately or connect them as needed. You choose the next step and submit the finished application yourself.
 
-After installation, try:
+## First use
+
+### 1. Install and set up
+
+Choose an option in [Install](#install) below. Then tell the agent in Claude Code or Codex:
 
 ```text
-Use job-hunt. Find me MRI reconstruction roles in the Netherlands.
-Use job-hunt. Here is a posting link and my CV. Is this worth applying to?
-Use job-hunt. Tailor my CV to this role and write a cover letter.
-Use job-hunt. Run a technical mock interview based on this posting and my CV.
+Set up job-hunt and start my task using my everyday browser.
 ```
 
-The agent first confirms your task and target market, then asks for any missing materials or preferences.
+The agent checks and prepares dependencies, then explains any browser consent or site login you need to complete. No additional skill or browser extension is required.
 
-## Create a Chinese or English CV and prepare your application
+### 2. Share what you have
 
-Start with an existing CV, or provide your education, work and project experience so the agent can organize a first draft. It then tailors the content to your target role. Chinese, English and the other supported languages are available, with editable Word files and typeset PDFs.
+For a search, give your target role, market and preferences. For an assessment, share the posting and your experience. For a CV, provide an existing document or your education, work and projects. A mock interview needs a posting and CV. The agent asks for missing information; you do not need to fill out a fixed template first.
 
-A complete career report checks the full description of every retained posting. If a description cannot be accessed, the report states the reason and marks the lead unresolved. List summaries support initial screening; reaching a target count does not make them complete research. You can explicitly request a preliminary shortlist first.
+### 3. Ask for the task you need
 
-The agent checks your experience against your profile, answers, papers and projects before editing the CV. It adjusts the order and wording, and lists claims that need more evidence. Edits use a copy of your profile; the original stays available.
+Each of these is a separate starting point:
 
-For each role, the agent compares the requirements with your experience and shows which are met, partly met or missing evidence. Work authorisation, licences and other eligibility requirements come first, followed by application advice and any information you need to add.
+```text
+Use job-hunt to find AI product manager roles in Shanghai.
+Use job-hunt. Here is a posting and my CV. Is this worth applying to?
+Use job-hunt to turn this experience into Chinese and English CVs in Word and PDF.
+Use job-hunt to run a mock interview based on this posting and my CV.
+```
 
-A standard CV receives three independent AI reviews. The ATS reviewer checks keywords and file parsing. The recruiter reviewer checks readability and basic eligibility. The hiring manager reviewer checks experience and responsibilities. The agent edits and reviews again for up to three rounds, listing any gaps that need additional experience or evidence.
+## What you receive
 
-Before delivery, the agent reviews every Word/PDF page against any supplied template and your later changes: fonts and sizes, margins, heading rules, date alignment, spacing, content order and pagination. Unreviewed pages or unresolved layout differences prevent completion; changed files must be reviewed again.
+| Deliverable | What it contains |
+|---|---|
+| **Career consultation report (PDF)** | Posting links, fit analysis, strengths and gaps, application priorities or next steps relevant to your task |
+| **Tailored CV (Word/PDF)** | An editable Word document and a typeset PDF, built from your experience or adapted to a role |
+| **Additional application materials (on request)** | A cover letter, motivation letter, employer form or criterion-based supporting statement |
+| **Interview preparation and feedback (on request)** | An interview brief, mock transcript, and independent assessments of answer quality and factual support |
 
-After a mock interview, two independent assessments review the quality of your answers and their factual support. The feedback identifies details to add and CV wording to revise.
+Each consultation includes a report; other documents depend on the task you choose. Local and employer requirements determine the format, such as a Japanese rirekisho and career-history document, or an NHS/Civil Service supporting statement in the UK.
+
+Delivery goes into one `~/Downloads/<workspace-name>/` folder, organized into `简历/` (CV) and `报告/` (report). Later stages use the same location so you can find the current documents.
+
+## How the work is checked
+
+### Full postings and real experience
+
+A complete career report requires reading the full description of every retained posting. Search summaries are for initial screening. If a description genuinely cannot be accessed, the report explains why and marks it unresolved; it does not count as reviewed.
+
+CV edits and advice use the experience you provide. The agent preserves your source profile, edits a copy, and lists missing evidence. It does not invent skills or performance figures, or predict hiring odds.
+
+### Three independent AI CV reviews
+
+| Review perspective | What it checks |
+|---|---|
+| **Applicant tracking system (ATS)** | Whether the CV can be parsed and its keywords reflect the role's requirements |
+| **Recruiter** | Readability and basic eligibility |
+| **Hiring manager** | Whether projects, responsibilities and experience support the role's requirements |
+
+A standard CV is revised and reviewed for up to three rounds. Gaps that need more real experience or evidence remain explicit. Employer forms and criterion-based statements are checked against their own requirements.
+
+### Layout and interview feedback
+
+Before delivery, every Word/PDF page is checked against your template, fonts, alignment, spacing and pagination. Changes trigger another review; unresolved layout issues prevent completion.
+
+After a mock interview, answer quality and factual support receive separate independent assessments, identifying details to add and CV wording to revise.
 
 ## CV and report examples
 
@@ -74,7 +111,7 @@ This image is rendered from a fictional CV PDF. Names, institutions, employers, 
 
 ### Career report excerpt
 
-An anonymized English excerpt from a real job search on 11 September 2026, showing priorities, relevant experience, missing evidence and preparation. This historical example preserves some summary-only leads; the current complete-delivery workflow now requires posting-by-posting detail checks. The fictional CV was not used for the report judgments. Click an image for full size.
+An anonymized English excerpt from a real search on 11 September 2026, showing role judgments and preparation. This historical snapshot retains some summary-only leads; current complete reports require each posting’s full details. The fictional CV was not used for these judgments. Click an image for full size.
 
 <p align="center">
   <a href="docs/assets/examples/report-en-01.png"><img src="docs/assets/examples/report-en-01.png" width="49%" alt="Anonymized English career report with priorities and selected roles"></a>
@@ -122,70 +159,42 @@ For Codex, replace `~/.claude/skills` with `~/.codex/skills` in the last two lin
 
 Open the job-hunt listing on [SkillHub](https://skillhub.cn/skills/user_f486c577/best-job-hunt) or [ClawHub](https://clawhub.ai/dong845/skills/job-hunt), then follow that platform's installation flow.
 
-### First use: let the agent prepare the environment
+## Markets and languages
 
-After installation, say: "Set up job-hunt and start my task using my everyday browser."
+Sources include 51job, Indeed, LinkedIn and BOSS Zhipin, selected for your market and access conditions. China searches also consider preferences for large or smaller private firms, state-owned enterprises and foreign companies. Nowcoder and 1point3acres provide interview and hiring-process context. See the [source catalogue](references/discovery-sources.md) and [source policy](references/source-policy.md).
 
-Install only this skill. The AnySearch client and browser reader are bundled. A single setup entry lets the agent prepare Python packages, Node.js and OpenCLI with its CDP patches; no other skill or browser extension needs a separate installation. Consultation report PDFs use bundled fonts by default and honor explicitly selected fonts without silent substitution, while CV layout tools are prepared when needed. **Browser access uses CDP.** The agent verifies OpenCLI first and uses the bundled CDP reader only after diagnosing an incompatibility.
+CV headings and personal-data labels support English, Dutch, German, French, Spanish, Italian, Chinese, Japanese and Korean. Discovery and assessment reports support Chinese, English, Japanese, Korean and Spanish through the [report language templates](references/report-localization.md). Company and industry research can use official sites, news, WeChat public accounts and relevant GitHub projects as [supplementary sources](references/supplementary-sources.md).
 
+The repository includes 5 market-convention tables with 38 sourced entries for the US, UK, Germany, the Netherlands and China, each with scope and review dates. Photos, personal details and application formats follow the target market and employer's requirements; outdated or missing information is flagged.
 
-The agent connects to your everyday browser where supported and reuses its login state. On first use, you may need to enable remote debugging at `chrome://inspect/#remote-debugging` and accept Chrome's connection request. The agent checks support and explains any steps you need to take.
+Standard CVs for the US, Canada, UK, Ireland, Australia and New Zealand omit photos and related personal information by default. Other recognized markets use supplied information according to their rules. These fields are omitted when the market is unknown.
 
-AnySearch searches through its HTTP API and works anonymously without an API key. Browser operations use your daily browser through CDP by default; a separate browser is used only when you explicitly request it. Independent sources are searched concurrently where possible to reduce waiting. You handle site logins, verification challenges and browser consent.
+## Setup and common questions
 
-See [environment setup](references/agent-setup.md) and [browser connections and concurrent searches](references/daily-browser.md) for details.
+### Do I need to install search and layout tools myself?
 
-### Trouble reading a job site
+After the skill is installed, the agent uses one setup entry to prepare Python packages, Node.js and OpenCLI with its CDP patches. The AnySearch client and browser reader are bundled; AnySearch uses an HTTP API without an API key. CV layout tools are prepared as needed. Reports use bundled fonts by default and honor explicitly selected fonts without silent substitution. See [environment setup](references/agent-setup.md).
 
-For known Indeed and 51job compatibility issues, the agent checks and applies the appropriate fix. Current patches target OpenCLI 1.8.7; other versions are checked separately.
+### Why does the browser ask for consent?
 
-You can also ask the agent to search through the job site's own search box. For troubleshooting, say "check job-site compatibility patches" or "revert compatibility patches". See the [check and revert instructions](references/opencli-compat.md).
+The agent uses CDP, a remote debugging connection, to access your everyday Chrome or Edge and reuse its login state. On first use, you may need to enable remote debugging at `chrome://inspect/#remote-debugging` and accept the connection. The agent checks support and guides you through the steps. Connections are reused within the task, and independent sources are searched concurrently where possible. A separate browser is used only on your explicit request. See [browser connections](references/daily-browser.md).
 
-## Markets, platforms, and languages
+### What if a site requires login or a posting cannot be read?
 
-The agent selects sources for your target market and reads them through the browser or an available OpenCLI adapter. Sources include 51job, Indeed, LinkedIn and BOSS Zhipin. The Indeed adapter currently connects to the US site; searches in other markets use local sources first. The [source catalogue](references/discovery-sources.md) lists login requirements and uses; the [source policy](references/source-policy.md) explains access rules.
+The agent pauses that source and asks you to complete the login or verification. Reply “done, continue” to resume. If access remains unavailable, you can provide the posting text or leave the lead unresolved.
 
-For China, the agent asks whether you prefer large private companies, small and medium private companies, state-owned enterprises or foreign companies, then uses your preferences to rank results. Nowcoder and 1point3acres provide interview experiences and hiring-process context.
+The agent verifies OpenCLI first and uses the bundled CDP reader only after confirming incompatibility. The Indeed adapter currently connects to the US site; other markets use local sources first. Known Indeed and 51job patches target OpenCLI 1.8.7 and can be checked or reverted. The agent can also use the site's search box directly. See [compatibility troubleshooting](references/opencli-compat.md).
 
-When a site requires login or verification, the agent pauses that source and asks you to complete the step. Reply "done, continue" to resume. If access is still unavailable, you can try later, paste the posting or review the results already collected.
+### Where are source profiles and working files stored?
 
-CV headings and personal-data labels support English, Dutch, German, French, Spanish, Italian, Chinese, Japanese and Korean. Discovery and assessment reports support Chinese, English, Japanese, Korean and Spanish through the [report language templates](references/report-localization.md). Some internal references remain in English. The agent checks PDF fonts during setup.
+This skill uses `~/.claude/job-profiles/` as its default shared store. It is not a built-in Claude Code or Codex directory; saving a profile creates it as needed. Both agents use the same location to reuse your data. Set `JOBHUNT_PROFILES_ROOT` to choose another directory. Source profiles can be stored by language, and applications have separate workspaces, apart from your delivered reports and CVs. Markdown, applicable `.tex` sources and check records support later edits and traceability. See [REFERENCE.md](REFERENCE.md) for the layout.
 
-The project includes 5 market-convention tables with 38 entries for the US, UK, Germany, the Netherlands and China. Each entry includes its source, scope and review date. The agent flags outdated or missing information; the employer's requirements guide the application.
-
-<p align="center">
-  <img src="docs/assets/personal-data.jpg" alt="Repository rendering examples: a US-targeted CV omits personal data; a Germany-targeted CV retains a supplied photo and date of birth">
-</p>
-
-The target market determines how photos and personal details appear. Standard CVs for the US, Canada, UK, Ireland, Australia and New Zealand omit them by default. Other recognised markets follow their own rules using the information you provide. If the market is unknown, these fields are omitted.
-
-## What you receive
-
-| Material | Formats and details |
-|---|---|
-| Tailored CV | Markdown, Word (`.docx`), and PDF; PDF typesetting also preserves `.tex` |
-| Cover or motivation letter | Optional; Markdown, Word, and PDF |
-| Japanese rirekisho (履歴書) | A separate form renderer produces a Markdown preview and editable `.docx`; export the form to PDF through Word or LibreOffice |
-| Structured supporting statement | Evidence organised by criterion, with word-limit checks, for applications such as NHS and Civil Service forms |
-| Assessment and interview material | Shortlists, fit assessments, interview briefs, mock transcripts, and debriefs |
-
-Structured applications review the supporting statement against the employer's criteria. If a standard CV is also required, it receives the three-reviewer check separately. A Japanese rirekisho is checked for form completeness; its companion career-history document follows the standard CV review process.
-
-Every consultation produces a PDF report with career analysis, supporting sources and questions to resolve. It goes in `~/Downloads/<workspace-name>/` with your CV and other requested documents. Later stages use the same folder. Cover letters and mock interviews are available when you request them.
-
-Delivery uses `简历/` (CV) and `报告/` (report) subfolders, with filenames such as `简历.docx`, `简历.pdf` and `求职建议报告.pdf`.
-
-For company or industry research, the agent can consult official sites, news, WeChat public accounts and relevant GitHub projects through [supplementary sources](references/supplementary-sources.md).
-
-## Where files live
-
-Source profiles, application workspaces, and check records default to `~/.claude/job-profiles/`, including when running on Codex. Set `JOBHUNT_PROFILES_ROOT` to use another root directory.
-
-Each person can retain source profiles in several languages, such as `profile.zh.yaml` and `profile.en.yaml`; the legacy `profile.yaml` is still supported. Applications have separate workspaces, and provenance records plus `journal.jsonl` preserve the check history. See [REFERENCE.md](REFERENCE.md) for the full layout.
-
-Files are stored locally. Model calls and web access still depend on your chosen agent and its service configuration.
+Files are stored locally; model calls and web access depend on your chosen agent and its service configuration.
 
 ## Verification and further reading
+
+<details>
+<summary>Developer checks, evaluation records and technical documentation</summary>
 
 Automated checks cover evidence references, source-profile preservation, verdict parsing, personal-data handling, rendering, and mode handoffs:
 
@@ -207,3 +216,5 @@ The three CV reviewers were tested through `codex exec` on 2026-09-06. See [agen
 - [Evaluation guide](evals/README.md): methods and limitations.
 
 These technical references are currently written mainly in English. Released under the [MIT License](LICENSE).
+
+</details>
