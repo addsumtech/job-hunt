@@ -102,8 +102,6 @@ Filter advertising. Posts that open with a course pitch, a 辅导 offer, or a co
   are commercial material wearing a 面经 costume. Log them `reason: advertising`.
 If the adapter returns 403 or "need login", report the source as unavailable and generate
   instead. Do not log in to work around it.
-1point3acres is unavailable: every read command 403s anonymously, including the
-  `browser: false` ones, and `search` is documented as requiring login.
 `nowcoder papers --company/--job` filters are inert (verified: three different filter
   values returned byte-identical rows). Use `papers` as a company/role index only.
 ```

@@ -817,7 +817,7 @@ and `check_shortlist.py` fails the run with `CAP_MISSING` or `CAP_ABOVE_CEILING`
 
 **READ `references/discovery-sources.md` when you are in discover mode and
 about to call an adapter other than the four in the table above** (upwork,
-nowcoder, 1point3acres, maimai, or any site added later). It carries that
+nowcoder, maimai, or any site added later). It carries that
 adapter's flags, its measured login state, its identity field and its detail
 command — and `shortlist.yaml`'s `sources:` entry cannot be filled in without
 them, so `check_shortlist.py` fails the run with `SOURCE_REPORT_MISSING` if you

@@ -162,7 +162,7 @@ ln -s "$PWD" ~/.claude/skills/job-hunt
 
 ## 地区与语言支持
 
-岗位来源包括 51job、Indeed、LinkedIn、BOSS 直聘等，按目标地区和访问条件选择。中国市场还会考虑你对大型私企、中小型私企、国企、外企的偏好。牛客和一亩三分地可用于了解面试经验与招聘流程。详见[岗位来源目录](references/discovery-sources.md)及[来源使用规则](references/source-policy.md)。
+岗位来源包括 51job、Indeed、LinkedIn、BOSS 直聘等，按目标地区和访问条件选择。中国市场还会考虑你对大型私企、中小型私企、国企、外企的偏好。牛客可用于了解面试经验与招聘流程。详见[岗位来源目录](references/discovery-sources.md)及[来源使用规则](references/source-policy.md)。
 
 简历标题与个人信息标签支持英语、荷兰语、德语、法语、西班牙语、意大利语、中文、日语和韩语；找岗与评估报告支持中文、英文、日语、韩语和西班牙语，见[报告语言模板](references/report-localization.md)。公司与行业调研还可使用官网、新闻、微信公众号及相关 GitHub 项目等[补充信息源](references/supplementary-sources.md)。
 

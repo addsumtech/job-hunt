@@ -113,6 +113,28 @@ diagnosis; `load_timed_out: true` with no extracted rows is recorded as transpor
 not zero matches. Login and human-verification pages stop the wait and require
 the user hand-off below, including a verification screen that keeps spinning.
 
+If DOM diagnosis shows that the intended description node is present but still
+contains a lazy-loading skeleton, use its **observed selector**, together with
+the expected text, to reveal that node:
+
+```sh
+python3 scripts/run_tool.py --browser chrome browser \
+  --url '<original-page-url>' \
+  --wait-for-text 'About the job' --reveal-selector '<observed-description-selector>' \
+  --output '<ws>/raw/<site>-browser-revealed.json'
+```
+
+After the first 15-second wait and the refusal check, this option activates only
+the capture's own tab, lets it settle for 1.5 seconds, and scrolls the specified
+node into view once. The remaining
+30- and 60-second waits still require the requested text; scrolling alone does
+not establish a complete JD. A missing or invalid selector returns an error and
+closes the task tab instead of scrolling elsewhere. The snapshot's `reveal`
+field records whether the action occurred. No application button is clicked and
+no website private API is called. Without this option, captures stay in the
+background. Do not guess selectors or enable it routinely: retain the observed
+lazy-loading evidence and obey the same capture/import and refusal-stop rules.
+
 Save the JSON string's contents as `raw/<site>-browser-<n>.json`, without rewriting
 its text or URLs. If a tool reports a refusal outside the DOM (HTTP 403, for
 example), retain that output and set `http_status: 403` or `blocked: true` on the

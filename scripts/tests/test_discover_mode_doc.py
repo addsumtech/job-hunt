@@ -380,7 +380,7 @@ def test_the_table_corrects_the_claim_rather_than_repeating_it():
     must be present is the correction, not the absence of the string."""
     f = flat()
     assert 'saying it has "no search command" is wrong' in f
-    assert "`nowcoder` and `1point3acres` both have one" in f
+    assert "`nowcoder` has a search command" in f
 
 
 def test_the_two_sites_are_not_listed_as_unusable():

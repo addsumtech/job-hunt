@@ -290,16 +290,15 @@ before calling anything outside SKILL.md's four.
 | Middle East · anywhere with no convention table | — | `linkedin` | `target_market: other`; say plainly there is no convention data for this market |
 
 **A site being absent from the "job listings" columns does not make it useless,
-and saying it has "no search command" is wrong.** `nowcoder` and `1point3acres`
-both have one; `discovery-sources.md` records what those searches actually
-return, and the distinction it draws is the one that matters — nowcoder is
-"an interview-experience (面经) source, not a job source", and 1point3acres is a
-forum. They inform a round and they do not produce shortlist rows, because a
-forum thread is not a posting with a `source_id` a row can be traced to.
+and saying it has "no search command" is wrong.** `nowcoder` has a search command;
+`discovery-sources.md` records what it returns. It is an interview-experience
+(面经) source, not a job source. It informs a round but does not produce shortlist
+rows, because a forum thread is not a posting with a `source_id` a row can be
+traced to.
 
-For a Chinese campus round (`seniority: new_grad`) both are worth naming to the
-user as places to read 面经 and 内推 threads alongside the shortlist — that is a
-pointer, not a row. `maimai`'s only read command is `search-talents`, the
+For a Chinese campus round (`seniority: new_grad`), name Nowcoder as a place to
+read 面经 and 内推 threads alongside the shortlist — a pointer, not a row.
+`maimai`'s only read command is `search-talents`, the
 recruiter side, so it has nothing to offer a candidate. `upwork` is freelance
 work rather than employment.
 
@@ -599,7 +598,7 @@ The wrapper returns one of five classifications, each with an action:
 | classification | what happened | what to do |
 |---|---|---|
 | `ok` | exit 0, JSON array parsed | continue to Step 5 |
-| `not_logged_in` | login wall, and auth says the session is absent or unknown | cross-check auth; hand `opencli <site> login` **to the user** — it is a write command. Pause for [user recovery](../references/user-recovery.md); no read retry while logged out. **Do not treat `strategy: public` as evidence that no login is needed** — 1point3acres' public-strategy `forum` still 403s. |
+| `not_logged_in` | login wall, and auth says the session is absent or unknown | cross-check auth; hand `opencli <site> login` **to the user** — it is a write command. Pause for [user recovery](../references/user-recovery.md); no read retry while logged out. **Do not treat `strategy: public` as evidence that no login is needed**; classify the actual response. |
 | `no_auth_adapter` | login wall on a site with no login concept | no CLI login command is available. Pause and ask the user to inspect the browser page; do not invent a login command or infer a missing session. |
 | `platform_limit` | a stop-signal from `references/risk-control-signals.yaml`, or a refusal while auth says logged in | **Stop immediately: no retry, parameter changes or bypass.** Pause this source, not the whole task. Explain whether it is verification, rate limiting or an unknown refusal; follow [user recovery](../references/user-recovery.md) before offering degraded output. |
 | `transport` | unrecognised failure, or exit 0 with unparsable stdout | Check the actual selected CDP connection and offline routing diagnostic, then follow [bounded network recovery](../references/network-recovery.md). Distinguish a disconnected browser from a site loading or route failure; a timeout alone is not evidence that a VPN caused it. |

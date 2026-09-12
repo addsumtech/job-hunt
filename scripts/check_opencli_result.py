@@ -48,7 +48,6 @@ DETAIL_COMMAND = {
     "linkedin": "opencli linkedin job-detail <job-url>",
     "upwork": "opencli upwork detail <id>",
     "nowcoder": "opencli nowcoder detail <id>",
-    "1point3acres": "opencli 1point3acres thread <tid>",
 }
 
 # A refusal that means "you are not signed in". Checked BEFORE the risk-control
