@@ -161,7 +161,7 @@ Codex では最後の二行の `~/.claude/skills` を `~/.codex/skills` に置�
 
 ## 対応地域と言語
 
-51job、Indeed、LinkedIn、BOSS 直聘などから、対象地域とアクセス条件に合う情報源を選びます。中国市場では大手・中小の民間企業、国有企業、外資系企業などの希望も反映します。牛客と一亩三分地は面接体験や選考プロセスの参考に使います。[情報源一覧](references/discovery-sources.md)と[利用ルール](references/source-policy.md)を参照してください。
+51job、Indeed、LinkedIn、BOSS 直聘などから、対象地域とアクセス条件に合う情報源を選びます。中国市場では大手・中小の民間企業、国有企業、外資系企業などの希望も反映します。牛客は面接体験や選考プロセスの参考に使います。[情報源一覧](references/discovery-sources.md)と[利用ルール](references/source-policy.md)を参照してください。
 
 CV の見出しと個人情報の項目名は、英語、オランダ語、ドイツ語、フランス語、スペイン語、イタリア語、中国語、日本語、韓国語に対応しています。求人探しと評価のレポートには、中国語、英語、日本語、韓国語、スペイン語の[言語別テンプレート](references/report-localization.md)があります。企業・業界調査では公式サイト、ニュース、WeChat 公式アカウント、関連 GitHub プロジェクトなどの[補足情報源](references/supplementary-sources.md)も使えます。
 

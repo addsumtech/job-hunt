@@ -15,7 +15,7 @@ import sys
 from urllib.parse import urlsplit
 
 import journal
-from check_opencli_result import read_journal, recovery_guidance
+from check_opencli_result import GUEST_LOGIN_WALL, read_journal, recovery_guidance
 
 ACTION = "browser_call"
 REASONS = ("preferred_browser", "cli_missing", "bridge_disconnected", "unsupported_extraction")
@@ -24,9 +24,12 @@ BACKENDS = ("builtin-cdp", "web-access", "chrome-devtools", "host-browser")
 STOP_CLASSES = {"platform_limit", "not_logged_in", "no_auth_adapter"}
 # Look for actual wall language, not an ordinary navigation link saying Login.
 WALL = re.compile(
-    r"(?:enter|complete|solve) (?:the |this |a )?captcha|verify (?:that )?you are (?:a )?human|access denied|too many requests|"
+    r"(?:enter|complete|solve) (?:the |this |a )?captcha|(?:verify|verifying|confirm) (?:that )?you are (?:a )?human|access denied|too many requests|"
     r"please (?:sign|log) in|(?:sign|log) in (?:required|to continue|to view)|"
     r"(?:请输入|请完成|请填写).{0,12}验证码|验证您是人类|访问受限|访问过于频繁|请先登[录入]|"
+    r"请按住滑块[，,\s]*拖动到最右边|为了更好的访问体验[，,\s]*请进行验证|"
+    r"(?:验证|确认)(?:您|你)(?:是否)?是(?:真人|人类)|(?:正在|请|需要).{0,8}(?:真人验证|人机验证)|"
+    r"验证成功[。.!！\s]*正在等待|verification successful[.!\s]*waiting for|checking your browser|"
     r"認証が必要|ログインが必要|로그인이 필요|접근이 제한", re.I)
 
 
@@ -39,6 +42,14 @@ def web_url(value):
                 and parsed.username is None and parsed.password is None)
     except ValueError:
         return False
+
+
+def known_security_page(url):
+    """A confirmed platform interstitial can initially show only a loading label."""
+    parsed = urlsplit(url)
+    host = (parsed.hostname or '').lower()
+    return ((host == 'zhipin.com' or host.endswith('.zhipin.com'))
+            and parsed.path == '/web/passport/zp/security.html')
 
 
 def validate_snapshot(snapshot, rows):
@@ -64,7 +75,15 @@ def validate_snapshot(snapshot, rows):
     blocked = snapshot.get("blocked", False)
     if type(blocked) is not bool:
         raise ValueError("blocked must be boolean")
-    if blocked or status in (401, 403, 429) or WALL.search(snapshot["text"]):
+    load_timed_out = snapshot.get("load_timed_out", False)
+    if type(load_timed_out) is not bool:
+        raise ValueError("load_timed_out must be boolean")
+    if GUEST_LOGIN_WALL.search(snapshot["text"]):
+        if rows:
+            raise ValueError("login wall must have no extracted rows")
+        return "not_logged_in"
+    if (blocked or status in (401, 403, 429) or WALL.search(snapshot["text"])
+            or known_security_page(snapshot["url"])):
         if rows:
             raise ValueError("site refusal must have no extracted rows")
         return "platform_limit"
@@ -88,7 +107,9 @@ def validate_snapshot(snapshot, rows):
         if row["source_id"] in seen:
             raise ValueError("duplicate source_id in capture")
         seen.add(row["source_id"])
-    return "ok"
+    # A loading page with no extracted rows is not evidence of zero matches.
+    # Actual rows still require the same verbatim-text and URL checks above.
+    return "transport" if load_timed_out and not rows else "ok"
 
 
 def _host(record):
@@ -113,20 +134,26 @@ def _labels(value):
 
     Applied to NAMES as well as hosts, because a name is how the two backends
     are joined and `51job` / `51job.com` / `www.51job` are one site written
-    three ways. Labels of two characters or fewer are dropped: they carry no
-    identity and would link unrelated sites.
+    three ways. Domain suffixes and labels of two characters or fewer are
+    dropped: they carry no source identity and would link unrelated sites.
     """
     value = (value or "").strip().lower()
     if value.startswith("www."):
         value = value[4:]
-    return {l for l in value.split(".") if len(l) > 2}
+    labels = value.split(".")
+    if len(labels) > 1:
+        labels.pop()  # A domain suffix does not identify a recruitment source.
+        while labels and labels[-1] in {"com", "co", "org", "net", "edu", "gov"}:
+            labels.pop()
+    return {label for label in labels if len(label) > 2}
 
 
 def _linked(a, b):
     """Do these two site identifiers plainly name the same site?
 
-    A shared LABEL, compared whole: `51job` links to `we.51job.com`, to
-    `51job.com` and to `www.51job`; `qiancheng` links to none of them.
+    A bare name matches a whole non-suffix label: `51job` links to
+    `we.51job.com`, `51job.com` and `www.51job`. Two hosts must match
+    exactly or be parent/subdomain; shared TLDs or `jobs` labels are insufficient.
 
     Substring containment was tried and removed. Measured, it bought exactly one
     hypothetical pairing (`boss` to `bossjobs.com`) and cost three plausible
@@ -140,6 +167,10 @@ def _linked(a, b):
     market before this function could be trusted at all. The journal supplies
     those pairings instead, from hosts the run actually read.
     """
+    a, b = (value.strip().lower().removeprefix("www.") for value in (a, b))
+    if "." in a and "." in b:
+        # Shared TLDs or generic subdomains such as jobs identify no common site.
+        return a == b or a.endswith("." + b) or b.endswith("." + a)
     x, y = _labels(a), _labels(b)
     return bool(x & y)
 
@@ -287,7 +318,8 @@ def main(argv=None):
         records = read_journal(root)
         if any("_unparsable" in r for r in records):
             raise ValueError("journal contains an unparsable line")
-        if check_stop_order(records + [{"action": ACTION, "site": args.site}]):
+        if check_stop_order(records + [{"action": ACTION, "site": args.site,
+                                       "url": snapshot["url"]}]):
             raise ValueError("READ_AFTER_STOP: site already stopped in this round")
         record = {
             "action": ACTION, "backend": args.backend, "operation": "snapshot",
@@ -305,9 +337,16 @@ def main(argv=None):
             "rows_file": paths[1].relative_to(root).as_posix(),
             "input_hashes": {p.relative_to(root).as_posix(): journal.sha256_file(p) for p in paths},
         }
-        if classification == "platform_limit":
+        if classification == "not_logged_in":
+            record["remedy"] = ("The site identifies this session as a guest and requires login. "
+                                + recovery_guidance("login"))
+        elif classification == "platform_limit":
             kind = "rate_limit" if snapshot.get("http_status") == 429 else "platform"
             record["remedy"] = recovery_guidance(kind)
+        elif classification == "transport":
+            record["remedy"] = ("Page load deadline reached without extracted rows. "
+                                "Inspect the preserved snapshot and follow references/network-recovery.md; "
+                                "this is not an empty search result.")
         record = journal.sign_receipt(record)
         journal.append(root, record)
         print(json.dumps(record, ensure_ascii=False))

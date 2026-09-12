@@ -12,7 +12,9 @@ what was actually observed, and what the user can do. Use the user's language.
 | Observed state | Hand-off |
 |---|---|
 | A confirmed missing login | Ask the user to sign in on that site in the connected browser. Offer `opencli <site> login` only if that adapter actually has it; the user runs it. |
+| A guest-group message such as `抱歉，您所在的用户组(游客)无法进行此操作` | Tell the user this site requires login. Do not call it an empty result or retry a working connection; the page's explicit guest state overrides a stale cached login flag. |
 | CAPTCHA, Cloudflare challenge or slider | Ask the user to open that site in the same connected browser and complete the displayed human verification. This does not establish that a login is missing. |
+| Human verification stays loading, including `验证成功。正在等待 … 响应` | Tell the user the page is still held at human verification and ask them to inspect/finish it. A tool timeout does not turn this into an ordinary loading retry. |
 | Rate limit / HTTP 429 | Explain the displayed wait period, if any. Logging in is not a fix. Wait for the user to return and request continuation; no timed or background retry. |
 | Permission/account denial or unexplained refusal | Quote the error and ask the user to inspect the page. Do not promise that login will fix it or label an unseen page as a CAPTCHA. |
 

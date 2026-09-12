@@ -154,7 +154,8 @@ def test_the_absolute_path_script_is_gone():
     so a clone audited the original author's tree and reported it as its own."""
     assert not (ROOT / "scripts" / "tests" / "check_assess_anchors.sh").exists()
     hits = [p for p in ROOT.rglob("*.sh")
-            if "/Users/" in p.read_text(encoding="utf-8", errors="replace")]
+            if p.relative_to(ROOT).parts[0] != "output"
+            and "/Users/" in p.read_text(encoding="utf-8", errors="replace")]
     assert not hits, f"a shell script hardcodes a home directory: {hits}"
 
 

@@ -81,6 +81,12 @@ STOPPED = [
 ]
 
 ALLOWED = [
+    ("BOSS security does not stop LinkedIn on the same TLD",
+     [browser("boss", "https://www.zhipin.com/web/passport/zp/security.html", "platform_limit"),
+      browser("linkedin", "https://www.linkedin.com/jobs")]),
+    ("shared jobs subdomain does not identify a source",
+     [browser("alpha", "https://jobs.alpha.com/a", "platform_limit"),
+      browser("beta", "https://jobs.beta.com/b")]),
     ("a genuinely different site",
      [adapter("51job", "platform_limit"), browser("linkedin", "https://www.linkedin.com/jobs")]),
     ("a different site in the same market",
@@ -124,6 +130,12 @@ def test_a_refusal_does_not_stop_anything_else(why, records):
     ("job", "jobsdb.com", False),
     ("", "we.51job.com", False),
     ("51job", "", False),
+    ("zhipin.com", "linkedin.com", False),
+    ("jobs.alpha.org", "jobs.beta.org", False),
+    ("alpha.net", "beta.net", False),
+    ("com", "linkedin.com", False),
+    ("com", "example.com.cn", False),
+    ("51job.com", "jobs.51job.com", True),
 ])
 def test_two_identifiers_are_linked_only_on_shared_text(a, b, linked):
     assert rb._linked(a, b) is linked, (a, b)
@@ -199,4 +211,3 @@ def test_a_refusal_still_stops_when_a_neighbouring_row_is_corrupt():
                            "classification": "platform_limit"},
                None, {"action": "browser_call", "site": "51job"}]
     assert rb.check_stop_order(records)
-

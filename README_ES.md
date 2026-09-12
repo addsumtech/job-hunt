@@ -161,7 +161,7 @@ Abre la ficha de job-hunt en [SkillHub](https://skillhub.cn/skills/user_f486c577
 
 ## Mercados e idiomas
 
-Las fuentes incluyen 51job, Indeed, LinkedIn y BOSS Zhipin, según el mercado y las condiciones de acceso. En China también se consideran las preferencias por grandes o pequeñas empresas privadas, estatales y extranjeras. Nowcoder y 1point3acres aportan experiencias de entrevistas y contexto de selección. Consulta el [catálogo de fuentes](references/discovery-sources.md) y la [política de uso](references/source-policy.md).
+Las fuentes incluyen 51job, Indeed, LinkedIn y BOSS Zhipin, según el mercado y las condiciones de acceso. En China también se consideran las preferencias por grandes o pequeñas empresas privadas, estatales y extranjeras. Nowcoder aporta experiencias de entrevistas y contexto de selección. Consulta el [catálogo de fuentes](references/discovery-sources.md) y la [política de uso](references/source-policy.md).
 
 Los títulos y las etiquetas de datos personales del CV están disponibles en inglés, neerlandés, alemán, francés, español, italiano, chino, japonés y coreano. Los informes de búsqueda y valoración tienen [plantillas](references/report-localization.md) en chino, inglés, japonés, coreano y español. La investigación de empresas y sectores puede usar sitios oficiales, noticias, cuentas públicas de WeChat y proyectos de GitHub como [fuentes complementarias](references/supplementary-sources.md).
 

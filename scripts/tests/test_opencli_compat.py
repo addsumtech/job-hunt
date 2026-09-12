@@ -69,6 +69,31 @@ def test_missing_override_is_reported_and_not_created(tmp_path):
     assert not (config / 'clis/indeed/job.js').exists()
 
 
+@pytest.mark.parametrize('action, expected', [('apply', b'fixed();\n'), ('revert', b'old();\n')])
+def test_known_previous_patch_can_upgrade_or_revert(tmp_path, action, expected):
+    package, config, manifest = fixture(tmp_path)
+    local = config / 'clis/indeed/job.js'
+    previous = b'previous_fix();\n'
+    local.write_bytes(previous)
+    manifest['files'][1]['previous_patched_sha256'] = [compat.digest(previous)]
+    changes, states = compat.prepare(package, config, 'indeed', 'check', manifest)
+    assert changes == []
+    assert states[-1]['state'] == 'previous_patch'
+    assert local.read_bytes() == previous
+    compat.execute(compat.prepare(package, config, 'indeed', action, manifest)[0])
+    assert local.read_bytes() == expected
+
+
+def test_user_edit_on_previous_patch_is_preserved(tmp_path):
+    package, config, manifest = fixture(tmp_path)
+    manifest['files'][1]['previous_patched_sha256'] = [compat.digest(b'previous_fix();\n')]
+    local = config / 'clis/indeed/job.js'
+    local.write_bytes(b'previous_fix();\nuser_edit();\n')
+    with pytest.raises(ValueError, match='Local edits'):
+        compat.prepare(package, config, 'indeed', 'apply', manifest)
+    assert local.read_bytes() == b'previous_fix();\nuser_edit();\n'
+
+
 def test_symlink_cannot_modify_official_package(tmp_path):
     package, config, manifest = fixture(tmp_path)
     local = config / 'clis/indeed/job.js'

@@ -14,17 +14,21 @@ use the normal reader, or the browser fallback when incompatibility is diagnosed
 | Observed defect | Narrow repair | Verified scope |
 |---|---|---|
 | 51job's `/pc/search?keyword=…&searchType=2` navigation times out while `/pc/search` renders results | Open the plain entry page; retain the existing keyword, area and limit in the search API request | Python / Shanghai / 3 rows on 2026-09-09 |
+| 51job detail mislabels a current slider as a parsing error, shifts company attributes and loses address/paragraph breaks | Recognize the observed slider instructions as `ANTI_BOT`; use labelled company icons and the full address; preserve HTML line breaks | Beijing live detail on 2026-09-12 plus current/old DOM regressions |
 | Indeed detail returns a sign-in heading as a job | Detect account pages with no job description and report a login error | Account-page DOM regressions and classifier stop-lock tests |
 | Indeed puts `Full-time` into salary, losing job type | Separate labelled pay and job-type fields; only use pay-like header text as salary | Real no-pay posting plus pay/type DOM variants |
 | Indeed search cards have ids but empty titles | Read the identified title link, including its existing title-attribute variant | Real search and DOM variants |
 | Indeed header's `Remote` has no old location test id | Read the observed company-header sibling when the explicit location markers are absent | Real detail and old/new header DOM variants |
+| Indeed's current detail page uses `vj-job-title` and a description heading instead of `h1` and `#jobDescriptionText` | Read the observed title, adjacent description and header metadata; wait for description text rather than a title alone | Current/old DOM variants, missing and delayed descriptions; live result recorded separately |
 
 ## Check, apply, revert
 
 `python scripts/opencli_compat.py --site indeed` is read-only; substitute `51job`
 for that adapter. It checks the installed package version and exact source hashes.
 Unknown versions, official-source drift, or local edits are refused, not guessed
-at. `--package-dir` supports installations where the executable wrapper does not
+at. Exact hashes of earlier patches shipped by this skill are recognized as
+`previous_patch` and can be upgraded or reverted; user edits remain untouched.
+`--package-dir` supports installations where the executable wrapper does not
 resolve to the npm package. `--config-dir` supports a different OpenCLI config
 root (the default respects `OPENCLI_CONFIG_DIR`).
 

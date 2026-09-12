@@ -27,15 +27,15 @@
     {
       "path": "indeed/job.js",
       "base_sha256": "8182e944812107c5eaf5216cf7ed9eba64156e4c0cabb4bbdefe72094b893878",
-      "patched_sha256": "31d8e4d433d85cdcbff09ea9ea3bbd5b28268648431cc7829f4dc33ecfe34a04",
+      "patched_sha256": "c1e116b4e3ac192c4a62af7c68a311000a82f0d34945659da1710efd23bdaa85",
       "replacements": [
         {
           "old": "const location = document.querySelector('[data-testid=\"jobsearch-JobInfoHeader-companyLocation\"] div, [data-testid=\"inlineHeader-companyLocation\"]')?.textContent?.trim() ?? '';",
-          "new": "const location = (document.querySelector('[data-testid=\"jobsearch-JobInfoHeader-companyLocation\"], [data-testid=\"inlineHeader-companyLocation\"]')?.textContent\n                    || document.querySelector('[data-testid=\"jobsearch-CompanyInfoContainer\"] [data-testid=\"inlineHeader-companyName\"]')?.parentElement?.nextElementSibling?.textContent || '').trim();"
+          "new": "const location = (document.querySelector('[data-testid=\"jobsearch-JobInfoHeader-companyLocation\"], [data-testid=\"inlineHeader-companyLocation\"]')?.textContent\n                    || document.querySelector('[data-testid=\"jobsearch-CompanyInfoContainer\"] [data-testid=\"inlineHeader-companyName\"]')?.parentElement?.nextElementSibling?.textContent\n                    || document.querySelector('[data-testid=\"company-info-metadata\"] > div > div:nth-child(2)')?.textContent || '').trim();"
         },
         {
           "old": "const salary = document.querySelector('[id*=\"salaryInfoAndJobType\"] span, [data-testid=\"job-salary\"]')?.textContent?.trim() ?? '';\n                const jobType = Array.from(document.querySelectorAll('[id*=\"salaryInfoAndJobType\"] span, [data-testid=\"job-type\"]'))\n                    .map(s => (s.textContent || '').trim())\n                    .filter(t => t && t !== salary)\n                    .join(', ');",
-          "new": "const texts = selector => [...new Set(Array.from(document.querySelectorAll(selector))\n                    .map(s => (s.textContent || '').trim()).filter(Boolean))];\n                const isJobType = text => /^(?:full[ -]time|part[ -]time|contract|temporary|permanent|internship|apprenticeship|seasonal|freelance|volunteer|per diem|fixed[ -]term)$/i.test(text);\n                const headerValues = texts('[id*=\"salaryInfoAndJobType\"] span');\n                const payValues = texts('[data-testid=\"job-salary\"], #jobDetailsSection [role=\"group\"][aria-label=\"Pay\"] li');\n                const salary = payValues.find(t => !isJobType(t))\n                    || headerValues.find(t => !isJobType(t) && /[0-9]/.test(t) && /[$€£¥]|USD|EUR|GBP|an? (?:hour|year|month|week|day)/i.test(t)) || '';\n                const jobType = [...new Set([\n                    ...texts('[data-testid=\"job-type\"], #jobDetailsSection [role=\"group\"][aria-label=\"Job type\"] li'),\n                    ...headerValues.filter(isJobType),\n                ])].filter(t => t !== salary).join(', ');"
+          "new": "const texts = selector => [...new Set(Array.from(document.querySelectorAll(selector))\n                    .map(s => (s.textContent || '').trim()).filter(Boolean))];\n                const isJobType = text => /^(?:full[ -]time|part[ -]time|contract|temporary|permanent|internship|apprenticeship|seasonal|freelance|volunteer|per diem|fixed[ -]term)$/i.test(text);\n                const currentPay = document.querySelector('[data-testid=\"company-info-metadata\"]')?.nextElementSibling;\n                const headerValues = [...texts('[id*=\"salaryInfoAndJobType\"] span'),\n                    ...Array.from(currentPay?.querySelectorAll('*') || []).filter(el => !el.children.length)\n                        .map(el => (el.textContent || '').trim()).filter(Boolean)];\n                const payValues = texts('[data-testid=\"job-salary\"], #jobDetailsSection [role=\"group\"][aria-label=\"Pay\"] li');\n                const salary = payValues.find(t => !isJobType(t))\n                    || headerValues.find(t => !isJobType(t) && /[0-9]/.test(t) && /[$€£¥]|USD|EUR|GBP|an? (?:hour|year|month|week|day)/i.test(t)) || '';\n                const jobType = [...new Set([\n                    ...texts('[data-testid=\"job-type\"], #jobDetailsSection [role=\"group\"][aria-label=\"Job type\"] li'),\n                    ...headerValues.filter(isJobType),\n                ])].filter(t => t !== salary).join(', ');"
         },
         {
           "old": "return { ready, challenge, notFound, title, company, location, salary, jobType, description };",
@@ -44,13 +44,33 @@
         {
           "old": "        if (!detail?.ready) {",
           "new": "        if (detail?.loginRequired) {\n            throw new CommandExecutionError('Indeed login required: the page is an account sign-in or verification screen, not a job posting', 'Complete login in the connected browser before requesting another read.');\n        }\n        if (!detail?.ready) {"
+        },
+        {
+          "old": "                let ready = !!document.querySelector('#jobDescriptionText, h1, [data-testid=\"error-page\"]');\n                for (let i = 0; i < 30; i++) {\n                    if (ready) break;\n                    await new Promise(r => setTimeout(r, 500));\n                    ready = !!document.querySelector('#jobDescriptionText, h1, [data-testid=\"error-page\"]');\n                }",
+          "new": "                const readDescription = () => {\n                    const body = document.querySelector('#jobDescriptionText')\n                        || document.querySelector('[data-testid=\"vj-job-description-heading\"]')?.nextElementSibling;\n                    return (body?.innerText || '').trim();\n                };\n                const isReady = () => !!readDescription()\n                    || !!document.querySelector('[data-testid=\"error-page\"], [id^=\"cf-\"]')\n                    || window.location.hostname === 'secure.indeed.com'\n                    || /Just a moment|Sign In.*Indeed Accounts/i.test(document.title || '')\n                    || /Page Not Found|not found/i.test(document.querySelector('h1')?.textContent || '');\n                let ready = isReady();\n                for (let i = 0; i < 30; i++) {\n                    if (ready) break;\n                    await new Promise(r => setTimeout(r, 500));\n                    ready = isReady();\n                }"
+        },
+        {
+          "old": "const title = document.querySelector('h1')?.textContent?.trim() ?? '';",
+          "new": "const title = (document.querySelector('[data-testid=\"vj-job-title\"]') || document.querySelector('h1'))?.textContent?.trim() ?? '';"
+        },
+        {
+          "old": "[data-company-name=\"true\"]",
+          "new": "[data-company-name=\"true\"], [data-testid=\"company-info-metadata\"] a[href*=\"/cmp/\"]"
+        },
+        {
+          "old": "const description = document.querySelector('#jobDescriptionText')?.innerText?.trim() ?? '';",
+          "new": "const description = readDescription();"
         }
+      ],
+      "previous_patched_sha256": [
+        "31d8e4d433d85cdcbff09ea9ea3bbd5b28268648431cc7829f4dc33ecfe34a04",
+        "3b7f830d28d2b80d60cb2970ad7f9cafee204a70426e67351ec3e0e855115a55"
       ]
     },
     {
       "path": "51job/detail.js",
       "base_sha256": "d37c0ae62c7dc76f34b777c0b1b8d340a08f359aec60f6168ba3c62dc5f38118",
-      "patched_sha256": "5231e4000783ba717b0e1b98317792532acddd0ec5710b3b000fb8894f2873c5",
+      "patched_sha256": "377926713207cd871f5f4601212636d8922941d0b5cb96af6b645919191bd87b",
       "replacements": [
         {
           "old": "        { name: 'jobId',",
@@ -62,15 +82,15 @@
         },
         {
           "old": "const bodyText = (document.body.innerText || '').slice(0, 400);",
-          "new": "if (!document.body) return { ready: false };\n            const bodyText = (document.body.innerText || '').slice(0, 1200);\n            if (/安全验证|滑块验证|拖动滑块|人机验证/.test(bodyText)) return { error: 'BLOCKED' };"
+          "new": "if (!document.body) return { ready: false };\n            const bodyText = (document.body.innerText || '').slice(0, 1200);\n            if (/安全验证|滑块验证|拖动滑块|人机验证|请按住滑块，拖动到最右边|为了更好的访问体验，请进行验证/.test(bodyText)) return { error: 'BLOCKED' };"
         },
         {
           "old": "return (clone.innerText || '').trim();",
-          "new": "return (clone.innerText || clone.textContent || '').trim();"
+          "new": "clone.querySelectorAll('br').forEach(n => n.replaceWith('\\\\n'));\n                    clone.querySelectorAll('p, div, li, h1, h2, h3, h4, h5, h6').forEach(n => n.append('\\\\n'));\n                    return (clone.textContent || '').trim();"
         },
         {
           "old": "        const data = await page.evaluate(script);",
-          "new": "        let data;\n        for (let attempt = 0; attempt < 8; attempt++) {\n            data = await page.evaluate(script) || {};\n            if (data.error || (data.title && data.description)) break;\n            if (attempt < 7) await page.wait(1);\n        }\n        if (data.error === 'BLOCKED') {\n            throw new CliError('NO_DATA', '51job requires browser verification; stop and ask the user to complete it');\n        }"
+          "new": "        let data;\n        for (let attempt = 0; attempt < 8; attempt++) {\n            data = await page.evaluate(script) || {};\n            if (data.error || (data.title && data.description)) break;\n            if (attempt < 7) await page.wait(1);\n        }\n        if (data.error === 'BLOCKED') {\n            throw new CliError('ANTI_BOT', '51job requires browser verification; stop and ask the user to complete it');\n        }"
         },
         {
           "old": "        if (!data.title) {",
@@ -91,7 +111,35 @@
         {
           "old": "welfare: all('.t1 span, .jtag .t1 span'),",
           "new": "welfare: all('.t1 span, .jtag .t1 span, .job-detail .tags .tag'),"
+        },
+        {
+          "old": "            const funcs = all('.bmsg .fp');",
+          "new": "            const companyField = icon => document.querySelector('.com_tag .' + icon)?.parentElement?.innerText?.trim() || '';\n            const structuredCompany = !!document.querySelector('.com_tag .i_flag, .com_tag .i_people, .com_tag .i_trade, .com_tag .p-l-0');\n            const funcs = all('.bmsg .fp');"
+        },
+        {
+          "old": "address: pick('上班地址'),",
+          "new": "address: pick('上班地址') || (() => {\n                    const address = document.querySelector('.bmsg address[data-address-country]')?.cloneNode(true);\n                    if (!address) return '';\n                    address.querySelectorAll('span').forEach(n => n.remove());\n                    return (address.textContent || '').trim().replace(/^完整地址[:：]\\\\s*/, '');\n                })(),"
+        },
+        {
+          "old": "companyTag: sel('.com_tag'),",
+          "new": "companyTag: sel('.com_tag'),\n                companyMetadata: structuredCompany ? {\n                    type: companyField('i_flag'),\n                    size: companyField('i_people'),\n                    industry: companyField('i_trade'),\n                } : null,"
+        },
+        {
+          "old": "companyType: tagParts[0] || '',",
+          "new": "companyType: data.companyMetadata ? data.companyMetadata.type : tagParts[0] || '',"
+        },
+        {
+          "old": "companySize: tagParts[1] || '',",
+          "new": "companySize: data.companyMetadata ? data.companyMetadata.size : tagParts[1] || '',"
+        },
+        {
+          "old": "companyIndustry: tagParts.slice(2).join(' / '),",
+          "new": "companyIndustry: data.companyMetadata ? data.companyMetadata.industry : tagParts.slice(2).join(' / '),"
         }
+      ],
+      "previous_patched_sha256": [
+        "5231e4000783ba717b0e1b98317792532acddd0ec5710b3b000fb8894f2873c5",
+        "70d7a1e82d0fe82bc24f977168eddf55ff1988eda2a0f7684bfc9df64cbe98f9"
       ]
     }
   ]

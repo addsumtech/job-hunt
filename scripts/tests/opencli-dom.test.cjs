@@ -9,7 +9,7 @@ const { JSDOM } = require('jsdom');
 const adapters = process.env.OPENCLI_TEST_ADAPTER_DIR;
 assert.ok(adapters, 'Set OPENCLI_TEST_ADAPTER_DIR to the patched adapter directory');
 
-async function extract(name, html, url = 'https://www.indeed.com/viewjob?jk=0123456789abcdef') {
+async function extract(name, html, url = 'https://www.indeed.com/viewjob?jk=0123456789abcdef', configure = () => {}) {
     const source = fs.readFileSync(path.join(adapters, 'indeed', name + '.js'), 'utf8');
     const match = source.match(/(?:detail|cards) = await page\.evaluate\(`([\s\S]*?)`\);/);
     assert.ok(match, 'Find the actual browser extraction, not a test reimplementation');
@@ -19,10 +19,68 @@ async function extract(name, html, url = 'https://www.indeed.com/viewjob?jk=0123
     });
     // Decode JavaScript template-literal escapes before executing the same source.
     const script = new Function('return `' + match[1] + '`')();
+    configure(dom.window);
     try { return await dom.window.eval(script); }
     finally { dom.window.close(); }
 }
 const job = extra => '<h1>Engineer</h1><div id="jobDescriptionText">Build data pipelines.</div>' + extra;
+
+// Synthetic content in the DOM structure observed on Indeed, 2026-09-12.
+const currentJob = (description = '<b>Responsibilities</b><p>Build the platform.</p><b>Required skills</b><p>Product experience.</p>') => `
+    <h1>Find jobs</h1>
+    <div data-testid="desktop-job-header">
+      <div><h5 data-testid="vj-job-title">AI Product Manager</h5></div>
+      <div data-testid="company-info-metadata"><div>
+        <div><a href="https://www.indeed.com/cmp/Example">Example</a><div>3.9</div></div>
+        <div><div>New York, NY</div></div>
+      </div></div>
+      <div><div aria-label="$100,000 a year, Full-time"><div>$100,000 a year</div><div>-</div><div>Full-time</div></div></div>
+    </div>
+    <div data-testid="viewjob-job-content">
+      <div>Match overview: NOT part of the job description.</div>
+      <div><h4 data-testid="vj-job-description-heading">Full job description</h4><div>${description}</div></div>
+    </div>
+    <div>Recommended jobs: NOT part of the job description.</div>`;
+
+test('current detail layout returns the posting fields and only the full description', async () => {
+    const result = await extract('job', currentJob());
+    assert.equal(result.ready, true);
+    assert.equal(result.title, 'AI Product Manager');
+    assert.equal(result.company, 'Example');
+    assert.equal(result.location, 'New York, NY');
+    assert.equal(result.salary, '$100,000 a year');
+    assert.equal(result.jobType, 'Full-time');
+    assert.equal(result.description, 'ResponsibilitiesBuild the platform.Required skillsProduct experience.');
+});
+
+test('a current title with no description is not ready', async () => {
+    const result = await extract('job', currentJob(''), undefined, window => {
+        window.setTimeout = callback => { callback(); return 0; };
+    });
+    assert.equal(result.ready, false);
+    assert.equal(result.description, '');
+});
+
+test('description loading after the current title is awaited', async () => {
+    const result = await extract('job', currentJob(''), undefined, window => {
+        window.setTimeout(() => {
+            window.document.querySelector('[data-testid="vj-job-description-heading"]').nextElementSibling.textContent = 'Loaded complete responsibilities.';
+        }, 10);
+    });
+    assert.equal(result.ready, true);
+    assert.equal(result.description, 'Loaded complete responsibilities.');
+});
+
+test('current header without a location does not use the employer as its location', async () => {
+    const result = await extract('job', currentJob().replace('<div><div>New York, NY</div></div>', ''));
+    assert.equal(result.company, 'Example');
+    assert.equal(result.location, '');
+});
+
+test('current company link also supports a relative URL', async () => {
+    const result = await extract('job', currentJob().replace('https://www.indeed.com/cmp/Example', '/cmp/Example'));
+    assert.equal(result.company, 'Example');
+});
 
 for (const [label, markup, salary, type] of [
     ['type only', '<span>Full-time</span>', '', 'Full-time'],

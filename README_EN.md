@@ -161,7 +161,7 @@ Open the job-hunt listing on [SkillHub](https://skillhub.cn/skills/user_f486c577
 
 ## Markets and languages
 
-Sources include 51job, Indeed, LinkedIn and BOSS Zhipin, selected for your market and access conditions. China searches also consider preferences for large or smaller private firms, state-owned enterprises and foreign companies. Nowcoder and 1point3acres provide interview and hiring-process context. See the [source catalogue](references/discovery-sources.md) and [source policy](references/source-policy.md).
+Sources include 51job, Indeed, LinkedIn and BOSS Zhipin, selected for your market and access conditions. China searches also consider preferences for large or smaller private firms, state-owned enterprises and foreign companies. Nowcoder provides interview and hiring-process context. See the [source catalogue](references/discovery-sources.md) and [source policy](references/source-policy.md).
 
 CV headings and personal-data labels support English, Dutch, German, French, Spanish, Italian, Chinese, Japanese and Korean. Discovery and assessment reports support Chinese, English, Japanese, Korean and Spanish through the [report language templates](references/report-localization.md). Company and industry research can use official sites, news, WeChat public accounts and relevant GitHub projects as [supplementary sources](references/supplementary-sources.md).
 

@@ -20,7 +20,7 @@ export async function dailyEndpoint(browser, {platform = process.platform, home 
   return `ws://127.0.0.1:${port}${lines[1]}`;
 }
 
-export async function capture({endpoint, url, settleMs = 1500, timeoutMs = 15000, WebSocketImpl = globalThis.WebSocket}) {
+export async function capture({endpoint, url, settleMs = 1500, timeoutMs = 15000, waitStagesMs = [timeoutMs, timeoutMs * 2, timeoutMs * 4], waitForText = '', revealSelector = '', WebSocketImpl = globalThis.WebSocket}) {
   const targetUrl = new URL(url);
   if (!['http:', 'https:'].includes(targetUrl.protocol) || targetUrl.username || targetUrl.password) throw Error('Capture URL must be HTTP(S), without credentials');
   const socketUrl = new URL(endpoint);
@@ -63,18 +63,63 @@ export async function capture({endpoint, url, settleMs = 1500, timeoutMs = 15000
     const navigation = await send('Page.navigate', {url});
     frameId = navigation.frameId;
     if (navigation.errorText) throw Error(`Navigation failed: ${navigation.errorText}`);
-    const deadline = Date.now() + timeoutMs;
-    let ready = false;
-    while (Date.now() < deadline) {
-      const r = await send('Runtime.evaluate', {expression:'document.readyState', returnByValue:true});
-      if (r.result?.value === 'complete') {ready = true;break;}
-      await new Promise(r => setTimeout(r, 250));
+    let ready = false, refused = false;
+    const renderWaits = [];
+    const reveal = revealSelector ? {selector:revealSelector, performed:false} : null;
+    for (const waitMs of waitStagesMs) {
+      renderWaits.push(waitMs);
+      const deadline = Date.now() + waitMs;
+      while (Date.now() < deadline) {
+        refused = responses.some(x => x.frameId === frameId && [401, 403, 429].includes(x.response.status));
+        if (refused) break;
+        const r = await send('Runtime.evaluate', {expression:'document.readyState', returnByValue:true});
+        if (r.result?.value === 'complete') {
+          const content = waitForText ? await send('Runtime.evaluate', {
+            expression:`Boolean(document.body?.innerText?.includes(${JSON.stringify(waitForText)}))`, returnByValue:true,
+          }) : null;
+          if (!waitForText || content.result?.value === true) {ready = true;break;}
+        }
+        await new Promise(r => setTimeout(r, Math.max(1, Math.min(250, deadline - Date.now()))));
+      }
+      if (ready || refused) break;
+      // Inspect a stalled page before waiting longer; never wait through a
+      // known human-verification wall merely because its load event is pending.
+      const wall = await send('Runtime.evaluate', {expression:`Boolean(
+        (/(^|\\.)zhipin\\.com$/.test(location.hostname) && location.pathname === '/web/passport/zp/security.html') ||
+        /请按住滑块[，,\\s]*拖动到最右边|为了更好的访问体验[，,\\s]*请进行验证|需要进行其他验证|(?:验证|确认)(?:您|你)(?:是否)?是(?:真人|人类)|(?:正在|请|需要).{0,8}(?:真人验证|人机验证)|验证成功[。.!！\\s]*正在等待|(?:您|你)所在的(?:用户组|用戶組)\\s*[（(]\\s*(?:游客|遊客)\\s*[)）]\\s*(?:无法|無法|不能)(?:进行|進行)此操作|(?:verify|verifying|confirm) (that )?you are (a )?human|checking your browser|unusual traffic/i.test(document.body?.innerText || '')
+      )`, returnByValue:true});
+      refused = wall.result?.value === true;
+      if (refused) break;
+      // Only reveal an observed lazy-loaded node after the first background
+      // wait. Activation is restricted to the tab this capture created.
+      if (reveal && renderWaits.length === 1) {
+        const selector = JSON.stringify(revealSelector);
+        const found = await send('Runtime.evaluate', {
+          expression:`Boolean(document.querySelector(${selector}))`, returnByValue:true,
+        });
+        if (found.exceptionDetails) throw Error('Invalid reveal selector');
+        if (found.result?.value !== true) throw Error(`Reveal selector not found: ${revealSelector}`);
+        await send('Target.activateTarget', {targetId}, null);
+        if (settleMs) await new Promise(r => setTimeout(r, settleMs));
+        const scrolled = await send('Runtime.evaluate', {
+          expression:`(() => {const node = document.querySelector(${selector}); if (!node) return false; node.scrollIntoView({block:'center',behavior:'instant'}); return true;})()`, returnByValue:true,
+        });
+        if (scrolled.exceptionDetails || scrolled.result?.value !== true) throw Error('Could not reveal the requested page node');
+        reveal.performed = true;
+        reveal.after_wait_stage = renderWaits.length;
+        reveal.revealed_at = new Date().toISOString();
+      }
     }
-    if (!ready) throw Error('Page did not finish loading within the capture deadline');
+    // Ads and other resources can keep a readable page from reaching complete.
+    // Preserve the actual DOM and refusal status at the deadline for diagnosis.
     if (settleMs) await new Promise(r => setTimeout(r, settleMs));
     const r = await send('Runtime.evaluate', {expression:`({url:location.href,title:document.title,retrieved_at:new Date().toISOString(),text:document.body?.innerText||'',links:[...new Set([...document.querySelectorAll('a[href]')].map(a=>a.href).filter(u=>/^https?:/.test(u)))],http_status:null})`, returnByValue:true});
     if (r.exceptionDetails || !r.result?.value?.url) throw Error('Could not read the page snapshot');
     const snapshot = r.result.value;
+    snapshot.load_timed_out = !ready && !refused;
+    snapshot.render_wait_budgets_ms = renderWaits;
+    if (waitForText) snapshot.wait_for_text = waitForText;
+    if (reveal) snapshot.reveal = reveal;
     const response = responses.filter(x => x.frameId === frameId && x.response.url === snapshot.url).at(-1);
     snapshot.http_status = response?.response.status ?? null;
     snapshot.capture = {backend:'builtin-cdp', targetId, trace};
@@ -92,13 +137,13 @@ export async function capture({endpoint, url, settleMs = 1500, timeoutMs = 15000
 export async function main(argv) {
   const args = {};
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === '--help') {console.log('node scripts/browser_cdp.mjs --browser chrome|edge --url URL --output raw/site-capture.json [--endpoint ws://.../devtools/browser/...]');return;}
-    if (!['--browser','--url','--output','--endpoint'].includes(argv[i]) || !argv[i+1]) throw Error(`Unknown or incomplete argument: ${argv[i]}`);
+    if (argv[i] === '--help') {console.log('node scripts/browser_cdp.mjs --browser chrome|edge --url URL --output raw/site-capture.json [--wait-for-text "Expected description heading"] [--reveal-selector "Observed lazy-loaded node selector"] [--endpoint ws://.../devtools/browser/...]');return;}
+    if (!['--browser','--url','--output','--endpoint','--wait-for-text','--reveal-selector'].includes(argv[i]) || !argv[i+1]) throw Error(`Unknown or incomplete argument: ${argv[i]}`);
     args[argv[i].slice(2)] = argv[++i];
   }
   if (!args.url || !args.output) throw Error('--url and --output are required');
   const endpoint = args.endpoint || await dailyEndpoint(args.browser);
-  const snapshot = await capture({endpoint, url:args.url});
+  const snapshot = await capture({endpoint, url:args.url, waitForText:args['wait-for-text'] || '', revealSelector:args['reveal-selector'] || ''});
   await writeFile(args.output, JSON.stringify(snapshot, null, 2), {flag:'wx'});
   console.log(JSON.stringify({output:args.output, url:snapshot.url, http_status:snapshot.http_status, characters:snapshot.text.length, backend:'builtin-cdp'}));
 }

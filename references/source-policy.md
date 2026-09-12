@@ -129,3 +129,9 @@ Yellow with the same caps. Browser snapshots use `browser_page` extraction and
 `check_shortlist.py` verifies browser row provenance and shared limits. Stop
 signals apply to the site across tools. No arbitrary browser eval or write action
 can be declared safe merely by labelling it a read.
+
+## Removed sources
+
+1point3acres (一亩三分地) is outside job-hunt scope. Do not query it, recommend it
+as an interview source, or include it in a recovery queue. Historical captures
+and regression fixtures remain evidence of past behavior, not active routing.

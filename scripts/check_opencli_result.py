@@ -48,7 +48,6 @@ DETAIL_COMMAND = {
     "linkedin": "opencli linkedin job-detail <job-url>",
     "upwork": "opencli upwork detail <id>",
     "nowcoder": "opencli nowcoder detail <id>",
-    "1point3acres": "opencli 1point3acres thread <tid>",
 }
 
 # A refusal that means "you are not signed in". Checked BEFORE the risk-control
@@ -56,12 +55,16 @@ DETAIL_COMMAND = {
 # rather than being swallowed as a generic platform limit.
 # One Chinese phrase and three English ones meant `请先登录后查看`,
 # `ログインが必要です`, `로그인이 필요합니다` and `Bitte melden Sie sich an` all fell
-# through to `classification: transport`, whose remedy is "run opencli doctor" —
+# through to `classification: transport`, whose remedy diagnoses the connection —
 # when the correct remedy is to hand the user `opencli <site> login`. A wrong
 # remedy costs more than no remedy: it sends them to debug a working adapter.
 #
 # The CJK entries carry no `\b`: there is no word boundary between 登录 and the
 # character beside it.
+GUEST_LOGIN_WALL = re.compile(
+    r"(?:您|你)所在的(?:用户组|用戶組)\s*[（(]\s*(?:游客|遊客)\s*[)）]\s*"
+    r"(?:无法|無法|不能)(?:进行|進行)此操作")
+
 LOGIN_WALL_PATTERNS = (
     re.compile(r"HTTP 40[13]\b"),
     re.compile(r"\bForbidden\b", re.I),
@@ -243,11 +246,22 @@ def classify(site, command, exit_code, stdout_text, stderr_text,
                         "http-429-rate-limited", "too-frequent-cn"}
                         else "verification" if signal["id"] in {
                             "indeed-cloudflare-challenge", "verify-human-en",
+                            "human-verification-cn", "human-verification-pending",
                             "captcha-interstitial", "slider-verification-cn",
                             "security-verification-cn"} else "platform")
                 )
                 return result
 
+
+        if GUEST_LOGIN_WALL.search(haystack):
+            result["classification"] = "not_logged_in"
+            result["signal_id"] = "guest-login-wall"
+            result["remedy"] = (
+                "The page explicitly identifies this session as a guest. "
+                "Ask the user to log in on this site in the connected browser; "
+                "a cached auth status does not override the page. "
+                + recovery_guidance("login"))
+            return result
 
         if any(p.search(message) for p in LOGIN_WALL_PATTERNS):
             state = result["auth_state"]
@@ -294,9 +308,11 @@ def classify(site, command, exit_code, stdout_text, stderr_text,
 
         result["classification"] = "transport"
         result["remedy"] = (
-            "unrecognised failure. Run `opencli doctor` before concluding this "
-            "adapter is broken — a dead browser bridge takes out every "
-            "browser:true command on every site at once."
+            "Unrecognised failure. Check the selected daily-browser CDP session "
+            "and the offline website routing probe in `scripts/doctor.py`; "
+            "follow `references/network-recovery.md`. Preserve the error and "
+            "inspect the actual page before concluding that the adapter is broken. "
+            "Do not run an extension-oriented health probe."
         )
         return result
 
@@ -306,8 +322,10 @@ def classify(site, command, exit_code, stdout_text, stderr_text,
     except (json.JSONDecodeError, TypeError):
         result["classification"] = "transport"
         result["remedy"] = (
-            "exit 0 but stdout is not JSON. Re-run with --trace on and check "
-            "`opencli doctor`."
+            "Exit 0 but stdout is not JSON. Preserve the output and check the "
+            "selected daily-browser CDP session and offline website routing "
+            "with `scripts/doctor.py`; follow `references/network-recovery.md` "
+            "before any bounded retry. Do not run an extension-oriented health probe."
         )
         return result
     if not isinstance(rows, list):

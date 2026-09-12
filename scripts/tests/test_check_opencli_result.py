@@ -82,6 +82,29 @@ def test_exit0_json_array_is_ok_and_says_nothing():
     assert r["remedy"] is None
 
 
+@pytest.mark.parametrize("status", ["logged_in", "unknown", "not_logged_in"])
+def test_explicit_guest_group_wall_overrides_cached_auth_status(status):
+    # User-observed message, independent of stale local auth metadata.
+    r = coc.classify("1point3acres", "search", 1, "",
+        "抱歉，您所在的用户组(游客)无法进行此操作",
+        [{"site": "1point3acres", "status": status}])
+    assert r["classification"] == "not_logged_in"
+    assert r["signal_id"] == "guest-login-wall"
+    assert "finish login" in r["remedy"]
+    assert r["empty_result"] is False
+
+
+@pytest.mark.parametrize("message", [
+    "请验证您是否是真人", "正在进行人机验证", "Verifying you are human",
+    "验证成功。正在等待 www.upwork.com 响应",
+])
+def test_human_verification_messages_request_user_action_instead_of_retry(message):
+    r = coc.classify("upwork", "search", 1, "", message, [], coc.load_signals(SIGNALS_FILE))
+    assert r["classification"] == "platform_limit"
+    assert "human verification themselves" in r["remedy"]
+    assert r["empty_result"] is False
+
+
 def test_exit0_with_empty_titles_stays_ok_but_demands_detail_recovery():
     r = coc.classify("indeed", "search", 0, STDOUT_INDEED_EMPTY_TITLES, "")
     assert r["classification"] == "ok"          # the rows EXIST
@@ -211,7 +234,10 @@ def test_transport_is_the_default_for_an_unrecognised_failure():
         "  message: 'connect ECONNREFUSED 127.0.0.1:19825'\n  exitCode: 1\n",
     )
     assert r["classification"] == "transport"
-    assert "opencli doctor" in r["remedy"]
+    assert "scripts/doctor.py" in r["remedy"]
+    assert "daily-browser CDP" in r["remedy"]
+    assert "references/network-recovery.md" in r["remedy"]
+    assert "opencli doctor" not in r["remedy"]
 
 
 def test_exit0_with_unparsable_stdout_is_transport_not_ok():
@@ -272,7 +298,7 @@ def test_read_adapter_calls_skips_receipts_and_surfaces_bad_lines(tmp_path):
 
 # ---------------------------------------------------------------------------
 # A login wall the classifier does not recognise becomes `transport`, whose
-# remedy is "run opencli doctor" — when the correct remedy is to hand the user
+# remedy diagnoses the connection — when the correct remedy is to hand the user
 # `opencli <site> login`. A wrong remedy costs more than none: it sends them to
 # debug a working adapter. One Chinese phrase and three English ones covered it.
 # ---------------------------------------------------------------------------

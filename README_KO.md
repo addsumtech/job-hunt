@@ -161,7 +161,7 @@ Codex에서는 마지막 두 줄의 `~/.claude/skills`를 `~/.codex/skills`로 �
 
 ## 지원 지역과 언어
 
-51job, Indeed, LinkedIn, BOSS 直聘 등에서 목표 지역과 접근 조건에 맞는 정보원을 선택합니다. 중국 시장에서는 대형·중소 민간기업, 국유기업, 외국계 기업 등의 선호도 반영합니다. 牛客와 一亩三分地는 면접 경험과 채용 절차를 참고할 때 사용합니다. [정보원 목록](references/discovery-sources.md)과 [이용 규칙](references/source-policy.md)을 참고하세요.
+51job, Indeed, LinkedIn, BOSS 直聘 등에서 목표 지역과 접근 조건에 맞는 정보원을 선택합니다. 중국 시장에서는 대형·중소 민간기업, 국유기업, 외국계 기업 등의 선호도 반영합니다. 牛客는 면접 경험과 채용 절차를 참고할 때 사용합니다. [정보원 목록](references/discovery-sources.md)과 [이용 규칙](references/source-policy.md)을 참고하세요.
 
 이력서 제목과 개인정보 항목명은 영어, 네덜란드어, 독일어, 프랑스어, 스페인어, 이탈리아어, 중국어, 일본어, 한국어를 지원합니다. 공고 탐색과 평가 보고서는 중국어, 영어, 일본어, 한국어, 스페인어의 [언어별 템플릿](references/report-localization.md)을 사용합니다. 기업·업계 조사에는 공식 사이트, 뉴스, WeChat 공식 계정과 관련 GitHub 프로젝트 등의 [추가 정보원](references/supplementary-sources.md)도 활용합니다.
 

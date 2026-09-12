@@ -10,7 +10,7 @@ SIGNALS = REPO / "references" / "risk-control-signals.yaml"
 SKILL = REPO / "SKILL.md"
 
 INLINED = ("51job", "indeed", "linkedin", "boss")
-NON_INLINED = ("upwork", "nowcoder", "1point3acres", "maimai")
+NON_INLINED = ("upwork", "nowcoder", "maimai")
 
 
 def adapters():

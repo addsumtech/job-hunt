@@ -13,6 +13,12 @@ Everything here was read out of the tool's own introspection
 actually executed that day; `false` means only the help text was read. Do not
 upgrade a `false` to a `true` without running the command and recording the output.
 
+For newer evidence, see [2026-09-12 live source acceptance](../docs/testing/live-sources-2026-09-12.md).
+It records the tested job/interview sources, including partial LinkedIn results.
+The catalogue retains dated 2026-08-09 measurements for the remaining adapters;
+it is not a current access guarantee. Sources removed from product scope are
+not retained as available adapters.
+
 ## The machine-readable block
 
 `scripts/tests/test_discovery_docs.py` parses this block and cross-checks it
@@ -118,23 +124,6 @@ adapters:
       Its --company/--job filters were measured INERT elsewhere in this project
       (three different ids returned byte-identical rows), so treat `papers` as a
       company/role index only.
-  1point3acres:
-    domain: www.1point3acres.com
-    login_state_2026_08_09: not_logged_in
-    runtime_verified: true
-    identity_field: title
-    search_command: 'opencli 1point3acres search "<company> 面经" --fid 145 --limit 20 -f json'
-    detail_command: "opencli 1point3acres thread <tid> --limit 30 --contentLimit 2000"
-    pagination: "`forum` --page + --limit (max 50); `search`/`hot`/`latest`/`digest` take --limit only."
-    caps: {rows_per_round: 20, pages_per_round: 1}
-    other_read_commands: [forum, forums, thread, hot, latest, digest]
-    notes: >-
-      MEASURED: `opencli 1point3acres forum 145 --limit 2 -f json` returned exit
-      1 and HTTP 403 while logged out, even though that command is
-      strategy=public / browser=false. Treat the WHOLE adapter as
-      login-required, and never treat `strategy: public` as evidence that no
-      login is needed. Raise --contentLimit above its 400-char default or a real
-      面经 will come back truncated.
   maimai:
     domain: maimai.cn
     login_state_2026_08_09: not_logged_in
@@ -165,7 +154,7 @@ verification wall.
 |---|---|---|
 | `indeed-cloudflare-challenge` | `Indeed served a Cloudflare challenge page` | yes, 2026-09-08 |
 | `http-429-rate-limited` | `HTTP 429` | no |
-| `verify-human-en` | `(?i)verify (that )?you are (a )?human` | no |
+| `verify-human-en` | See the expanded human-verification patterns below | no |
 | `unusual-traffic-en` | `(?i)unusual traffic` | no |
 | `captcha-interstitial` | `(?i)captcha` | no |
 | `slider-verification-cn` | `滑块` | no |
@@ -173,6 +162,20 @@ verification wall.
 | `risk-control-cn` | `风控` | no |
 | `too-frequent-cn` | `操作过于频繁` | no |
 | `access-restricted-cn` | `访问受限` | no |
+
+Human-verification patterns also cover a check that stays loading. These are
+recognition regressions, not claims that every variant was emitted by a live
+adapter's stderr. The Upwork waiting message was observed in a live page trace.
+
+```text
+verify-human-en: (?i)(verify|verifying|confirm) (that )?you are (a )?human
+human-verification-cn: (?:验证|确认)(?:您|你)(?:是否)?是(?:真人|人类)|(?:正在|请|需要).{0,8}(?:真人验证|人机验证)
+human-verification-pending: (?i)验证成功[。.!！\s]*正在等待|verification successful[.!\s]*waiting for|checking your browser
+```
+
+A guest-group denial such as `抱歉，您所在的用户组(游客)无法进行此操作`
+is a login request, even if cached auth metadata says logged in. It is classified
+separately from a CAPTCHA; hand off to the user and resume only after confirmation.
 
 **2026-09-08 runtime check (OpenCLI 1.8.7):** an Indeed search for Python in
 New York returned exit 1, empty stdout and `Indeed served a Cloudflare challenge
