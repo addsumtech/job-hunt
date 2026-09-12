@@ -1044,13 +1044,15 @@ Told the user:
 - [ ] The consultation folder and its client report/CV files; keep internal files private.
 - [ ] **The delivered files** `deliver.py` printed — in one `~/Downloads/<workspace-name>/` folder, including the report PDF.
       That is the one the user can actually open; the workspace path is for an audit.
-- [ ] In discover: the §0 Sources and read quality table, the trigger reason, each row's actual
-      read quality and provisional band, and — if the run degraded — the completed
-      disclosure block. Use "provisional, from card data only" only for an all-card
-      round; if any posting has a full detail, use "provisional; not a full application
-      assessment". **Write the output in the user's language.** Follow `modes/discover.md`
-      and `references/report-localization.md` for the matching disclosure in each
-      supported language. Keep one language per document.
+- [ ] In discover: before delivering a complete report, read the full description
+      of every retained posting. Search-card summaries serve internal triage and
+      do not satisfy this requirement. If access genuinely fails, retain a failure
+      capture, explain the reason in the report and mark the posting unresolved;
+      never count it as detail-reviewed. Show the Sources and read quality table,
+      the trigger reason and each posting's actual read status. Full detail review
+      is still distinct from a complete application assessment; use the matching
+      disclosure from `modes/discover.md` and `references/report-localization.md`.
+      **Write the output in the user's language.** Keep one language per document.
 
 Client typography: English uses Times New Roman and Chinese uses SimSun (宋体),
 including names and headings, unless the user explicitly requests otherwise.
