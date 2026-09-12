@@ -31,6 +31,9 @@ OpenCLI capability diagnosis first, following
    `chrome://inspect/#remote-debugging` and accepts Chrome's connection prompt.
    Start `python scripts/run_tool.py browser-session start` once and wait for
    consent; use `browser-session status` instead of repeated starts while waiting.
+   A missing or stale endpoint, a disconnected session, or an expired consent
+   request must be handed back with the command's setup guidance. Keep failed
+   starts distinct from `waiting_for_consent`; never report them as connected.
    OpenCLI and fallback captures reuse this connection. Close it with
    `browser-session stop` at the end. Idle sessions expire after 30 minutes;
    browser restarts or disconnections require a new explicit start and consent.

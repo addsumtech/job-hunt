@@ -11,6 +11,8 @@ import {dailyEndpoint} from './browser_cdp.mjs';
 
 const alive = pid => {try {process.kill(pid, 0);return true;} catch {return false;}};
 const send = (ws, value) => {if (ws?.readyState === 1) ws.send(JSON.stringify(value));};
+const failed = state => ['disconnected', 'consent_timeout'].includes(state);
+const connectionHelp = browser => `Cannot connect to the selected daily ${browser}. Keep it open and ${browser === 'chrome' ? 'enable remote debugging at chrome://inspect/#remote-debugging' : 'enable its supported remote-debugging endpoint'}, then start one session and accept the browser's connection prompt.`;
 
 export async function createSession({endpoint, WebSocket, WebSocketServer,
   idleMs = 30 * 60 * 1000, consentMs = 120000, changed = () => {}}) {
@@ -109,20 +111,21 @@ export async function createSession({endpoint, WebSocket, WebSocketServer,
     const owner = owners.get(message.sessionId) || targets.get(message.params?.targetId);
     if (owner) send(owner, message);
   });
-  const close = async () => {
+  const close = async (finalState = 'closed') => {
     if (closing) return;
-    closing = true;clearTimeout(consentTimer);clearInterval(idleTimer);
+    closing = true;state = finalState;publish();clearTimeout(consentTimer);clearInterval(idleTimer);
     for (const targetId of targets.keys()) closeTarget(targetId);
     for (const client of clients) client.close(1001);
     if (upstream.readyState === 1) await new Promise(r => setTimeout(r, 100));
-    upstream.close();downstream.close();server.close();state = 'closed';publish();
+    upstream.close();downstream.close();server.close();publish();
   };
   upstream.on('close', () => {
-    state = 'disconnected';clearTimeout(consentTimer);
+    if (closing) return;
+    clearTimeout(consentTimer);
     for (const client of clients) client.close(1011, 'Browser connection ended; explicitly start a new session');
-    pending.clear();publish();void close();
+    pending.clear();void close('disconnected');
   });
-  const consentTimer = setTimeout(() => {state = 'consent_timeout';publish();void close();}, consentMs);
+  const consentTimer = setTimeout(() => {void close('consent_timeout');}, consentMs);
   const idleTimer = setInterval(() => {if (!clients.size && Date.now() - lastUse > idleMs) void close();}, Math.min(idleMs, 30000));
   await new Promise((ok, fail) => {server.once('error', fail);server.listen(0, '127.0.0.1', ok);});
   return {endpoint:`ws://127.0.0.1:${server.address().port}${socketPath}`, close,
@@ -149,11 +152,16 @@ export async function main(argv) {
     return response;
   }
   if (action === 'status') {
-    if (!previous || !alive(previous.pid)) {console.log(JSON.stringify({state:'stopped',browser}));return;}
+    if (!previous || !alive(previous.pid)) {
+      if (failed(previous?.state)) throw Error(connectionHelp(browser));
+      console.log(JSON.stringify({state:'stopped',browser}));return;
+    }
     const status = await (await contact('/status')).json();
+    if (failed(status.state)) throw Error(connectionHelp(browser));
     console.log(JSON.stringify({...status,browser}));return;
   }
   if (action === 'endpoint') {
+    if (failed(previous?.state)) throw Error(connectionHelp(browser));
     const status = await (await contact('/status')).json();
     if (status.state !== 'connected') throw Error(`Browser session is ${status.state}; wait for user consent instead of opening another connection`);
     if (previous.source_endpoint !== await dailyEndpoint(browser)) throw Error('Selected daily browser restarted; start a new consented session');
@@ -168,8 +176,11 @@ export async function main(argv) {
     if (previous && alive(previous.pid)) {
       if (previous.source_endpoint !== await dailyEndpoint(browser)) throw Error('Browser changed; stop the old session before starting a new one');
       const status = await (await contact('/status')).json();
+      if (failed(status.state)) throw Error(connectionHelp(browser));
       console.log(JSON.stringify({...status,browser,reused:true}));return;
     }
+    // Fail before spawning when first-run setup has no endpoint at all.
+    try {await dailyEndpoint(browser);} catch (err) {throw Error(`${err.message}. ${connectionHelp(browser)}`);}
     let lock;
     try {lock = await open(lockFile,'wx',0o600);} catch (err) {
       if (err.code === 'EEXIST') throw Error('A session start is already in progress; check status instead of reconnecting');
@@ -182,7 +193,12 @@ export async function main(argv) {
       child.unref();await log.close();
       // Do not launch another process in the gap before serve writes its state.
       for (let i=0;i<100;i++) {
-        try {const s=JSON.parse(await readFile(stateFile,'utf8'));if (s.pid===child.pid) {console.log(JSON.stringify({state:s.state,browser,pid:s.pid,reused:false}));return;}} catch {}
+        let s;
+        try {s=JSON.parse(await readFile(stateFile,'utf8'));} catch {}
+        if (s?.pid===child.pid) {
+          if (failed(s.state) || s.state === 'closed') throw Error(connectionHelp(browser));
+          console.log(JSON.stringify({state:s.state,browser,pid:s.pid,reused:false}));return;
+        }
         await new Promise(r=>setTimeout(r,50));
       }
       throw Error('Browser session did not start; inspect its local log');
