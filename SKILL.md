@@ -35,6 +35,11 @@ question needs.
 
 Delivery uses two child folders: `简历/` for `简历.docx`, `简历.pdf` and other requested application documents; `报告/` for `求职建议报告.pdf` and its editable text. Filenames never include the employer, role or internal workspace slug.
 
+In `discover`, `assess` and `interview`, an existing CV is source material, so
+delivery copies only the report by default. Use `--include-applications` only
+when the user explicitly asks to receive the existing application documents too.
+Do not regenerate or deliver a source CV merely because it is in the workspace.
+
 Author `report.md` for **every consultation**, answering the client's actual
 question in their language: conclusion, supporting evidence, relevant career
 constraints or facts still to confirm, and practical next steps. Tool defects,
@@ -67,7 +72,7 @@ Do not automatically start a mock interview or another mode.
 
 **HONEST REFRAMING ONLY.** Never fabricate experience, skills, titles, dates, or credentials. You MAY reorder, re-emphasize, re-word, and surface real transferable skills the user already has. You may NOT invent anything. When in doubt, ask the user a question rather than guess or embellish. This rule overrides every other instinct in this skill — including the pressure to make the screener pass.
 
-**The review loop is non-negotiable.** This skill does not judge its own output. Three independent judges modelling the real hiring funnel — an ATS Screener (machine lens), a Recruiter/HR Screener (fast human screen), and a Hiring Manager (deep human lens), each a fresh subagent — must all decide the package passes. You do not get to declare success on your own.
+**The apply review loop is non-negotiable.** A standard CV needs three independent judges modelling the real hiring funnel — an ATS Screener (machine lens), a Recruiter/HR Screener (fast human screen), and a Hiring Manager (deep human lens), each a fresh subagent. All three must pass before the package is described as passing review. An honest stretch can still be delivered with its rejected verdicts and real gaps clearly stated. Discover and assess use their own evidence checks; interview uses its two independent assessors. Never invent a review or declare an unreviewed package passed.
 
 **Read references as you go.** Each step below points to a `references/*.md` file. Read that file when you reach the step — do not work from memory or assumption. The references hold the craft detail; this file is just the flow.
 
@@ -108,7 +113,7 @@ which of these they want next, in one question with selectable options:
 
 | finished | offer next | why |
 |---|---|---|
-| `discover` | `assess` a row that interests them | the shortlist carries a provisional verdict only; a real one needs the posting read |
+| `discover` | `assess` a row that interests them | the full-posting read and discovery mapping can be extended into the selected role's complete assessment |
 | `assess` | `apply` if the verdict is worth it | and say the verdict out loud first — `blocked` gets one honest ask, not a silent refusal |
 | `apply` | `interview` on the package just built | the CV now makes specific claims; the mock round is where the candidate finds out whether they can defend them |
 | `interview` | `apply` again to fix what the round exposed | an undefendable claim is a CV bug, not a story to drill |
@@ -118,7 +123,7 @@ Two rules on the offer itself:
 - **Never run one unasked**, including when the answer looks obvious. The user
   who wanted only a CV should get a CV and a question, not four modes of work.
 - **Do not offer a mode whose inputs are not there.** `interview` needs a built
-  application; `assess` needs a posting. Offering a mode that would immediately
+  application or a posting plus CV for an upcoming interview; `assess` needs a posting. Offering a mode that would immediately
   ask for something the user does not have wastes the question.
 
 **No gate prints this offer, deliberately.** `modes/apply.md` Step 7.6 carries it,
@@ -312,13 +317,14 @@ Garbage in, garbage out: extracting from a page that isn't actually the posting 
 - **When the fetch is thin or wrong, do not extract — ask the user to paste the full posting text.** Inventing must-haves off a login wall is worse than asking.
 - **Terminal case:** if the posting genuinely can't be obtained (dead link, nothing to paste), stop and say so. Never proceed on guessed requirements.
 
-Follow this order every time. Do not skip ahead.
+If the user already provided complete posting text, validate that text and proceed
+to extraction. Otherwise follow this retrieval order.
 
 **Step 1 — Try to fetch the URL.**
 
 Use `WebFetch` on the provided URL. Examine the returned text:
-- Is it at least ~300 words of readable job-description prose?
-- Does it contain a requirements or qualifications section?
+- Does it identify the specific role and employer and contain substantive duties and requirements?
+- Is the description complete rather than a search card, truncated excerpt or access wall?
 
 If yes, proceed to extraction.
 
@@ -331,7 +337,12 @@ The following platforms frequently return login walls, empty shells, or JavaScri
 - Lever postings embedded in iframes
 - Taleo and iCIMS portals
 
-If `WebFetch` returns fewer than ~200 words, no qualifications language, or a login/sign-in prompt, **do not guess**.
+Word count is a warning signal, not a minimum: concise postings and languages
+without spaces can still carry complete requirements. A sign-in link beside a
+readable description is not a login wall. If the description is actually missing
+or truncated, **do not guess**. Use an available reader under
+`references/network-recovery.md`, or ask for the full text when access requires
+the user's participation.
 
 **Step 3 — Ask the user to paste the full text.**
 
@@ -356,7 +367,7 @@ Wait for the pasted text. Then extract.
 | `company_values_tone` | string | Culture signals + voice. Note: formal vs. casual writing style, mission language ("we believe", "our north star"), DEI statements, pace signals ("fast-moving", "startup within a larger company"), team descriptors ("collaborative", "autonomous"). This shapes the cover letter's register. |
 | `red_flags` | list of strings | Signals of a problematic role. See the full list of red-flag patterns in §2. |
 | `salary_range` | string or null | The stated pay range, if the posting gives one (e.g. "€65k–80k"); else `null`. Many EU/US postings now state a range. |
-| `application_type` | enum: `cv / structured` | `structured` when the posting splits requirements into **Essential / Desirable** criteria, names **behaviours / "Success Profiles" / a competency framework**, or tells the applicant to "evidence how you meet each criterion" / submit a scored supporting statement (common for UK NHS, Civil Service, public-sector, NGO, and many academic roles). Otherwise `cv`. When `structured`, the primary deliverable is a criterion-mapped supporting statement — follow `references/structured-applications.md`. |
+| `application_type` | enum: `cv / structured` | `structured` when the employer asks for a supporting statement, criterion-by-criterion evidence, a competency response or a structured application form. Essential / Desirable headings or a framework name alone do not establish that requirement. Otherwise `cv`; preserve any explicitly requested CV alongside structured materials. Follow `references/structured-applications.md`. |
 
 **The `posting.yaml` field list, and it is exactly these twelve names in this order:**
 
@@ -408,7 +419,7 @@ The rirekisho asks for **personal data** a Western CV omits — date of birth, a
 
 **Dispatch all three in parallel** — as fresh independent **Agent** subagents in a **single message (three tool calls at once)** each round, so they run concurrently. They share no state, so parallel dispatch is both faster and avoids ordering bias; never run one, read its verdict, then run the next. Each has **no other context**, so paste everything it needs:
 
-**The mechanism is replaceable; the isolation is not.** On a host with no subagent tool, dispatch three concurrent fresh invocations of that host's own CLI instead — `codex exec "$(cat agents/ats-screener.md) …"` — because `agents/*.md` are standalone personas that need no particular dispatcher. A judge that watched the tailoring is not a second opinion. If the host can open no fresh context at all, run the loop anyway and say plainly, in the completion message and the run notes, that the judges shared the author's context and their verdicts are weaker evidence than this loop's shape implies — never report three PASSes as a review that happened at arm's length when it did not. `references/portability.md`.
+**The mechanism is replaceable; the isolation is not.** On a host with no subagent tool, dispatch concurrent fresh invocations of that host's own CLI (for example, `codex exec`) using `agents/*.md`. A judge that watched the tailoring is not a second opinion. If no fresh context is available, preserve the draft and report that independent review is incomplete. Self-review may find obvious defects, but it cannot produce judge verdicts, review receipts or a claimed review PASS. Resume with isolated judges when available. See `references/portability.md`.
 
 - *ATS Screener:* the **full text** of `agents/ats-screener.md` + the structured posting + the tailored CV Markdown (`<workspace>/cv.md`) + the **CV language**. (No letter — ATS doesn't parse letters.)
 - *Recruiter / HR Screener:* the **full text** of `agents/recruiter-screener.md` + the structured posting (`<workspace>/posting.yaml`) + the tailored CV Markdown (`<workspace>/cv.md`) + the motivation letter (`<workspace>/letter.md`) if produced, else `No letter provided.` + the **target market & CV language**.
@@ -454,6 +465,11 @@ The three lenses are deliberately distinct: ATS = literal findability, Recruiter
 In both cases give the final per-judge verdicts, the ATS coverage % (or `n/a`), the remaining honest gaps, and concrete next steps (skills to gain, certifications, better-fitting roles). **Never fake a pass.**
 
 ## Immutability + workspace
+
+Resolve the store with `scripts/paths.py` first. Paths below illustrate the default;
+when `JOBHUNT_PROFILES_ROOT` is set, use `paths.PROFILES_ROOT` for profile and
+resume lookups and report the actual saved paths. A missing store is normal on
+first use; `save_profile.py` creates it when a profile is saved.
 
 **Resume an in-progress application first.** Before anything else, check `~/.claude/job-profiles/*/applications/` for a workspace that matches this target (by company/role) and already contains a `posting.yaml` and/or `tailored-profile.yaml`. If one exists, a prior run was interrupted — show the user what's already there and offer to **resume from where it stopped** (e.g. posting already extracted → jump to gap analysis or tailoring) rather than rebuilding from Step 0. Only start fresh if they prefer it or no matching workspace exists.
 
@@ -574,8 +590,8 @@ shape — counted facts, then one word, then the disclaimer. **The block follows
 user's language, not the market's**, so both shapes are here; `scripts/count_coverage.py`
 emits them with `--lang zh` and `--lang en` and is the only path that produces the counts.
 
-    must-have 强证据：   X of N   （partial P，gap G，无证据 U）
-    核心职责已证实：     M of K
+    必备条件有充分证据：   X 项，共 N 项   （部分符合 P，存在缺口 G，无证据 U）
+    核心职责已证实：     M 项，共 K 项
     职级匹配：           <上跳 | 平级 | 下沉 | 不明>
     可补缺口所需投入：   <当天 | 一晚 | 数日 | 补不上>
     投递建议：           <强烈建议投 | 值得投 | 可以冲刺 | 大概率被筛掉 | 硬性阻断>
@@ -627,26 +643,22 @@ Using it as a conclusion is fabrication. Never assert a score on it.
 ## The grounding contract
 
 ```
-  原始来源文本                    skill 说了什么              谁在检查
-  ─────────────                  ──────────────             ────────
-  posting-source.txt  ──切块──► JD-001…JD-080  ──被引用──► 需求表行
-  cv.md / profile     ──切块──► CV-001…CV-080                  │
-                                                                ▼
-                                                    check_evidence_refs.py
-                                                    （解析得到，或丢弃）
+  Original source             Referenced claim              Check
+  posting-source.txt --> JD-001…JD-080 --> requirement row --> check_evidence_refs.py
+  cv.md / profile    --> CV-001…CV-080 --> requirement row --> resolves or is dropped
 
-  profile.yaml 某行  ─┐
-  本次会话的回答     ─┼────► claims.yaml ──被要求──► 每个 REFRAME /
-  已读取的本人产物   ─┘                              KEYWORD-INSERT 词条
-                                                                │
-                                                                ▼
-                                                         check_claims.py
+  profile.yaml field       --|
+  answer in this session   --|--> claims.yaml --> each REFRAME / KEYWORD-INSERT
+  candidate artifact read  --|                                |
+                                                             v
+                                                      check_claims.py
 
-  一个人，在一次提交里 ────► market-conventions/<key>.yaml
-                                    │  id 白名单 · 逐字渲染
-                                    │  绝不经模型转述
-                                    ▼
-                             check_conventions.py
+  Human-authored commit --> market-conventions/<key>.yaml
+                                       |
+                            allowlisted IDs; verbatim text
+                            no model paraphrase
+                                       v
+                               check_conventions.py
 ```
 
 1. **Evidence blocks tie the analysis to the source text.** The model may only cite
@@ -784,9 +796,9 @@ is declined/unavailable, not as a silent substitute for waiting:
    fresh `--window` is still a retry.
 4. Do not route around it — no other adapter, no public mirror, no logged-in
    session standing in for a logged-out one.
-5. Emit the **direction-level degraded output** instead: 3-5 目标方向, no `rows:`,
+5. Emit the **direction-level degraded output** instead: 3-5 target directions, no `rows:`,
    so it cannot claim a posting exists.
-6. Fill in the disclosure table, whose answers ship pre-filled as 否 / no precisely
+6. Fill in the disclosure table, whose answers ship pre-filled as localized "no" precisely
    so that concealing a retry has to be an active overwrite rather than an
    omission. Six lines, one language — `modes/discover.md` gives the block in both.
 
@@ -1054,8 +1066,10 @@ Told the user:
       disclosure from `modes/discover.md` and `references/report-localization.md`.
       **Write the output in the user's language.** Keep one language per document.
 
-Client typography: English uses Times New Roman and Chinese uses SimSun (宋体),
+CV typography: English uses Times New Roman and Chinese uses SimSun (宋体),
 including names and headings, unless the user explicitly requests otherwise.
+For reports, follow `references/word-resume-layout.md`: an explicitly selected
+font/template wins; otherwise the portable renderer may use its embedded fonts.
 Verify embedded PDF fonts, not only DOCX settings. Preserve template font sizes
 and aim for a well-filled page; any added gap before a section heading is at
 most one blank line. Never invent content or shrink fonts just to fill a page.

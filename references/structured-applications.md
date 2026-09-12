@@ -9,10 +9,16 @@ The big ones:
 
 ## How to detect it
 
-Treat a posting as a structured application when extraction (`job-posting-extraction.md`) finds any of:
-- An explicit **Essential / Desirable** split, or a "Person Specification" / "Selection Criteria" list.
-- Named **behaviours / competencies** with the words "Success Profiles", "behaviours", "competency framework".
-- Instructions like "address each of the criteria", "evidence how you meet", "your statement will be scored against", a per-section **word/character limit**, or a free-text "supporting information / statement" box rather than (or alongside) a CV upload.
+Treat a posting as a structured application when the employer requests a
+supporting statement, criterion-by-criterion evidence, a competency response or
+a structured application form. Examples include "address each of the criteria",
+"evidence how you meet", a statement scored against named criteria, or a
+"supporting information" box with a word limit.
+
+An **Essential / Desirable** split, "Person Specification" heading or framework
+name alone describes requirements, not the documents to submit. If the employer
+asks only for a CV, keep the CV route. If the requested material is genuinely
+unclear, confirm it rather than silently replacing the CV with a statement.
 
 When detected, **tell the user the deliverable is the supporting statement, not just the CV**, and confirm before proceeding — the CV may still be required as an attachment, but it won't be what wins the shortlisting.
 

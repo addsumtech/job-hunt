@@ -30,9 +30,9 @@ MATCH_TEXT = {
         "detail_unmapped": ("完整职位描述已核对；尚未逐项匹配简历，暂不作为推荐投递。"),
         "card": ("简历匹配：仅有职位卡，尚未读取完整要求；"
                  "这是一条待核实线索，不是推荐。"),
-        "detail": ("简历匹配（已读取详情）：必备要求强证据 {strong} of {must_total}"
-                   "（partial {partial}，gap {gap}，无证据 {no_evidence}）；"
-                   "核心职责已证实 {responsibilities} of {responsibility_total}。"),
+        "detail": ("简历匹配（已读取详情）：必备条件有充分证据 {strong} 项，共 {must_total} 项"
+                   "（部分符合 {partial}，存在缺口 {gap}，无证据 {no_evidence}）；"
+                   "核心职责已证实 {responsibilities} 项，共 {responsibility_total} 项。"),
     },
     "en": {
         "detail_unmapped": ("Full job description reviewed; the CV has not yet been mapped "

@@ -192,10 +192,10 @@ def render_block(assessment: dict, counts: dict, lang: str = "zh") -> str:
     effort = _assessed(assessment.get("effort"), vocab.EFFORT, EFFORT_ZH, lang)
     if lang == "zh":
         return (
-            f"must-have 强证据：   {counts['must_strong']} of {counts['must_total']}   "
-            f"（partial {counts['must_partial']}，gap {counts['must_gap']}，"
+            f"必备条件有充分证据：   {counts['must_strong']} 项，共 {counts['must_total']} 项   "
+            f"（部分符合 {counts['must_partial']}，存在缺口 {counts['must_gap']}，"
             f"无证据 {counts['must_no_evidence']}）\n"
-            f"核心职责已证实：     {counts['resp_demonstrated']} of {counts['resp_total']}\n"
+            f"核心职责已证实：     {counts['resp_demonstrated']} 项，共 {counts['resp_total']} 项\n"
             f"职级匹配：           {direction}\n"
             f"可补缺口所需投入：   {effort}\n"
             f"投递建议：           {_verdict_zh(verdict)}")

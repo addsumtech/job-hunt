@@ -32,6 +32,9 @@ from evals import runlib
 CHECKERS = {}
 TWINS = {}
 
+# Accept current localized counts and the earlier Chinese label in archived runs.
+_COUNTABLE_BLOCK = re.compile(r"\bof\s+\d+\b|强证据|充分证据")
+
 
 def register(name, twin=None):
     """Register a checker. `twin` names the checker deciding its decoy.
@@ -565,7 +568,7 @@ def refusal_floor_fires(run):
     if leaked:
         return False, (f"verdict is {REFUSAL} but the rendered assessment still "
                        f"prints a conclusion: {leaked!r}")
-    if re.search(r"\bof\s+\d+\b|强证据", md):
+    if _COUNTABLE_BLOCK.search(md):
         return False, "verdict is a refusal but a coverage count is rendered"
     return True, f"verdict {REFUSAL}, no conclusion and no count rendered"
 
@@ -582,7 +585,7 @@ def verdict_produced_when_inputs_suffice(run):
                        f"{REFUSAL!r} anyway")
     if verdict not in VERDICTS:
         return False, f"verdict {verdict!r} is not one of {VERDICTS}"
-    if not re.search(r"\bof\s+\d+\b|强证据", md):
+    if not _COUNTABLE_BLOCK.search(md):
         return False, f"verdict {verdict!r} rendered with no countable-facts block"
     if not _DISCLAIMER.search(md):
         return False, ("the countable-facts block is rendered without the "
@@ -1317,9 +1320,6 @@ WALKBACK_REQUIRED_FIELDS = ("quote", "defect", "softened")
 # quote and reported, not silently skipped as an unmatched line.
 _FINDING = re.compile(
     r"FINDING:\s*tag=([A-Z][A-Z0-9-]*)\s*\|\s*ref=([^|]+)\|\s*quote=(.*)")
-
-# The same trigger the assess half already uses for a countable-facts block.
-_COUNTABLE_BLOCK = re.compile(r"\bof\s+\d+\b|强证据")
 
 
 def _findings(run):

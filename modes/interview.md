@@ -63,9 +63,15 @@ The persona costs nothing and is most of what makes a text interview feel like a
 
 ## 2. Seed `mock/question-log.yaml`
 
-Questions come from three places, and each row records which: `generated`, `scraped`, or
-`judge-supplementary` (carried over from the CV judges'
-`SUPPLEMENTARY_QUESTIONS_FOR_CANDIDATE`).
+Each question records its source: `generated`, `scraped`, `judge-supplementary`
+(carried over from the CV judges' `SUPPLEMENTARY_QUESTIONS_FOR_CANDIDATE`), or
+`user-provided` (questions or an existing transcript supplied by the user).
+
+For `user-provided` questions, preserve the original input in the workspace and
+keep the questions and answers verbatim. They are user-supplied material, not
+independently verified evidence of the employer's process. When asked to debrief
+an existing round, analyse those answers; do not invent a new conversation or
+relabel them as generated questions. All assessment and provenance checks still apply.
 
 **Generated questions are the high-value ones.** *"You wrote that you cut deploy time 40% —
 how did you measure that?"* exists in no archive, and it is the question that catches an
@@ -119,7 +125,7 @@ same held for Philips. This is the most dangerous failure available in this sour
 | `posting_country` | ISO-2 country of the **posting** — without it the country rule cannot fire |
 | `questions[].id` | `Q1`, `Q2`, … — must match the transcript's `## Q<n>` headings |
 | `questions[].text` | the question as it will be asked |
-| `questions[].source` | `generated` \| `scraped` \| `judge-supplementary` |
+| `questions[].source` | `generated` \| `scraped` \| `judge-supplementary` \| `user-provided` |
 | `questions[].asked` | whether it was actually put to the candidate |
 | `questions[].source_site` | **scraped-only** — e.g. `nowcoder` |
 | `questions[].source_id` | **scraped-only** — the id `detail` was called with |
@@ -456,6 +462,10 @@ as a verdict is fabrication. Everywhere else, no score, no percentage, no probab
 "strong candidate", no invented scale — see the banned-vocabulary block in SKILL.md.
 
 ## Hand the artifacts over — `deliver.py`, not a sentence in the final message
+
+Deliver the debrief report. The CV used by the assessors remains source material;
+`deliver.py` does not copy or render it in this mode unless the user explicitly
+requests the existing application documents and you pass `--include-applications`.
 
 A workspace under `~/.claude/job-profiles/` is where the skill works, and it is
 not where a person looks. Nobody browses a dotfile directory, and a path pasted

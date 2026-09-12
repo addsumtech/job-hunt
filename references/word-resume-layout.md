@@ -58,9 +58,11 @@ available to the exporter. Do not shrink body text merely to force one page.
 Aim for a balanced, well-filled page using the supplied content. Where space
 permits, separate section headings with at most one blank line (prefer paragraph
 spacing over empty paragraphs); never stack blank lines or invent content to
-fill the page. Verify pagination after adjusting spacing. These conventions
-apply to report PDFs too: English Times New Roman, Chinese SimSun; verify actual
-exported fonts and use the installed office-suite font when available. A newer
+fill the page. Verify pagination after adjusting spacing. For report PDFs, use
+English Times New Roman and Chinese SimSun when following an explicitly selected
+template or font; verify actual exported fonts. Without an explicit report font
+selection, the bundled report renderer may use its embedded fallback fonts as
+described below. Never describe those as Times New Roman or SimSun. A newer
 explicit user typography request overrides the reference template.
 Record a requested Chinese font in `meta.cjk_font` of the workspace profile.
 Delivery honors that selection before its bundled report fonts; a missing selected

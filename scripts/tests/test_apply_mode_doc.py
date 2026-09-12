@@ -70,10 +70,11 @@ def test_reusing_a_master_carries_experience_not_a_target():
         "the rule has to sit inside the reuse paragraph, where the temptation is"
 
 
-def test_it_says_why_assess_and_interview_do_not_need_the_question():
-    """Both are handed a posting and the posting states its own location.
-    Without this line the rule reads as an omission in the other two modes."""
-    assert "Assess and interview do not need it" in text()
+def test_market_confirmation_agrees_across_mode_handoffs():
+    """A posting location is not consent, and a current answer need not be repeated."""
+    assert "Assess and interview also confirm the market" in text()
+    assert "does not need to be asked again" in text()
+    assert "Assess and interview do not need it" not in text()
 
 
 def test_the_claim_about_the_interlock_matches_the_renderer():

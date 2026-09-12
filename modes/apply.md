@@ -2,6 +2,9 @@
 
 Make a **single `AskUserQuestion` call** with up to 4 questions. Drop any question the user already answered in their opening request; keep the rest.
 
+Use the host's supported question mechanism and limits. Never invent a missing
+tool or use an unavailable interaction mode just to reproduce this example.
+
 On a host without that tool — codex, another agent, or a Claude Code **subagent**, which does not get it either — the requirement is the SHAPE, not the tool: the same questions, in ONE message, each with concrete lettered options rather than an open prompt. Never degrade to one question per turn; a four-round interrogation before any work is what makes people abandon the run. With no interactive user at all, state the assumptions you proceeded on and carry them into the completion message. Measured: ten of the fifteen with_skill eval runs recorded this tool as unavailable. See `references/portability.md`.
 
 1. **CV source** — Do you have a CV to use, or should I build one for you? (If they choose *build*, follow up: can you share an example whose style I should mimic, or should I design a clean template?)
@@ -11,11 +14,16 @@ On a host without that tool — codex, another agent, or a Claude Code **subagen
 
    The cost is not cosmetic, because this one field arms the personal-data interlock. A returning user whose master says `nl` (Cluster 2) who is now applying in the US gets `_suppress_personal_data` returning False, and a photo or date of birth reaches a CV that US employers route straight to rejection. The reverse is just as wrong: inheriting a Cluster-1 market strips the Bewerbungsfoto a German employer expects. **Ask it every run, of every user, saved profile or not.**
 
-   Discover mode carries the same rule for the same reason (`modes/discover.md`, "Before Step 0"). Assess and interview do not need it: both are handed a posting, and the posting states its own location.
+   Discover mode carries the same rule for the same reason (`modes/discover.md`, "Before Step 0"). Assess and interview also confirm the market under their own entry rules. A market explicitly confirmed for this target in the current conversation does not need to be asked again merely because the mode changed.
 3. **Output formats** — Markdown / PDF / .docx (multi-select).
 4. **Motivation letter** — Do you want a cover/motivation letter as well?
 
 ## Step 1 — CV acquisition → `profile.yaml`
+
+Resolve the store with `scripts/paths.py` first. Paths below illustrate the default;
+when `JOBHUNT_PROFILES_ROOT` is set, use `paths.PROFILES_ROOT` for profile and
+resume lookups and report the actual saved paths. A missing store is normal on
+first use; `save_profile.py` creates it when a profile is saved.
 
 **Resume an in-progress application first.** Before anything else, check `~/.claude/job-profiles/*/applications/` for a workspace that matches this target (by company/role) and already contains a `posting.yaml` and/or `tailored-profile.yaml`. If one exists, a prior run was interrupted — show the user what's already there and offer to **resume from where it stopped** (e.g. posting already extracted → jump to gap analysis or tailoring) rather than rebuilding from Step 0. Only start fresh if they prefer it or no matching workspace exists.
 
@@ -54,7 +62,7 @@ Read `references/job-posting-extraction.md` and follow it.
   recipient against, and `application_type: structured` is the only signal that routes
   to the supporting-statement branch — the document a UK NHS or Civil Service panel
   actually scores. Dropping either is silent: the run simply never produces it.
-- **Detect a structured / competency-based application.** If the posting splits requirements into **Essential / Desirable** criteria, names **behaviours / "Success Profiles"**, or instructs the applicant to "evidence how you meet each criterion" / provide a scored supporting statement (common for UK NHS, Civil Service, public-sector, and many academic roles), the deliverable is a criterion-mapped **supporting statement**, not just a CV. Read and follow `references/structured-applications.md`, and tell the user before proceeding.
+- **Detect a structured / competency-based application.** Use `structured` when the employer requests a supporting statement, criterion-by-criterion evidence, a competency response or a structured application form. Essential / Desirable headings or a framework name alone do not change a CV application into a statement. Read `references/structured-applications.md`, confirm any genuinely ambiguous requested document, and preserve an explicitly requested CV alongside the statement.
 - **Confirm the must-haves and keywords with the user** before moving on.
 - After confirmation, write the extracted and confirmed posting to `posting.yaml` in the application workspace (defined in Step 4 below). This persists the posting for re-runs and the user's records.
 
@@ -190,7 +198,7 @@ The three lenses are deliberately distinct: ATS = literal findability, Recruiter
 
 **Dispatch all three in parallel** — as fresh independent **Agent** subagents in a **single message (three tool calls at once)** each round, so they run concurrently. They share no state, so parallel dispatch is both faster and avoids ordering bias; never run one, read its verdict, then run the next. Each has **no other context**, so paste everything it needs:
 
-**The mechanism is replaceable; the isolation is not.** On a host with no subagent tool, dispatch three concurrent fresh invocations of that host's own CLI instead — `codex exec "$(cat agents/ats-screener.md) …"` — because `agents/*.md` are standalone personas that need no particular dispatcher. A judge that watched the tailoring is not a second opinion. If the host can open no fresh context at all, run the loop anyway and say plainly, in the completion message and the run notes, that the judges shared the author's context and their verdicts are weaker evidence than this loop's shape implies — never report three PASSes as a review that happened at arm's length when it did not. `references/portability.md`.
+**The mechanism is replaceable; the isolation is not.** On a host with no subagent tool, dispatch concurrent fresh invocations of that host's own CLI (for example, `codex exec`) using `agents/*.md`. A judge that watched the tailoring is not a second opinion. If no fresh context is available, preserve the draft and report that independent review is incomplete. Self-review may find obvious defects, but it cannot produce judge verdicts, review receipts or a claimed review PASS. Resume with isolated judges when available. See `references/portability.md`.
 
 - *ATS Screener:* the **full text** of `agents/ats-screener.md` + the structured posting + the tailored CV Markdown (`<workspace>/cv.md`) + the **CV language**. (No letter — ATS doesn't parse letters.)
 - *Recruiter / HR Screener:* the **full text** of `agents/recruiter-screener.md` + the structured posting (`<workspace>/posting.yaml`) + the tailored CV Markdown (`<workspace>/cv.md`) + the motivation letter (`<workspace>/letter.md`) if produced, else `No letter provided.` + the **target market & CV language**.
@@ -227,12 +235,16 @@ Tell the user **all three verdicts and the ATS coverage %** (report it verbatim 
 
 ## Step 7 — Finalize
 
-- List the workspace path (`~/.claude/job-profiles/<name>/applications/<company>-<role>-<YYYY-MM-DD>/`) and all output files (CV and letter in each requested format). When PDF was requested, list the `.tex` source alongside the PDF — it's a deliverable too.
+- Link the actual client delivery folder and each requested document after `deliver.py` succeeds. Keep the workspace, `.tex` sources and review records private unless the user explicitly asks for them. Do not present an internal source as a finished client document.
 - Show the **final FIT SNAPSHOT delta**: baseline (before tailoring) vs. final (after tailoring) — coverage, responsibility match, and the apply verdict.
 - Summarize what changed during tailoring and why.
 - Note any **remaining honest gaps** the user should be aware of going into the application and interview.
 - **Consistency reminder:** the tailored CV now states specific things about the candidate's roles, scope, and dates. Remind them to make sure their **LinkedIn and any portal profile don't contradict it** — recruiters cross-check, and a mismatch reads as dishonesty. (A reminder only — do not scrape or fetch their profile.)
-- Remind them the reusable **master profile** is saved at `~/.claude/job-profiles/<name>/profile.yaml` and can be retargeted for the next application.
+- If a reusable **master profile** was saved, mention its actual path and that it can be reused for the next application. Never claim a default path was created without verifying it.
+
+### Step 7.5 — Interview-readiness brief
+
+Produce the brief in `references/interview-prep.md` (write it to `<workspace>/interview-brief.md`). Use the claim-provenance map, the judges' `SUPPLEMENTARY_QUESTIONS_FOR_CANDIDATE`, and the HONEST-GAPS. For each REFRAMED/AMPLIFIED claim, give the source fact and a "be ready to explain…" prompt; for each honest gap, the truthful framing if asked; and carry over the recruiter/manager questions. If a claim cannot be truthfully defended, walk it back on the CV and re-run the affected checks.
 
 ### Step 7.6 — Offer what comes next
 
@@ -249,10 +261,6 @@ and run none of them unasked** (`SKILL.md`, "Hand-off"):
 Offer only modes whose inputs exist, and say plainly if the loop ended
 un-passed: a `blocked` or `honest_stretch` package makes `interview` more useful,
 not less, because the gaps are known going in.
-
-### Step 7.5 — Interview-readiness brief
-
-Produce the brief in `references/interview-prep.md` (write it to `<workspace>/interview-brief.md`). It is **near-free** — you already hold everything it needs: the claim-provenance map (every reframed claim → its real source), the judges' `SUPPLEMENTARY_QUESTIONS_FOR_CANDIDATE`, and the HONEST-GAPS. For each REFRAMED/AMPLIFIED claim, give the source fact and a "be ready to explain…" prompt; for each honest gap, the truthful framing if asked; and carry over the recruiter/manager questions. Honest only — if a claim can't be truthfully defended, that's a tailoring error: walk it back on the CV.
 
 ## Toolchain note
 
@@ -450,8 +458,10 @@ For native Word/LibreOffice export, complete ordinary save and print dialogs dir
 
 Request user intervention only for an observed blocker the available tools cannot resolve or an action that requires human participation under the host's rules. State what is actually visible and what was attempted; do not diagnose a crash from grey controls or one unchanged tool response. This document-export guidance does not change the login, verification or refusal rules for job websites.
 
-Client typography: English uses Times New Roman and Chinese uses SimSun (宋体),
+CV typography: English uses Times New Roman and Chinese uses SimSun (宋体),
 including names and headings, unless the user explicitly requests otherwise.
+For reports, follow `references/word-resume-layout.md`: an explicitly selected
+font/template wins; otherwise the portable renderer may use its embedded fonts.
 Verify embedded PDF fonts, not only DOCX settings. Preserve template font sizes
 and aim for a well-filled page; any added gap before a section heading is at
 most one blank line. Never invent content or shrink fonts just to fill a page.

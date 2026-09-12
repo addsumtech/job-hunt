@@ -77,7 +77,7 @@ MOCK_MARKET_KEYS = vocab.MARKET_KEYS + (vocab.NO_MARKET,)
 COVERAGE_STATUS = ("evidenced", "asked_thin", "not_asked")
 SHAPE_STATUS = ("rehearsed", "partial", "not_attempted", "cannot_simulate")
 
-QUESTION_SOURCES = ("generated", "scraped", "judge-supplementary")
+QUESTION_SOURCES = ("generated", "scraped", "judge-supplementary", "user-provided")
 REJECT_REASONS = (
     "wrong_country",
     "stale_specific",

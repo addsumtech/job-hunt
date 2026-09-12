@@ -138,8 +138,9 @@ def test_the_honest_degraded_case_is_stated_rather_than_hidden():
     can see that it did. Reporting three PASSes as an arm's-length review would
     be the failure the whole loop exists to prevent."""
     t = " ".join((ROOT / "SKILL.md").read_text(encoding="utf-8").split())
-    assert "shared the author's context" in t
-    assert "never report three passes" in t.lower()
+    assert "independent review is incomplete" in t
+    assert "cannot produce judge verdicts" in t
+    assert "run the loop anyway" not in t
 
 
 def test_the_read_when_list_points_at_it():

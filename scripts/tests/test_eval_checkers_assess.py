@@ -144,6 +144,22 @@ def test_the_decoy_requires_a_verdict_a_count_and_a_disclaimer(tmp_path):
     assert ck.CHECKERS["verdict_produced_when_inputs_suffice"](run)[0] is True
 
 
+def test_localized_counts_are_recognized_in_a_supported_verdict(tmp_path):
+    run = build(tmp_path, assessment={"verdict": "worth_applying"},
+                assessment_md="必备条件有充分证据：3 项，共 5 项\n"
+                              "投递建议：值得投\n不是对结果的预判。\n")
+    assert ck.CHECKERS["verdict_produced_when_inputs_suffice"](run)[0] is True
+
+
+def test_localized_counts_cannot_leak_through_a_refusal(tmp_path):
+    run = build(tmp_path, assessment={"verdict": "insufficient_evidence"},
+                assessment_md="证据不足—不出结论。\n"
+                              "必备条件有充分证据：3 项，共 5 项\n")
+    passed, evidence = ck.CHECKERS["refusal_floor_fires"](run)
+    assert passed is False
+    assert "coverage count" in evidence
+
+
 def test_refusing_on_sufficient_input_fires_the_twin(tmp_path):
     run = build(tmp_path, assessment={"verdict": "insufficient_evidence"},
                 assessment_md="证据不足—不出结论。\n")

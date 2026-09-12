@@ -62,6 +62,26 @@ def test_default_destination_is_a_consultation_folder(tmp_path, monkeypatch):
     assert (tmp_path / "Downloads" / ws.name / "报告" / "求职建议报告.md").is_file()
 
 
+@pytest.mark.parametrize("mode", ["assess", "interview"])
+def test_read_only_consultations_do_not_redeliver_or_render_the_source_cv(tmp_path, mode):
+    ws = build(tmp_path, "# Career report\n\nDiscuss the documented experience.\n")
+    (ws / "cv.md").write_text("# Source CV\n\nAn existing source document.", encoding="utf-8")
+    deliver.journal.append(ws, {"action": "mode_entry", "mode": mode})
+    dest = tmp_path / "consultation"
+    assert run(ws, dest) == 0
+    assert {p.relative_to(dest).as_posix() for p in dest.rglob("*") if p.is_file()} == {
+        "报告/求职建议报告.md", "报告/求职建议报告.pdf"}
+    assert (ws / "cv.md").is_file() and (ws / "cv.pdf").is_file()
+
+
+def test_explicit_application_copy_remains_available_after_an_interview(tmp_path):
+    ws = build(tmp_path)
+    deliver.journal.append(ws, {"action": "mode_entry", "mode": "interview"})
+    dest = tmp_path / "requested-copy"
+    assert run(ws, dest, "--no-pdf", "--include-applications") == 0
+    assert (dest / "简历" / "简历.pdf").read_bytes() == (ws / "cv.pdf").read_bytes()
+
+
 # ---- what stays behind ----------------------------------------------------
 
 def test_the_provenance_chain_is_left_in_the_workspace(tmp_path):

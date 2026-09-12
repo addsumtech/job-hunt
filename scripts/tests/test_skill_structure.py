@@ -422,7 +422,7 @@ def _paragraphs(path: pathlib.Path) -> list[str]:
 # what to do on a host with no subagent tool has to be in layer 1 too — a codex run
 # reading only SKILL.md would otherwise hit "dispatch subagents" with no subagents
 # and no stated alternative.
-SHARED_WITH_APPLY = 25  # includes the shared client-report prediction gate
+SHARED_WITH_APPLY = 26  # includes resolved profile-store lookup guidance
 
 
 def test_the_paragraphs_layer_1_shares_with_a_mode_file_are_byte_identical():

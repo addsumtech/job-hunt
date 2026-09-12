@@ -87,7 +87,7 @@ def test_bilingual_query_generation_is_required_with_its_reason():
 
 def test_the_exit_code_rule_is_restated_here():
     body = text()
-    assert "先看 exit code" in body
+    assert "Read the exit code before interpreting empty output." in body
     assert "JSON.parse(stdout || '[]')" in body
 
 
@@ -105,8 +105,8 @@ def test_the_no_fabrication_rule_is_restated_at_why_matched():
     index = body.find(anchor)
     assert index != -1, "the why_matched fence paragraph is gone"
     window = body[index:index + 700]
-    assert "绝不" in window
-    assert "write a reason that the card does not support" in body
+    assert "**Never** write a reason that the card does not support" in window
+    assert "borrow a requirement from a JD you have not fetched" in window
 
 
 def test_every_script_and_reference_this_mode_uses_is_named():
@@ -122,9 +122,9 @@ def test_every_script_and_reference_this_mode_uses_is_named():
 
 def test_the_platform_limit_stop_rule_is_absolute():
     body = text()
-    assert "不重试" in body
-    assert "不改参数重试" in body
-    assert "不绕过" in body
+    stop_row = next(line for line in body.splitlines()
+                    if line.startswith("| `platform_limit` |"))
+    assert "Stop immediately: no retry, parameter changes or bypass." in stop_row
 
 
 def test_the_finding_codes_an_operator_must_react_to_are_explained():

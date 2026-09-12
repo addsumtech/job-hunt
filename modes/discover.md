@@ -1,4 +1,4 @@
-# Mode: discover — 找什么
+# Mode: discover — find roles worth considering
 
 Loaded unconditionally on entering discover mode. Read it in full before the first
 adapter call.
@@ -8,8 +8,8 @@ job listings with a provisional verdict on each. **What it does not do:** it nev
 chains into `apply`. Thirty rows do not become thirty CVs; the whole point of
 ranking a shortlist is to let a person choose.
 
-**The shortlist is written in the user's language** — spec §10: CV 跟市场走，评估 /
-shortlist / 面试复盘**跟用户走**. A Dutch- or US-market round run by someone who
+**The shortlist is written in the user's language** — spec §10: CVs follow the
+target market; assessments, shortlists and interview debriefs follow the user. A Dutch- or US-market round run by someone who
 writes to you in English produces an English `shortlist.md`, and that is ordinary
 output, not an edge case. Every literal `check_shortlist.py` requires the document
 to contain follows that language: the English and Chinese examples are below,
@@ -574,7 +574,7 @@ python3 scripts/check_opencli_result.py --workspace . --site 51job --command sea
     --command-line 'opencli 51job search "算法工程师" --area 上海 --page 1 --limit 25 --window background -f json'
 ```
 
-**先看 exit code，再解释「空」。** A login wall gives exit 1, EMPTY stdout and a YAML
+**Read the exit code before interpreting empty output.** A login wall gives exit 1, EMPTY stdout and a YAML
 error body on stderr *even under `-f json`*, so `JSON.parse(stdout || '[]')` silently
 converts a 403 into a zero-result success. Only `exit == 0` **and** stdout parsed to
 an array is "no results".
@@ -586,7 +586,7 @@ The wrapper returns one of five classifications, each with an action:
 | `ok` | exit 0, JSON array parsed | continue to Step 5 |
 | `not_logged_in` | login wall, and auth says the session is absent or unknown | cross-check auth; hand `opencli <site> login` **to the user** — it is a write command. Pause for [user recovery](../references/user-recovery.md); no read retry while logged out. **Do not treat `strategy: public` as evidence that no login is needed** — 1point3acres' public-strategy `forum` still 403s. |
 | `no_auth_adapter` | login wall on a site with no login concept | no CLI login command is available. Pause and ask the user to inspect the browser page; do not invent a login command or infer a missing session. |
-| `platform_limit` | a stop-signal from `references/risk-control-signals.yaml`, or a refusal while auth says logged in | **立即停止。不重试、不改参数重试、不绕过。** Pause this source, not the whole task. Explain whether it is verification, rate limiting or an unknown refusal; follow [user recovery](../references/user-recovery.md) before offering degraded output. |
+| `platform_limit` | a stop-signal from `references/risk-control-signals.yaml`, or a refusal while auth says logged in | **Stop immediately: no retry, parameter changes or bypass.** Pause this source, not the whole task. Explain whether it is verification, rate limiting or an unknown refusal; follow [user recovery](../references/user-recovery.md) before offering degraded output. |
 | `transport` | unrecognised failure, or exit 0 with unparsable stdout | Check the actual selected CDP connection and offline routing diagnostic, then follow [bounded network recovery](../references/network-recovery.md). Distinguish a disconnected browser from a site loading or route failure; a timeout alone is not evidence that a VPN caused it. |
 
 ## Step 5 — row integrity, before anything else
@@ -597,7 +597,7 @@ adapter except `boss`, where it is `name`. The wrapper reports this as
 
 `indeed` is measured to return exit 0, valid JSON, and empty `title`/`salary`/`tags`
 while `id`/`company`/`location`/`url` are populated. Recover each row with
-`opencli indeed job <id>` and report the gap in `§0`. **绝不** infer "this site has
+`opencli indeed job <id>` and report the gap in `§0`. **Never** infer "this site has
 no such jobs" from blank fields — the rows existed.
 
 ## Step 6 — normalise, then de-duplicate
@@ -659,7 +659,7 @@ copy. So `check_shortlist.py` also requires
 **`why_matched` is one of exactly three places where the no-fabrication fence is
 restated, and this is that restatement.** Cite the brief field and the raw field
 that made the match — "brief.target_titles 命中「算法工程师」；raw salaryMin 30000
-在 brief 区间内". **绝不** write a reason that the card does not support, and 绝不
+在 brief 区间内". **Never** write a reason that the card does not support, and never
 borrow a requirement from a JD you have not fetched. An invented `why_matched` is
 the most persuasive part of a fabricated row.
 

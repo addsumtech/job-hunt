@@ -31,9 +31,9 @@ Extract exactly these fields. Populate each as described below.
 | `company_values_tone` | string | Culture signals + voice. Note: formal vs. casual writing style, mission language ("we believe", "our north star"), DEI statements, pace signals ("fast-moving", "startup within a larger company"), team descriptors ("collaborative", "autonomous"). This shapes the cover letter's register. |
 | `red_flags` | list of strings | Signals of a problematic role. See the full list of red-flag patterns in §2. |
 | `salary_range` | string or null | The stated pay range, if the posting gives one (e.g. "€65k–80k"); else `null`. Many EU/US postings now state a range. |
-| `application_type` | enum: `cv / structured` | `structured` when the posting splits requirements into **Essential / Desirable** criteria, names **behaviours / "Success Profiles" / a competency framework**, or tells the applicant to "evidence how you meet each criterion" / submit a scored supporting statement (common for UK NHS, Civil Service, public-sector, NGO, and many academic roles). Otherwise `cv`. When `structured`, the primary deliverable is a criterion-mapped supporting statement — follow `references/structured-applications.md`. |
+| `application_type` | enum: `cv / structured` | `structured` when the employer asks for a supporting statement, criterion-by-criterion evidence, a competency response or a structured application form. Essential / Desirable headings or a framework name alone do not establish that requirement. Otherwise `cv`; preserve any explicitly requested CV alongside structured materials. Follow `references/structured-applications.md`. |
 
-**Salary fit (when a range is stated):** if `salary_range` is present, ask the user **once** whether it fits their expectation — a band mismatch is a common silent screen-out, and it's better surfaced now than after a full application. Keep it a single optional question; if no range is stated, don't ask (don't volunteer salary the posting didn't raise).
+**Salary fit (when a range is stated):** if `salary_range` is present, ask the user **once** whether it fits their expectation unless already answered. If no range is stated, keep it unknown; explain that uncertainty when it affects the decision or a stated pay floor. Never invent salary or block the rest of the assessment on an optional salary question.
 
 ### JSON shape (for internal use by the orchestrator)
 
@@ -86,14 +86,14 @@ Real postings are inconsistent, duplicated, and full of noise. Use these rules t
 
 **Non-English postings:** the cue words above are English; apply the same logic to the local-language equivalents. German: `Erforderlich` / `Voraussetzungen` / `Sie bringen mit` → `must_have`; `Wünschenswert` / `von Vorteil` / `idealerweise` → `nice_to_have`. French: `Exigé` / `Requis` → `must_have`; `Souhaité` / `un plus` → `nice_to_have`. Japanese: `必須` → `must_have`; `歓迎` / `尚可` / `あれば尚可` → `nice_to_have`. Extract `keywords` in the **posting's language** (tool names and proper nouns stay as-is). Record the posting language and carry it to `meta.language` so the CV and letter are written to match (see `cv-craft.md §2`).
 
-### Implicit must-haves for senior/lead roles
+### Seniority questions are not unstated must-haves
 
-When a posting titles the role "Senior" or "Lead" but does not list years of experience or leadership expectations explicitly, add these as implicit must-haves (mark them `[implicit]` for the user to confirm):
-
-- `[implicit] 5+ years of relevant industry experience` — senior implies this
-- `[implicit] Demonstrated ownership of significant features or systems`
-- `[implicit] Ability to work with minimal supervision`
-- For "Lead": also `[implicit] Experience mentoring engineers or technical leadership`
+A "Senior" or "Lead" title does not establish a fixed years-of-experience floor,
+management duty or eligibility barrier. Extract only the employer's stated
+requirements into `must_haves`. You may suggest confirming expected ownership,
+independence or mentoring with the employer; keep those questions separate from
+the extracted requirements, coverage denominator and screening verdict. A user's
+guess about an employer's expectations does not turn it into a sourced condition.
 
 ### Hard disqualifiers (tag separately — they are walls, not wishes)
 
@@ -116,13 +116,14 @@ Keep soft skills that appear in the specific requirements section of *this* post
 
 Postings often list the same skill in both "Requirements" and "Responsibilities" sections. De-duplicate: keep one entry in the most appropriate field (`must_have` if it was in Requirements, `responsibility` if it was only in Responsibilities).
 
-### Very short postings (under 150 words)
+### Short or incomplete postings
 
-If the posting gives almost no detail (a brief LinkedIn summary, a generic title + one paragraph):
-1. Extract what is there.
-2. Infer from the role title + company: look up the company type/size mentally and note it in `company_values_tone`.
-3. Add a note to the user: "This posting is unusually short. The extracted schema may be incomplete. Please review and add anything you know about the role."
-4. Do not fabricate requirements.
+Validate completeness using the fetch procedure below. A concise but complete
+posting is usable; a title and search snippet are not its full description.
+Extract what the source states. Leave unsupported company size, culture and
+requirements unknown; never fill `company_values_tone` from memory or a title.
+If a material field is absent, name that uncertainty and its effect on the
+decision rather than inventing a value. Ask for missing source text when needed.
 
 ### Red-flag patterns to detect
 
@@ -143,13 +144,14 @@ Add to `red_flags[]` if any of these appear:
 
 ## 3. The Fetch Procedure
 
-Follow this order every time. Do not skip ahead.
+If the user already provided complete posting text, validate that text and proceed
+to extraction. Otherwise follow this retrieval order.
 
 **Step 1 — Try to fetch the URL.**
 
 Use `WebFetch` on the provided URL. Examine the returned text:
-- Is it at least ~300 words of readable job-description prose?
-- Does it contain a requirements or qualifications section?
+- Does it identify the specific role and employer and contain substantive duties and requirements?
+- Is the description complete rather than a search card, truncated excerpt or access wall?
 
 If yes, proceed to extraction.
 
@@ -162,7 +164,12 @@ The following platforms frequently return login walls, empty shells, or JavaScri
 - Lever postings embedded in iframes
 - Taleo and iCIMS portals
 
-If `WebFetch` returns fewer than ~200 words, no qualifications language, or a login/sign-in prompt, **do not guess**.
+Word count is a warning signal, not a minimum: concise postings and languages
+without spaces can still carry complete requirements. A sign-in link beside a
+readable description is not a login wall. If the description is actually missing
+or truncated, **do not guess**. Use an available reader under
+`references/network-recovery.md`, or ask for the full text when access requires
+the user's participation.
 
 **Step 3 — Ask the user to paste the full text.**
 
@@ -202,7 +209,7 @@ After extracting, always show a concise plain-English summary and ask for confir
 
 **Red flags:** [none / list]
 
-Any implicit must-haves I inferred (marked [implicit]): [list or "none"]
+Questions about unstated employer expectations: [list or "none"; not counted as requirements]
 
 ---
 
