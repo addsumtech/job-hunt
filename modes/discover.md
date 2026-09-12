@@ -509,6 +509,21 @@ location names a country outside `brief.markets` — but an empty shortlist has 
 rows to warn about, so the only thing standing between a UK user and "there are no
 London backend roles" is this paragraph, read before the call.
 
+This restriction belongs to the installed **OpenCLI adapter**, not to Indeed's
+worldwide website. Select the country site from Indeed's official
+[country directory](https://www.indeed.com/countries), then use this round's
+`brief.locations` for cities within that country. Never reuse a previous test's
+`New York, NY` or infer the target country from the browser's current page.
+For `cn`, Indeed's country site is `https://cn.indeed.com/`; a Chinese request
+must not run against `www.indeed.com` with only `--location` changed to China.
+With the current US-only adapter, use the diagnosed built-in browser route on
+the Chinese site if Indeed is needed, or use the already-supported Chinese
+sources (`51job`, `boss`). Keep the original country-domain URLs for both
+search and detail; do not feed a Chinese posting's ID to the US-only detail
+command. Check each returned location against the requested country and city.
+If the regional site cannot be read, report that source limitation; never
+substitute US jobs or conclude that China has no matching jobs.
+
 ## Step 3 — generate queries in BOTH languages
 
 Generate the keyword set in English **and** in the market's local language, and run
