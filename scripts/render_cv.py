@@ -1230,19 +1230,21 @@ def render_docx(profile, out_path):
     section.top_margin, section.bottom_margin = Mm(10), Mm(12)
     section.left_margin = section.right_margin = Mm(12.7)
     width = section.page_width - section.left_margin - section.right_margin
-    east_asia = {"zh": "SimSun", "ja": "Yu Mincho", "ko": "Malgun Gothic"}.get(language)
+    east_asia = meta.get("cjk_font") or {"zh": "SimSun", "ja": "Yu Mincho", "ko": "Malgun Gothic"}.get(language)
     body_size = 11
     for name, size, before, after in [("Normal", body_size, 0, 2), ("Title", 16, 0, 4),
                                       ("Heading 1", 11, 9, 3), ("List Bullet", body_size, 0, 2)]:
         style = doc.styles[name]
-        style.font.name = "Times New Roman"
+        style.font.name = meta.get("main_font") or "Times New Roman"
         style.font.size = Pt(size)
         style.font.color.rgb = RGBColor(0, 0, 0)
         style.font.bold = name in {"Title", "Heading 1"}
+        # Theme faces override explicit names in Word/LibreOffice, including
+        # English Title/Heading styles. Clear them for every language.
+        fonts = style.element.get_or_add_rPr().rFonts
+        for attr in ("asciiTheme", "hAnsiTheme", "eastAsiaTheme", "cstheme"):
+            fonts.attrib.pop(qn("w:" + attr), None)
         if east_asia:
-            fonts = style.element.get_or_add_rPr().rFonts
-            for attr in ("asciiTheme", "hAnsiTheme", "eastAsiaTheme", "cstheme"):
-                fonts.attrib.pop(qn("w:" + attr), None)
             fonts.set(qn("w:eastAsia"), east_asia)
         fmt = style.paragraph_format
         fmt.space_before, fmt.space_after = Pt(before), Pt(after)

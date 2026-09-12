@@ -19,10 +19,11 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from urllib.parse import unquote, urlsplit
+from urllib.parse import unquote, urlsplit, urlunsplit
 
 import journal
 import lint_no_prediction
+import vocab
 from render_cv import has_rtl
 from pdf_glyphs import glyph_findings
 
@@ -121,23 +122,34 @@ def _portable_report_style(text: str) -> dict[str, str] | None:
     except ImportError:
         return None
 
-    if _JAPANESE.search(text):
+    # A quoted employer or original posting title may use a different script
+    # from the consultation. Choose the labels from the dominant prose, while
+    # choosing a font separately that also covers those preserved quotations.
+    han = len(_HAN.findall(text))
+    japanese = len(_JAPANESE.findall(text))
+    korean = len(_KOREAN.findall(text))
+    latin = len(re.findall(r"[A-Za-zÀ-ɏ]", text))
+    cjk = han + japanese + korean
+    if cjk > latin and japanese * 3 > han and japanese > korean:
         style = {"font": "japan", "footer": "キャリア相談レポート",
                  "page": "{number} ページ", "link": "リンク：", "separator": "："}
-    elif _KOREAN.search(text):
+    elif cjk > latin and korean > japanese and korean > han:
         style = {"font": "korea", "footer": "커리어 상담 보고서",
                  "page": "{number}쪽", "link": "링크: ", "separator": ": "}
-    elif has_han(text):
+    elif cjk > latin and han:
         style = {"font": "china-s", "footer": "职业咨询报告",
                  "page": "第 {number} 页", "link": "链接：", "separator": "："}
-    elif (re.search(r"[áéíóúüñ¿¡]", text, re.I)
-          or re.search(r"\b(?:candidaturas?|experiencia|puestos?|salario|evidencia|"
-                       r"vacante|recomendaci[oó]n|ubicaci[oó]n)\b", text, re.I)):
+    elif len(re.findall(r"\b(?:de|la|el|los|las|para|con|una|un|y|que|tu|tus|"
+                        r"candidaturas?|experiencia|puestos?|salario|evidencia|"
+                        r"vacante|recomendaci[oó]n|ubicaci[oó]n)\b", text, re.I)) >= 2:
         style = {"font": "helv", "footer": "Informe de orientación profesional",
                  "page": "Página {number}", "link": "Enlace: ", "separator": ": "}
     else:
         style = {"font": "helv", "footer": "Career consultation report",
                  "page": "Page {number}", "link": "Link: ", "separator": ": "}
+
+    if cjk:
+        style["font"] = "japan" if japanese else "korea" if korean else "china-s"
 
     # The rendered form intentionally substitutes a readable [!] for the one
     # warning symbol a built-in PDF font cannot carry. Source Markdown stays
@@ -154,21 +166,42 @@ def cjk_chars(text: str) -> int:
 
 
 def _url_stem(value: str) -> str:
-    """Comparable HTTP(S) destination, without volatile query/fragment text."""
+    """Comparable HTTP(S) destination, retaining the exact posting identity."""
     try:
         parsed = urlsplit(html.unescape(value))
     except ValueError:
         return ""
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         return ""
-    return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}{parsed.path}".rstrip("/")
+    return urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(),
+                       parsed.path, parsed.query, parsed.fragment))
 
 
 def clickable_urls(source: str) -> set[str]:
     """HTTP(S) destinations authored as PDF-renderable Markdown or angle links."""
+    source = "\n".join(line for line, literal in _report_lines(source) if not literal)
+    source = _MD_CODE.sub("", source)
     urls = [match.group(2) for match in _MD_LINK.finditer(source)]
     urls.extend(match.group(1) for match in _RAW_ANGLE_URL.finditer(source))
     return {stem for value in urls if (stem := _url_stem(value))}
+
+
+def _report_lines(source: str):
+    """Yield visible lines, distinguishing fenced code from Markdown prose."""
+    fence = None
+    for line in source.splitlines():
+        if fence is not None:
+            if re.fullmatch(r" {0,3}" + re.escape(fence[0]) +
+                            r"{" + str(len(fence)) + r",}\s*", line):
+                fence = None
+            else:
+                yield line, True
+            continue
+        opening = re.match(r"^ {0,3}(`{3,}|~{3,})(.*)$", line)
+        if opening and not (opening[1][0] == "`" and "`" in opening[2]):
+            fence = opening[1]
+            continue
+        yield line, False
 
 
 def _pdf_link_problem(pdf: pathlib.Path, source: str) -> str:
@@ -219,10 +252,12 @@ def client_path(rel: pathlib.Path) -> pathlib.Path:
     return pathlib.Path(folder) / (names[rel.stem] + rel.suffix)
 
 
-def is_deliverable(path: pathlib.Path, workspace: pathlib.Path) -> bool:
+def is_deliverable(path: pathlib.Path, workspace: pathlib.Path,
+                   include_applications: bool = True) -> bool:
     rel = path.relative_to(workspace)
     # Explicit client artifacts only. completion.md can contain tool diagnostics.
-    return (len(rel.parts) == 1 and rel.stem in {
+    return ((include_applications or rel.stem == "report")
+            and len(rel.parts) == 1 and rel.stem in {
         "report", "cv", "letter", "rirekisho", "supporting-statement"
     } and rel.suffix in {".md", ".pdf", ".docx"})
 
@@ -245,42 +280,137 @@ def writable(directory: pathlib.Path) -> tuple[bool, str]:
         return False, str(exc)
 
 
-def _discover_handoff_problem(workspace: pathlib.Path) -> str:
-    """Refuse a discover report that skipped its machine-readable shortlist.
-
-    Delivery is deliberately not a general gate runner. Discover is the one
-    exception worth recognising here: without a checked `shortlist.yaml` and
-    `shortlist.md`, the report can look complete while omitting the actionable
-    per-posting URLs and the evidence chain behind them.
-    """
-    if journal.current_mode(workspace) != "discover":
-        return ""
+def _checked_discover_round(workspace: pathlib.Path) -> tuple[dict, str]:
     missing = [name for name in ("shortlist.yaml", "shortlist.md")
                if not (workspace / name).is_file()]
     if missing:
-        return "discover requires " + ", ".join(missing)
+        return {}, "discover requires " + ", ".join(missing)
     receipts = journal.read_receipts(workspace, "check_shortlist")
     if not receipts:
-        return "discover requires a check_shortlist receipt before delivery"
+        return {}, "discover requires a check_shortlist receipt before delivery"
     last = receipts[-1]
     if not journal.receipt_intact(last) or last.get("verdict") != "pass":
-        return "discover requires the latest intact check_shortlist receipt to pass"
+        return {}, "discover requires the latest intact check_shortlist receipt to pass"
+    for name, expected in last.get("input_hashes", {}).items():
+        if pathlib.Path(name).name == "journal.jsonl":
+            continue  # Appending the receipt changes its own journal, as in check_shortlist.
+        if pathlib.Path(name).is_absolute() or ".." in pathlib.Path(name).parts:
+            return {}, f"discover receipt input is outside the round: {name}"
+        path = workspace / name
+        if not path.is_file() or journal.sha256_file(path) != expected:
+            return {}, f"discover check_shortlist receipt is stale: {name}"
     try:
-        shortlist = journal.load_yaml(workspace / "shortlist.yaml", dict)
+        return journal.load_yaml(workspace / "shortlist.yaml", dict), ""
     except journal.YamlUnreadable as exc:
-        return f"discover shortlist.yaml cannot be read: {exc.reason}"
-    required = {
-        stem for row in (shortlist.get("rows") or []) if isinstance(row, dict)
-        if (stem := _url_stem(str(row.get("url") or "")))
-    }
+        return {}, f"discover shortlist.yaml cannot be read: {exc.reason}"
+
+
+def _unavailable_detail_supported(workspace: pathlib.Path, row: dict,
+                                  exception: dict, report: str) -> bool:
+    """An access failure is a traceable exception, not a substitute for doing the read."""
+    from check_candidate_match import _safe_path, _record_mentions_row
+    from record_browser_capture import read_retrieval_calls, STOP_CLASSES
+    reason, name = exception.get("reason"), exception.get("capture")
+    if not isinstance(reason, str) or not reason.strip() or reason not in report:
+        return False
+    path = _safe_path(workspace, name, raw=True)
+    if path is None:
+        return False
+    source = path.read_text(encoding="utf-8")
+    for call in read_retrieval_calls(workspace):
+        if (call.get("site") != row.get("source_site")
+                or call.get("classification") in (None, "ok")
+                or name not in [call.get(k) for k in ("stdout_file", "stderr_file", "snapshot_file")]):
+            continue
+        if call.get("classification") in STOP_CLASSES:
+            return True  # A site-level stop prohibits another attempt for each row.
+        if (call.get("command") in ("detail", "job-detail", "job")
+                and _record_mentions_row(call, row, source)):
+            return True
+    return False
+
+
+def _discover_detail_problem(workspace: pathlib.Path, shortlist: dict,
+                             rows: list[dict], report: str, scope_config: dict | None = None) -> str:
+    if not rows:
+        return ""
+    import check_candidate_match as match_gate
+    try:
+        brief = journal.load_yaml(workspace / "brief.yaml", dict)
+    except (OSError, journal.YamlUnreadable) as exc:
+        return f"discover requires readable brief.yaml: {exc}"
+    config = brief if scope_config is None else scope_config
+    scope = config.get("report_scope", "complete")
+    if scope == "preliminary":
+        if not isinstance(config.get("preliminary_request"), str) or not config["preliminary_request"].strip():
+            return "a preliminary report requires the user's explicit request in preliminary_request"
+        return ""
+    if scope != "complete":
+        return f"unknown discover report_scope: {scope!r}"
+    exceptions = {entry.get("id"): entry for entry in shortlist.get("detail_unavailable", [])
+                  if isinstance(entry, dict)} if isinstance(shortlist.get("detail_unavailable", []), list) else {}
+    for row in rows:
+        if row.get("quality") == "complete":
+            continue
+        exception = exceptions.get(row.get("id"), {})
+        if row.get("verdict") in vocab.VERDICTS[:2] or not _unavailable_detail_supported(
+                workspace, row, exception, report):
+            return (f"full description not reviewed for {row.get('id') or row.get('url')}; "
+                    "finish the read, remove the lead from this delivery, or record a "
+                    "captured access failure with its reason visible in the report")
+    try:
+        match, profile, all_rows, brief, _ = match_gate._load_workspace(workspace, need_markdown=False)
+        findings, _ = match_gate.check(workspace, match, profile, all_rows, brief,
+                                       verify_rendered=False)
+    except (OSError, ValueError, journal.YamlUnreadable) as exc:
+        return f"discover detail evidence cannot be checked: {exc}"
+    if findings:
+        return "discover detail evidence is incomplete: " + "; ".join(findings)
+    return ""
+
+
+def _discover_handoff_problem(workspace: pathlib.Path) -> str:
+    """Check every retained posting, including all rounds in a collection report."""
+    collection_path = workspace / "collection.yaml"
+    if journal.current_mode(workspace) != "discover" and not collection_path.exists():
+        return ""
     try:
         report_source = (workspace / "report.md").read_text(encoding="utf-8")
-    except OSError as exc:
-        return f"discover report.md cannot be read: {exc}"
-    missing = sorted(required - clickable_urls(report_source))
-    if missing:
-        return ("discover report.md omits clickable direct posting link(s): "
-                + ", ".join(missing))
+        if collection_path.exists():
+            collection = journal.load_yaml(collection_path, dict)
+            rounds = collection.get("rounds")
+            if not isinstance(rounds, list) or not rounds:
+                return "collection.yaml requires a nonempty rounds list"
+        else:
+            rounds = [{"workspace": "."}]
+        required = set()
+        for item in rounds:
+            if not isinstance(item, dict) or not isinstance(item.get("workspace"), str):
+                return "each collection round requires a workspace path"
+            source = (workspace / item["workspace"]).expanduser().resolve()
+            shortlist, problem = _checked_discover_round(source)
+            if problem:
+                return f"{source.name}: {problem}"
+            rows = shortlist.get("rows")
+            if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+                return "discover shortlist rows must be a list of mappings"
+            if "ids" in item:
+                ids = item["ids"]
+                available = {row.get("id") for row in rows}
+                if (not isinstance(ids, list) or not ids or any(not isinstance(i, str) for i in ids)
+                        or len(set(ids)) != len(ids) or not set(ids) <= available):
+                    return "collection round ids must select distinct existing shortlist rows"
+                rows = [row for row in rows if row.get("id") in ids]
+            required.update(stem for row in rows if (stem := _url_stem(str(row.get("url") or ""))))
+            missing = sorted(required - clickable_urls(report_source))
+            if missing:
+                return "discover report.md omits clickable direct posting link(s): " + ", ".join(missing)
+            problem = _discover_detail_problem(source, shortlist, rows, report_source,
+                                               collection if collection_path.exists() else None)
+            if problem:
+                return f"{source.name}: {problem}"
+    except (OSError, UnicodeError, journal.YamlUnreadable) as exc:
+        return f"discover delivery sources cannot be read: {exc}"
     return ""
 
 
@@ -375,11 +505,11 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
     def text_width(value: str, size: float) -> float:
         return font.text_length(value, fontsize=size)
 
-    def wrap(value: str, size: float, width: float) -> list[str]:
+    def wrap(value: str, size: float, width: float, literal: bool = False) -> list[str]:
         """Wrap CJK and Latin text without spacing individual Latin glyphs."""
         result: list[str] = []
         for source_line in value.splitlines() or [""]:
-            rest = source_line.strip()
+            rest = source_line if literal else source_line.strip()
             while rest:
                 if text_width(rest, size) <= width:
                     result.append(rest)
@@ -392,10 +522,18 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
                     else:
                         high = middle - 1
                 end = low
-                split_at = rest.rfind(" ", 1, end + 1)
+                # Chinese can wrap between characters. Rewinding to a distant
+                # ASCII space is useful only when this cut splits a word in a
+                # space-delimited script (Latin or Korean).
+                splits_word = (end < len(rest)
+                               and re.match(r"[A-Za-zÀ-ɏ0-9_+/가-힯-]", rest[end - 1])
+                               and re.match(r"[A-Za-zÀ-ɏ0-9_+/가-힯-]", rest[end]))
+                split_at = rest.rfind(" ", 1, end + 1) if splits_word else -1
                 if split_at > 0:
                     result.append(rest[:split_at].rstrip())
-                    rest = rest[split_at + 1:].lstrip()
+                    rest = rest[split_at + 1:]
+                    if not literal:
+                        rest = rest.lstrip()
                 else:
                     result.append(rest[:end])
                     rest = rest[end:]
@@ -582,17 +720,24 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
     try:
         pdf.unlink(missing_ok=True)
         new_page()
-        lines, index = md.read_text(encoding="utf-8").splitlines(), 0
+        lines, index = list(_report_lines(md.read_text(encoding="utf-8"))), 0
         while index < len(lines):
-            line = lines[index].strip()
+            raw_line, literal = lines[index]
+            line = raw_line.strip()
             index += 1
+            if literal:
+                if not write_lines(wrap(raw_line, 12, right - left, literal=True),
+                                   left, 12, body_color, 16.2):
+                    return False, "report code block does not fit on a page"
+                continue
             if not line:
                 cursor += 4
                 continue
             if line.startswith("|"):
                 table = [line]
-                while index < len(lines) and lines[index].strip().startswith("|"):
-                    table.append(lines[index].strip())
+                while (index < len(lines) and not lines[index][1]
+                       and lines[index][0].strip().startswith("|")):
+                    table.append(lines[index][0].strip())
                     index += 1
                 if not add_table(table):
                     return False, "report block does not fit on a page"
@@ -740,7 +885,8 @@ def pick_cjk_font(source: str = "测试中文渲染") -> str | dict | None:
     return None
 
 
-def _verify_pdf(pdf: pathlib.Path, source: str, needs_cjk: bool) -> tuple[bool, str]:
+def _verify_pdf(pdf: pathlib.Path, source: str, needs_cjk: bool,
+                link_source: str | None = None) -> tuple[bool, str]:
     """Reject a rendered PDF that lost text or painted broken glyphs."""
     problems = glyph_findings(pdf)
     if problems:
@@ -748,7 +894,7 @@ def _verify_pdf(pdf: pathlib.Path, source: str, needs_cjk: bool) -> tuple[bool, 
         return False, "; ".join(problems)
     # A document with an authored URL must identify a missing PDF annotation
     # even if the deliberately minimal regression fixture has no body text.
-    link_problem = _pdf_link_problem(pdf, source)
+    link_problem = _pdf_link_problem(pdf, source if link_source is None else link_source)
     if link_problem:
         pdf.unlink(missing_ok=True)
         return False, link_problem
@@ -776,6 +922,9 @@ def render_pdf(md: pathlib.Path, pdf: pathlib.Path,
                font: str | dict | None) -> tuple[bool, str]:
     """Render, then READ IT BACK. A PDF that dropped characters is not a PDF."""
     source = visible_markdown(md)
+    # The plain-text view deliberately removes destinations. Link verification
+    # must inspect authored Markdown, otherwise a missing annotation is invisible.
+    link_source = md.read_text(encoding="utf-8")
     if has_rtl(source):
         # Delivery must not rebuild a PDF that the CV renderer refused. A
         # nonempty English header does not prove the RTL body survived.
@@ -791,16 +940,31 @@ def render_pdf(md: pathlib.Path, pdf: pathlib.Path,
         if not _pandoc(md, pdf, font if needs_cjk else None):
             pdf.unlink(missing_ok=True)
             return False, "could not render the selected report font with pandoc/TeX"
-        return _verify_pdf(pdf, source, needs_cjk)
+        return _verify_pdf(pdf, source, needs_cjk, link_source)
 
     style = _portable_report_style(source)
+    if style:
+        # Counts blocks and source URLs are not the client's narrative language.
+        prose = "\n".join(line for line, literal in _report_lines(link_source) if not literal)
+        prose = _RAW_ANGLE_URL.sub("", _MD_LINK.sub(r"\1", prose))
+        prose = _MD_CODE.sub("", prose)
+        # An unambiguous local-language title is stronger evidence than repeated
+        # English skill names. Mixed titles can contain a person's or employer's
+        # name, so let the narrative decide instead of counting title letters.
+        local_title = next((line[2:].strip() for line in prose.splitlines()
+                            if line.startswith("# ") and has_cjk(line)
+                            and not re.search(r"[A-Za-zÀ-ɏ]", line)), "")
+        language_style = _portable_report_style(local_title or prose)
+        if language_style:
+            for key in ("footer", "page", "link", "separator"):
+                style[key] = language_style[key]
     # Without an explicit selection, prefer bundled, embedded report fonts.
     # This keeps Chinese, English, Japanese, Korean and Spanish layout identical
     # across machines, while the explicit RTL refusal above remains unchanged.
     if style:
         ok, why = _render_portable_report(md, pdf, style)
         if ok:
-            return _verify_pdf(pdf, source, needs_cjk)
+            return _verify_pdf(pdf, source, needs_cjk, link_source)
         portable_renderer_problem = why
     else:
         portable_renderer_problem = ""
@@ -814,11 +978,12 @@ def render_pdf(md: pathlib.Path, pdf: pathlib.Path,
         pdf.unlink(missing_ok=True)
         suffix = f"; bundled report renderer: {portable_renderer_problem}" if portable_renderer_problem else ""
         return False, "pandoc/tectonic produced no PDF" + suffix
-    return _verify_pdf(pdf, source, needs_cjk)
+    return _verify_pdf(pdf, source, needs_cjk, link_source)
 
 
 def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
-            make_pdf: bool = True) -> tuple[list[pathlib.Path], list[str]]:
+            make_pdf: bool = True, include_applications: bool | None = None
+            ) -> tuple[list[pathlib.Path], list[str]]:
     written, notes = [], []
     fonts = {}
     report_font = None
@@ -835,8 +1000,11 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
             if isinstance(meta, dict) and meta.get("cjk_font"):
                 report_font = meta["cjk_font"]
                 break
+    if include_applications is None:
+        include_applications = journal.current_mode(workspace) not in {
+            "discover", "assess", "interview"}
     sources = [p for p in sorted(workspace.rglob("*"))
-               if p.is_file() and is_deliverable(p, workspace)
+               if p.is_file() and is_deliverable(p, workspace, include_applications)
                and not (make_pdf and p.name == "report.pdf")]
 
     claimed: dict = {}
@@ -899,6 +1067,8 @@ def main(argv: list[str] | None = None) -> int:
                     help=f"destination directory (default: {DEFAULT_ROOT})")
     ap.add_argument("--no-pdf", action="store_true",
                     help="copy the Markdown only; do not render PDFs")
+    ap.add_argument("--include-applications", action="store_true",
+                    help="also copy application documents during a non-apply consultation, only when explicitly requested")
     args = ap.parse_args(argv)
 
     ws = args.workspace.expanduser().resolve()
@@ -941,7 +1111,8 @@ def main(argv: list[str] | None = None) -> int:
               "copied and the workspace is untouched.", file=sys.stderr)
         return 2
 
-    written, notes = deliver(ws, dest, ws.name, make_pdf=not args.no_pdf)
+    written, notes = deliver(ws, dest, ws.name, make_pdf=not args.no_pdf,
+                             include_applications=True if args.include_applications else None)
     if not written:
         print(f"DELIVER_NOTHING_TO_COPY: {ws} holds no deliverable files",
               file=sys.stderr)

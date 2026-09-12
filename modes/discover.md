@@ -1,4 +1,4 @@
-# Mode: discover — 找什么
+# Mode: discover — find roles worth considering
 
 Loaded unconditionally on entering discover mode. Read it in full before the first
 adapter call.
@@ -8,8 +8,8 @@ job listings with a provisional verdict on each. **What it does not do:** it nev
 chains into `apply`. Thirty rows do not become thirty CVs; the whole point of
 ranking a shortlist is to let a person choose.
 
-**The shortlist is written in the user's language** — spec §10: CV 跟市场走，评估 /
-shortlist / 面试复盘**跟用户走**. A Dutch- or US-market round run by someone who
+**The shortlist is written in the user's language** — spec §10: CVs follow the
+target market; assessments, shortlists and interview debriefs follow the user. A Dutch- or US-market round run by someone who
 writes to you in English produces an English `shortlist.md`, and that is ordinary
 output, not an edge case. Every literal `check_shortlist.py` requires the document
 to contain follows that language: the English and Chinese examples are below,
@@ -44,15 +44,67 @@ Keep a collection manifest with the requested count, maximum rounds, completed
 round workspaces, deduplicated posting URLs/IDs, and shortfall reasons. Continue
 independent sources while a site awaits login or recovery. Refusal locks and
 per-consultation limits survive round changes; a new folder never resets them.
-Stop when the target is met, the agreed rounds are exhausted, or available sources
-cannot add useful evidence. Report the actual count and remaining gap honestly.
+Reaching the collection target ends lead gathering, not the consultation. Before
+final delivery, read the full description for every retained posting, including
+each city/ID under a grouped title. Continue within the existing source caps;
+never reset a stop lock or raise a cap to finish. If agreed rounds are exhausted,
+report that the work is incomplete rather than calling unread leads complete.
 
 Each round still passes its own shortlist and evidence gates. The final client
 report combines unique roles across those verified rounds, explains priorities
 and tradeoffs, gives concrete application actions and role-specific interview
-preparation, and distinguishes card-only leads from detail-reviewed candidates.
+preparation. A complete report contains detail-reviewed postings; a genuinely
+unavailable detail can remain only as an explicitly unresolved lead with a
+captured access failure and a visible reason. Unattempted cards belong in the
+research workspace, not a finished report. An explicitly requested preliminary
+shortlist may include them; record the user request as described below.
 Undisclosed or overlapping salary ranges are confirmation items, not proof that
 a pay floor is satisfied. Do not create a tailored CV for every lead by default.
+
+### Final detail coverage and collection delivery
+
+`brief.report_scope` defaults to `complete`. Use `preliminary` only when the user
+explicitly asks for an initial/partial list or chooses to publish the current
+partial report; record their request in `brief.preliminary_request` and explain
+which requirements remain unchecked. Do not choose this mode to avoid more work.
+
+Read every retained description before completing the report. The 1–5
+`max_match_reviews` cap limits **requirement-by-requirement CV mappings**, not the
+number of retained descriptions to read. Once a full description is read, a row
+outside that mapping batch uses `basis: detail_unmapped`, `recommendation: review`,
+empty `requirements`, no `alignment`, and `job_evidence` quoting its duties and
+requirements from the journaled detail. It does not count against the mapping cap
+and cannot become a default recommendation. Use later bounded rounds for more
+CV mappings when the request requires them. Never infer that an unmapped row is
+unsuitable; say what has and has not been checked.
+
+If a genuine access failure prevents a read, preserve the failed capture and add
+`shortlist.yaml.detail_unavailable: [{id: site-id, reason: <reader-facing reason>,
+capture: raw/<failed-capture>}]`. Show that exact reason beside the job in the
+report. A site-level login or risk-control stop can explain affected rows without
+retrying each one. Time spent, a reached job count or the mapping cap is not an
+access failure. Do not recommend an unresolved row. Closed roles stay out of the
+client report as required by `references/report-writing.md`.
+
+For one round, `deliver.py` checks every row in its shortlist. For a consultation
+spanning several rounds, put `report.md` and this manifest in a delivery workspace:
+
+```yaml
+# collection.yaml — private delivery inputs; not a client artifact
+report_scope: complete
+rounds:
+  - workspace: ../round-01
+    ids: [site-123, site-456]  # only final retained rows; omit ids to include all
+  - workspace: ../round-02
+    ids: [site-789]
+```
+
+Use existing round workspaces with passing, current shortlist checks. The manifest
+selects the final set without deleting earlier search evidence. `deliver.py`
+checks each selected ID, its full-description evidence (or captured failure), and
+its link in the aggregate report. It refuses an unread card even if every search
+round previously passed. The collection's report scope governs all its rounds;
+a preliminary collection also needs its own `preliminary_request`.
 
 Mock interview remains opt-in: include preparation in the report, then enter the
 interview mode and its interactive coaching workflow only when the user asks to
@@ -522,7 +574,7 @@ python3 scripts/check_opencli_result.py --workspace . --site 51job --command sea
     --command-line 'opencli 51job search "算法工程师" --area 上海 --page 1 --limit 25 --window background -f json'
 ```
 
-**先看 exit code，再解释「空」。** A login wall gives exit 1, EMPTY stdout and a YAML
+**Read the exit code before interpreting empty output.** A login wall gives exit 1, EMPTY stdout and a YAML
 error body on stderr *even under `-f json`*, so `JSON.parse(stdout || '[]')` silently
 converts a 403 into a zero-result success. Only `exit == 0` **and** stdout parsed to
 an array is "no results".
@@ -534,7 +586,7 @@ The wrapper returns one of five classifications, each with an action:
 | `ok` | exit 0, JSON array parsed | continue to Step 5 |
 | `not_logged_in` | login wall, and auth says the session is absent or unknown | cross-check auth; hand `opencli <site> login` **to the user** — it is a write command. Pause for [user recovery](../references/user-recovery.md); no read retry while logged out. **Do not treat `strategy: public` as evidence that no login is needed** — 1point3acres' public-strategy `forum` still 403s. |
 | `no_auth_adapter` | login wall on a site with no login concept | no CLI login command is available. Pause and ask the user to inspect the browser page; do not invent a login command or infer a missing session. |
-| `platform_limit` | a stop-signal from `references/risk-control-signals.yaml`, or a refusal while auth says logged in | **立即停止。不重试、不改参数重试、不绕过。** Pause this source, not the whole task. Explain whether it is verification, rate limiting or an unknown refusal; follow [user recovery](../references/user-recovery.md) before offering degraded output. |
+| `platform_limit` | a stop-signal from `references/risk-control-signals.yaml`, or a refusal while auth says logged in | **Stop immediately: no retry, parameter changes or bypass.** Pause this source, not the whole task. Explain whether it is verification, rate limiting or an unknown refusal; follow [user recovery](../references/user-recovery.md) before offering degraded output. |
 | `transport` | unrecognised failure, or exit 0 with unparsable stdout | Check the actual selected CDP connection and offline routing diagnostic, then follow [bounded network recovery](../references/network-recovery.md). Distinguish a disconnected browser from a site loading or route failure; a timeout alone is not evidence that a VPN caused it. |
 
 ## Step 5 — row integrity, before anything else
@@ -545,7 +597,7 @@ adapter except `boss`, where it is `name`. The wrapper reports this as
 
 `indeed` is measured to return exit 0, valid JSON, and empty `title`/`salary`/`tags`
 while `id`/`company`/`location`/`url` are populated. Recover each row with
-`opencli indeed job <id>` and report the gap in `§0`. **绝不** infer "this site has
+`opencli indeed job <id>` and report the gap in `§0`. **Never** infer "this site has
 no such jobs" from blank fields — the rows existed.
 
 ## Step 6 — normalise, then de-duplicate
@@ -607,7 +659,7 @@ copy. So `check_shortlist.py` also requires
 **`why_matched` is one of exactly three places where the no-fabrication fence is
 restated, and this is that restatement.** Cite the brief field and the raw field
 that made the match — "brief.target_titles 命中「算法工程师」；raw salaryMin 30000
-在 brief 区间内". **绝不** write a reason that the card does not support, and 绝不
+在 brief 区间内". **Never** write a reason that the card does not support, and never
 borrow a requirement from a JD you have not fetched. An invented `why_matched` is
 the most persuasive part of a fabricated row.
 
@@ -680,15 +732,17 @@ second, so it belongs in the shortfall, not in the list.
 
 ## Step 8 — detail fetch and CV mapping, bounded
 
-Fetch detail pages **only** for rows in the top three verdict bands
+For initial triage, fetch detail pages **only** for rows in the top three verdict bands
 (`strong_apply`, `worth_applying`, `stretch`), and no more than
 `brief.max_match_reviews` rows may enter CV matching. Select the most promising card
 leads first; a `stretch` card is a valid detail candidate precisely because its
 requirements are still unknown. `likely_screen_out` and `blocked` rows stay card-level
-and are labelled **未取详情** (English round: **no detail fetched**) in `shortlist.md`.
-The user can name one to fetch anyway, which is recorded in
-`shortlist.yaml.detail_fetch_exceptions` with a reason, but it does not bypass the
-matching-review cap.
+and are labelled **未取详情** (English round: **no detail fetched**) in an initial `shortlist.md`.
+Before complete-report delivery, either exclude such a row or read its description
+if it is still useful to retain. A final-report completeness read, like a user-named
+fetch, is recorded in
+`shortlist.yaml.detail_fetch_exceptions` with a reason, but it does not bypass source limits or the
+matching-review cap. Unmapped reads use `detail_unmapped` as described above.
 
 Each detail call goes through `scripts/check_opencli_result.py` too, and its stdout
 lands in `raw/<site>-detail-<id>.json`. For every fetched detail selected for mapping,
@@ -739,7 +793,7 @@ quotes verbatim; the schema is deliberately compact so it can be audited:
 profile_snapshot: candidate-profile.yaml
 rows:
   - id: 51job-173199597
-    basis: detail                    # detail | card
+    basis: detail                    # detail | detail_unmapped | card
     recommendation: recommend        # recommend | review
     requirements:
       - id: M1
@@ -878,7 +932,7 @@ exactly like a clean one.
 | `SOURCE_REPORT_COUNT_MISMATCH` | the source report claims more than the receipts recorded | the receipts are right. Never reconcile by editing `raw/` or the journal. |
 | `EMPTY_RESULT_UNSUPPORTED` | "no results" wording with no adapter that exited 0 | rewrite as "every adapter failed", and emit the disclosure block |
 | `DEGRADED_WITHOUT_DISCLOSURE` | degraded run with no disclosure block in a supported report language | add the matching template, check and fill every answer |
-| `MD_MISSING_PROVISIONAL_STAMP` | `shortlist.md` renders rows without 「基于卡片信息的初判」 / "provisional, from card data only" | add the stamp, in the round's own language, to the section heading. The YAML flag is not a disclosure. |
+| `MD_MISSING_PROVISIONAL_STAMP` | `shortlist.md` lacks the provisional stamp matching the round's actual read quality | add the all-card or detail-reviewed stamp from Step 7, in the round's own language, to the section heading. The YAML flag is not a disclosure. |
 | `HIGH_VERDICT_UNVERIFIED` / `RECOMMENDATION_NOT_READY` | a high verdict or default recommendation lacks complete JD-to-CV evidence | keep the row as `review` / `stretch`, or repair the quoted evidence mapping. Do not claim an outcome. |
 | `JOB_EVIDENCE_NOT_DETAIL` / `CV_EVIDENCE_PATH_INVALID` | the match evidence is not a successful row-specific detail capture, or does not point into the frozen profile | fetch the actual detail within the cap, or cite the exact profile leaf. Never cite an inferred skill. |
 | `MATCH_REVIEWS_ABOVE_CAP` | more detail mappings than `brief.max_match_reviews` permits | keep only the highest-priority reviews this round; start a new bounded round for the rest. |
@@ -967,8 +1021,9 @@ Do not automatically start a mock interview or another mode.
       verdict and effort within the remaining order.
 - [ ] Cards that could not support any level were dropped and named in
       `shortfall_reason` — not listed as `insufficient_evidence` rows.
-- [ ] Detail fetched only for `strong_apply` / `worth_applying` / `stretch`, and no
-      more than `max_match_reviews` entries have CV mappings.
+- [ ] Detail reads outside `strong_apply` / `worth_applying` / `stretch` have a
+      documented user-named or final-report completeness exception, and no more
+      than `max_match_reviews` entries have CV mappings.
 - [ ] Every high verdict has a complete `candidate-match.yaml` entry, raw-detail
       quotes, frozen-profile pointers, and its exact localized summary beside the link.
 - [ ] `references/source-policy.md` re-read if any action felt like it might be
@@ -978,6 +1033,9 @@ Do not automatically start a mock interview or another mode.
 - [ ] `scripts/check_no_write.py`, `scripts/check_candidate_match.py`,
       `scripts/lint_no_prediction.py`, and `scripts/check_shortlist.py` all exited 0,
       and the completion message cites their `journal.jsonl` receipts.
+- [ ] Every final retained posting has a full description or a captured access-failure
+      exception with its reason visible; `deliver.py` checked all collection rounds.
+      Preliminary delivery is based on an explicit user request, not a reached cap.
 - [ ] No chaining into `apply`. The shortlist is handed back for a person to choose.
 
 **Voice.** The shortlist is a document the user reads, not a dump. `SKILL.md`, "How this skill writes to the user", governs its prose — every row's provenance visible, what was not searched said out loud, no closing offer to help further.

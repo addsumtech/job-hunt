@@ -41,8 +41,14 @@ history. Do not put a user's original reference in the repository when adapting
 this layout. Inspect the final export, not only the Word editing view: paragraph
 markers and pagination squares are non-printing UI aids, not resume bullets.
 
-A supplied template takes precedence over these default fonts and sizes. Inspect
-its document defaults, styles and direct run formatting, including the name font
+A supplied template takes precedence over these default fonts and sizes.
+For translated versions of the same example, reuse its approved template, section
+order, paragraph styles, margins, rules and date columns. Translate the content
+inside that layout; do not switch the English version to a different default
+template. Use concise, faithful wording where English runs longer and inspect
+both final exports together without stretching preview images or shrinking text.
+
+Inspect its document defaults, styles and direct run formatting, including the name font
 and mixed body sizes. Preserve the actual font families (Songti SC is not SimSun)
 and remove inherited theme overrides when setting them. Verify the fonts embedded
 in the exported PDF; readable Chinese alone does not prove template fidelity.
@@ -52,9 +58,11 @@ available to the exporter. Do not shrink body text merely to force one page.
 Aim for a balanced, well-filled page using the supplied content. Where space
 permits, separate section headings with at most one blank line (prefer paragraph
 spacing over empty paragraphs); never stack blank lines or invent content to
-fill the page. Verify pagination after adjusting spacing. These conventions
-apply to report PDFs too: English Times New Roman, Chinese SimSun; verify actual
-exported fonts and use the installed office-suite font when available. A newer
+fill the page. Verify pagination after adjusting spacing. For report PDFs, use
+English Times New Roman and Chinese SimSun when following an explicitly selected
+template or font; verify actual exported fonts. Without an explicit report font
+selection, the bundled report renderer may use its embedded fallback fonts as
+described below. Never describe those as Times New Roman or SimSun. A newer
 explicit user typography request overrides the reference template.
 Record a requested Chinese font in `meta.cjk_font` of the workspace profile.
 Delivery honors that selection before its bundled report fonts; a missing selected

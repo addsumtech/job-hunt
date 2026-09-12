@@ -149,6 +149,12 @@ def test_an_unknown_question_source_fails(tmp_path):
     assert any(f.startswith("UNKNOWN_QUESTION_SOURCE:") for f in findings)
 
 
+def test_user_supplied_questions_need_no_fabricated_scraping_metadata(tmp_path):
+    text = F.QUESTION_LOG.replace("source: generated", "source: user-provided")
+    findings = run(F.build(tmp_path, question_log=text))
+    assert not findings, findings
+
+
 def test_an_unknown_rejection_reason_fails(tmp_path):
     text = F.QUESTION_LOG.replace("reason: wrong_country", "reason: seemed_off")
     findings = run(F.build(tmp_path, question_log=text))

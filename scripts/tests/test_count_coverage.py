@@ -90,8 +90,8 @@ def test_the_rendered_block_is_stable_and_exact():
     counts = cc.coverage(ASSESSMENT["requirements"])
     block = cc.render_block(ASSESSMENT, counts, "zh")
     assert block == (
-        "must-have 强证据：   2 of 6   （partial 2，gap 1，无证据 1）\n"
-        "核心职责已证实：     1 of 3\n"
+        "必备条件有充分证据：   2 项，共 6 项   （部分符合 2，存在缺口 1，无证据 1）\n"
+        "核心职责已证实：     1 项，共 3 项\n"
         "职级匹配：           平级\n"
         "可补缺口所需投入：   一晚\n"
         "投递建议：           值得投")
@@ -196,7 +196,7 @@ def test_main_writes_coverage_json_and_prints_the_block(tmp_path, capsys):
     assert cc.main(["--workspace", str(tmp_path)]) == 0
     data = json.loads((tmp_path / "coverage.json").read_text(encoding="utf-8"))
     assert data["must_strong"] == 2 and data["resp_total"] == 3
-    assert "must-have 强证据：   2 of 6" in capsys.readouterr().out
+    assert "必备条件有充分证据：   2 项，共 6 项" in capsys.readouterr().out
 
 
 def test_main_fails_on_an_out_of_enum_value(tmp_path, capsys):

@@ -34,6 +34,10 @@ message, with the options spelled out as lettered choices. Do not degrade to one
 question per turn — the reason the skill asks for a single call is that a
 four-round interrogation before any work is what makes people abandon the run.
 
+The host's actual question tool, capacity and interaction rules take precedence
+over this example. Ask only what is still missing; a current user answer remains
+valid across mode changes for the same target. Never invent an unavailable tool.
+
 **Measured, and it is not only an other-agent problem.** Ten of the fifteen
 `with_skill` runs in `evals/iterations/iteration-2-with-skill.md` recorded
 `AskUserQuestion` as unavailable — those were Claude Code subagents, which do not
@@ -88,12 +92,12 @@ PASS carries none of the information a real second opinion carries. Running it
 anyway and reporting three PASSes would be the exact failure this skill spends
 most of its design avoiding: an output that looks reviewed and was not.
 
-The honest degraded form is to run the loop that way, and to state in the
-completion message and the run notes that the judges shared the author's context
-and their verdicts are therefore weaker evidence than the skill's shape implies.
-`parse_verdicts.py` still checks the verdicts are well-formed; nothing it can see
-tells it whether the judge was isolated, which is exactly why this has to be
-written down rather than gated.
+If no fresh context is available, preserve the draft and report that independent
+review is incomplete. You may inspect it yourself for obvious defects, but do
+not create judge verdict files, manufacture review receipts or label it reviewed.
+Resume the independent review when a supported mechanism becomes available.
+`parse_verdicts.py` checks verdict syntax, not context isolation; a parseable
+block alone is never evidence that an independent review happened.
 
 ## 3. Fetching a posting or a paper
 

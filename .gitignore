@@ -5,3 +5,5 @@ __pycache__/
 *.log
 *.out
 build/
+# Local client reports and private source artifacts; curated public images live in docs/assets/.
+output/

@@ -1,4 +1,4 @@
-# Mode: assess — 该不该投
+# Mode: assess — decide whether to apply
 
 **Entry condition:** a posting exists — a URL, pasted text, or a row the user named from
 a shortlist. Nothing else in this file runs until step 1 has produced usable text.
@@ -6,7 +6,7 @@ a shortlist. Nothing else in this file runs until step 1 has produced usable tex
 **This mode owns** `posting.yaml`, `posting-source.txt`, `cv-source.txt`,
 `evidence-blocks.json`, `fit-assessment.yaml`, `fit-assessment.md`, `coverage.json`.
 It reads `profile.yaml` and never writes it. Resolve the workspace with
-`paths.workspace(name, company, role, "2026-08-09")` — never by joining strings. That
+`paths.workspace(name, company, role, today_iso)` using today's local ISO date — never by joining strings. That
 one function owns the shape `~/.claude/job-profiles/<name>/applications/<company>-<role>-<YYYY-MM-DD>/`,
 which is byte-identical to the old skill's so "resume an unfinished application" keeps
 working; a run that builds its own path breaks resumption silently.
@@ -44,9 +44,14 @@ entirely wrong, and every later step inherits it.
 
 | Reading | Verdict |
 |---|---|
-| About 300 words or more of readable job-description prose **and** a requirements or qualifications section | **usable** — proceed |
-| Under about 200 words, **or** no qualifications language, **or** a login / consent / bot-check prompt | **blocked** — ask the user to paste the full posting text |
-| Between those, or ambiguous | treat as blocked and ask; the cost of asking is one message |
+| The specific role and employer are identifiable, with substantive duties and requirements and no indication that the description is truncated | **usable** — proceed, even for a concise posting or a language without spaces |
+| A login / consent / bot-check wall replaces the description, or the result is a search card, empty shell or visibly truncated excerpt | **blocked** — recover the full text with the available reader or ask the user to paste it |
+| Completeness remains ambiguous | explain what appears missing and ask; never invent requirements |
+
+Word count is a warning signal, not a minimum. A complete short Chinese posting
+can be usable; a long login page cannot. An incidental sign-in link does not make
+an otherwise complete description inaccessible. Already-pasted complete text
+needs no fetch merely to satisfy a tool step.
 
 Save whatever you got, verbatim and unedited, as `posting-source.txt`. That file is the
 end of the source chain for every downstream claim — editing it makes provenance
@@ -63,7 +68,8 @@ not match the stored market. That file is written by discover mode; if it does n
 exist, just ask. Never write it from here.
 
 Markets with tables: `cn`, `nl`, `de`, `uk`, `us`. Anything else → set
-`market: other` in `fit-assessment.yaml`, say 「本市场无惯例数据」, and render no
+`market: other` in `fit-assessment.yaml`, explain in the user's language that no
+convention data is available for that market, and render no
 convention card at all. The sixth token is `other`, never `none` — one spelling, so two
 gates cannot disagree about the same word. **Never substitute a neighbouring market's
 conventions.**
@@ -100,10 +106,13 @@ Three fields carry weight far past their size:
   apply run downstream of an assess run that skipped it fails on that line.
 - `salary_range` — when present, ask the user **once** whether the band fits. A band
   mismatch is a common silent screen-out and is cheaper to surface now than after a
-  full application. If no range is stated, do not raise salary at all.
-- `application_type` — `structured` when the posting splits Essential / Desirable
-  criteria, names behaviours or a competency framework, or asks the applicant to
-  evidence each criterion. It is the **only** signal that routes to a
+  full application. If no range is stated, keep it unknown. Mention that absence
+  when it affects the user's decision or stated pay floor; never invent a band
+  or require a salary answer before assessing the available evidence.
+- `application_type` — `structured` when the employer requests a supporting
+  statement, criterion-by-criterion evidence, a competency response or a structured
+  application form. Essential / Desirable headings alone are not enough.
+  It is the **only** signal that routes to a
   supporting-statement deliverable in `apply`. Getting it wrong produces a perfectly
   good CV for a process that does not read CVs.
 
@@ -287,8 +296,8 @@ into `fit-assessment.md` inside a fence. It is the **only** counting path; a sec
 number written by hand will fail the gate.
 
 ```
-must-have 强证据：   8 of 11   （partial 2，gap 1，无证据 0）
-核心职责已证实：     4 of 6
+必备条件有充分证据：   8 项，共 11 项   （部分符合 2，存在缺口 1，无证据 0）
+核心职责已证实：     4 项，共 6 项
 职级匹配：           平级
 可补缺口所需投入：   一晚
 投递建议：           大概率被筛掉
@@ -338,7 +347,7 @@ The disclaimer is what stops a count being read as a prediction. `check_assessme
 looks for 「不是对结果的预判」, "not a forecast of the outcome", or the corresponding
 Japanese, Korean or Spanish anchor in the language contract.
 
-## 8. The refusal floor — 证据不足，不出结论
+## 8. The refusal floor — insufficient evidence, no verdict
 
 Set `verdict: insufficient_evidence` and print **no** coverage block and **no** verdict
 from the five-level list when any of these holds:
@@ -376,7 +385,7 @@ Conventions feed **neither the verdict nor any consistency check**. They are the
 class of claim with no source text behind them; keeping them out of the arithmetic is
 what stops an unciteable assertion moving a citeable conclusion.
 
-## 10. When the verdict is 大概率被筛掉 or 硬性阻断: the other half
+## 10. When the verdict is likely_screen_out or blocked: the other half
 
 A verdict without this half is a door closed with nothing behind it. Produce all three,
 under a `## 那该怎么办` heading — `## What to do instead` if you are writing in English.

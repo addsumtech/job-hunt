@@ -29,7 +29,7 @@ def legacy_cli(script, *args):
 
 
 @pytest.mark.parametrize("language,expected", [
-    ("zh", "强证据"), ("en", "must-haves"), ("ja", "必須条件"),
+    ("zh", "充分证据"), ("en", "must-haves"), ("ja", "必須条件"),
     ("ko", "필수 요건"), ("es", "sólida"),
 ])
 def test_count_cli_uses_utf8_even_when_python_starts_with_legacy_stdio(tmp_path, language, expected):

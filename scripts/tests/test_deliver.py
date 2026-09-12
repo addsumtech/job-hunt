@@ -62,6 +62,26 @@ def test_default_destination_is_a_consultation_folder(tmp_path, monkeypatch):
     assert (tmp_path / "Downloads" / ws.name / "报告" / "求职建议报告.md").is_file()
 
 
+@pytest.mark.parametrize("mode", ["assess", "interview"])
+def test_read_only_consultations_do_not_redeliver_or_render_the_source_cv(tmp_path, mode):
+    ws = build(tmp_path, "# Career report\n\nDiscuss the documented experience.\n")
+    (ws / "cv.md").write_text("# Source CV\n\nAn existing source document.", encoding="utf-8")
+    deliver.journal.append(ws, {"action": "mode_entry", "mode": mode})
+    dest = tmp_path / "consultation"
+    assert run(ws, dest) == 0
+    assert {p.relative_to(dest).as_posix() for p in dest.rglob("*") if p.is_file()} == {
+        "报告/求职建议报告.md", "报告/求职建议报告.pdf"}
+    assert (ws / "cv.md").is_file() and (ws / "cv.pdf").is_file()
+
+
+def test_explicit_application_copy_remains_available_after_an_interview(tmp_path):
+    ws = build(tmp_path)
+    deliver.journal.append(ws, {"action": "mode_entry", "mode": "interview"})
+    dest = tmp_path / "requested-copy"
+    assert run(ws, dest, "--no-pdf", "--include-applications") == 0
+    assert (dest / "简历" / "简历.pdf").read_bytes() == (ws / "cv.pdf").read_bytes()
+
+
 # ---- what stays behind ----------------------------------------------------
 
 def test_the_provenance_chain_is_left_in_the_workspace(tmp_path):
@@ -309,6 +329,9 @@ def test_discover_delivery_requires_every_shortlist_link_in_the_report(tmp_path)
     (ws / "shortlist.md").write_text("# Shortlist\n", encoding="utf-8")
     deliver.journal.append(ws, {"action": "mode_entry", "mode": "discover"})
     deliver.journal.receipt(ws, "check_shortlist", {}, "pass")
+    (ws / "brief.yaml").write_text(
+        "report_scope: preliminary\npreliminary_request: Show me the initial shortlist first\n",
+        encoding="utf-8")
 
     dest = tmp_path / "out"
     assert run(ws, dest, "--no-pdf") == 2
@@ -482,3 +505,118 @@ def test_delivery_refuses_predictions_in_client_report(tmp_path, text):
     dest = tmp_path / 'out'
     assert run(ws, dest, '--no-pdf') == 2
     assert not dest.exists()
+
+
+# Real discovery fixtures make this a delivery/evidence regression rather than
+# a test that trusts a manually set "complete" flag.
+def discovery_delivery(tmp_path, *, detail_only=False):
+    import discover_fixtures as fx
+    import yaml
+    ws = fx.build_workspace(tmp_path)
+    shortlist = yaml.safe_load((ws / "shortlist.yaml").read_text())
+    if detail_only:
+        shortlist["rows"] = [row for row in shortlist["rows"] if row["quality"] == "complete"]
+        (ws / "shortlist.yaml").write_text(yaml.safe_dump(shortlist, allow_unicode=True))
+        matches = yaml.safe_load((ws / "candidate-match.yaml").read_text())
+        matches["rows"] = [row for row in matches["rows"] if row["basis"] == "detail"]
+        (ws / "candidate-match.yaml").write_text(yaml.safe_dump(matches, allow_unicode=True))
+    (ws / "report.md").write_text("# Career report\n\n" + "\n".join(
+        f"[Posting]({row['url']})" for row in shortlist["rows"]), encoding="utf-8")
+    deliver.journal.receipt(ws, "check_shortlist", {
+        "shortlist.yaml": deliver.journal.sha256_file(ws / "shortlist.yaml"),
+        "brief.yaml": deliver.journal.sha256_file(ws / "brief.yaml"),
+        "journal.jsonl": deliver.journal.sha256_file(ws / "journal.jsonl"),
+    }, "pass")
+    return ws, shortlist
+
+
+def test_complete_discovery_refuses_unattempted_cards_even_after_search_passes(tmp_path):
+    ws, _ = discovery_delivery(tmp_path)
+    assert "full description not reviewed" in deliver._discover_handoff_problem(ws)
+    assert run(ws, tmp_path / "out", "--no-pdf") == 2
+    assert not (tmp_path / "out").exists()
+
+
+def test_complete_discovery_accepts_full_evidence_and_checks_it_again(tmp_path):
+    ws, _ = discovery_delivery(tmp_path, detail_only=True)
+    assert deliver._discover_handoff_problem(ws) == ""
+    assert run(ws, tmp_path / "out", "--no-pdf") == 0
+    (ws / "raw/51job-detail-173199597.json").write_text("{}")
+    assert "detail evidence is incomplete" in deliver._discover_handoff_problem(ws)
+
+
+def test_preliminary_delivery_needs_an_explicit_request(tmp_path):
+    import yaml
+    ws, _ = discovery_delivery(tmp_path)
+    brief = yaml.safe_load((ws / "brief.yaml").read_text())
+    brief["report_scope"] = "preliminary"
+    (ws / "brief.yaml").write_text(yaml.safe_dump(brief))
+    deliver.journal.receipt(ws, "check_shortlist", {}, "pass")
+    assert "explicit request" in deliver._discover_handoff_problem(ws)
+    brief["preliminary_request"] = "Give me the initial list now; review details later."
+    (ws / "brief.yaml").write_text(yaml.safe_dump(brief))
+    assert deliver._discover_handoff_problem(ws) == ""
+
+
+def test_complete_delivery_does_not_accept_a_stale_search_receipt(tmp_path):
+    ws, _ = discovery_delivery(tmp_path, detail_only=True)
+    with (ws / "shortlist.yaml").open("a") as handle:
+        handle.write("\nchanged: true\n")
+    assert "receipt is stale" in deliver._discover_handoff_problem(ws)
+
+
+def test_multi_round_delivery_checks_each_retained_id_and_its_details(tmp_path):
+    import yaml
+    first, rows_a = discovery_delivery(tmp_path / "a", detail_only=True)
+    second, rows_b = discovery_delivery(tmp_path / "b")
+    ws = tmp_path / "collection"
+    ws.mkdir()
+    (ws / "report.md").write_text((first / "report.md").read_text() + (second / "report.md").read_text())
+    manifest = {"rounds": [{"workspace": str(first)}, {"workspace": str(second)}]}
+    (ws / "collection.yaml").write_text(yaml.safe_dump(manifest))
+    assert "full description not reviewed" in deliver._discover_handoff_problem(ws)
+    # A preliminary source round does not downgrade a complete collection.
+    brief = yaml.safe_load((second / "brief.yaml").read_text())
+    brief.update(report_scope="preliminary", preliminary_request="Show an early shortlist")
+    (second / "brief.yaml").write_text(yaml.safe_dump(brief))
+    deliver.journal.receipt(second, "check_shortlist", {}, "pass")
+    assert "full description not reviewed" in deliver._discover_handoff_problem(ws)
+    manifest["rounds"][1]["ids"] = [r["id"] for r in rows_b["rows"] if r["quality"] == "complete"]
+    (ws / "collection.yaml").write_text(yaml.safe_dump(manifest))
+    assert deliver._discover_handoff_problem(ws) == ""
+    manifest["rounds"][1]["ids"] = ["invented-posting"]
+    (ws / "collection.yaml").write_text(yaml.safe_dump(manifest))
+    assert "existing shortlist rows" in deliver._discover_handoff_problem(ws)
+
+
+def test_access_failure_exception_requires_a_real_capture_and_visible_reason(tmp_path):
+    import yaml
+    ws, shortlist = discovery_delivery(tmp_path)
+    row = next(r for r in shortlist["rows"] if r["quality"] != "complete")
+    reason = "The employer page timed out; full requirements could not be checked."
+    name = "raw/51job-detail-failed.json"
+    shortlist["detail_unavailable"] = [{"id": row["id"], "reason": reason, "capture": name}]
+    (ws / "shortlist.yaml").write_text(yaml.safe_dump(shortlist, allow_unicode=True))
+    deliver.journal.receipt(ws, "check_shortlist", {}, "pass")
+    assert "not reviewed" in deliver._discover_handoff_problem(ws)
+    (ws / name).write_text("request timeout")
+    deliver.journal.append(ws, {"action": "adapter_call", "site": "51job", "command": "detail",
+        "classification": "transport", "exit_code": 1, "stdout_file": name,
+        "command_line": f"opencli 51job detail {row['source_id']}"})
+    assert "not reviewed" in deliver._discover_handoff_problem(ws)
+    with (ws / "report.md").open("a") as handle:
+        handle.write("\n\n" + reason)
+    assert deliver._discover_handoff_problem(ws) == ""
+
+
+def test_site_stop_does_not_require_retrying_every_retained_posting(tmp_path):
+    ws, shortlist = discovery_delivery(tmp_path)
+    row = next(r for r in shortlist["rows"] if r["quality"] != "complete")
+    name = "raw/site-login.json"
+    (ws / name).write_text("login required")
+    deliver.journal.append(ws, {"action": "adapter_call", "site": "51job", "command": "search",
+        "classification": "not_logged_in", "exit_code": 1, "stdout_file": name})
+    exception = {"reason": "Login required; details remain unverified.", "capture": name}
+    assert deliver._unavailable_detail_supported(ws, row, exception, exception["reason"])
+    row["source_site"] = "another-employer"
+    assert not deliver._unavailable_detail_supported(ws, row, exception, exception["reason"])

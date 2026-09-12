@@ -63,6 +63,25 @@ def test_render_docx_creates_readable_file(sample_profile_path, tmp_path):
     assert "MSc CS" in text
 
 
+@pytest.mark.parametrize("main_font", [None, "Arial"])
+def test_english_docx_names_and_headings_cannot_be_overridden_by_theme_fonts(
+        sample_profile_path, tmp_path, main_font):
+    from docx import Document
+    from docx.oxml.ns import qn
+    profile = render_cv.load_profile(sample_profile_path)
+    profile["meta"]["language"] = "en"
+    if main_font:
+        profile["meta"]["main_font"] = main_font
+    out = tmp_path / "cv.docx"
+    render_cv.render_docx(profile, out)
+    doc = Document(out)
+    for name in ("Normal", "Title", "Heading 1", "List Bullet"):
+        fonts = doc.styles[name].element.rPr.rFonts
+        assert fonts.get(qn("w:ascii")) == (main_font or "Times New Roman")
+        assert fonts.get(qn("w:hAnsi")) == (main_font or "Times New Roman")
+        assert not any("theme" in key.lower() for key in fonts.attrib), name
+
+
 def test_docx_education_includes_dates(full_profile, tmp_path):
     """Regression: docx must not drop Education dates (md/LaTeX include them)."""
     from docx import Document

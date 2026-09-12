@@ -1,4 +1,4 @@
-# job-hunt: busca empleo, adapta tu CV y practica entrevistas
+# job-hunt: busca empleo, crea tu CV y practica entrevistas
 
 <p align="center">
   <a href="README.md">简体中文</a> ·
@@ -17,46 +17,106 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/hero.jpg" alt="Afirmaciones de un CV conectadas con sus fuentes: un artículo, notas, certificados y proyectos">
+  <img src="docs/assets/hero.jpg" alt="Proceso de búsqueda de empleo ilustrado: buscar ofertas, valorar la adecuación, crear el CV y practicar entrevistas">
 </p>
 
-job-hunt es una skill de búsqueda de empleo para Claude Code y Codex. Te ayuda a encontrar ofertas, decidir dónde postularte, preparar el CV y la carta de presentación y practicar entrevistas.
+job-hunt es una skill de búsqueda de empleo para Claude Code y Codex. Te ayuda a encontrar ofertas, decidir dónde postularte, crear un CV en chino o inglés y otros documentos de candidatura, y practicar entrevistas.
 
-Dale al agente tus objetivos, tu CV o el enlace de una oferta. Comparará los requisitos con tu experiencia y se encargará de editar, maquetar y revisar los documentos. Incluye orientación para perfiles técnicos y de investigación, cambios de carrera, periodos sin empleo, recién graduados y candidaturas internacionales.
+Comparte tus objetivos, experiencia o el enlace de una oferta. El agente organiza la información, comprueba los requisitos, edita los documentos y revisa la maquetación. Incluye orientación para recién graduados, cambios de carrera, periodos sin empleo, perfiles técnicos y de investigación, y candidaturas internacionales.
 
-## Empieza por el paso que necesitas
+## Qué puedes hacer
 
-| Modo | Cuándo usarlo | Resultado principal |
+| Función | Cuándo usarla | Qué hace el agente |
 |---|---|---|
-| **discover · Buscar ofertas** | Quieres encontrar puestos en tu área de interés | Lista de ofertas, enlaces originales y orientación inicial |
-| **assess · Valorar la candidatura** | Tienes una oferta y quieres decidir si merece dedicarle tiempo | Requisitos vinculados a evidencias, condiciones excluyentes, carencias y orientación |
-| **apply · Preparar documentos** | Has elegido un puesto y necesitas materiales adaptados | CV, carta de presentación opcional, registros de revisión y guía de preparación para la entrevista |
-| **interview · Practicar** | Tienes una oferta y un CV y quieres ensayar tus respuestas | Una ronda de entrevista, transcripción, dos evaluaciones independientes y cuestiones pendientes |
+| **discover · Buscar ofertas** | Tienes un objetivo, pero necesitas encontrar vacantes adecuadas | Busca por mercado y preferencias, lee la descripción completa de las ofertas seleccionadas y organiza enlaces y consejos |
+| **assess · Decidir si postularte** | Quieres valorar un puesto concreto | Compara requisitos y experiencia, e identifica condiciones excluyentes, fortalezas, carencias y esfuerzo de preparación |
+| **apply · Crear el CV y la candidatura** | Necesitas un CV o documentos adaptados a una oferta | Crea un borrador a partir de tu experiencia o edita el CV existente, maqueta Word/PDF y realiza revisiones independientes |
+| **interview · Practicar entrevistas** | Quieres ensayar respuestas y preguntas de seguimiento | Simula una entrevista con la oferta y el CV, registra las respuestas y revisa la comunicación y el respaldo factual |
 
-Puedes usar cada modo por separado. Al terminar una ronda, el agente propone los siguientes pasos y tú decides si continúas. Tú presentas la candidatura con los documentos terminados.
+Puedes usar las funciones por separado o combinarlas según tus necesidades. Tú eliges el siguiente paso y presentas la candidatura con los documentos terminados.
 
-Después de instalarlo, prueba estas peticiones:
+## Primer uso
+
+### 1. Instala y configura
+
+Elige una opción en [Instalación](#instalación). Después, dile al agente en Claude Code o Codex:
 
 ```text
-Usa job-hunt para buscar puestos de reconstrucción de imágenes por resonancia magnética en los Países Bajos.
-Usa job-hunt. Aquí tienes una oferta y mi CV. ¿Merece la pena postularme?
-Usa job-hunt para adaptar mi CV a este puesto y redactar una carta de presentación.
-Usa job-hunt para hacer una entrevista técnica simulada a partir de esta oferta y mi CV.
+Configura job-hunt y empieza mi tarea con mi navegador habitual.
 ```
 
-El agente confirma primero la tarea y el mercado de destino, y después pide los materiales y las preferencias que falten.
+El agente comprueba y prepara las dependencias, e indica qué permisos del navegador o inicios de sesión debes completar. No necesitas otra skill ni extensiones del navegador.
 
-## Cómo prepara tu candidatura
+### 2. Comparte lo que ya tienes
 
-Antes de editar el CV, el agente comprueba tu experiencia en el perfil, tus respuestas, artículos y proyectos. Ajusta el orden y la redacción, y enumera los puntos que necesitan más información. Trabaja sobre una copia y conserva el perfil original.
+Para buscar ofertas, indica el puesto, mercado y preferencias. Para valorar una candidatura, comparte la oferta y tu experiencia. Para crear un CV, facilita el documento actual o tu formación, trayectoria y proyectos. Una entrevista simulada necesita la oferta y el CV. El agente pregunta por la información que falta; no tienes que rellenar antes una plantilla fija.
 
-Para valorar una oferta, compara cada requisito con tu experiencia e indica cuáles cumples, cuáles cumples en parte y cuáles necesitan más evidencia. Los permisos de trabajo, las licencias y otras condiciones de acceso aparecen primero, seguidos de consejos para la candidatura y la información que debes añadir.
+### 3. Pide la tarea que necesitas
 
-Un CV convencional pasa por tres revisiones independientes de IA. El revisor ATS comprueba las palabras clave y la lectura del archivo; el de selección, la claridad y los requisitos básicos; y el responsable de contratación, la experiencia y las funciones. El agente corrige y vuelve a revisar hasta un máximo de tres rondas, y señala los puntos que requieren más experiencia o documentación.
+Cada ejemplo es un punto de partida independiente:
 
-Antes de entregar los documentos, el agente revisa todas las páginas de Word/PDF frente a la plantilla proporcionada y tus cambios posteriores: fuentes y tamaños, márgenes, líneas de los títulos, alineación de fechas, espaciado, orden del contenido y paginación. Las páginas sin revisar o las diferencias de formato pendientes impiden dar el trabajo por terminado; los archivos modificados se revisan de nuevo.
+```text
+Usa job-hunt para buscar puestos de product manager de IA en Shanghái.
+Usa job-hunt. Aquí tienes una oferta y mi CV. ¿Merece la pena postularme?
+Usa job-hunt para convertir esta experiencia en CV en chino e inglés, en Word y PDF.
+Usa job-hunt para hacer una entrevista simulada con esta oferta y mi CV.
+```
 
-Después de una entrevista simulada, dos evaluaciones independientes revisan la calidad de las respuestas y su respaldo factual. La devolución indica qué detalles conviene añadir y qué frases del CV necesitan cambios.
+## Qué recibes
+
+| Entregable | Contenido |
+|---|---|
+| **Informe de orientación profesional (PDF)** | Enlaces a ofertas, análisis de adecuación, fortalezas y carencias, prioridades de candidatura o siguientes pasos según la tarea |
+| **CV adaptado (Word/PDF)** | Un Word editable y un PDF maquetado, creados a partir de tu experiencia o adaptados a una oferta |
+| **Documentos adicionales (a petición)** | Carta de presentación o motivación, formulario de la empresa o declaración organizada por criterios |
+| **Preparación y devolución de entrevista (a petición)** | Guía de preparación, transcripción y evaluaciones independientes de la calidad de las respuestas y su respaldo factual |
+
+Cada consulta incluye un informe; los demás documentos dependen de la tarea elegida. El formato se adapta al mercado y a la empresa: por ejemplo, el rirekisho y el documento de trayectoria profesional en Japón, o el supporting statement para el NHS y la función pública del Reino Unido.
+
+La entrega se guarda en una sola carpeta `~/Downloads/<workspace-name>/`, organizada en `简历/` (CV) y `报告/` (informe). Las siguientes etapas usan la misma ubicación para facilitar el acceso a los documentos actuales.
+
+## Cómo se comprueba y mejora el trabajo
+
+### Ofertas completas y experiencia real
+
+Un informe completo exige leer la descripción íntegra de cada oferta seleccionada. Los resúmenes sirven para la selección inicial. Si no se puede acceder a una descripción, el informe explica el motivo y la marca como pendiente; no cuenta como revisada.
+
+Las modificaciones y los consejos se basan en la experiencia que aportes. El agente conserva el perfil original, edita una copia y enumera las evidencias que faltan. No inventa habilidades ni cifras de rendimiento y no predice las probabilidades de contratación.
+
+### Tres revisiones independientes de IA del CV
+
+| Perspectiva | Qué comprueba |
+|---|---|
+| **Sistema de seguimiento de candidaturas (ATS)** | Si el CV se puede procesar y sus palabras clave corresponden a los requisitos del puesto |
+| **Selección de personal** | Claridad y requisitos básicos |
+| **Responsable del equipo** | Si los proyectos, las responsabilidades y la experiencia respaldan los requisitos del puesto |
+
+Un CV convencional se corrige y revisa hasta un máximo de tres rondas. Las carencias que requieren más experiencia real o documentación quedan señaladas. Los formularios y las declaraciones por criterios se comprueban según sus requisitos específicos.
+
+### Maquetación y devolución de la entrevista
+
+Antes de entregar, se revisa cada página de Word/PDF frente a la plantilla, las fuentes, la alineación, los espacios y la paginación. Tras un cambio se repite la revisión; los problemas de formato pendientes impiden dar el trabajo por terminado.
+
+Después de la entrevista simulada, la calidad de las respuestas y su respaldo factual se evalúan de forma independiente, indicando qué detalles añadir y qué frases del CV revisar.
+
+## Ejemplos de CV e informe
+
+### CV en inglés
+
+Imagen obtenida de un CV ficticio en PDF. Los nombres, centros, empresas, proyectos y cifras son ilustrativos. La versión china aparece en el [README en chino](README.md).
+
+<p align="center">
+  <a href="docs/assets/examples/cv-en.png"><img src="docs/assets/examples/cv-en.png" width="680" alt="CV ficticio en inglés con formación, experiencia, prácticas, proyectos y habilidades"></a>
+</p>
+
+### Extracto del informe de búsqueda (en inglés)
+
+Extracto anonimizado y traducido al inglés de una búsqueda real del 11 de septiembre de 2026, con valoraciones de puestos y preparación. Esta muestra histórica conserva algunas ofertas que solo tenían un resumen; los informes completos actuales exigen leer cada descripción íntegra. El CV ficticio no se utilizó para estas valoraciones. Haz clic para ampliar.
+
+<p align="center">
+  <a href="docs/assets/examples/report-en-01.png"><img src="docs/assets/examples/report-en-01.png" width="49%" alt="Informe anonimizado en inglés: prioridades y puestos seleccionados"></a>
+  <a href="docs/assets/examples/report-en-02.png"><img src="docs/assets/examples/report-en-02.png" width="49%" alt="Informe anonimizado en inglés: análisis de puestos, carencias y preparación"></a>
+</p>
 
 ## Instalación
 
@@ -99,70 +159,42 @@ Para Codex, sustituye `~/.claude/skills` por `~/.codex/skills` en las dos últim
 
 Abre la ficha de job-hunt en [SkillHub](https://skillhub.cn/skills/user_f486c577/best-job-hunt) o [ClawHub](https://clawhub.ai/dong845/skills/job-hunt) y sigue el proceso de instalación de la plataforma.
 
-### Primer uso: deja la configuración al agente
+## Mercados e idiomas
 
-Tras la instalación, dile al agente: «Configura job-hunt y empieza mi tarea con mi navegador habitual».
+Las fuentes incluyen 51job, Indeed, LinkedIn y BOSS Zhipin, según el mercado y las condiciones de acceso. En China también se consideran las preferencias por grandes o pequeñas empresas privadas, estatales y extranjeras. Nowcoder y 1point3acres aportan experiencias de entrevistas y contexto de selección. Consulta el [catálogo de fuentes](references/discovery-sources.md) y la [política de uso](references/source-policy.md).
 
-Solo tienes que instalar este skill. Incluye el cliente de AnySearch y el lector del navegador. El agente prepara los paquetes de Python, Node.js y OpenCLI con sus parches CDP desde una única herramienta de configuración; no necesitas instalar otro skill ni extensiones del navegador. Los informes PDF usan por defecto fuentes incluidas y respetan las fuentes elegidas expresamente, sin sustituirlas de forma silenciosa; las herramientas de maquetación del CV se preparan cuando hacen falta. **El navegador se conecta mediante CDP.** El agente verifica primero OpenCLI y recurre al lector CDP incluido tras diagnosticar una incompatibilidad.
+Los títulos y las etiquetas de datos personales del CV están disponibles en inglés, neerlandés, alemán, francés, español, italiano, chino, japonés y coreano. Los informes de búsqueda y valoración tienen [plantillas](references/report-localization.md) en chino, inglés, japonés, coreano y español. La investigación de empresas y sectores puede usar sitios oficiales, noticias, cuentas públicas de WeChat y proyectos de GitHub como [fuentes complementarias](references/supplementary-sources.md).
 
+El repositorio incluye 5 tablas de convenciones de mercado con 38 entradas para Estados Unidos, Reino Unido, Alemania, Países Bajos y China, cada una con fuente, ámbito y fecha de revisión. Las fotos, los datos personales y los formatos siguen el mercado y los requisitos de la empresa; la información desactualizada o ausente se señala para su comprobación.
 
-Cuando el entorno lo permite, el agente conecta con tu navegador habitual y aprovecha la sesión abierta. La primera vez puede que tengas que activar la depuración remota en `chrome://inspect/#remote-debugging` y aceptar la solicitud de Chrome. El agente comprueba la compatibilidad y te explica los pasos necesarios.
+Los CV convencionales para Estados Unidos, Canadá, Reino Unido, Irlanda, Australia y Nueva Zelanda omiten por defecto las fotos y los datos personales relacionados. Los demás mercados reconocidos usan los datos aportados según sus reglas. Si el mercado está sin confirmar, esos campos se omiten.
 
-AnySearch busca mediante su API HTTP y permite acceso anónimo sin clave API. Las operaciones del navegador usan por defecto tu navegador habitual mediante CDP; solo se utiliza uno independiente si lo solicitas expresamente. Las fuentes independientes se consultan a la vez cuando es posible para reducir la espera. Tú completas los inicios de sesión, las verificaciones y los permisos del navegador.
+## Configuración y preguntas frecuentes
 
-Consulta la [configuración del entorno](references/agent-setup.md) y las [conexiones del navegador y búsquedas paralelas](references/daily-browser.md) para más detalles.
+### ¿Tengo que instalar las herramientas de búsqueda y maquetación?
 
-### Si un portal de empleo no se puede leer
+Tras instalar la skill, el agente prepara los paquetes de Python, Node.js y OpenCLI con sus parches CDP desde una única herramienta de configuración. El cliente de AnySearch y el lector del navegador están incluidos; AnySearch busca mediante una API HTTP sin clave API. Las herramientas para maquetar el CV se preparan cuando hacen falta. Los informes usan fuentes incluidas por defecto y respetan las elegidas expresamente, sin sustituirlas en silencio. Consulta la [configuración del entorno](references/agent-setup.md).
 
-El agente comprueba los problemas conocidos de Indeed y 51job y aplica la corrección adecuada. Los parches actuales son para OpenCLI 1.8.7; las demás versiones se comprueban por separado.
+### ¿Por qué el navegador pide permiso?
 
-También puedes pedirle que busque directamente en el buscador del portal. Para revisar un problema, di «comprueba los parches de compatibilidad» o «revierte los parches de compatibilidad». Consulta las [instrucciones de comprobación y reversión](references/opencli-compat.md).
+El agente usa CDP, una conexión de depuración remota, para acceder a tu Chrome o Edge habitual y aprovechar la sesión abierta. La primera vez puede requerir activar la depuración en `chrome://inspect/#remote-debugging` y aceptar la conexión. El agente comprueba la compatibilidad y te guía. Reutiliza la conexión durante la tarea y consulta fuentes independientes en paralelo cuando es posible. Solo usa un navegador separado si lo pides expresamente. Consulta las [conexiones del navegador](references/daily-browser.md).
 
-## Mercados, plataformas e idiomas
+### ¿Qué pasa si hay que iniciar sesión, verificar el acceso o no se puede leer una oferta?
 
-El agente elige fuentes para tu mercado de destino y las lee desde el navegador o un adaptador de OpenCLI disponible. Incluyen 51job, Indeed, LinkedIn y BOSS Zhipin. El adaptador de Indeed conecta actualmente con Estados Unidos; para otros mercados se priorizan las fuentes locales. El [catálogo de fuentes](references/discovery-sources.md) explica los requisitos de acceso y los usos; la [política de fuentes](references/source-policy.md) detalla las reglas de consulta.
+El agente pausa esa fuente y te indica cómo completar el inicio de sesión o la verificación. Responde «listo, continúa» para seguir. Si el acceso sigue sin estar disponible, puedes facilitar el texto de la oferta o dejarla pendiente.
 
-Para China, el agente pregunta si prefieres grandes empresas privadas, pequeñas y medianas empresas privadas, empresas estatales o extranjeras, y usa la respuesta para ordenar las ofertas. Nowcoder y 1point3acres aportan experiencias de entrevistas y contexto sobre los procesos de selección.
+Primero se verifica OpenCLI; el lector CDP incluido solo se usa tras confirmar una incompatibilidad. El adaptador de Indeed conecta actualmente con Estados Unidos y los demás mercados priorizan fuentes locales. Los parches conocidos de Indeed y 51job son para OpenCLI 1.8.7 y pueden comprobarse o revertirse. También se puede utilizar directamente el buscador del sitio. Consulta la [resolución de problemas de compatibilidad](references/opencli-compat.md).
 
-Si un sitio exige iniciar sesión o completar una verificación, el agente pausa esa fuente y te indica qué hacer. Responde «listo, continúa» para reanudar la comprobación. Si sigue sin haber acceso, puedes probar más tarde, pegar el texto de la oferta o revisar los resultados ya recogidos.
+### ¿Dónde se guardan los perfiles originales y los archivos de trabajo?
 
-Los títulos y las etiquetas de datos personales del CV están disponibles en inglés, neerlandés, alemán, francés, español, italiano, chino, japonés y coreano. Los informes de búsqueda y valoración usan [plantillas](references/report-localization.md) en chino, inglés, japonés, coreano y español. Algunos documentos internos están en inglés. El agente comprueba las fuentes del PDF durante la configuración.
+Esta skill usa `~/.claude/job-profiles/` como almacenamiento compartido predeterminado. No es una carpeta incluida en Claude Code o Codex: se crea cuando es necesario al guardar un perfil. Ambos agentes comparten la ubicación para reutilizar tus datos; puedes cambiarla con `JOBHUNT_PROFILES_ROOT`. Los perfiles se conservan por idioma y las candidaturas tienen espacios de trabajo separados de los informes y CV entregados. Markdown, las fuentes `.tex` cuando correspondan y los registros de comprobación facilitan posteriores ediciones y trazabilidad. Consulta la estructura en [REFERENCE.md](REFERENCE.md).
 
-El proyecto incluye 5 tablas de convenciones de mercado con 38 entradas para Estados Unidos, Reino Unido, Alemania, Países Bajos y China. Cada entrada tiene fuente, ámbito de aplicación y fecha de revisión. El agente señala la información desactualizada o ausente; los requisitos de la empresa guían cada candidatura.
-
-<p align="center">
-  <img src="docs/assets/personal-data.jpg" alt="Ejemplos del repositorio: un CV para Estados Unidos omite datos personales y otro para Alemania conserva una foto y una fecha de nacimiento aportadas">
-</p>
-
-Las fotos y los datos personales se adaptan al mercado de destino. Los CV convencionales para Estados Unidos, Canadá, Reino Unido, Irlanda, Australia y Nueva Zelanda los omiten por defecto. Los demás mercados reconocidos siguen sus reglas con los datos que aportes. Si el mercado está sin confirmar, esos campos se omiten.
-
-## Qué recibes
-
-| Material | Formatos y detalles |
-|---|---|
-| CV adaptado | Markdown, Word (`.docx`) y PDF; la composición en PDF también conserva `.tex` |
-| Carta de presentación o motivación | Opcional; Markdown, Word y PDF |
-| Rirekisho japonés (履歴書) | Un generador de formularios independiente crea una vista previa Markdown y un `.docx` editable; el formulario se exporta a PDF desde Word o LibreOffice |
-| Declaración estructurada de competencias | Evidencias organizadas por criterio y comprobación de límites de palabras para solicitudes como las del NHS y la función pública británica |
-| Material de evaluación y entrevista | Listas de ofertas, valoraciones de adecuación, guías de entrevista, transcripciones y análisis posterior |
-
-Las solicitudes estructuradas revisan el supporting statement según los criterios de la empresa. Si también se exige un CV convencional, se le aplica por separado la revisión de los tres evaluadores. El rirekisho japonés se comprueba como formulario completo; el documento de trayectoria profesional que lo acompaña sigue el proceso de revisión del CV.
-
-Cada consulta genera un informe PDF con el análisis profesional, las fuentes y las cuestiones pendientes. Se guarda en `~/Downloads/<workspace-name>/` junto con el CV y los demás documentos solicitados. Las siguientes etapas usan la misma carpeta. Puedes pedir cartas de presentación y entrevistas simuladas cuando las necesites.
-
-La entrega usa las subcarpetas `简历/` (CV) y `报告/` (informe), con nombres como `简历.docx`, `简历.pdf` y `求职建议报告.pdf`.
-
-Para investigar empresas o sectores, el agente también puede consultar sitios oficiales, noticias, cuentas públicas de WeChat y proyectos relevantes de GitHub mediante las [fuentes complementarias](references/supplementary-sources.md).
-
-## Dónde se guardan los archivos
-
-Los perfiles originales, los espacios de trabajo de cada candidatura y los registros de comprobación se guardan por defecto en `~/.claude/job-profiles/`, también al usar Codex. Puedes indicar otro directorio raíz con `JOBHUNT_PROFILES_ROOT`.
-
-Cada persona puede conservar perfiles originales por idioma, como `profile.zh.yaml` y `profile.en.yaml`; el archivo anterior `profile.yaml` sigue siendo compatible. Las candidaturas tienen espacios de trabajo separados, y los registros de fuentes junto con `journal.jsonl` conservan el historial de comprobaciones. Consulta la estructura completa en [REFERENCE.md](REFERENCE.md), en inglés.
-
-Los archivos se almacenan localmente. Las llamadas al modelo y el acceso web dependen del agente elegido y de la configuración de sus servicios.
+Los archivos se almacenan localmente; las llamadas al modelo y el acceso web dependen del agente y la configuración de sus servicios.
 
 ## Verificación y documentación
+
+<details>
+<summary>Ver comprobaciones para desarrolladores, evaluaciones y documentación técnica</summary>
 
 Las comprobaciones automáticas cubren las referencias a evidencias, la conservación del perfil original, la lectura de los veredictos, los datos personales, la composición y los cambios de modo:
 
@@ -184,3 +216,5 @@ Los tres revisores de CV se probaron mediante `codex exec` el 2026-09-06. Consul
 - [Guía de evaluación](evals/README.md): métodos y limitaciones.
 
 Estas referencias técnicas están redactadas principalmente en inglés. Distribuido bajo la [licencia MIT](LICENSE).
+
+</details>

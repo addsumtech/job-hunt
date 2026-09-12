@@ -497,8 +497,9 @@ def test_attaching_the_notice_text_clears_it(tmp_path):
 
 def test_a_hand_edited_count_fails(tmp_path):
     ws, market_dir, root = build(tmp_path)
-    md = (ws / "fit-assessment.md").read_text(encoding="utf-8").replace(
-        "1 of 2", "2 of 2")
+    original = (ws / "fit-assessment.md").read_text(encoding="utf-8")
+    md = original.replace("1 项，共 2 项", "2 项，共 2 项")
+    assert md != original, "the test must actually change the rendered count"
     (ws / "fit-assessment.md").write_text(md, encoding="utf-8")
     assert any(f.startswith("COUNT_MISMATCH:")
                for f in ca.check(ws, market_dir, TODAY, root))
