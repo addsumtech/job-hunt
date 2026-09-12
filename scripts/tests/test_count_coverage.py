@@ -39,6 +39,24 @@ def test_only_strong_counts_as_strong():
     assert counts["invalid"] == []
 
 
+def test_preferred_practice_does_not_inflate_campus_must_have_counts():
+    rows = [row(id="degree"), row(id="java"),
+            row(id="learning", match="partial"),
+            row(id="teamwork", match="partial"),
+            row(id="practice", text="有开发实践者优先", level="preferred",
+                screening="nice_to_have", match="partial")]
+    counts = cc.coverage(rows)
+    assert counts["must_total"] == 4
+    assert counts["must_strong"] == counts["must_partial"] == 2
+
+
+def test_each_preference_axis_excludes_a_row_without_hiding_bad_evidence():
+    for preference in ({"level": "preferred"}, {"screening": "nice_to_have"}):
+        counts = cc.coverage([row(match="invalid", **preference)])
+        assert counts["must_total"] == 0
+        assert any(f.startswith("INVALID_MATCH:") for f in counts["invalid"])
+
+
 def test_undated_evidence_is_not_downgraded():
     counts = cc.coverage([row(match="strong", recency="undated")])
     assert counts["must_strong"] == 1 and counts["must_partial"] == 0
