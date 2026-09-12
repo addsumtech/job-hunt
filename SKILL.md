@@ -1044,13 +1044,11 @@ Told the user:
 - [ ] The consultation folder and its client report/CV files; keep internal files private.
 - [ ] **The delivered files** `deliver.py` printed — in one `~/Downloads/<workspace-name>/` folder, including the report PDF.
       That is the one the user can actually open; the workspace path is for an audit.
-- [ ] In discover: the §0 来源与读取质量 table, the trigger reason, each row's actual
+- [ ] In discover: the §0 Sources and read quality table, the trigger reason, each row's actual
       read quality and provisional band, and — if the run degraded — the completed
-      disclosure block. Use 「基于卡片信息的初判」 only for an all-card round; if any
-      posting has a full detail, use 「已获取职位信息后的初判，尚非完整投递评估」.
-      **In the user's language**: English uses §0 Sources and read quality, with
-      "provisional, from card data only" for an all-card round or "provisional; not a
-      full application assessment" when detail was read. Follow `modes/discover.md`
+      disclosure block. Use "provisional, from card data only" only for an all-card
+      round; if any posting has a full detail, use "provisional; not a full application
+      assessment". **Write the output in the user's language.** Follow `modes/discover.md`
       and `references/report-localization.md` for the matching disclosure in each
       supported language. Keep one language per document.
 
