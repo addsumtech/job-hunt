@@ -13,6 +13,11 @@ Everything here was read out of the tool's own introspection
 actually executed that day; `false` means only the help text was read. Do not
 upgrade a `false` to a `true` without running the command and recording the output.
 
+For newer evidence, see [2026-09-12 live source acceptance](../docs/testing/live-sources-2026-09-12.md).
+It records all seven job/interview sources, including partial LinkedIn results
+and the unresolved Upwork/1point3acres recovery steps. The dated block below
+remains the original 2026-08-09 snapshot, not a current access guarantee.
+
 ## The machine-readable block
 
 `scripts/tests/test_discovery_docs.py` parses this block and cross-checks it
@@ -165,7 +170,7 @@ verification wall.
 |---|---|---|
 | `indeed-cloudflare-challenge` | `Indeed served a Cloudflare challenge page` | yes, 2026-09-08 |
 | `http-429-rate-limited` | `HTTP 429` | no |
-| `verify-human-en` | `(?i)verify (that )?you are (a )?human` | no |
+| `verify-human-en` | See the expanded human-verification patterns below | no |
 | `unusual-traffic-en` | `(?i)unusual traffic` | no |
 | `captcha-interstitial` | `(?i)captcha` | no |
 | `slider-verification-cn` | `滑块` | no |
@@ -173,6 +178,20 @@ verification wall.
 | `risk-control-cn` | `风控` | no |
 | `too-frequent-cn` | `操作过于频繁` | no |
 | `access-restricted-cn` | `访问受限` | no |
+
+Human-verification patterns also cover a check that stays loading. These are
+recognition regressions, not claims that every variant was emitted by a live
+adapter's stderr. The Upwork waiting message was observed in a live page trace.
+
+```text
+verify-human-en: (?i)(verify|verifying|confirm) (that )?you are (a )?human
+human-verification-cn: (?:验证|确认)(?:您|你)(?:是否)?是(?:真人|人类)|(?:正在|请|需要).{0,8}(?:真人验证|人机验证)
+human-verification-pending: (?i)验证成功[。.!！\s]*正在等待|verification successful[.!\s]*waiting for|checking your browser
+```
+
+A guest-group denial such as `抱歉，您所在的用户组(游客)无法进行此操作`
+is a login request, even if cached auth metadata says logged in. It is classified
+separately from a CAPTCHA; hand off to the user and resume only after confirmation.
 
 **2026-09-08 runtime check (OpenCLI 1.8.7):** an Indeed search for Python in
 New York returned exit 1, empty stdout and `Indeed served a Cloudflare challenge

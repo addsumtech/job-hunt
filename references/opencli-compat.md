@@ -14,6 +14,7 @@ use the normal reader, or the browser fallback when incompatibility is diagnosed
 | Observed defect | Narrow repair | Verified scope |
 |---|---|---|
 | 51job's `/pc/search?keyword=…&searchType=2` navigation times out while `/pc/search` renders results | Open the plain entry page; retain the existing keyword, area and limit in the search API request | Python / Shanghai / 3 rows on 2026-09-09 |
+| 51job detail mislabels a current slider as a parsing error, shifts company attributes and loses address/paragraph breaks | Recognize the observed slider instructions as `ANTI_BOT`; use labelled company icons and the full address; preserve HTML line breaks | Beijing live detail on 2026-09-12 plus current/old DOM regressions |
 | Indeed detail returns a sign-in heading as a job | Detect account pages with no job description and report a login error | Account-page DOM regressions and classifier stop-lock tests |
 | Indeed puts `Full-time` into salary, losing job type | Separate labelled pay and job-type fields; only use pay-like header text as salary | Real no-pay posting plus pay/type DOM variants |
 | Indeed search cards have ids but empty titles | Read the identified title link, including its existing title-attribute variant | Real search and DOM variants |

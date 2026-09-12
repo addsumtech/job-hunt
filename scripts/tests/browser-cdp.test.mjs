@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {capture, dailyEndpoint} from '../browser_cdp.mjs';
 
 let fixtureId = 0;
-function fixture({status=200, navigationError=false}={}) {
+function fixture({status=200, navigationError=false, pageReadyState='complete', pageRefusal=false, pageTextReady=true, readyAfterWait=false, textAfterWait=false}={}) {
   const commands=[];
   const target=`owned-${++fixtureId}`, session=`session-${fixtureId}`;
   class Socket extends EventTarget {
@@ -22,7 +22,11 @@ function fixture({status=200, navigationError=false}={}) {
           emit({sessionId:session,method:'Network.responseReceived',params:{frameId:'frame',type:'Document',response:{url:'https://example.com/',status}}});
           result=navigationError?{errorText:'net::ERR_FAILED'}:{frameId:'frame'};
         }
-        if(c.method==='Runtime.evaluate') result={result:{value:c.params.expression==='document.readyState'?'complete':{url:'https://example.com/',title:'Fixture',text:'Visible job description',links:[]}}};
+        if(c.method==='Runtime.evaluate') result={result:{value:c.params.expression==='document.readyState'?(Array.isArray(pageReadyState)?pageReadyState.shift() || 'complete':pageReadyState):c.params.expression.startsWith('Boolean(document.body')?(Array.isArray(pageTextReady)?pageTextReady.shift():pageTextReady):c.params.expression.startsWith('Boolean(')?pageRefusal:{url:'https://example.com/',title:'Fixture',text:'Visible job description',links:[]}}};
+        if(c.method==='Runtime.evaluate' && c.params.expression.startsWith('Boolean(\n')) {
+          if(readyAfterWait) pageReadyState='complete';
+          if(textAfterWait) pageTextReady=true;
+        }
         if(c.method==='Target.closeTarget') result={success:true};
         emit({id:c.id,result});
       });
@@ -49,6 +53,43 @@ test('a navigation failure still closes the created tab',async()=>{
   assert.equal(commands.at(-1).method,'Target.closeTarget');
   assert.equal(commands.at(-1).params.targetId,target);
 });
+
+test('a page that never finishes loading retains its DOM after three increasing waits',async()=>{
+  const {Socket,commands,target}=fixture({pageReadyState:'interactive'});
+  const result=await capture({endpoint:'ws://127.0.0.1:9222/devtools/browser/test',url:'https://example.com/',timeoutMs:5,settleMs:0,WebSocketImpl:Socket});
+  assert.equal(result.load_timed_out,true);
+  assert.equal(result.http_status,200);
+  assert.deepEqual(result.render_wait_budgets_ms,[5,10,20]);
+  assert.equal(result.text,'Visible job description');
+  assert.deepEqual(commands.filter(c=>c.method==='Target.closeTarget').map(c=>c.params.targetId),[target]);
+  assert.equal(commands.filter(c=>c.method==='Page.navigate').length,1);
+});
+
+test('a later render succeeds without navigating again',async()=>{
+  const {Socket,commands}=fixture({pageReadyState:'loading',readyAfterWait:true});
+  const result=await capture({endpoint:'ws://127.0.0.1:9222/devtools/browser/test',url:'https://example.com/',waitStagesMs:[2,4,8],settleMs:0,WebSocketImpl:Socket});
+  assert.equal(result.load_timed_out,false);
+  assert.deepEqual(result.render_wait_budgets_ms,[2,4]);
+  assert.equal(commands.filter(c=>c.method==='Page.navigate').length,1);
+});
+
+test('document complete still waits for the requested rendered description',async()=>{
+  const {Socket,commands}=fixture({pageTextReady:false,textAfterWait:true});
+  const result=await capture({endpoint:'ws://127.0.0.1:9222/devtools/browser/test',url:'https://example.com/',waitStagesMs:[2,4,8],waitForText:'About the job',settleMs:0,WebSocketImpl:Socket});
+  assert.equal(result.load_timed_out,false);
+  assert.equal(result.wait_for_text,'About the job');
+  assert.deepEqual(result.render_wait_budgets_ms,[2,4]);
+  assert.equal(commands.filter(c=>c.method==='Page.navigate').length,1);
+});
+
+for (const refusal of [{status:403},{pageRefusal:true}]) {
+  test('a refusal ends further rendering waits: '+JSON.stringify(refusal),async()=>{
+    const {Socket}=fixture({...refusal,pageReadyState:'interactive'});
+    const result=await capture({endpoint:'ws://127.0.0.1:9222/devtools/browser/test',url:'https://example.com/',waitStagesMs:[2,4,8],settleMs:0,WebSocketImpl:Socket});
+    assert.deepEqual(result.render_wait_budgets_ms,[2]);
+    assert.equal(result.load_timed_out,false);
+  });
+}
 
 test('concurrent captures never share a session or tab',async()=>{
   const a=fixture(),b=fixture();

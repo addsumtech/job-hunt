@@ -106,6 +106,13 @@ supports known HTTP(S) URLs; it does not submit forms or synthesize clicks. If a
 source requires unsupported interaction, retain that limitation and request a
 user-provided original URL or JD. Do not install another browser skill to fill it.
 
+Rendering waits use three increasing budgets: 15, 30 and 60 seconds in the same
+tab. For a job page whose shell loads first, add `--wait-for-text "About the job"`
+(or its observed local-language heading). A timeout retains the actual DOM for
+diagnosis; `load_timed_out: true` with no extracted rows is recorded as transport,
+not zero matches. Login and human-verification pages stop the wait and require
+the user hand-off below, including a verification screen that keeps spinning.
+
 Save the JSON string's contents as `raw/<site>-browser-<n>.json`, without rewriting
 its text or URLs. If a tool reports a refusal outside the DOM (HTTP 403, for
 example), retain that output and set `http_status: 403` or `blocked: true` on the

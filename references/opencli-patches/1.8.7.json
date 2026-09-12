@@ -70,7 +70,7 @@
     {
       "path": "51job/detail.js",
       "base_sha256": "d37c0ae62c7dc76f34b777c0b1b8d340a08f359aec60f6168ba3c62dc5f38118",
-      "patched_sha256": "5231e4000783ba717b0e1b98317792532acddd0ec5710b3b000fb8894f2873c5",
+      "patched_sha256": "377926713207cd871f5f4601212636d8922941d0b5cb96af6b645919191bd87b",
       "replacements": [
         {
           "old": "        { name: 'jobId',",
@@ -82,15 +82,15 @@
         },
         {
           "old": "const bodyText = (document.body.innerText || '').slice(0, 400);",
-          "new": "if (!document.body) return { ready: false };\n            const bodyText = (document.body.innerText || '').slice(0, 1200);\n            if (/安全验证|滑块验证|拖动滑块|人机验证/.test(bodyText)) return { error: 'BLOCKED' };"
+          "new": "if (!document.body) return { ready: false };\n            const bodyText = (document.body.innerText || '').slice(0, 1200);\n            if (/安全验证|滑块验证|拖动滑块|人机验证|请按住滑块，拖动到最右边|为了更好的访问体验，请进行验证/.test(bodyText)) return { error: 'BLOCKED' };"
         },
         {
           "old": "return (clone.innerText || '').trim();",
-          "new": "return (clone.innerText || clone.textContent || '').trim();"
+          "new": "clone.querySelectorAll('br').forEach(n => n.replaceWith('\\\\n'));\n                    clone.querySelectorAll('p, div, li, h1, h2, h3, h4, h5, h6').forEach(n => n.append('\\\\n'));\n                    return (clone.textContent || '').trim();"
         },
         {
           "old": "        const data = await page.evaluate(script);",
-          "new": "        let data;\n        for (let attempt = 0; attempt < 8; attempt++) {\n            data = await page.evaluate(script) || {};\n            if (data.error || (data.title && data.description)) break;\n            if (attempt < 7) await page.wait(1);\n        }\n        if (data.error === 'BLOCKED') {\n            throw new CliError('NO_DATA', '51job requires browser verification; stop and ask the user to complete it');\n        }"
+          "new": "        let data;\n        for (let attempt = 0; attempt < 8; attempt++) {\n            data = await page.evaluate(script) || {};\n            if (data.error || (data.title && data.description)) break;\n            if (attempt < 7) await page.wait(1);\n        }\n        if (data.error === 'BLOCKED') {\n            throw new CliError('ANTI_BOT', '51job requires browser verification; stop and ask the user to complete it');\n        }"
         },
         {
           "old": "        if (!data.title) {",
@@ -111,7 +111,35 @@
         {
           "old": "welfare: all('.t1 span, .jtag .t1 span'),",
           "new": "welfare: all('.t1 span, .jtag .t1 span, .job-detail .tags .tag'),"
+        },
+        {
+          "old": "            const funcs = all('.bmsg .fp');",
+          "new": "            const companyField = icon => document.querySelector('.com_tag .' + icon)?.parentElement?.innerText?.trim() || '';\n            const structuredCompany = !!document.querySelector('.com_tag .i_flag, .com_tag .i_people, .com_tag .i_trade, .com_tag .p-l-0');\n            const funcs = all('.bmsg .fp');"
+        },
+        {
+          "old": "address: pick('上班地址'),",
+          "new": "address: pick('上班地址') || (() => {\n                    const address = document.querySelector('.bmsg address[data-address-country]')?.cloneNode(true);\n                    if (!address) return '';\n                    address.querySelectorAll('span').forEach(n => n.remove());\n                    return (address.textContent || '').trim().replace(/^完整地址[:：]\\\\s*/, '');\n                })(),"
+        },
+        {
+          "old": "companyTag: sel('.com_tag'),",
+          "new": "companyTag: sel('.com_tag'),\n                companyMetadata: structuredCompany ? {\n                    type: companyField('i_flag'),\n                    size: companyField('i_people'),\n                    industry: companyField('i_trade'),\n                } : null,"
+        },
+        {
+          "old": "companyType: tagParts[0] || '',",
+          "new": "companyType: data.companyMetadata ? data.companyMetadata.type : tagParts[0] || '',"
+        },
+        {
+          "old": "companySize: tagParts[1] || '',",
+          "new": "companySize: data.companyMetadata ? data.companyMetadata.size : tagParts[1] || '',"
+        },
+        {
+          "old": "companyIndustry: tagParts.slice(2).join(' / '),",
+          "new": "companyIndustry: data.companyMetadata ? data.companyMetadata.industry : tagParts.slice(2).join(' / '),"
         }
+      ],
+      "previous_patched_sha256": [
+        "5231e4000783ba717b0e1b98317792532acddd0ec5710b3b000fb8894f2873c5",
+        "70d7a1e82d0fe82bc24f977168eddf55ff1988eda2a0f7684bfc9df64cbe98f9"
       ]
     }
   ]

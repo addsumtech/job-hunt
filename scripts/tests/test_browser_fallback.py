@@ -49,6 +49,55 @@ def record(ws, args):
     return call
 
 
+@pytest.mark.parametrize("status, expected", [(200, "transport"), (403, "platform_limit")])
+def test_loading_capture_is_preserved_without_claiming_zero_matches(tmp_path, status, expected):
+    ws, _, snap, _, args = setup_capture(tmp_path, text="Still loading", status=status)
+    snap["load_timed_out"] = True
+    dump(ws / "raw/51job-browser-1.json", snap)
+    call = record(ws, args)
+    assert call["classification"] == expected
+    assert call["empty_result"] is False
+    assert call["exit_code"] == 1
+
+
+def test_loading_page_rows_still_require_verbatim_evidence(tmp_path):
+    ws, _, snap, rows, args = setup_capture(tmp_path)
+    snap["load_timed_out"] = True
+    dump(ws / "raw/51job-browser-1.json", snap)
+    assert record(ws, args)["classification"] == "ok"
+    rows[0]["raw_text"] = "Invented description"
+    with pytest.raises(ValueError, match="copied verbatim"):
+        browser.validate_snapshot(snap, rows)
+
+
+@pytest.mark.parametrize("text", [
+    "抱歉，您所在的用户组(游客)无法进行此操作",
+    "抱歉，您所在的用户组（游客）无法进行此操作",
+    "抱歉，您所在的用戶組（遊客）無法進行此操作",
+])
+def test_guest_group_denial_requests_login_and_stops_the_source(tmp_path, text):
+    ws, _, _, _, args = setup_capture(tmp_path, text=text, status=403)
+    call = record(ws, args)
+    assert call["classification"] == "not_logged_in"
+    assert call["empty_result"] is False
+    assert "finish login" in call["remedy"]
+    assert browser.check_stop_order([call, {"action": "adapter_call", "site": "51job"}])
+
+
+@pytest.mark.parametrize("text", [
+    "请验证您是否是真人", "正在进行人机验证", "Verifying you are human",
+    "验证成功。正在等待 www.upwork.com 响应", "Checking your browser",
+])
+def test_stalled_human_verification_is_not_a_loading_retry(tmp_path, text):
+    ws, _, snap, _, args = setup_capture(tmp_path, text=text, status=200)
+    snap["load_timed_out"] = True
+    dump(ws / "raw/51job-browser-1.json", snap)
+    call = record(ws, args)
+    assert call["classification"] == "platform_limit"
+    assert call["empty_result"] is False
+    assert "human verification" in call["remedy"]
+
+
 @pytest.mark.parametrize("backend", browser.BACKENDS)
 @pytest.mark.parametrize("reason", ["bridge_disconnected", "preferred_browser"])
 def test_browser_only_full_shortlist_passes(tmp_path, capsys, backend, reason):

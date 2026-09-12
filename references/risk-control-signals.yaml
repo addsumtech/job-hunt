@@ -40,7 +40,15 @@ signals:
     verified: false
   - id: verify-human-en
     site: "*"
-    pattern: "(?i)verify (that )?you are (a )?human"
+    pattern: "(?i)(verify|verifying|confirm) (that )?you are (a )?human"
+    verified: false
+  - id: human-verification-cn
+    site: "*"
+    pattern: "(?:验证|确认)(?:您|你)(?:是否)?是(?:真人|人类)|(?:正在|请|需要).{0,8}(?:真人验证|人机验证)"
+    verified: false
+  - id: human-verification-pending
+    site: "*"
+    pattern: '(?i)验证成功[。.!！\s]*正在等待|verification successful[.!\s]*waiting for|checking your browser'
     verified: false
   - id: unusual-traffic-en
     site: "*"
