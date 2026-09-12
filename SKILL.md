@@ -1044,13 +1044,15 @@ Told the user:
 - [ ] The consultation folder and its client report/CV files; keep internal files private.
 - [ ] **The delivered files** `deliver.py` printed — in one `~/Downloads/<workspace-name>/` folder, including the report PDF.
       That is the one the user can actually open; the workspace path is for an audit.
-- [ ] In discover: the §0 来源与读取质量 table, the trigger reason, every row's band
-      marked 「基于卡片信息的初判」, and — if the run degraded — the disclosure block
-      with its answers filled in. **In the user's language**: an English round says
-      §0 Sources and read quality / "provisional, from card data only" / Logged in
-      this session:, and `modes/discover.md` carries both spellings of all seven
-      literals the gate requires. One language per document — Chinese furniture in
-      an English page passes every gate and still reads as a bug.
+- [ ] In discover: the §0 来源与读取质量 table, the trigger reason, each row's actual
+      read quality and provisional band, and — if the run degraded — the completed
+      disclosure block. Use 「基于卡片信息的初判」 only for an all-card round; if any
+      posting has a full detail, use 「已获取职位信息后的初判，尚非完整投递评估」.
+      **In the user's language**: English uses §0 Sources and read quality, with
+      "provisional, from card data only" for an all-card round or "provisional; not a
+      full application assessment" when detail was read. Follow `modes/discover.md`
+      and `references/report-localization.md` for the matching disclosure in each
+      supported language. Keep one language per document.
 
 Client typography: English uses Times New Roman and Chinese uses SimSun (宋体),
 including names and headings, unless the user explicitly requests otherwise.
