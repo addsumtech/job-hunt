@@ -31,10 +31,10 @@ const currentJob = (description = '<b>Responsibilities</b><p>Build the platform.
     <div data-testid="desktop-job-header">
       <div><h5 data-testid="vj-job-title">AI Product Manager</h5></div>
       <div data-testid="company-info-metadata"><div>
-        <div><a href="/cmp/Example">Example</a><div>3.9</div></div>
+        <div><a href="https://www.indeed.com/cmp/Example">Example</a><div>3.9</div></div>
         <div><div>New York, NY</div></div>
       </div></div>
-      <div><div aria-label="$100,000 a year, Full-time"></div><div>$100,000 a year</div><div>-</div><div>Full-time</div></div>
+      <div><div aria-label="$100,000 a year, Full-time"><div>$100,000 a year</div><div>-</div><div>Full-time</div></div></div>
     </div>
     <div data-testid="viewjob-job-content">
       <div>Match overview: NOT part of the job description.</div>
@@ -75,6 +75,11 @@ test('current header without a location does not use the employer as its locatio
     const result = await extract('job', currentJob().replace('<div><div>New York, NY</div></div>', ''));
     assert.equal(result.company, 'Example');
     assert.equal(result.location, '');
+});
+
+test('current company link also supports a relative URL', async () => {
+    const result = await extract('job', currentJob().replace('https://www.indeed.com/cmp/Example', '/cmp/Example'));
+    assert.equal(result.company, 'Example');
 });
 
 for (const [label, markup, salary, type] of [
