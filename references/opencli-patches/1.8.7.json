@@ -27,15 +27,15 @@
     {
       "path": "indeed/job.js",
       "base_sha256": "8182e944812107c5eaf5216cf7ed9eba64156e4c0cabb4bbdefe72094b893878",
-      "patched_sha256": "31d8e4d433d85cdcbff09ea9ea3bbd5b28268648431cc7829f4dc33ecfe34a04",
+      "patched_sha256": "3b7f830d28d2b80d60cb2970ad7f9cafee204a70426e67351ec3e0e855115a55",
       "replacements": [
         {
           "old": "const location = document.querySelector('[data-testid=\"jobsearch-JobInfoHeader-companyLocation\"] div, [data-testid=\"inlineHeader-companyLocation\"]')?.textContent?.trim() ?? '';",
-          "new": "const location = (document.querySelector('[data-testid=\"jobsearch-JobInfoHeader-companyLocation\"], [data-testid=\"inlineHeader-companyLocation\"]')?.textContent\n                    || document.querySelector('[data-testid=\"jobsearch-CompanyInfoContainer\"] [data-testid=\"inlineHeader-companyName\"]')?.parentElement?.nextElementSibling?.textContent || '').trim();"
+          "new": "const location = (document.querySelector('[data-testid=\"jobsearch-JobInfoHeader-companyLocation\"], [data-testid=\"inlineHeader-companyLocation\"]')?.textContent\n                    || document.querySelector('[data-testid=\"jobsearch-CompanyInfoContainer\"] [data-testid=\"inlineHeader-companyName\"]')?.parentElement?.nextElementSibling?.textContent\n                    || document.querySelector('[data-testid=\"company-info-metadata\"] > div > div:nth-child(2)')?.textContent || '').trim();"
         },
         {
           "old": "const salary = document.querySelector('[id*=\"salaryInfoAndJobType\"] span, [data-testid=\"job-salary\"]')?.textContent?.trim() ?? '';\n                const jobType = Array.from(document.querySelectorAll('[id*=\"salaryInfoAndJobType\"] span, [data-testid=\"job-type\"]'))\n                    .map(s => (s.textContent || '').trim())\n                    .filter(t => t && t !== salary)\n                    .join(', ');",
-          "new": "const texts = selector => [...new Set(Array.from(document.querySelectorAll(selector))\n                    .map(s => (s.textContent || '').trim()).filter(Boolean))];\n                const isJobType = text => /^(?:full[ -]time|part[ -]time|contract|temporary|permanent|internship|apprenticeship|seasonal|freelance|volunteer|per diem|fixed[ -]term)$/i.test(text);\n                const headerValues = texts('[id*=\"salaryInfoAndJobType\"] span');\n                const payValues = texts('[data-testid=\"job-salary\"], #jobDetailsSection [role=\"group\"][aria-label=\"Pay\"] li');\n                const salary = payValues.find(t => !isJobType(t))\n                    || headerValues.find(t => !isJobType(t) && /[0-9]/.test(t) && /[$€£¥]|USD|EUR|GBP|an? (?:hour|year|month|week|day)/i.test(t)) || '';\n                const jobType = [...new Set([\n                    ...texts('[data-testid=\"job-type\"], #jobDetailsSection [role=\"group\"][aria-label=\"Job type\"] li'),\n                    ...headerValues.filter(isJobType),\n                ])].filter(t => t !== salary).join(', ');"
+          "new": "const texts = selector => [...new Set(Array.from(document.querySelectorAll(selector))\n                    .map(s => (s.textContent || '').trim()).filter(Boolean))];\n                const isJobType = text => /^(?:full[ -]time|part[ -]time|contract|temporary|permanent|internship|apprenticeship|seasonal|freelance|volunteer|per diem|fixed[ -]term)$/i.test(text);\n                const currentPay = document.querySelector('[data-testid=\"company-info-metadata\"]')?.nextElementSibling;\n                const headerValues = [...texts('[id*=\"salaryInfoAndJobType\"] span'),\n                    ...Array.from(currentPay?.children || []).map(el => (el.textContent || '').trim()).filter(Boolean)];\n                const payValues = texts('[data-testid=\"job-salary\"], #jobDetailsSection [role=\"group\"][aria-label=\"Pay\"] li');\n                const salary = payValues.find(t => !isJobType(t))\n                    || headerValues.find(t => !isJobType(t) && /[0-9]/.test(t) && /[$€£¥]|USD|EUR|GBP|an? (?:hour|year|month|week|day)/i.test(t)) || '';\n                const jobType = [...new Set([\n                    ...texts('[data-testid=\"job-type\"], #jobDetailsSection [role=\"group\"][aria-label=\"Job type\"] li'),\n                    ...headerValues.filter(isJobType),\n                ])].filter(t => t !== salary).join(', ');"
         },
         {
           "old": "return { ready, challenge, notFound, title, company, location, salary, jobType, description };",
@@ -44,7 +44,26 @@
         {
           "old": "        if (!detail?.ready) {",
           "new": "        if (detail?.loginRequired) {\n            throw new CommandExecutionError('Indeed login required: the page is an account sign-in or verification screen, not a job posting', 'Complete login in the connected browser before requesting another read.');\n        }\n        if (!detail?.ready) {"
+        },
+        {
+          "old": "                let ready = !!document.querySelector('#jobDescriptionText, h1, [data-testid=\"error-page\"]');\n                for (let i = 0; i < 30; i++) {\n                    if (ready) break;\n                    await new Promise(r => setTimeout(r, 500));\n                    ready = !!document.querySelector('#jobDescriptionText, h1, [data-testid=\"error-page\"]');\n                }",
+          "new": "                const readDescription = () => {\n                    const body = document.querySelector('#jobDescriptionText')\n                        || document.querySelector('[data-testid=\"vj-job-description-heading\"]')?.nextElementSibling;\n                    return (body?.innerText || '').trim();\n                };\n                const isReady = () => !!readDescription()\n                    || !!document.querySelector('[data-testid=\"error-page\"], [id^=\"cf-\"]')\n                    || window.location.hostname === 'secure.indeed.com'\n                    || /Just a moment|Sign In.*Indeed Accounts/i.test(document.title || '')\n                    || /Page Not Found|not found/i.test(document.querySelector('h1')?.textContent || '');\n                let ready = isReady();\n                for (let i = 0; i < 30; i++) {\n                    if (ready) break;\n                    await new Promise(r => setTimeout(r, 500));\n                    ready = isReady();\n                }"
+        },
+        {
+          "old": "const title = document.querySelector('h1')?.textContent?.trim() ?? '';",
+          "new": "const title = (document.querySelector('[data-testid=\"vj-job-title\"]') || document.querySelector('h1'))?.textContent?.trim() ?? '';"
+        },
+        {
+          "old": "[data-company-name=\"true\"]",
+          "new": "[data-company-name=\"true\"], [data-testid=\"company-info-metadata\"] a[href^=\"/cmp/\"]"
+        },
+        {
+          "old": "const description = document.querySelector('#jobDescriptionText')?.innerText?.trim() ?? '';",
+          "new": "const description = readDescription();"
         }
+      ],
+      "previous_patched_sha256": [
+        "31d8e4d433d85cdcbff09ea9ea3bbd5b28268648431cc7829f4dc33ecfe34a04"
       ]
     },
     {

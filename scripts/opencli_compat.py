@@ -61,9 +61,11 @@ def prepare(package, config, site, action, manifest):
                 raise ValueError(f'Run opencli adapter eject {site} first; existing overrides are never replaced.')
             continue
         current = local.read_bytes()
-        if current not in (original, patched):
+        previous = digest(current) in item.get('previous_patched_sha256', [])
+        if current not in (original, patched) and not previous:
             raise ValueError(f'Local edits detected: {relative}; preserve them and review manually.')
-        states.append({'file': str(relative), 'state': 'patched' if current == patched else 'original'})
+        state = 'patched' if current == patched else 'previous_patch' if previous else 'original'
+        states.append({'file': str(relative), 'state': state})
         desired = original if action == 'revert' else patched
         if action != 'check' and current != desired:
             changes.append((local, current, desired))

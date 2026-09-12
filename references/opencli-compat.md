@@ -18,13 +18,16 @@ use the normal reader, or the browser fallback when incompatibility is diagnosed
 | Indeed puts `Full-time` into salary, losing job type | Separate labelled pay and job-type fields; only use pay-like header text as salary | Real no-pay posting plus pay/type DOM variants |
 | Indeed search cards have ids but empty titles | Read the identified title link, including its existing title-attribute variant | Real search and DOM variants |
 | Indeed header's `Remote` has no old location test id | Read the observed company-header sibling when the explicit location markers are absent | Real detail and old/new header DOM variants |
+| Indeed's current detail page uses `vj-job-title` and a description heading instead of `h1` and `#jobDescriptionText` | Read the observed title, adjacent description and header metadata; wait for description text rather than a title alone | Current/old DOM variants, missing and delayed descriptions; live result recorded separately |
 
 ## Check, apply, revert
 
 `python scripts/opencli_compat.py --site indeed` is read-only; substitute `51job`
 for that adapter. It checks the installed package version and exact source hashes.
 Unknown versions, official-source drift, or local edits are refused, not guessed
-at. `--package-dir` supports installations where the executable wrapper does not
+at. Exact hashes of earlier patches shipped by this skill are recognized as
+`previous_patch` and can be upgraded or reverted; user edits remain untouched.
+`--package-dir` supports installations where the executable wrapper does not
 resolve to the npm package. `--config-dir` supports a different OpenCLI config
 root (the default respects `OPENCLI_CONFIG_DIR`).
 
