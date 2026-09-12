@@ -107,9 +107,10 @@ def validate_snapshot(snapshot, rows):
         if row["source_id"] in seen:
             raise ValueError("duplicate source_id in capture")
         seen.add(row["source_id"])
-    # A loading page with no extracted rows is not evidence of zero matches.
+    # A loading or textless page is not evidence of zero matches. Image-only
+    # recruitment landing pages can settle successfully without exposing a JD.
     # Actual rows still require the same verbatim-text and URL checks above.
-    return "transport" if load_timed_out and not rows else "ok"
+    return "transport" if not rows and (load_timed_out or not snapshot["text"].strip()) else "ok"
 
 
 def _host(record):
@@ -344,7 +345,10 @@ def main(argv=None):
             kind = "rate_limit" if snapshot.get("http_status") == 429 else "platform"
             record["remedy"] = recovery_guidance(kind)
         elif classification == "transport":
-            record["remedy"] = ("Page load deadline reached without extracted rows. "
+            reason = ("Page load deadline reached without extracted rows. "
+                      if snapshot.get("load_timed_out") else
+                      "The page exposed no readable text or extracted rows. ")
+            record["remedy"] = (reason +
                                 "Inspect the preserved snapshot and follow references/network-recovery.md; "
                                 "this is not an empty search result.")
         record = journal.sign_receipt(record)

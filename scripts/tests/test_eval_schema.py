@@ -147,10 +147,17 @@ def test_no_harness_module_carries_a_machine_specific_absolute_path(prefix):
     # module. Scenarios, fixtures, assertions.yaml and the stub are exactly the
     # files most likely to grow a path someone pasted from their own shell.
     import subprocess  # local: only this test shells out
-    listed = subprocess.run(["git", "ls-files", "evals"], cwd=str(_REPO_ROOT),
-                            capture_output=True, text=True, encoding="utf-8")
-    assert listed.returncode == 0, "could not list committed evals files"
-    committed = [_REPO_ROOT / rel for rel in listed.stdout.split() if rel.strip()]
+    if (_REPO_ROOT / ".git").exists():
+        listed = subprocess.run(["git", "ls-files", "-z", "evals"], cwd=str(_REPO_ROOT),
+                                capture_output=True, text=True, encoding="utf-8")
+        assert listed.returncode == 0, "could not list committed evals files"
+        committed = [_REPO_ROOT / rel for rel in listed.stdout.split("\0") if rel]
+    else:
+        # `skills add` copies the skill without .git, sometimes inside another
+        # repository. That parent's index says nothing about the installed tree.
+        committed = [p for p in EVALS_DIR.rglob("*") if p.is_file()
+                     and "__pycache__" not in p.parts
+                     and not any(part.startswith(".") for part in p.relative_to(EVALS_DIR).parts)]
     assert len(committed) > 20, (
         f"only {len(committed)} committed files found under evals/ — the scan is "
         f"not reaching the tree it is supposed to guard")

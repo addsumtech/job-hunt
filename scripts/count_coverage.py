@@ -118,6 +118,11 @@ def coverage(rows: list[dict] | None) -> dict:
             if effective == "strong":
                 counts["resp_demonstrated"] += 1
         elif kind == "must_have":
+            # Preferred criteria stay in the evidence table but are not
+            # mandatory qualifications, even when the schema uses must_have
+            # as the requirement-row kind.
+            if item.get("level") == "preferred" or item.get("screening") == "nice_to_have":
+                continue
             counts["must_total"] += 1
             if effective == "strong":
                 counts["must_strong"] += 1

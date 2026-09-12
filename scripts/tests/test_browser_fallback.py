@@ -70,6 +70,20 @@ def test_loading_page_rows_still_require_verbatim_evidence(tmp_path):
         browser.validate_snapshot(snap, rows)
 
 
+@pytest.mark.parametrize("text", ["", " \n\t "])
+@pytest.mark.parametrize("status", [None, 200, 403])
+def test_textless_recruitment_landing_page_is_not_zero_matches(tmp_path, text, status):
+    ws, _, snap, _, args = setup_capture(tmp_path, text=text, status=status)
+    snap["load_timed_out"] = False
+    snap["links"] = ["https://careers.example.org/#/aboutus"]
+    dump(ws / "raw/51job-browser-1.json", snap)
+    call = record(ws, args)
+    assert call["classification"] == ("platform_limit" if status == 403 else "transport")
+    assert call["empty_result"] is False
+    assert call["exit_code"] == 1
+    assert browser.validate_record(call, ws) == []
+
+
 @pytest.mark.parametrize("text", [
     "抱歉，您所在的用户组(游客)无法进行此操作",
     "抱歉，您所在的用户组（游客）无法进行此操作",
