@@ -488,6 +488,12 @@ opencli <site> --help -f yaml > raw/opencli-help/<site>.yaml
 
 ## Step 2 — choose sources
 
+For domestic job discovery, read the WeChat coverage procedure in
+`references/supplementary-sources.md` now and include it in the source plan.
+Carry relevant leads from targeted queries through original-article reading and
+recruitment-condition checks. Preserve the distinction between search snippets
+and verified openings; follow the existing read budgets and site-stop rules.
+
 Prefer sources that need no login. `51job` is the only adapter measured to return
 every documented column populated. `indeed` also works without login but returns
 empty titles (Step 4). For the four inlined adapters, use the command pairs in
@@ -1016,6 +1022,9 @@ Do not automatically start a mock interview or another mode.
 - [ ] `raw/auth-status.json` saved; `unknown` re-probed with `--full`.
 - [ ] Every adapter call classified by `scripts/check_opencli_result.py`.
 - [ ] Queries generated in both languages of the market.
+- [ ] For domestic discovery, the WeChat source plan has been reconciled with
+      actual query/article captures and unresolved gaps under
+      `references/supplementary-sources.md`; snippets alone are not coverage.
 - [ ] Identity field asserted non-empty on every row; `indeed` rows recovered.
 - [ ] Every row's `raw_text` is the card text **copied** from the capture, and its
       `id` is `<site>-<source_id>`.

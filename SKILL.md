@@ -31,14 +31,18 @@ gap. It defines source selection, availability checks and evidence quality.
 These sources supplement formal posting evidence; select only what the current
 question needs.
 
-## Client consultation delivery
-
 For China recruitment, WeChat public accounts are a priority research source.
 Use the prescribed OpenCLI/Sogou WeChat route for targeted employer, graduation
 year and role queries, prioritizing official recruitment, state-owned enterprise
 and university career accounts. Read relevant original articles and follow their
 application links. One broad query or a few search snippets do not establish
 source coverage; record unread articles as leads, not verified opportunities.
+
+For domestic job discovery, read `references/supplementary-sources.md` before
+selecting sources and apply its WeChat coverage procedure. A CV-only edit or a
+single supplied posting does not automatically start a new search.
+
+## Client consultation delivery
 
 **Formatting is an acceptance requirement for both the CV and the report.**
 Read `references/layout-review.md` before rendering. Use the latest user-selected
@@ -948,6 +952,17 @@ believing you vetted it.
 - [ ] Drafting or revising a client report? Read `references/report-writing.md`,
       apply its readability revision, preserve every grouped posting's city and
       link, and inspect the final pages, navigation and approved typography.
+- [ ] Domestic job discovery? Reconcile the WeChat source plan with captured
+      queries, original articles and recruitment conditions; identify unread or
+      inaccessible leads. A successful search command is not completed research.
+- [ ] Following a report example? Compare its applicable tables, columns,
+      numbered jobs, field labels, preparation lists and directory with both the
+      final Markdown and PDF. Recheck every explicit user correction; do not
+      accept a font/color match while the information structure is missing.
+- [ ] Client delivery? Read the entire report without the private test notes:
+      it must give career decisions and actions, with no fixture or test-process
+      narration. For a requested full-page CV, check the final Word-export PDF's
+      page count, measured content bottom and natural spacing before delivery.
 
 - [ ] On a site refusal, follow `references/user-recovery.md`: explain the reason,
       preserve partial results, wait for explicit user confirmation before a new

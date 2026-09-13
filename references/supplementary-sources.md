@@ -43,6 +43,38 @@ consider it explicitly during source selection rather than silently omitting it.
 A generic web search is not a substitute for an actual WeChat search. If Sogou or
 an article cannot be accessed, record that result and the scope actually read.
 
+### WeChat coverage for domestic job discovery
+
+Include WeChat in the source plan for a domestic job search, especially campus
+and state-owned enterprise recruitment. A user-limited source list takes
+precedence; a CV-only edit or an assessment of a supplied JD does not require
+unrelated searches. Use the fixed route above and the existing access boundaries.
+
+Derive targeted queries from the actual brief: target employers or employer
+type, graduation year/recruitment season, role family and city. Adapt queries to
+the unresolved parts of the search rather than running every combination.
+Prioritize employer recruitment accounts, state-owned enterprise accounts and
+university career offices; check the publisher before treating it as official.
+One employer query does not cover a multi-employer or multi-role request.
+
+Open relevant original articles and retain their account, title, publication
+date, original URL and captured text. Check the applicable graduating class,
+location, role requirements, application window and route. Follow linked job
+descriptions when the article only summarizes them. An employer's official
+recruitment article can itself be the original posting when it supplies those
+details; capture it through the supported posting-evidence workflow. An old
+article or an unspecified deadline does not prove recruitment is still open.
+
+Keep a private coverage table in the existing research notes: search question,
+actual query, captured result, article reading scope, linked-posting status and
+remaining gap. Separate search snippets, full article reads and verified hiring
+conditions. Reconcile the table before calling research complete: resolve
+relevant unread leads within the agreed scope and read budget, or record the
+actual access failure or exclusion reason. Do not prescribe a fixed article
+quota, count a few snippets as coverage, or bypass site stops to fill the table.
+Missing coverage remains a research gap; report only limitations that affect the
+client's decision and keep tool diagnostics in the private record.
+
 Use AnySearch vertical search for a relevant specialist question, and its
 `site:` search for public pages on a specified domain. Discover the supported
 vertical domains before using them. Neither route replaces original-job evidence.
@@ -70,7 +102,7 @@ read, unavailable or no longer needed, and why. Do not count a source as searche
 just because this reference names it. Do not install unrelated providers or
 request additional social accounts to complete setup.
 
-These supplementary reads are background research. A hiring lead may become a
+Employer or industry context remains background research. A hiring lead may become a
 shortlist candidate only after its original posting has been read through the
 supported evidence workflow. Use [browser-fallback.md](browser-fallback.md) for
 browser posting captures and keep the recruitment gates and refusal locks.
