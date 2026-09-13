@@ -22,6 +22,7 @@ import tempfile
 from urllib.parse import unquote, urlsplit, urlunsplit
 
 import journal
+import check_layout
 import lint_no_prediction
 import vocab
 from render_cv import has_rtl
@@ -985,6 +986,14 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
             make_pdf: bool = True, include_applications: bool | None = None
             ) -> tuple[list[pathlib.Path], list[str]]:
     written, notes = [], []
+    # An authored/reviewed report must survive delivery byte-for-byte. Never
+    # silently replace a selected layout with the default Markdown renderer.
+    reviewed_report = make_pdf and any((workspace / name).exists() for name in (
+        "report.pdf", "report-layout-review.yaml", "report-layout-requirements.yaml"))
+    if reviewed_report:
+        problems, _ = check_layout.inspect(workspace, report=True)
+        if problems:
+            return [], problems
     fonts = {}
     report_font = None
     if make_pdf:
@@ -994,7 +1003,7 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
                 continue
             try:
                 profile = journal.load_yaml(profile_path, dict)
-            except journal.InputProblem as exc:
+            except journal.YamlUnreadable as exc:
                 return [], [f"cannot read report typography from {name}: {exc.reason}"]
             meta = profile.get("meta") or {}
             if isinstance(meta, dict) and meta.get("cjk_font"):
@@ -1043,6 +1052,14 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
             pdf = target.with_suffix(".pdf")
             try:
                 source = visible_markdown(src)
+                if src.name == "report.md" and reviewed_report:
+                    shutil.copy2(workspace / "report.pdf", pdf)
+                    ok, why = _verify_pdf(pdf, source, has_cjk(source), src.read_text(encoding="utf-8"))
+                    if ok:
+                        written.append(pdf)
+                    else:
+                        notes.append(f"{pdf.name}: {why}")
+                    continue
                 glyphs = frozenset(_CJK.findall(source))
                 # A user-selected font wins; otherwise covered bundled glyphs
                 # keep delivery independent of a Tectonic font probe.
@@ -1114,6 +1131,8 @@ def main(argv: list[str] | None = None) -> int:
     written, notes = deliver(ws, dest, ws.name, make_pdf=not args.no_pdf,
                              include_applications=True if args.include_applications else None)
     if not written:
+        for note in notes:
+            print(f"DELIVER_LAYOUT_OR_INPUT_REFUSED: {note}", file=sys.stderr)
         print(f"DELIVER_NOTHING_TO_COPY: {ws} holds no deliverable files",
               file=sys.stderr)
         return 2

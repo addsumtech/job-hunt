@@ -11,6 +11,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 import check_apply
 import check_layout
 import journal
+import deliver
 
 
 def reviewed_workspace(tmp_path):
@@ -27,7 +28,21 @@ def reviewed_workspace(tmp_path):
     doc.save(ws / "cv.pdf")
     page.get_pixmap().save(ws / "preview.png")
     doc.close()
+    requirements = {
+        "reference": {"path": str(reference), "sha256": journal.sha256_file(reference)},
+        "expectations": {key: "Measured reference: " + key for key in check_layout.CHECKS},
+        "page_size_pt": [595, 842], "text_bounds_pt": [72, 59, 523, 770],
+        "docx_geometry_twips": {"width": 12240, "height": 15840, "top": 1440,
+                                "bottom": 1440, "left": 1800, "right": 1800},
+        "text_samples": [{"role": role, "text": "Test Candidate", "size_pt": 11,
+                          "fonts": ["Helvetica"]} for role in ("name", "heading", "body")],
+    }
+    (ws / "layout-requirements.yaml").write_text(yaml.safe_dump(requirements))
+    (ws / "word-export.pdf").write_bytes((ws / "cv.pdf").read_bytes())
     review = {
+        "requirements_sha256": journal.sha256_file(ws / "layout-requirements.yaml"),
+        "word_export": {"path": "word-export.pdf", "sha256": journal.sha256_file(ws / "cv.pdf"),
+                        "docx_sha256": journal.sha256_file(ws / "cv.docx")},
         "reviewer": "Test reviewer", "reviewed_at": "2026-09-11T12:00:00+08:00",
         "reference": {"path": str(reference), "sha256": journal.sha256_file(reference)},
         "user_overrides": [],
@@ -119,8 +134,87 @@ def test_unreviewed_or_unresolved_layout_cannot_pass(tmp_path, problem):
 def test_no_template_does_not_waive_page_review(tmp_path):
     ws, review = reviewed_workspace(tmp_path)
     review["reference"] = None
+    requirements = yaml.safe_load((ws / "layout-requirements.yaml").read_text())
+    requirements["reference"] = None
+    (ws / "layout-requirements.yaml").write_text(yaml.safe_dump(requirements))
+    review["requirements_sha256"] = journal.sha256_file(ws / "layout-requirements.yaml")
     write_review(ws, review)
     assert check_layout.main(["--workspace", str(ws)]) == 0
     review["artifacts"]["cv.pdf"]["previews"] = []
     write_review(ws, review)
     assert check_layout.main(["--workspace", str(ws)]) == 1
+
+
+@pytest.mark.parametrize("problem", ["size", "font", "margin", "requirements_missing", "requirements_stale", "word_export"])
+def test_measured_format_failures_cannot_be_waived_by_passed_visual_strings(tmp_path, problem):
+    ws, review = reviewed_workspace(tmp_path)
+    if problem.startswith("requirements"):
+        path = ws / "layout-requirements.yaml"
+        if problem == "requirements_missing":
+            path.unlink()
+        else:
+            path.write_text(path.read_text() + "\nchanged: true\n")
+    elif problem == "margin":
+        document = Document(ws / "cv.docx")
+        document.sections[0].left_margin = 1000000
+        document.save(ws / "cv.docx")
+        review["artifacts"]["cv.docx"]["sha256"] = journal.sha256_file(ws / "cv.docx")
+        review["word_export"]["docx_sha256"] = journal.sha256_file(ws / "cv.docx")
+    else:
+        doc = pymupdf.open()
+        page = doc.new_page()
+        page.insert_text((72, 72), "Test Candidate", fontsize=14 if problem == "size" else 11,
+                         fontname="cour" if problem == "font" else "helv")
+        doc.save(ws / "new.pdf")
+        doc.close()
+        (ws / "new.pdf").replace(ws / "cv.pdf")
+        review["artifacts"]["cv.pdf"]["sha256"] = journal.sha256_file(ws / "cv.pdf")
+        if problem != "word_export":
+            (ws / "word-export.pdf").write_bytes((ws / "cv.pdf").read_bytes())
+            review["word_export"]["sha256"] = journal.sha256_file(ws / "cv.pdf")
+    write_review(ws, review)
+    assert check_layout.main(["--workspace", str(ws)]) == 1
+    findings = journal.read_receipts(ws, "check_layout")[-1]["findings"]
+    code = ("MISSING_LAYOUT_INPUT" if problem == "requirements_missing" else
+            "STALE_LAYOUT_REVIEW" if problem == "requirements_stale" else
+            "PDF_NOT_WORD_EXPORT" if problem == "word_export" else "FORMAT_MISMATCH")
+    assert any(code in item for item in findings)
+
+
+def reviewed_report(tmp_path):
+    ws, review = reviewed_workspace(tmp_path)
+    requirements = yaml.safe_load((ws / "layout-requirements.yaml").read_text())
+    requirements["text_samples"][0]["role"] = "title"
+    (ws / "report-layout-requirements.yaml").write_text(yaml.safe_dump(requirements))
+    (ws / "report.md").write_text("# Test Candidate\n")
+    (ws / "report.pdf").write_bytes((ws / "cv.pdf").read_bytes())
+    review["requirements_sha256"] = journal.sha256_file(ws / "report-layout-requirements.yaml")
+    review["source_sha256"] = journal.sha256_file(ws / "report.md")
+    review["artifacts"] = {"report.pdf": review["artifacts"]["cv.pdf"]}
+    (ws / "report-layout-review.yaml").write_text(yaml.safe_dump(review))
+    return ws
+
+
+def test_delivery_preserves_reviewed_pdf_without_rerendering(tmp_path, monkeypatch):
+    ws = reviewed_report(tmp_path)
+    assert check_layout.main(["--workspace", str(ws), "--report"]) == 0
+    def forbidden(*args, **kwargs):
+        pytest.fail("must not regenerate a reviewed report")
+    monkeypatch.setattr(deliver, "render_pdf", forbidden)
+    written, problems = deliver.deliver(ws, tmp_path / "delivery", "test", include_applications=False)
+    assert not problems
+    pdf = next(path for path in written if path.suffix == ".pdf")
+    assert pdf.read_bytes() == (ws / "report.pdf").read_bytes()
+
+
+@pytest.mark.parametrize("changed", ["report.md", "report.pdf", "report-layout-requirements.yaml", "report-layout-review.yaml"])
+def test_delivery_blocks_stale_or_removed_report_review(tmp_path, changed):
+    ws = reviewed_report(tmp_path)
+    target = ws / changed
+    if changed == "report-layout-review.yaml":
+        target.unlink()
+    else:
+        target.write_bytes(target.read_bytes() + b"changed")
+    written, problems = deliver.deliver(ws, tmp_path / "delivery", "test", include_applications=False)
+    assert written == [] and problems
+    assert not (tmp_path / "delivery").exists()

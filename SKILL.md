@@ -33,6 +33,22 @@ question needs.
 
 ## Client consultation delivery
 
+**Formatting is an acceptance requirement for both the CV and the report.**
+Read `references/layout-review.md` before rendering. Use the latest user-selected
+reference for each document separately: matching wording, headings or page count
+does not establish a style match. First record its actual fonts, sizes, margins,
+rules, spacing, alignment and hierarchy in `layout-requirements.yaml` (CV) and
+`report-layout-requirements.yaml` (report). Preserve the reference's visual system;
+do not substitute a default renderer, shrink text or pad content to mimic its
+page count. Author `report.pdf` in the workspace before delivery. Inspect every
+final page beside its reference and run `check_layout.py` for the CV and
+`check_layout.py --report` for the report. Any unapproved difference requires
+repair, re-export and a fresh review until all requirements pass. If blocked,
+state the actual unmet requirement; never label that output format-compliant.
+Deliver the reviewed Word export as the CV PDF and preserve the reviewed report
+PDF byte-for-byte. A later edit or export invalidates the review. The eight visual
+checks and measured format checks are separate from content judges.
+
 Delivery uses two child folders: `简历/` for `简历.docx`, `简历.pdf` and other requested application documents; `报告/` for `求职建议报告.pdf` and its editable text. Filenames never include the employer, role or internal workspace slug.
 
 In `discover`, `assess` and `interview`, an existing CV is source material, so
@@ -696,7 +712,7 @@ a fabrication the candidate then repeats back), and the shortlist's `why_matched
 | CV lint | `scripts/lint_cv.py` | clichés, weak openers, over-long bullets, repeated verbs; the 2026 AI vocabulary from `scripts/prose_tells.py` (`AI_VOCABULARY`). The cliché and vocabulary scans run over the WHOLE document, not only the bullets — the summary is the line a recruiter reads first, and it used to be the one line nothing checked. Headings and the contact line are skipped, so an employer called "Robust Systems" is not reported as a cliché. A CV is exempt from the structural checks: a skills line reads "Python, C++, MATLAB" and would fire the tricolon check on every correct CV |
 | Letter | `scripts/check_letter.py` | machine-prose tells over the whole body — the 2026 AI vocabulary (`AI_VOCABULARY`), em-dash density (`EM_DASH_DENSITY`), the "not just X, but Y" pivot (`NOT_JUST_PIVOT`) and tricolon density (`TRICOLON_DENSITY`), all from `scripts/prose_tells.py`, whose thresholds are calibrated against real letters including this skill's own; markdown in a body string, length, duplicated name, wrong company/role; a missing salutation or sign-off in a language this skill has no sourced default for (`NO_SALUTATION` / `NO_CLOSING`) — the renderer no longer prints an English one onto a non-English letter, so the gate is what stops it shipping with none. The 250–350 band is an ENGLISH word count, so a CJK-dominant letter is reported (`NOTICE_CJK_LENGTH_UNSCORED`, stderr) rather than scored — this skill has no sourced length convention for one, and the one-page constraint behind the band is measured directly by `check_pages` on the rendered PDF |
 | Page count and PDF text | `scripts/check_pages.py` | a PDF longer than the market's table allows; a letter over one page; an unreadable PDF; a PDF whose text is missing `meta.name` or an `experience[].org`, or whose text cannot be read at all (`UNVERIFIED_PDF_TEXT` — not a pass); a start date in a calendar it cannot read (`START_DATE_UNREAD` — years of experience is then *unknown*, not zero, and the permissive budget is used rather than the strictest) |
-| Template layout review | `scripts/check_layout.py` | a missing or stale page-by-page visual review; missing template or artifact fingerprints; an uninspected page; an unresolved template difference. The agent must inspect the actual rendered pages; this gate validates that review record, not visual similarity by itself. See `references/layout-review.md`. |
+| Template layout review | `scripts/check_layout.py` | missing/stale requirements, reference or final-file fingerprints; measured font, size, color, paper or margin mismatches; a PDF replaced after Word export; uninspected pages or unresolved differences. `--report` reviews the report separately. Measurements supplement the eight actual visual comparisons; failures require repair and re-review. See `references/layout-review.md`. |
 | Word limits | `scripts/check_word_limits.py` | a supporting-statement criterion over its stated limit, empty, or with no limit recorded; and the machine-prose tells from `scripts/prose_tells.py`, measured per criterion so the finding names which answer to rewrite. This is the artifact that is actually MARKED — the three CV judges are routed away from a structured application by design — and it had no reader for its prose at all |
 | Apply completion | `scripts/check_apply.py` | a missing receipt; a receipt that does not match its own `receipt_hash`, i.e. hand-written or edited rather than produced by a gate (`RECEIPT_UNVERIFIED`); a gate that only ran its `--record` setup (`NOT_VERIFIED`); ANY gate left failing, named or not; an unclassified stop; a missing brief. `RECEIPT_UNVERIFIED` and `MODE_FILE_MISSING` are checked by every composer — apply, assess, discover and interview — not just this one |
 | Mock interview | `scripts/check_mock.py` | an invented tag or band; a tag with no quote, or a quote that is not in the transcript; a pass emitting the other pass's tags; a scraped question with no id, no date, or the wrong country; an answer-bank entry with no source; a collapsed claim with no walk-back; an unsourced fact neither promoted nor walked back |
@@ -1002,6 +1018,7 @@ Ran, leaving nothing in the journal (they render; they do not judge):
       looks, and a path pasted into a chat message is gone once it scrolls.
 - [ ] `references/supplementary-sources.md` — career source selection, WeChat articles and source quality.
 - [ ] `scripts/pdf_glyphs.py` — shared painted-glyph validation used by page checks and delivery.
+- [ ] `scripts/layout_requirements.py` — imported measurement checks used by `check_layout.py`; verify reference-derived requirements for CV and report.
 - [ ] `scripts/doctor.py` — once per machine, before the first mode. Reports
       capabilities by using them; `--install` covers the Python packages only. Follow
       `references/agent-setup.md` to install required tools and prepare daily-browser CDP.

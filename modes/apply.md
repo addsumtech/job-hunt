@@ -136,13 +136,21 @@ A worked file, including a retracted row, is in `assets/claims.example.yaml`.
 - **AI-uniformity pass:** Run the full-CV coherence check from `references/gap-analysis.md` (post-tailoring AI-uniformity check): verb variety, sentence-structure variety, voice and specificity, prose quality. Make targeted repairs before delivering. The goal is a CV that reads as one human's real work history, not a keyword-filled template. `lint_cv`, `check_letter` and `check_word_limits` report the mechanical half (`AI_VOCABULARY`, `EM_DASH_DENSITY`, `NOT_JUST_PIVOT`, `TRICOLON_DENSITY`) — treat a clean run as the floor, not as the pass: no gate can see that three roles were written to the same template.
 - **Show the after-tailoring FIT SNAPSHOT** (same format as Step 3 — coverage, responsibility match, apply verdict) so the user sees the delta. Include the same disclaimer.
 - **File-format note:** For ATS/portal submission, `.docx` is the safer default (see `references/cv-craft.md §4`). PDF is for the human-facing copy or when explicitly requested by the posting. If the portal gives a choice and the posting doesn't specify, submit `.docx`.
-- Render each requested format, running the command once per format:
+- Render Markdown and DOCX from the tailored profile, adapting the DOCX to the
+  selected reference first. Export the **final DOCX** with Word/LibreOffice into
+  `raw/layout/word-export.pdf`, then copy that export to `cv.pdf`. Inspect both
+  final formats. Keep the export and its source DOCX hash in `layout-review.yaml`.
+  Do not separately generate a LaTeX CV PDF when delivering the matching Word/PDF pair.
+  The renderer supports these individual formats:
 
   ```bash
   python scripts/render_cv.py <workspace>/tailored-profile.yaml --format <md|docx|pdf> --out <workspace>/cv.<ext>
   ```
 
-- **The PDF always ships with its `.tex` source.** Each `--format pdf` run writes `cv.tex` next to `cv.pdf` (whether or not the compile succeeds), so deliver both — the candidate can hand-tune typography or recompile later. List the `.tex` among the outputs in Step 7.
+- **For an explicitly requested standalone LaTeX PDF**, `--format pdf` writes
+  `cv.tex` next to `cv.pdf`; deliver its `.tex` source too. Word-exported PDFs do
+  not need a `.tex` file. The following engine troubleshooting applies only to
+  the LaTeX route; its output must still satisfy the selected format requirements.
 - If the PDF run warns about a missing LaTeX engine: follow `references/agent-setup.md` to install a suitable engine, then re-render and verify the requested PDF. If setup is blocked, deliver the available Markdown, .docx and `.tex`, and name the actual blocker. The renderer's no-engine fallback exits 0; that does not mean a PDF was produced.
 - If `HOST_EXECUTION_REQUIRED` appears, the engine is installed but the current restricted process cannot reach a required host service. Follow `references/agent-setup.md` to rerun only rendering and PDF verification through the host's approved trusted or elevated route. Do not reinstall the engine, substitute an old PDF, or mark the PDF delivered until that rerun passes.
 - **If the PDF run exits non-zero and reports dropped characters, there is no PDF and there must not be one.** The engine reports a `Missing character` per glyph it could not typeset and still exits 0 by itself, so the renderer scans for them and refuses; `cv.md` and `cv.docx` are unaffected and will look perfect while the PDF would have lost letters out of the candidate's own name. Do not hand over a PDF from a previous run, and do not describe the PDF as delivered. Read the codepoints it names, set `meta.main_font` (Latin) or `meta.cjk_font` (CJK) in the tailored profile to a font installed on this machine, and re-render — or ship `.docx` + `.tex` and say plainly that the PDF could not be produced.
@@ -269,7 +277,7 @@ This note concerns template-based CV/letter rendering. Run the private setup in
 PyMuPDF. Consultation report PDFs use bundled fonts and do not require TeX.
 
 - Scripts need their dependencies: `pip install -r requirements.txt` (PyYAML, python-docx).
-- PDF output needs a LaTeX engine — `tectonic` is recommended. Without it, **Markdown and .docx still work**, and the renderer emits a `.tex` file you can compile later.
+- Standalone LaTeX PDF output needs a LaTeX engine — `tectonic` is recommended. Without it, **Markdown and .docx still work**, and the renderer emits a `.tex` file you can compile later.
 
 ## Entry conditions
 
