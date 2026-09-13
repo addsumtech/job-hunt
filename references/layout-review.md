@@ -137,6 +137,12 @@ same inspected preview. The gate checks hashes, page coverage and the completed
 comparison; the agent remains responsible for making the visual judgment.
 
 For reports, author `report.pdf` in the workspace with the selected visual system.
+Before rendering, inventory the reference's tables, column names, list types,
+numbering, repeated job fields, contents and source directory. Put the expected
+block structure under `expectations.content_order`; compare the actual Markdown
+and PDF against it in `checks.content_order` and `checks.headings_and_rules`.
+Fonts and colors alone cannot satisfy this comparison. Preserve applicable
+blocks even when shortening the report, using only the current case's real rows.
 Write `report-layout-review.yaml` using the same structure: bind
 `report-layout-requirements.yaml` via `requirements_sha256`, add `source_sha256`
 for `report.md`, use `artifacts: {report.pdf: ...}` with all pages, and omit

@@ -90,6 +90,21 @@ next decision, without turning internal query bookkeeping into report content.
 
 ## Make a detailed report easy to navigate
 
+When following a report example, copy its information structure as well as its
+typography. For the consultation-report pattern, preserve: a priority table;
+numbered key jobs with consistent “匹配依据 / 经验缺口 / 投递准备” fields; a table
+of remaining jobs and tradeoffs; numbered preparation steps; an interview
+preparation list/table; and a numbered job directory with company, full title,
+location, reading status and usable source links. Use a linked contents list
+for a multi-section report. Scale the rows to the actual evidence; never copy
+the example's job count or fabricate entries to fill it.
+
+Review structure explicitly after rewriting. Compare the reference and output's
+table columns, field labels, numbering, grouping and links in both Markdown and
+PDF. A single summary table does not replace all of the example's lists. Record
+this comparison in the layout review under `content_order` and
+`headings_and_rules`; missing lists or tables require another formatting pass.
+
 Keep the approved typography; follow `references/word-resume-layout.md` for the
 English Times New Roman and Chinese SimSun report convention and its language,
 template and user-request exceptions. Verify the embedded fonts in the output.
