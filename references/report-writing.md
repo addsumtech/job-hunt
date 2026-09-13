@@ -105,6 +105,11 @@ show the full company name once at the start of its group. Preserve each role's
 full title and distinct links, including the existing city/ID grouping rules.
 Grouping by company does not merge different roles or imply identical vacancies.
 
+Place the table of contents after the report title and brief metadata, before
+the first numbered section. Do not place it after the first section's narrative
+or table. Verify that order in both the editable text and rendered PDF, and
+check the actual page destinations after pagination.
+
 When following a report example, copy its information structure as well as its
 typography. For the consultation-report pattern, preserve: a priority table;
 numbered key jobs with consistent “匹配依据 / 经验缺口 / 投递准备” fields; a table
