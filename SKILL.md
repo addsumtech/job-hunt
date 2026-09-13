@@ -42,6 +42,11 @@ For domestic job discovery, read `references/supplementary-sources.md` before
 selecting sources and apply its WeChat coverage procedure. A CV-only edit or a
 single supplied posting does not automatically start a new search.
 
+When a source requests human verification, immediately tell the user which site
+and page needs attention, ask them to complete it in the connected browser, and
+wait for an explicit completion reply before resuming that source. Follow
+`references/user-recovery.md`; announcing a site stop alone is not a hand-off.
+
 ## Client consultation delivery
 
 **Formatting is an acceptance requirement for both the CV and the report.**
