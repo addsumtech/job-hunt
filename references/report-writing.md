@@ -5,6 +5,14 @@ It applies to `report.md`, explanations in shortlists and assessments, interview
 advice, and the final hand-off. It supplements the language contract; it does not
 rewrite source quotations, schema keys, IDs, required labels or computed counts.
 
+Before delivery, remove internal test narration from the whole report, including
+the title, body and footer. A fictional-profile test still produces a sample
+client report: do not insert “固定虚构履历”“并非真人面试”“本轮只练了” or describe
+which software test stages ran. Store that provenance in the private test record.
+Turn any useful result into concrete preparation advice without inventing actual
+user interview performance. The delivery marker check is a backstop; reading the
+whole report for its intended audience remains mandatory.
+
 ## Readability before brevity
 
 Remove words that do no work, not words that make the explanation understandable.

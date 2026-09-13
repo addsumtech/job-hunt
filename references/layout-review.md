@@ -4,8 +4,9 @@ Apply this to the CV **and** the consultation report, using each one's latest
 user-selected reference. A folder may contain different visual systems: do not
 apply CV typography to the report or use an older report as the reference. Style
 matching preserves typography, geometry, hierarchy and spacing, not the original
-person's content or number of pages. Shorter truthful content may occupy less
-space. Never invent text to fill the reference's pages.
+person's content or number of pages. For a one-page CV, redistribute supported
+content and spacing to use the page naturally; do not accept a largely blank
+lower third. Never invent text to fill the reference's pages.
 
 Before authoring, write `layout-requirements.yaml` for the CV and
 `report-layout-requirements.yaml` for the report. Measure the reference, not the
@@ -32,6 +33,7 @@ expectations:
 page_size_pt: [595.28, 841.89]
 text_bounds_pt: [36, 20, 559.28, 817.24]
 docx_geometry_twips: {width: 11906, height: 16838, top: 437, bottom: 493, left: 720, right: 720}
+minimum_content_bottom_pt: 777  # When full-page use is required, derived from the usable bottom edge
 text_samples:
   - {role: name, text: "Example Candidate", size_pt: 16, fonts: [TimesNewRomanPSMT, TimesNewRomanPS-BoldMT]}
   - {role: heading, text: "教育背景", size_pt: 11, fonts: [SimSun], color: 0}
@@ -49,6 +51,11 @@ PDF integer RGB value. These samples do not prove whole-document conformity:
 visually compare the remaining content, rules and whitespace on **every page**.
 For text repeated in a header and title at different sizes, set `region_pt:
 [left, top, right, bottom]` on the sample to measure only the intended text area.
+`minimum_content_bottom_pt` is a lower bound on the final text's bottom edge for
+a one-page CV. Measure it together with the one-page count and visually reject
+artificially large gaps; merely placing one line near the bottom does not pass
+the visual check. Record the user's full-page request as an explicit spacing
+override when the supplied reference would otherwise leave a large blank area.
 
 This is part of apply review, separate from the three content judges. A judge
 reading Markdown cannot verify the Word/PDF layout. Do not call matching headings,

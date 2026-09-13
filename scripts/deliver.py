@@ -54,6 +54,20 @@ _RAW_ANGLE_URL = re.compile(r"<(https?://[^\s>]+)>")
 _PDF_WARNING = "\u26a0"
 
 
+def report_audience_findings(source: str) -> list[str]:
+    """Keep fixture provenance in the private audit, not the client report.
+
+    Match specific internal-test narration, not words such as '测试' or
+    '模拟面试': those are ordinary job requirements and preparation advice.
+    """
+    markers = ("固定虚构履历", "固定的虚构履历", "并非真人面试",
+               "本轮只练了", "synthetic candidate", "fixed fictional profile",
+               "not a real interview")
+    folded = source.casefold()
+    return [f"REPORT_INTERNAL_NARRATION: {marker!r}; move test-process notes to the private audit and write advice for the client"
+            for marker in markers if marker in folded]
+
+
 def _replace_unsupported_pdf_symbols(document: object) -> bool:
     """Apply the former Pandoc filter to text nodes without changing Markdown.
 
@@ -986,6 +1000,14 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
             make_pdf: bool = True, include_applications: bool | None = None
             ) -> tuple[list[pathlib.Path], list[str]]:
     written, notes = [], []
+    report_source = workspace / "report.md"
+    if report_source.is_file():
+        try:
+            problems = report_audience_findings(report_source.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError) as exc:
+            return [], [f"REPORT_UNREADABLE: {exc}"]
+        if problems:
+            return [], problems
     # An authored/reviewed report must survive delivery byte-for-byte. Never
     # silently replace a selected layout with the default Markdown renderer.
     reviewed_report = make_pdf and any((workspace / name).exists() for name in (
