@@ -1,5 +1,6 @@
 """Evidence-backed default recommendations in discover mode."""
 import copy
+import json
 
 import pytest
 import yaml
@@ -148,6 +149,34 @@ def test_indeed_job_command_is_accepted_as_detail_evidence():
     assert gate._detail_files([{**call, "site": "unrelated"}]) == {}
     assert gate._detail_files([{**call, "classification": "platform_limit",
                                "exit_code": 1}]) == {}
+
+
+@pytest.mark.parametrize("path_kind", ("inside", "outside", "symlink_escape"))
+def test_absolute_journal_capture_paths_stay_within_workspace(tmp_path, capsys, path_kind):
+    workspace = fx.build_workspace(tmp_path / "round")
+    log = workspace / "journal.jsonl"
+    records = [json.loads(line) for line in log.read_text().splitlines()]
+    for record in records:
+        if record.get("action") != "adapter_call" or record.get("command") != "detail":
+            continue
+        capture = workspace / record["stdout_file"]
+        if path_kind != "inside":
+            outside = tmp_path / capture.name
+            outside.write_bytes(capture.read_bytes())
+            if path_kind == "symlink_escape":
+                link = workspace / "raw" / "external-detail.json"
+                link.symlink_to(outside)
+                capture = link
+            else:
+                capture = outside
+        record["stdout_file"] = str(capture.absolute())
+    log.write_text("".join(json.dumps(record) + "\n" for record in records))
+    code, captured = run(workspace, capsys)
+    if path_kind == "inside":
+        assert code == 0, captured.out
+    else:
+        assert code == 1
+        assert "JOB_EVIDENCE_NOT_DETAIL" in captured.out
 
 
 def test_rendered_summary_order_and_review_cap_are_checked(tmp_path, capsys):

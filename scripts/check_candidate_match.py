@@ -119,7 +119,7 @@ def _pointer_value(document: object, pointer: object) -> tuple[object | None, st
     return value, None
 
 
-def _detail_files(calls: list[dict]) -> dict[str, list[dict]]:
+def _detail_files(calls: list[dict], workspace: pathlib.Path | None = None) -> dict[str, list[dict]]:
     """Successful detail captures, including browser snapshot files."""
     out: dict[str, list[dict]] = {}
     for raw_record in calls:
@@ -135,6 +135,15 @@ def _detail_files(calls: list[dict]) -> dict[str, list[dict]]:
             continue
         for field in ("stdout_file", "snapshot_file", "rows_file"):
             name = record.get(field)
+            # The classifier preserves the caller's path spelling. Accept an
+            # absolute capture only when it resolves inside this workspace.
+            if isinstance(name, str) and pathlib.Path(name).is_absolute():
+                if workspace is None:
+                    continue
+                try:
+                    name = pathlib.Path(name).resolve().relative_to(workspace.resolve()).as_posix()
+                except (OSError, ValueError, RuntimeError):
+                    continue
             if isinstance(name, str) and name.startswith("raw/"):
                 out.setdefault(name, []).append(record)
     return out
@@ -419,7 +428,7 @@ def check(workspace: pathlib.Path, match_document: dict, profile: dict, shortlis
                         f"detail matches exceed brief.yaml max_match_reviews={limit}")
 
     calls = read_retrieval_calls(workspace)
-    context = EvidenceContext(workspace, profile, _detail_files(calls))
+    context = EvidenceContext(workspace, profile, _detail_files(calls, workspace))
     for identifier, match in matches.items():
         row = rows_by_id.get(identifier)
         if row is None:
