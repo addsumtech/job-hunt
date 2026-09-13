@@ -43,6 +43,16 @@ def measure(ws, requirements, report=False):
                     fail("text_samples must measure " + ", ".join(sorted(roles)))
                 lines = [line for page in doc for block in page.get_text("dict")["blocks"]
                          for line in block.get("lines", [])]
+                minimum_bottom = requirements.get("minimum_content_bottom_pt")
+                if minimum_bottom is not None:
+                    if len(doc) != 1:
+                        fail("minimum_content_bottom_pt requires a one-page document")
+                    if type(minimum_bottom) not in (int, float) or not math.isfinite(minimum_bottom) or minimum_bottom <= 0:
+                        fail("minimum_content_bottom_pt must be a positive finite number")
+                    else:
+                        bottom = max((span["bbox"][3] for line in lines for span in line["spans"]), default=0)
+                        if bottom < minimum_bottom - .6:
+                            fail(f"content ends at {bottom:.2f} pt, required at least {minimum_bottom:.2f} pt; excessive lower-page whitespace")
                 for sample in samples:
                     if not isinstance(sample, dict):
                         fail("invalid text sample")

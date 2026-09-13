@@ -58,7 +58,13 @@ in the exported PDF; readable Chinese alone does not prove template fidelity.
 If the source font exists in the installed office suite, make that exact font
 available to the exporter. Do not shrink body text merely to force one page.
 
-Aim for a balanced, well-filled page using the supplied content. Where space
+Aim for a balanced, well-filled page using the supplied content. A largely blank
+lower third is not an acceptable first draft when existing content can be
+grouped more clearly or spacing redistributed naturally. When the user requests
+a full page, expand supported points and adjust paragraph spacing, then record
+`minimum_content_bottom_pt` in the format requirements and verify the final PDF
+against it. Keep the selected font sizes; avoid duplicate facts, filler wording,
+oversized gaps or empty paragraphs. Where space
 permits, separate section headings with at most one blank line (prefer paragraph
 spacing over empty paragraphs); never stack blank lines or invent content to
 fill the page. Verify pagination after adjusting spacing. For report PDFs, use

@@ -195,6 +195,33 @@ def reviewed_report(tmp_path):
     return ws
 
 
+def test_full_page_requirement_rejects_large_blank_bottom(tmp_path):
+    ws, review = reviewed_workspace(tmp_path)
+    path = ws / "layout-requirements.yaml"
+    requirements = yaml.safe_load(path.read_text())
+    requirements["minimum_content_bottom_pt"] = 777
+    path.write_text(yaml.safe_dump(requirements))
+    review["requirements_sha256"] = journal.sha256_file(path)
+    write_review(ws, review)
+    assert check_layout.main(["--workspace", str(ws)]) == 1
+    assert any("excessive lower-page whitespace" in s for s in journal.read_receipts(ws, "check_layout")[-1]["findings"])
+
+
+@pytest.mark.parametrize("text", ["本次围绕固定虚构履历进行了11个问答，并非真人面试。",
+                                 "This fixed fictional profile is a synthetic candidate, not a real interview."])
+def test_client_delivery_rejects_internal_test_narration(tmp_path, text):
+    ws = tmp_path / "application"
+    ws.mkdir()
+    (ws / "report.md").write_text(text)
+    written, problems = deliver.deliver(ws, tmp_path / "delivery", "test", make_pdf=False)
+    assert written == []
+    assert any("REPORT_INTERNAL_NARRATION" in s for s in problems)
+
+
+def test_audience_check_keeps_normal_testing_and_interview_advice():
+    assert deliver.report_audience_findings("软件测试工程师要求JUnit测试经验。模拟面试前，整理测试输入、预期结果和缺陷复测记录。") == []
+
+
 def test_delivery_preserves_reviewed_pdf_without_rerendering(tmp_path, monkeypatch):
     ws = reviewed_report(tmp_path)
     assert check_layout.main(["--workspace", str(ws), "--report"]) == 0

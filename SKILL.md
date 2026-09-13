@@ -49,6 +49,13 @@ Deliver the reviewed Word export as the CV PDF and preserve the reviewed report
 PDF byte-for-byte. A later edit or export invalidates the review. The eight visual
 checks and measured format checks are separate from content judges.
 
+For a one-page CV, use the page fully: do not accept a largely empty lower third.
+Expand existing, supported content into clear groups and adjust paragraph spacing
+while preserving the selected font sizes and a natural reading rhythm. If the
+user asks to fill the page, record a `minimum_content_bottom_pt` requirement and
+verify it alongside one-page pagination; a large blank bottom requires rework.
+Do not add invented experience, repeated claims or empty paragraphs to fill space.
+
 Delivery uses two child folders: `简历/` for `简历.docx`, `简历.pdf` and other requested application documents; `报告/` for `求职建议报告.pdf` and its editable text. Filenames never include the employer, role or internal workspace slug.
 
 In `discover`, `assess` and `interview`, an existing CV is source material, so
@@ -67,6 +74,14 @@ Before drafting, read `references/report-writing.md`. After drafting, perform it
 reader-focused revision and rendered-report review: concrete recommendations,
 plain explanations, usable next steps and preserved evidence. This applies to
 all four modes; a clean vocabulary lint alone does not establish readability.
+
+Client reports must not narrate the test harness or fixture provenance. Even
+when testing the skill with a fictional profile, keep statements such as
+“固定虚构履历进行了11个问答”“并非真人面试” and “本轮只练了” in the private
+test record. Write the client report directly as role choices, evidence gaps,
+resume advice and next actions. Do not describe generated fixture answers as a
+real user's interview performance. `deliver.py` rejects these specific internal
+test markers; still read the whole report for other process narration.
 
 After authoring `report.md`, run `lint_no_prediction.py --workspace <ws>`.
 Delivery also refuses prediction language in the report.
