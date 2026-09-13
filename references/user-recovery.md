@@ -9,6 +9,12 @@ This applies to both OpenCLI and browser retrieval, before search and mid-search
 Preserve the raw response and journal it before another read. State the site,
 what was actually observed, and what the user can do. Use the user's language.
 
+Notify the user immediately when human verification is detected, with the
+original page link when captured and a concrete request to complete it in the
+connected browser and reply “已完成，继续”. Merely announcing that the source
+was stopped and continuing elsewhere is not this hand-off. Keep the request
+pending until the user responds; never simulate their confirmation in a test.
+
 | Observed state | Hand-off |
 |---|---|
 | A confirmed missing login | Ask the user to sign in on that site in the connected browser. Offer `opencli <site> login` only if that adapter actually has it; the user runs it. |

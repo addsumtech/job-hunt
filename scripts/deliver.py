@@ -506,7 +506,7 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
     page_width, page_height = 595.28, 841.89  # A4 in PDF points
     left, right, top, bottom = 56, 539, 64, 770
     body_color = (0.09, 0.10, 0.13)
-    heading_color = (27 / 255, 69 / 255, 194 / 255)
+    heading_color = (23 / 255, 54 / 255, 93 / 255)
     link_color = heading_color
     font = pymupdf.Font(style["font"])
     document = pymupdf.open()

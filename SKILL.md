@@ -42,6 +42,11 @@ For domestic job discovery, read `references/supplementary-sources.md` before
 selecting sources and apply its WeChat coverage procedure. A CV-only edit or a
 single supplied posting does not automatically start a new search.
 
+When a source requests human verification, immediately tell the user which site
+and page needs attention, ask them to complete it in the connected browser, and
+wait for an explicit completion reply before resuming that source. Follow
+`references/user-recovery.md`; announcing a site stop alone is not a hand-off.
+
 ## Client consultation delivery
 
 **Formatting is an acceptance requirement for both the CV and the report.**
@@ -100,6 +105,14 @@ test record. Write the client report directly as role choices, evidence gaps,
 resume advice and next actions. Do not describe generated fixture answers as a
 real user's interview performance. `deliver.py` rejects these specific internal
 test markers; still read the whole report for other process narration.
+
+The job directory and its original posting links already serve as the report's
+source list. Do not append a separate “来源与信息范围” section or reproduce the
+internal source audit, ownership chain, annual-report citations or explanations
+of unstated restrictions. Keep that evidence private. Put only facts that change
+the client's decision or next action beside the relevant job, stated once.
+Group the directory's rows by company, with separate company, position, location
+and original-link columns. Keep distinct roles and posting links within each group.
 
 After authoring `report.md`, run `lint_no_prediction.py --workspace <ws>`.
 Delivery also refuses prediction language in the report.
