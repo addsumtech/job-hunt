@@ -33,6 +33,13 @@ question needs.
 
 ## Client consultation delivery
 
+For China recruitment, WeChat public accounts are a priority research source.
+Use the prescribed OpenCLI/Sogou WeChat route for targeted employer, graduation
+year and role queries, prioritizing official recruitment, state-owned enterprise
+and university career accounts. Read relevant original articles and follow their
+application links. One broad query or a few search snippets do not establish
+source coverage; record unread articles as leads, not verified opportunities.
+
 **Formatting is an acceptance requirement for both the CV and the report.**
 Read `references/layout-review.md` before rendering. Use the latest user-selected
 reference for each document separately: matching wording, headings or page count
@@ -48,6 +55,13 @@ state the actual unmet requirement; never label that output format-compliant.
 Deliver the reviewed Word export as the CV PDF and preserve the reviewed report
 PDF byte-for-byte. A later edit or export invalidates the review. The eight visual
 checks and measured format checks are separate from content judges.
+
+A report reference also controls how information is organized. Preserve its
+tables, numbered sections, comparable job fields, preparation lists and linked
+directory; matching only fonts and colors is insufficient. Record these blocks
+and their columns/labels under the layout requirements' `content_order`, then
+check that they appear in both Markdown and the rendered PDF. Do not flatten
+the reference's lists and tables into continuous prose during a rewrite.
 
 For a one-page CV, use the page fully: do not accept a largely empty lower third.
 Expand existing, supported content into clear groups and adjust paragraph spacing
