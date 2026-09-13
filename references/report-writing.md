@@ -246,3 +246,15 @@ review ideas. Do not import the originals' social-platform hooks, first-person
 persona quotas, engagement requests, fixed word/frequency budgets, automatic
 style scores or universal punctuation bans. Career reports retain the client's
 formatting choices, necessary questions, exact quotations and source links.
+## Report format acceptance
+
+Before rendering, follow `layout-review.md` and record the latest report
+reference's visual system in `report-layout-requirements.yaml`. Preserve its
+fonts/sizes, margins, heading color/weight, rules, tables, paragraph spacing,
+headers and footers; do not reuse the CV's styling or an unrelated default PDF
+theme. Its page count is not a target for padding or font shrinking. Render to
+workspace `report.pdf`, inspect every page beside the reference, and run
+`check_layout.py --workspace <workspace> --report`. Any unapproved difference
+requires correction, re-render and re-review before delivery. A readable PDF or
+good writing alone does not meet the format requirement. `deliver.py` preserves
+the reviewed PDF; do not replace it at handoff.

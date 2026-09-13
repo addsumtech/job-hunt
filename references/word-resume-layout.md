@@ -21,8 +21,11 @@ in `experience`; set an entry's `section: internships` to preserve a separate
 internship heading in a supplied template. Other candidates need not use the
 example's section order. Photos are absent
 from the examples, but an explicitly supplied photo still follows market policy.
-Markdown and LaTeX/PDF output are unchanged; export the DOCX with Word/LibreOffice
-when a PDF with this exact layout is needed, and check its actual page count.
+When delivering Word and PDF, export the final DOCX with Word/LibreOffice and
+deliver that exact PDF. Save the export under `raw/layout/word-export.pdf` and
+bind it to the final DOCX in the layout review. A separately generated LaTeX PDF
+uses a different template and cannot stand in for the Word export. Check actual
+fonts, sizes, margins and all pages using `references/layout-review.md`.
 
 Fictional, editable examples and their inputs:
 

@@ -64,7 +64,9 @@
     "8d5fcab47c34a9d6": "2026-09-12 adversarial audit: Already-supplied complete posting text proceeds directly to validation/extraction; fetching a URL is required only when source text still needs retrieval.",
     "84477c243cb10af4": "2026-09-12 adversarial audit: Replace hard 200/300-word and section-heading heuristics with actual role identity, duties, requirements, completeness and access checks. Concise Chinese postings can be complete; long login pages are not; an incidental sign-in link is not a wall.",
     "6eb337045ec4c663": "2026-09-12 adversarial audit: Replace hard 200/300-word and section-heading heuristics with actual role identity, duties, requirements, completeness and access checks. Concise Chinese postings can be complete; long login pages are not; an incidental sign-in link is not a wall.",
-    "8de41ffe04c71eb1": "2026-09-12 adversarial audit: Replace hard 200/300-word and section-heading heuristics with actual role identity, duties, requirements, completeness and access checks. Concise Chinese postings can be complete; long login pages are not; an incidental sign-in link is not a wall."
+    "8de41ffe04c71eb1": "2026-09-12 adversarial audit: Replace hard 200/300-word and section-heading heuristics with actual role identity, duties, requirements, completeness and access checks. Concise Chinese postings can be complete; long login pages are not; an incidental sign-in link is not a wall.",
+    "af2815d0937fa416": "2026-09-13 user-requested reference-layout acceptance: replace separate per-format rendering and unconditional TeX delivery with a final DOCX-derived PDF. Keep .tex only for explicitly requested standalone LaTeX PDF; see modes/apply.md and references/layout-review.md.",
+    "2e0de3eeb3710e5c": "2026-09-13 user-requested reference-layout acceptance: replace separate per-format rendering and unconditional TeX delivery with a final DOCX-derived PDF. Keep .tex only for explicitly requested standalone LaTeX PDF; see modes/apply.md and references/layout-review.md."
   },
   "deleted_files": {
     "assets/cv/template.tex": {

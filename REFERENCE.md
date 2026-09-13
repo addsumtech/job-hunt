@@ -130,6 +130,7 @@ job-hunt/
     ├── opencli_compat.py            # Check/apply/revert known local adapter fixes
     ├── check_pages.py               # page count + the text actually inside the delivered PDF
     ├── check_layout.py              # Current template/page review and artifact fingerprints
+    ├── layout_requirements.py       # reference-derived PDF/DOCX format measurements
     ├── check_personal_data.py       # Cluster-1 personal-data interlock
     ├── check_render_freshness.py    # the judges read the files still on disk
     ├── check_shortlist.py           # discover's gate: row provenance, caps, md↔yaml agreement

@@ -126,7 +126,7 @@ def _stale_inputs(ws: pathlib.Path, gate: str, receipt: dict) -> list:
                 reference = journal.as_mapping(review.get("reference"))
                 external_template = (pathlib.Path(reference.get("path", "")).resolve() == candidate.resolve()
                                      and reference.get("sha256") == recorded)
-            except (journal.InputProblem, TypeError, ValueError):
+            except (journal.YamlUnreadable, TypeError, ValueError):
                 pass
         if (candidate.is_absolute() or ".." in candidate.parts) and not external_template:
             findings.append(
@@ -389,7 +389,7 @@ def main(argv=None) -> int:
         else:
             findings.extend(_stale_inputs(ws, gate, last))
             if gate == "check_layout":
-                expected = {"layout-review.yaml"}
+                expected = {"layout-review.yaml", "layout-requirements.yaml"}
                 expected.update(name for name in ("cv.docx", "cv.pdf") if (ws / name).is_file())
                 missing = expected - set(last.get("input_hashes") or {})
                 if missing:

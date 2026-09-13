@@ -13,6 +13,7 @@ import pathlib
 import sys
 
 import journal
+import layout_requirements
 
 GATE = "check_layout"
 CHECKS = ("fonts", "font_sizes", "page_geometry", "headings_and_rules",
@@ -20,15 +21,16 @@ CHECKS = ("fonts", "font_sizes", "page_geometry", "headings_and_rules",
           "pagination_and_clipping")
 
 
-def inspect(ws: pathlib.Path):
+def inspect(ws: pathlib.Path, report=False):
     findings, hashes = [], {}
-    path = ws / "layout-review.yaml"
+    prefix = "report-" if report else ""
+    path = ws / f"{prefix}layout-review.yaml"
     if not path.is_file():
-        return ["NO_LAYOUT_REVIEW: render and inspect every CV page against the supplied template, then write layout-review.yaml"], hashes
+        return [f"NO_LAYOUT_REVIEW: render and inspect every page against the supplied template, then write {path.name}"], hashes
     hashes[path.name] = journal.sha256_file(path)
     try:
         review = journal.load_yaml(path, dict)
-    except journal.InputProblem as exc:
+    except journal.YamlUnreadable as exc:
         return [f"BAD_LAYOUT_REVIEW: {exc.reason}"], hashes
 
     def bind(raw, expected, label, local=True):
@@ -63,6 +65,19 @@ def inspect(ws: pathlib.Path):
     elif review["reference"] is not None:
         ref = journal.as_mapping(review["reference"])
         bind(ref.get("path"), ref.get("sha256"), "reference template", local=False)
+    requirement_path = bind(f"{prefix}layout-requirements.yaml", review.get("requirements_sha256"), "format requirements")
+    if requirement_path:
+        try:
+            requirements = journal.load_yaml(requirement_path, dict)
+            if "reference" not in requirements or requirements["reference"] != review.get("reference"):
+                findings.append("FORMAT_REFERENCE_CHANGED: requirements and review must name the same reference")
+            expectations = journal.as_mapping(requirements.get("expectations"))
+            for name in CHECKS:
+                if not isinstance(expectations.get(name), str) or not expectations[name].strip():
+                    findings.append(f"FORMAT_REQUIREMENT_MISSING: {name} needs concrete reference-derived expectations")
+            findings.extend(layout_requirements.measure(ws, requirements, report=report))
+        except journal.YamlUnreadable as exc:
+            findings.append(f"BAD_LAYOUT_REQUIREMENTS: {exc.reason}")
     overrides = review.get("user_overrides")
     if not isinstance(overrides, list) or any(not isinstance(v, str) or not v.strip() for v in overrides):
         findings.append("BAD_LAYOUT_REVIEW: user_overrides must list the user's changes to the reference, or be []")
@@ -75,7 +90,16 @@ def inspect(ws: pathlib.Path):
         findings.append("LAYOUT_DIFFERENCES: resolve all unapproved layout differences before delivery")
 
     artifacts = journal.as_mapping(review.get("artifacts"))
-    for name in ("cv.docx", "cv.pdf"):
+    if report:
+        bind("report.md", review.get("source_sha256"), "report source")
+    elif (ws / "cv.docx").is_file() and (ws / "cv.pdf").is_file():
+        export = journal.as_mapping(review.get("word_export"))
+        evidence = bind(export.get("path"), export.get("sha256"), "Word export PDF")
+        if export.get("docx_sha256") != journal.sha256_file(ws / "cv.docx"):
+            findings.append("STALE_WORD_EXPORT: export must bind the final DOCX")
+        if evidence and journal.sha256_file(evidence) != journal.sha256_file(ws / "cv.pdf"):
+            findings.append("PDF_NOT_WORD_EXPORT: deliver the reviewed Word export; do not replace it with a different PDF layout")
+    for name in (("report.pdf",) if report else ("cv.docx", "cv.pdf")):
         if not (ws / name).is_file():
             continue
         item = journal.as_mapping(artifacts.get(name))
@@ -116,21 +140,23 @@ def inspect(ws: pathlib.Path):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workspace", required=True, type=pathlib.Path)
+    parser.add_argument("--report", action="store_true", help="review report.pdf against report-layout-requirements.yaml")
     args = parser.parse_args(argv)
     ws = args.workspace.resolve()
     if not ws.is_dir():
         print(f"cannot run {GATE}: workspace {ws} does not exist", file=sys.stderr)
         return 2
-    if not any((ws / name).is_file() for name in ("cv.docx", "cv.pdf")):
-        findings, hashes = ["NO_LAYOUT_ARTIFACT: no rendered CV exists"], {}
-        journal.receipt(ws, GATE, hashes, "could_not_run", findings)
+    gate = "check_report_layout" if args.report else GATE
+    if not any((ws / name).is_file() for name in (("report.pdf",) if args.report else ("cv.docx", "cv.pdf"))):
+        findings, hashes = ["NO_LAYOUT_ARTIFACT: no rendered document exists"], {}
+        journal.receipt(ws, gate, hashes, "could_not_run", findings)
         print(findings[0], file=sys.stderr)
         return 2
     else:
-        findings, hashes = inspect(ws)
+        findings, hashes = inspect(ws, report=args.report)
     for finding in findings:
         print(finding)
-    journal.receipt(ws, GATE, hashes, "fail" if findings else "pass", findings)
+    journal.receipt(ws, gate, hashes, "fail" if findings else "pass", findings)
     return 1 if findings else 0
 
 
