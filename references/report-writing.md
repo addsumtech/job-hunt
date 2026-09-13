@@ -90,6 +90,21 @@ next decision, without turning internal query bookkeeping into report content.
 
 ## Make a detailed report easy to navigate
 
+Use the job directory and its original posting links as the report's source
+list. Do not add a separate source/methodology/scope chapter when that directory
+already supplies the links. Keep ownership verification chains, annual-report
+page references, collection windows and commentary about restrictions the
+posting never stated in the private research notes. If a finding affects the
+decision, give its practical conclusion once with the relevant job, such as an
+application deadline or a specific contract question; do not narrate how the
+evidence was checked. This does not remove the need to do and retain that work.
+
+Group the job directory by hiring company, keeping that company's roles
+consecutive. Use separate company, position, location and original-link columns;
+show the full company name once at the start of its group. Preserve each role's
+full title and distinct links, including the existing city/ID grouping rules.
+Grouping by company does not merge different roles or imply identical vacancies.
+
 When following a report example, copy its information structure as well as its
 typography. For the consultation-report pattern, preserve: a priority table;
 numbered key jobs with consistent “匹配依据 / 经验缺口 / 投递准备” fields; a table
@@ -108,7 +123,7 @@ this comparison in the layout review under `content_order` and
 Keep the approved typography; follow `references/word-resume-layout.md` for the
 English Times New Roman and Chinese SimSun report convention and its language,
 template and user-request exceptions. Verify the embedded fonts in the output.
-The default consultation palette is white paper with blue emphasis (`#1b45c2`),
+The default consultation palette is white paper with navy emphasis (`#17365d`),
 very pale blue table alternation (`#f5f7fd`) and light blue rules (`#c5d2e3`).
 A newer user palette or supplied template takes precedence. A request to borrow
 colors does not authorize copying a reference's fonts, spacing or entire layout.

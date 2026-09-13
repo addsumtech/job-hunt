@@ -118,6 +118,10 @@ important hiring conditions with primary sources.
 Use relevant findings in `report.md` and place source links beside the claims or
 in a short source list. WeChat findings should name the account and article, with
 the reading scope clear. Do not add a link merely to show platform coverage.
+For a job-search report with a job directory, that directory is the source list;
+do not add another “来源与信息范围” section. Keep supplemental verification detail
+in the research notes. Include a supplementary finding beside a job only when
+it changes the client's choice or preparation, with a direct link if needed.
 Tool diagnostics and the full source-selection audit stay in internal records.
 If a missing source limits a career conclusion, explain the fact that remains
 unverified. Deliver the verified report PDF with any requested CV in the same
