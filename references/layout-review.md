@@ -141,6 +141,15 @@ Before rendering, inventory the reference's tables, column names, list types,
 numbering, repeated job fields, contents and source directory. Put the expected
 block structure under `expectations.content_order`; compare the actual Markdown
 and PDF against it in `checks.content_order` and `checks.headings_and_rules`.
+Under `checks.content_order`, record the actual job identities/numbers in the
+priority list, key-job section, remaining-job section and directory. Reject
+unexplained selection/order mismatches or changed numbers; company grouping may
+change directory row order without changing job numbers. Under
+`checks.headings_and_rules`, record whether shared company names use visible
+row-spanning cells or repeat on every row. Inspect internal dividers and page
+breaks; blank company cells with full-width dividers fail this comparison.
+Plain Markdown tables must repeat the company name. These are actual content
+and visual comparisons, not claims that the hash/geometry gate detects them.
 Fonts and colors alone cannot satisfy this comparison. Preserve applicable
 blocks even when shortening the report, using only the current case's real rows.
 Write `report-layout-review.yaml` using the same structure: bind

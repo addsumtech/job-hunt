@@ -113,6 +113,11 @@ of unstated restrictions. Keep that evidence private. Put only facts that change
 the client's decision or next action beside the relevant job, stated once.
 Group the directory's rows by company, with separate company, position, location
 and original-link columns. Keep distinct roles and posting links within each group.
+Report review must reconcile priority order, key-job selection and stable job
+numbers across sections, and verify that each role remains visibly attached to
+its company. Use clear merged company cells in PDF or repeat names; repeat names
+in Markdown tables. Follow the concrete checks in `references/report-writing.md`
+and record them in the report layout review before delivery.
 
 After authoring `report.md`, run `lint_no_prediction.py --workspace <ws>`.
 Delivery also refuses prediction language in the report.

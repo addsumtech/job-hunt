@@ -100,10 +100,15 @@ application deadline or a specific contract question; do not narrate how the
 evidence was checked. This does not remove the need to do and retain that work.
 
 Group the job directory by hiring company, keeping that company's roles
-consecutive. Use separate company, position, location and original-link columns;
-show the full company name once at the start of its group. Preserve each role's
-full title and distinct links, including the existing city/ID grouping rules.
-Grouping by company does not merge different roles or imply identical vacancies.
+consecutive. Use separate company, position, location and original-link columns.
+In the PDF, show a shared company name in a visibly merged cell spanning its
+roles: internal row dividers must not cross that company cell. If the renderer
+cannot merge cells, repeat the full company name on each row. Repeat it in plain
+Markdown tables, which have no row spans; do not leave a blank company cell under
+a full-width row divider. When a group crosses a page, repeat the company name
+on the new page. Preserve each role's full title and distinct links, including
+the existing city/ID grouping rules. Company grouping does not merge different
+roles or imply identical vacancies.
 
 Place the table of contents after the report title and brief metadata, before
 the first numbered section. Do not place it after the first section's narrative
@@ -125,6 +130,15 @@ preparation list/table; and a numbered job directory with company, full title,
 location, reading status and usable source links. Use a linked contents list
 for a multi-section report. Scale the rows to the actual evidence; never copy
 the example's job count or fabricate entries to fill it.
+
+Use one stable displayed number per job throughout the priority table, detailed
+sections and directory. A company-grouped directory may change row order, but
+must not renumber those jobs. If a section promises the key or priority jobs,
+its selection and order must follow the stated priority list; put the remaining
+jobs in the remaining-jobs section. A deliberately different selection needs a
+clear section label and a reason visible to the reader. An internal limit on
+how many jobs were mapped is not a reader-facing reason to call lower-priority
+jobs the priorities. Check the job identities and numbers, not just the counts.
 
 Review structure explicitly after rewriting. Compare the reference and output's
 table columns, field labels, numbering, grouping and links in both Markdown and
@@ -260,6 +274,12 @@ intended reader, checking:
    adding information rather than restating another paragraph?
 5. Did the revision preserve facts, uncertainty, sources, consent boundaries and
    distinctions between completed work and suggestions?
+6. Do the priority list, key-job section, remaining-job section and directory
+   refer to the same jobs with stable numbers? Check every identity and order;
+   correct an unexplained mismatch even when all section counts are correct.
+7. Is each role visibly attached to its company? Inspect the rendered group
+   boundaries, including page breaks: merge company cells clearly or repeat
+   the name, and keep every Markdown row's company identifiable.
 
 For a long report, compare pages as well as individual sentences. Look for the
 same paragraph opening, rhetorical reversal, overused bolding or repeated
