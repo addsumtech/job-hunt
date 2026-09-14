@@ -89,6 +89,7 @@ job-hunt/
 │   ├── supplementary-sources.md     # optional career background research
 │   ├── discovery-sources.md         # Per-adapter catalogue for discover
 │   ├── candidate-matching.md         # Evidence-backed CV-to-detail matching for discovery
+│   ├── search-coverage.md            # Preregistered search scope and completion evidence
 │   ├── gap-analysis.md              # Gap analysis, tailoring methodology, claim provenance
 │   ├── interview-prep.md            # Interview-readiness brief
 │   ├── interview-shapes.md          # Round types, tags and bands for the mock interview
@@ -134,6 +135,7 @@ job-hunt/
     ├── check_personal_data.py       # Cluster-1 personal-data interlock
     ├── check_render_freshness.py    # the judges read the files still on disk
     ├── check_shortlist.py           # discover's gate: row provenance, caps, md↔yaml agreement
+    ├── check_search_coverage.py     # complete search coverage across all registered rounds
     ├── check_skill_lossless.py      # CI only — the migration moved content, did not delete it
     ├── check_word_limits.py         # supporting-statement per-criterion word limits
     ├── consistency.py               # contradictions between assessment fields — reports, never repairs
@@ -196,6 +198,7 @@ it is defined.
     candidate-profile.yaml      byte-for-byte profile snapshot for this search round
     candidate-match.yaml        per-row quoted JD ↔ snapshot evidence mapping
     shortlist.{yaml,md}         structured rows and the reader-facing shortlist
+    search-coverage.yaml       preregistered plan, source/direction checks and lead dispositions
     raw/                        verbatim adapter/detail captures
     journal.jsonl               retrieval records and discover-gate receipts
 

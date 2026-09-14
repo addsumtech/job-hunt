@@ -387,7 +387,9 @@ def _discover_detail_problem(workspace: pathlib.Path, shortlist: dict,
 def _discover_handoff_problem(workspace: pathlib.Path) -> str:
     """Check every retained posting, including all rounds in a collection report."""
     collection_path = workspace / "collection.yaml"
-    if journal.current_mode(workspace) != "discover" and not collection_path.exists():
+    was_discover = any(r.get("action") == "mode_entry" and r.get("mode") == "discover"
+                       for r in journal._records(workspace))
+    if not was_discover and not collection_path.exists() and not (workspace / "search-coverage.yaml").exists():
         return ""
     try:
         report_source = (workspace / "report.md").read_text(encoding="utf-8")
@@ -426,7 +428,8 @@ def _discover_handoff_problem(workspace: pathlib.Path) -> str:
                 return f"{source.name}: {problem}"
     except (OSError, UnicodeError, journal.YamlUnreadable) as exc:
         return f"discover delivery sources cannot be read: {exc}"
-    return ""
+    import check_search_coverage
+    return "; ".join(check_search_coverage.inspect(workspace))
 
 
 def _pandoc(md: pathlib.Path, pdf: pathlib.Path, font: str | dict | None) -> bool:
@@ -1000,6 +1003,9 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
             make_pdf: bool = True, include_applications: bool | None = None
             ) -> tuple[list[pathlib.Path], list[str]]:
     written, notes = [], []
+    problem = _discover_handoff_problem(workspace)
+    if problem:
+        return [], [problem]
     report_source = workspace / "report.md"
     if report_source.is_file():
         try:

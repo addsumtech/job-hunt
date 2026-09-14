@@ -1123,6 +1123,11 @@ does not require these; a discover run is not reportable without them:
       complete descriptions for all retained postings across collection rounds,
       or captured access failures with visible reasons. Cards are allowed in an
       explicitly requested preliminary report, not a completed consultation.
+- [ ] `scripts/check_search_coverage.py` (complete discover/collection delivery):
+      register planned sources and directions before retrieval; close every
+      planned pair and observed lead with evidence. Round limits, target counts
+      and `shortfall` do not mean completion. Delivery rechecks current evidence.
+      See `references/search-coverage.md` for the multi-round manifest and schema.
 
 Ran, leaving an `adapter_call` record rather than a gate receipt:
 - [ ] `scripts/check_opencli_result.py` — once per adapter invocation. It is a
