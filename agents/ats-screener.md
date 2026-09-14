@@ -149,7 +149,9 @@ TOP_FEEDBACK:
 
 ```
 VERDICT: REJECT
-COVERAGE: 67% (4 present, 2 partial of 9 must-haves)
+COVERAGE: 56% (4 present, 2 partial of 9 keyword-scoped must-haves)
+NON_KEYWORD_REQUIREMENTS:
+  - none
 MISSING_OR_WEAK:
   - Kubernetes — absent (not found anywhere; add to Skills section if genuinely held)
   - CI/CD — absent (not found; "deployment pipelines" appears in prose but is not the required term)
@@ -159,19 +161,21 @@ FORMAT_ISSUES:
 TOP_FEEDBACK:
   - Add 'Kubernetes' to the Skills / Technical Skills section if you have genuine hands-on experience with it
   - Add 'CI/CD' (or name the specific tool, e.g. 'GitHub Actions', 'Jenkins') to the Skills section if truthful
-  - Move 'distributed systems' from the summary into a dedicated Skills entry for better ATS weighting
+  - If truthful, include 'distributed systems' in Skills as well as the summary for a clear evidence location; no section-weight advantage is assumed
 ```
 
 **PASS example:**
 
 ```
 VERDICT: PASS
-COVERAGE: 89% (7 present, 2 partial of 9 must-haves)
+COVERAGE: 89% (7 present, 2 partial of 9 keyword-scoped must-haves)
+NON_KEYWORD_REQUIREMENTS:
+  - none
 MISSING_OR_WEAK:
   - real-time processing — partial [Prose] (appears in one experience bullet; consider adding to Skills section)
   - Spark — partial [Prose] (mentioned in project bullet; add to Skills section if primary tool)
 FORMAT_ISSUES:
   - none
 TOP_FEEDBACK:
-  - Move 'real-time processing' and 'Apache Spark' into the Skills section to improve ATS weighting, if truthful
+  - If truthful, include 'real-time processing' and 'Apache Spark' in Skills while retaining their project context; no section-weight advantage is assumed
 ```

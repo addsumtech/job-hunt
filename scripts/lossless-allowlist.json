@@ -78,7 +78,11 @@
     "d3fb819f9deacae7": "2026-09-14 campus screening fix: Recognize Internship and Project Experience and their localized equivalents for graduate CVs while preserving readable Education and Skills headings.",
     "a0042cae884b0d53": "2026-09-14 campus screening fix: Label the denominator keyword-scoped must-haves and support n/a when none exist; excluded requirements remain separately reported.",
     "53bc631d6436d588": "2026-09-14 campus screening fix: Apply present/partial/absent classification to keyword-scoped requirements after routing; human and by-start requirements remain explicitly preserved outside coverage.",
-    "b567a90c3b0ed76f": "2026-09-14 campus screening fix: Label the example keyword-scoped and correct its arithmetic: (5 + 0.5 * 2) / 7 rounds to 86, not 83."
+    "b567a90c3b0ed76f": "2026-09-14 campus screening fix: Label the example keyword-scoped and correct its arithmetic: (5 + 0.5 * 2) / 7 rounds to 86, not 83.",
+    "fe853c935c0107ab": "2026-09-14 campus screening fix: Synchronize worked examples with keyword-scoped coverage, explicit non-keyword output and neutral evidence-location notes; correct the rejected example arithmetic to 56 percent.",
+    "6451f3e6403cf62b": "2026-09-14 campus screening fix: Synchronize worked examples with keyword-scoped coverage, explicit non-keyword output and neutral evidence-location notes; correct the rejected example arithmetic to 56 percent.",
+    "56c38cc3c073e193": "2026-09-14 campus screening fix: Synchronize worked examples with keyword-scoped coverage, explicit non-keyword output and neutral evidence-location notes; correct the rejected example arithmetic to 56 percent.",
+    "d703699b21f1cd39": "2026-09-14 campus screening fix: Synchronize worked examples with keyword-scoped coverage, explicit non-keyword output and neutral evidence-location notes; correct the rejected example arithmetic to 56 percent."
   },
   "deleted_files": {
     "assets/cv/template.tex": {
