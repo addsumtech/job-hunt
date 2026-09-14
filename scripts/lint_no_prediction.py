@@ -529,6 +529,26 @@ def capture_corpus(workspace: pathlib.Path) -> str:
     return _normalise(" \x00 ".join(pieces))
 
 
+# Only an identifiable historical exam result can use this exemption. The
+# evidence corpus is hash-verified above; arbitrary profile/raw files do not
+# authorize a number. Exam identity and value both have to match.
+_EXAM_RESULT = re.compile(
+    r"(?P<exam>(?:大学英语)?[四六]级|CET[ -]?[46]|雅思|IELTS|托福|TOEFL|GRE|GMAT)"
+    r"\s*(?:考试)?\s*(?:(?:成绩|总分|得分|score)\s*)?(?:为|是|of|[:：])?\s*"
+    r"(?P<number>[0-9]+(?:\.[0-9]+)?)(?![0-9.])\s*(?:分|points?)?", re.I)
+
+
+def _exam_results(text: str):
+    for match in _EXAM_RESULT.finditer(text):
+        exam = re.sub(r"[ -]", "", match["exam"].lower()).removeprefix("大学英语")
+        exam = {"四级": "cet4", "六级": "cet6", "雅思": "ielts", "托福": "toefl"}.get(exam, exam)
+        # 7 and 7.0 denote the same result; avoid float rounding of long values.
+        number = match["number"]
+        if "." in number:
+            number = number.rstrip("0").rstrip(".")
+        yield (exam, number), match.span("number")
+
+
 def mask_copied_numbers(line: str, corpus: str) -> str:
     """Blank numeric tokens this round captured verbatim, preserving length.
 
@@ -555,6 +575,10 @@ def mask_copied_numbers(line: str, corpus: str) -> str:
             continue
         window = [t[2] for t in tokens[max(0, index - 1):index + 2]]
         if " " + _normalise(" ".join(window)) + " " in padded:
+            out[start:end] = " " * (end - start)
+    known_exams = {key for key, _ in _exam_results(corpus)}
+    for key, (start, end) in _exam_results(line):
+        if key in known_exams:
             out[start:end] = " " * (end - start)
     # Chinese prose has no whitespace tokens. Exempt only the numeric span
     # attached to an exact captured metric phrase; never erase prediction words.

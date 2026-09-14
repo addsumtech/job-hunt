@@ -603,3 +603,24 @@ def test_client_report_is_a_default_judgement_surface(tmp_path):
     report.write_text('You are likely to be hired.\n', encoding='utf-8')
     assert report in lnp.target_files(tmp_path)
     assert lnp.main(['--workspace', str(tmp_path)]) == 1
+
+
+def test_verified_exam_results_are_not_hiring_scores():
+    corpus = lint._normalise('普通话流利；大学英语六级587分、雅思7.0，可阅读英文年报。')
+    assert lint.scan_text('六级587分、雅思7.0和英文课程展示是现有依据。', 'report.md', corpus) == []
+    assert lint.scan_text('CET-6 score: 587；IELTS score: 7。', 'report.md', corpus) == []
+    for text in ['六级588分', '四级587分', '匹配度587分', '对该岗位评分587分']:
+        assert lint.scan_text(text, 'report.md', corpus), text
+    assert lint.scan_text('六级587分，匹配度85分，面试概率80%。', 'report.md', corpus)
+    assert lint.scan_text('六级587分', 'report.md')
+
+
+def test_exam_exemption_requires_hash_bound_candidate_source(tmp_path):
+    import hashlib
+    cv = _write(tmp_path, 'cv-source.txt', '大学英语六级587分；雅思7.0。')
+    _write(tmp_path, 'evidence-blocks.json', json.dumps({'sources': {'cv': {
+        'path': str(cv), 'sha256': hashlib.sha256(cv.read_bytes()).hexdigest()}}}))
+    _write(tmp_path, 'report.md', '六级587分、雅思7.0是已有考试成绩。')
+    assert lint.main(['--workspace', str(tmp_path)]) == 0
+    cv.write_text('大学英语六级588分；雅思7.0。')
+    assert lint.main(['--workspace', str(tmp_path)]) == 1

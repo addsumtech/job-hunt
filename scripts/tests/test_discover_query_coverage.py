@@ -167,12 +167,13 @@ def test_discover_tells_the_reader_to_split_the_row_budget():
         "otherwise the reader raises the cap, which is the one thing forbidden")
 
 
-def test_discover_says_target_count_is_asked():
+def test_discover_preserves_explicit_counts_without_silently_capping_broad_searches():
     doc = _flat((REPO / "modes" / "discover.md").read_text(encoding="utf-8"))
-    assert "`target_count` is asked" in doc, (
-        "target_count is a user preference that sits outside the eight fields "
-        "carrying the asked-never-inferred rule; it needs the rule stated where "
-        "it is written")
+    assert "Use an explicit requested count" in doc
+    assert "state a practical working target and continue" in doc
+    assert "not silently limit the search to three or five" in doc
+    assert "not a stop condition by itself" in doc.replace("**", "")
+    assert "Preserve source caps and refusal locks" in doc
 
 
 def test_discover_says_to_run_the_most_specific_query_first():
