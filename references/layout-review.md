@@ -142,7 +142,10 @@ numbering, repeated job fields, contents and source directory. Put the expected
 block structure under `expectations.content_order`; compare the actual Markdown
 and PDF against it in `checks.content_order` and `checks.headings_and_rules`.
 Under `checks.content_order`, record the actual job identities/numbers in the
-priority list, key-job section, remaining-job section and directory. Reject
+priority list, key-job section, remaining-job section and directory. Also record
+what each preparation section helps the client do, which role/version it targets,
+and where any repeated case adds a different action. Read the sections in order;
+separate headings and correct page layout do not prove a coherent workflow. Reject
 unexplained selection/order mismatches or changed numbers; company grouping may
 change directory row order without changing job numbers. Under
 `checks.headings_and_rules`, record whether shared company names use visible

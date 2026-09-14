@@ -131,6 +131,17 @@ location, reading status and usable source links. Use a linked contents list
 for a multi-section report. Scale the rows to the actual evidence; never copy
 the example's job count or fabricate entries to fill it.
 
+Give adjacent sections different jobs in the reader's workflow. For example,
+application preparation answers what to confirm before applying, which CV/version
+to use or revise, and what to check before sending. Interview preparation answers
+which questions to practise, how to explain real decisions and outcomes, and what
+to ask the interviewer. Put the full case preparation in the interview section;
+refer to it briefly elsewhere only when that reference advances a distinct action.
+A sequence of similarly titled preparation lists is not a coherent workflow.
+Name the role a tailored CV or interview plan targets, especially when the report
+compares several roles; distinguish an existing deliverable from a suggested
+future version. These are section purposes, not mandatory headings or counts.
+
 Use one stable displayed number per job throughout the priority table, detailed
 sections and directory. A company-grouped directory may change row order, but
 must not renumber those jobs. If a section promises the key or priority jobs,
@@ -245,6 +256,17 @@ clinical registration with a vague synonym just to sound less technical.
 - Give actions a real subject. Replace “市场会奖励复合能力” with the particular
   requirement an identified employer published. Do not upgrade ordinary English
   such as “use” and “make” into “leverage” and “facilitate” for a professional tone.
+- Name the actual object: the CV, the experience the client described, a job
+  advert or a specific work record. Do not blur them into “现有材料” or narrate
+  an internal evidence assessment when the reader needs an action. For example,
+  “简历还没写出连接器延期的处理结果；面试前补清最后的到货安排” identifies both
+  the missing detail and the next step. Keep a real distinction between missing
+  experience and a detail merely absent from the CV; do not turn clearer prose
+  into a new factual claim.
+- Lead preparation advice with what to do or explain. Put a relevant honesty
+  boundary beside that action once; avoid making every section another list of
+  things the client must not say. This does not remove real gaps or authorize
+  invented achievements, numbers or first-person interview scripts.
 - Address the client directly. An anonymized public example may say “示例中的
   求职者”, but should not sound like an internal assessment of a person who is
   absent from the conversation. Do not invent anecdotes or casual slang to
@@ -280,6 +302,12 @@ intended reader, checking:
 7. Is each role visibly attached to its company? Inspect the rendered group
    boundaries, including page breaks: merge company cells clearly or repeat
    the name, and keep every Markdown row's company identifiable.
+8. Do adjacent sections answer different reader questions, with a clear next
+   action? Trace any repeated case across sections: each occurrence must add a
+   distinct purpose rather than repeat the same preparation or warning.
+9. Are the target role, CV version, existing work and suggested next steps clear?
+   Replace vague “material/evidence” references with the actual object, then check
+   that the rewrite preserved what is known, missing or still to be confirmed.
 
 For a long report, compare pages as well as individual sentences. Look for the
 same paragraph opening, rhetorical reversal, overused bolding or repeated
