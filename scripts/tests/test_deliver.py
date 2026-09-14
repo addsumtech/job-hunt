@@ -318,6 +318,10 @@ def test_discover_delivery_requires_a_checked_shortlist(tmp_path):
 
     (ws / "shortlist.md").write_text("# Shortlist\n", encoding="utf-8")
     deliver.journal.receipt(ws, "check_shortlist", {}, "pass")
+    # A checked empty round alone is not a completed search consultation.
+    assert run(ws, dest, "--no-pdf") == 2
+    (ws / "brief.yaml").write_text(
+        "report_scope: preliminary\npreliminary_request: Show this initial round now\n")
     assert run(ws, dest, "--no-pdf") == 0
 
 
@@ -527,6 +531,8 @@ def discovery_delivery(tmp_path, *, detail_only=False):
         "brief.yaml": deliver.journal.sha256_file(ws / "brief.yaml"),
         "journal.jsonl": deliver.journal.sha256_file(ws / "journal.jsonl"),
     }, "pass")
+    from test_search_coverage import seed_coverage
+    seed_coverage(ws)
     return ws, shortlist
 
 
@@ -574,6 +580,8 @@ def test_multi_round_delivery_checks_each_retained_id_and_its_details(tmp_path):
     (ws / "report.md").write_text((first / "report.md").read_text() + (second / "report.md").read_text())
     manifest = {"rounds": [{"workspace": str(first)}, {"workspace": str(second)}]}
     (ws / "collection.yaml").write_text(yaml.safe_dump(manifest))
+    from test_search_coverage import seed_coverage
+    seed_coverage(ws, [first, second])
     assert "full description not reviewed" in deliver._discover_handoff_problem(ws)
     # A preliminary source round does not downgrade a complete collection.
     brief = yaml.safe_load((second / "brief.yaml").read_text())
@@ -601,6 +609,7 @@ def test_access_failure_exception_requires_a_real_capture_and_visible_reason(tmp
     assert "not reviewed" in deliver._discover_handoff_problem(ws)
     (ws / name).write_text("request timeout")
     deliver.journal.append(ws, {"action": "adapter_call", "site": "51job", "command": "detail",
+        "ts": "2026-08-09T14:04:00Z",
         "classification": "transport", "exit_code": 1, "stdout_file": name,
         "command_line": f"opencli 51job detail {row['source_id']}"})
     assert "not reviewed" in deliver._discover_handoff_problem(ws)

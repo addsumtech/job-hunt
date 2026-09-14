@@ -593,6 +593,21 @@ is what stops the round from getting there.
 
 ## Step 4 — run the search, read the exit code first
 
+Before the first retrieval, follow [Search completion coverage](../references/search-coverage.md):
+write `search-coverage.yaml` with the planned sources and directions and run
+`python3 scripts/check_search_coverage.py --workspace . --record-plan`.
+For a multi-round consultation, register at the collection owner before any
+round reads; register every round path there before using it. Scope can grow,
+but cannot shrink after reading begins. Keep the owner and its journal across
+rounds. State this scope to the user before searching.
+
+Row/page budgets, elapsed time, target counts (including 18 or 20), and a
+`shortfall` explanation never establish search completion. Continue remaining
+sources and directions in linked rounds within the existing access rules.
+Every observed lead needs a retained, evidence-backed excluded, or genuinely
+blocked disposition, including rows omitted from a collection's selected ids.
+Record unstructured catalog leads in the browser capture's rows as well.
+
 One round per site, capped at `max_rows_per_round`, `-f json`, `--window background`.
 **No detail pages at this stage.** Capture stdout and stderr to separate files, then
 classify:
@@ -947,6 +962,15 @@ python3 scripts/check_shortlist.py      --workspace .
 All four must exit 0. **This mode may not claim success without a passing receipt for
 each in `journal.jsonl`** — a skipped script produces no output, and that looks
 exactly like a clean one.
+
+Those four gates validate a round. Before a **complete consultation delivery**,
+also run `python3 scripts/check_search_coverage.py --workspace .` at the report
+owner and require its passing receipt. `deliver.py` independently rechecks the
+current coverage file, all declared rounds, raw captures and unresolved leads
+before copying files. A prior pass or changing modes cannot bypass that check.
+A real source access failure requires captured evidence and a visible limitation
+in the report; it does not complete other sources. Only the user's explicit
+request permits `report_scope: preliminary` with `preliminary_request` recorded.
 
 | Finding | What it means | What to do |
 |---|---|---|

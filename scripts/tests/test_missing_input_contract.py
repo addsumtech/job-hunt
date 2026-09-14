@@ -64,6 +64,7 @@ GATES = [
     ("check_assessment.py", ["--today", TODAY], "fit-assessment.yaml"),
     ("check_candidate_match.py", [], "candidate-match.yaml"),
     ("check_shortlist.py", [], "shortlist.yaml"),
+    ("check_search_coverage.py", [], "search-coverage.yaml and brief.yaml"),
     ("check_no_write.py", ["--no-fetch"], "journal.jsonl"),
     ("check_mock.py", ["--round", "1", "--today", TODAY], "mock/transcript-1.md"),
     ("check_render_freshness.py", ["--round", "1"], "judge-round-1.json"),
