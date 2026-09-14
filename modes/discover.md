@@ -368,12 +368,27 @@ max_match_reviews: 5                   # 1-5 full JDs eligible for CV matching
 max_age_days: 30                       # older than this ⇒ verification: stale_possible
 ```
 
-**`target_count` is asked, not chosen for the user.** It is the one brief field
-that is purely their preference — how many rows they want to look at — and it sits
-outside `search-preferences.yaml`, whose eight fields carry the "asked, never
-inferred" rule. That rule applies here for the same reason: a number picked on
-their behalf silently sets how much of the market they get shown. Ask it with the
-brief, in the same pass as the trigger reason.
+**`target_count` is a collection target, not the size of the labour market.**
+Use an explicit requested count. Otherwise, for a broad search, state a practical
+working target and continue; do not silently limit the search to three or five
+examples. Ask only when the number or scope materially changes the desired
+result. Keep this consistent with “A complete job-search consultation” above.
+
+Before accepting a shortfall, inspect the source coverage: how many distinct
+leads were observed, how many obtained complete descriptions, and how many were
+actually excluded for candidate fit or eligibility. Unread details are an access
+or extraction backlog, not evidence that the market has no jobs. For a named
+industry, cover relevant employers and role synonyms (for investment banking,
+股权/债券/并购/保荐承销/财务顾问/ABS/REITs, including graduate and campus labels).
+Do not count unrelated trading, asset management or investment-research roles
+as investment banking merely to reach a number.
+
+A written `shortfall_reason` explains a remaining limitation; it is **not a stop
+condition by itself**. Resolve known catalog-to-detail gaps using supported
+navigation, continue already authorized bounded rounds/independent sources,
+and only then report any remaining shortfall. Preserve source caps and refusal
+locks. Distinguish “found N verified postings in the sources checked” from
+“only N postings exist”, and do not imply exhaustive market coverage.
 
 `target_count` and `max_rows_per_round` are different things: the first is the goal,
 the second is the politeness cap from `references/source-policy.md`. Falling short of

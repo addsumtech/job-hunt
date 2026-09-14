@@ -102,9 +102,36 @@ The helper creates and closes its own background tab, captures the rendered DOM,
 and records a main-document HTTP status when CDP reports it. It never selects an
 existing tab. Read/classify and import this file before the next read of the same
 site. Navigation failures return an error, not an empty success. The reader
-supports known HTTP(S) URLs; it does not submit forms or synthesize clicks. If a
-source requires unsupported interaction, retain that limitation and request a
-user-provided original URL or JD. Do not install another browser skill to fill it.
+supports known HTTP(S) URLs and explicit read-only navigation to an observed
+job title, detail control or pagination label. It never submits forms or clicks
+application/account controls. A rendered catalog without hrefs is not evidence
+that no job details exist. Inspect the observed label, then navigate within the
+same task-owned tab:
+
+```sh
+python3 scripts/run_tool.py --browser chrome browser \
+  --url '<catalog-url>' \
+  --click-text '<exact visible job title>' --wait-for-text '任职资格' \
+  --output '<ws>/raw/<site>-detail.json'
+```
+
+If the label is ambiguous or not the actual clickable control, first capture
+`--inspect-text '<observed label>'`. The snapshot includes that node's parent
+HTML; use an observed `--click-selector` plus the exact control's `--click-text`
+(e.g. a specific card's “详情”), never a guessed selector. Missing or duplicate
+matches fail instead of clicking an arbitrary element. A click is attempted
+once; the final snapshot retains its source URL/text/links under `navigation`,
+the original label and timestamp, and the resulting page. The final expected
+text must be the detail's actual heading; a timeout or unchanged catalog is not
+a complete JD. Import/classify before further same-site work. Reopening a known
+catalog solely to follow an already observed title is navigation, not a new
+search query; new rows discovered there still count against the source budget.
+
+Links which normally open a new window are directed into the capture's own tab;
+no unrelated browser tab is selected. Refusal checks apply before interaction
+and while waiting for the destination. If the site needs interaction beyond
+this supported navigation, retain the concrete limitation and continue other
+sources. Do not install another browser skill to fill it.
 
 Rendering waits use three increasing budgets: 15, 30 and 60 seconds in the same
 tab. For a job page whose shell loads first, add `--wait-for-text "About the job"`

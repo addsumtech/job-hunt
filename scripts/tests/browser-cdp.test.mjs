@@ -201,3 +201,79 @@ test('Chrome and Edge discovery covers macOS, Windows and Linux daily profiles',
     }
   } finally {await rm(home,{recursive:true,force:true});}
 });
+
+// Execute the actual page expression against observed DOM-like nodes, rather
+// than merely asserting that a click-shaped CDP command was emitted.
+function navigationDom(labels, {form=false, tag='DIV', href=null}={}) {
+  const clicks=[], events=[], assignments=[];
+  const nodes=labels.map(label=>({innerText:label,tagName:tag,disabled:false,
+    getClientRects:()=>[{}],getAttribute:key=>key==='href'?href:null,
+    contains:()=>false,closest(selector){return selector==='form'?(form?{}:null):this;},
+    click(){clicks.push(label);}}));
+  const context={URL,location:{href:'https://example.com/jobs',assign:url=>assignments.push(url)},
+    window:{},getComputedStyle:()=>({visibility:'visible'}),
+    document:{querySelectorAll:()=>nodes,addEventListener:type=>events.push(type)}};
+  return {context,clicks,events,assignments,nodes};
+}
+
+test('an exact observed job label navigates without selecting a pre-existing tab',async()=>{
+  const {clickExpression}=await import('../browser_cdp.mjs');
+  const f=navigationDom(['（2027届校招）投资银行股权业务线助理']);
+  const result=runInNewContext(clickExpression('（2027届校招）投资银行股权业务线助理'),f.context);
+  assert.equal(result.performed,true);
+  assert.equal(result.action,'navigate');
+  assert.deepEqual(f.clicks,['（2027届校招）投资银行股权业务线助理']);
+  assert.deepEqual(f.events,['submit']);
+  f.context.window.open('/jobs/123');
+  assert.deepEqual(f.assignments,['https://example.com/jobs/123']);
+  assert.throws(()=>f.context.window.open('javascript:alert(1)'),/Invalid navigation/);
+});
+
+test('ambiguous, missing, form and application controls never click',async()=>{
+  const {clickExpression}=await import('../browser_cdp.mjs');
+  for(const [labels,label,options] of [
+    [['详情','详情'],'详情',{}], [[], '详情',{}],
+    [['立即投递'],'立即投递',{}], [['Apply now'],'Apply now',{}],
+    [['下一页'],'下一页',{form:true}], [['详情'],'详情',{tag:'A',href:'javascript:submit()'}],
+  ]) {
+    const f=navigationDom(labels,options);
+    assert.ok(runInNewContext(clickExpression(label),f.context).error);
+    assert.deepEqual(f.clicks,[]);
+  }
+});
+
+test('navigation labels and selectors remain data, not page code',async()=>{
+  const {clickExpression}=await import('../browser_cdp.mjs');
+  const label='岗位 "); globalThis.injected=true; //', selector='#node "); globalThis.injected=true; //';
+  const f=navigationDom([label]);f.context.injected=false;
+  assert.equal(runInNewContext(clickExpression(label,selector),f.context).performed,true);
+  assert.equal(f.context.injected,false);
+  assert.deepEqual(f.clicks,[label]);
+});
+
+test('a document-level refusal prevents catalog navigation',async()=>{
+  const {Socket,commands}=fixture({status:403});
+  const result=await capture({endpoint:'ws://127.0.0.1:9222/devtools/browser/test',url:'https://example.com/',clickText:'岗位详情',settleMs:0,WebSocketImpl:Socket});
+  assert.equal(result.blocked,true);
+  assert.equal(commands.some(c=>c.params.expression?.includes('node.click()')),false);
+  assert.equal(commands.at(-1).method,'Target.closeTarget');
+});
+
+test('inert javascript:void(0) detail links invoke their observed click handler',async()=>{
+  const {clickExpression}=await import('../browser_cdp.mjs');
+  const f=navigationDom(['详情'],{tag:'A',href:'javascript:void(0)'});
+  assert.equal(runInNewContext(clickExpression('详情'),f.context).performed,true);
+  assert.deepEqual(f.clicks,['详情']);
+  assert.equal(f.nodes[0].target,'_self');
+});
+
+
+test('a complete SPA login wall stops immediately when detail text is missing',async()=>{
+  const {Socket,commands}=fixture({pageRefusal:true,pageTextReady:false});
+  const result=await capture({endpoint:'ws://127.0.0.1:9222/devtools/browser/test',url:'https://example.com/',waitForText:'任职资格',settleMs:0,waitStagesMs:[50,100,200],WebSocketImpl:Socket});
+  assert.equal(result.blocked,true);
+  assert.equal(result.load_timed_out,false);
+  assert.deepEqual(result.render_wait_budgets_ms,[50]);
+  assert.equal(commands.filter(c=>c.params.expression==='document.readyState').length,1);
+  assert.equal(commands.at(-1).method,'Target.closeTarget');
+});

@@ -514,7 +514,7 @@ The rirekisho asks for **personal data** a Western CV omits — date of birth, a
 **Parsing each verdict (apply exactly, to all three):**
 
 1. In each judge's response, find the last line beginning with `VERDICT:` followed by `PASS` or `REJECT` (case-insensitive). If absent or ambiguous (anything other than exactly `PASS`/`REJECT`), treat that judge as `REJECT` and re-dispatch it.
-2. ATS Screener: also read `COVERAGE`, `MISSING_OR_WEAK`, and `FORMAT_ISSUES`.
+2. ATS Screener: also read `COVERAGE`, `NON_KEYWORD_REQUIREMENTS`, `MISSING_OR_WEAK`, and `FORMAT_ISSUES`. Verify every original must-have is either keyword-scoped or explicitly retained for human/by-start review. A high keyword count does not clear an unresolved qualification, and an absent values slogan is not a reason to add ungrounded self-praise.
 3. Recruiter / HR Screener: also read `SCORES`, `SCREEN_NOTE`, `TOP_FEEDBACK`, and `SUPPLEMENTARY_QUESTIONS_FOR_CANDIDATE`. The recruiter's questions are often **logistics** (work authorization, relocation) — surface them to the user.
 4. Hiring Manager: also read `SCORES`, `LEVELING`, `STANDOUT_SIGNAL`, `TOP_FEEDBACK`, and `SUPPLEMENTARY_QUESTIONS_FOR_CANDIDATE` (a single `  - none` bullet means no questions). `LEVELING` and `STANDOUT_SIGNAL` are advisory — they do not change the verdict, but relay them to the user and act on them when tailoring (e.g. lead the summary with a buried standout signal; address an under-leveled read).
 

@@ -66,7 +66,19 @@
     "6eb337045ec4c663": "2026-09-12 adversarial audit: Replace hard 200/300-word and section-heading heuristics with actual role identity, duties, requirements, completeness and access checks. Concise Chinese postings can be complete; long login pages are not; an incidental sign-in link is not a wall.",
     "8de41ffe04c71eb1": "2026-09-12 adversarial audit: Replace hard 200/300-word and section-heading heuristics with actual role identity, duties, requirements, completeness and access checks. Concise Chinese postings can be complete; long login pages are not; an incidental sign-in link is not a wall.",
     "af2815d0937fa416": "2026-09-13 user-requested reference-layout acceptance: replace separate per-format rendering and unconditional TeX delivery with a final DOCX-derived PDF. Keep .tex only for explicitly requested standalone LaTeX PDF; see modes/apply.md and references/layout-review.md.",
-    "2e0de3eeb3710e5c": "2026-09-13 user-requested reference-layout acceptance: replace separate per-format rendering and unconditional TeX delivery with a final DOCX-derived PDF. Keep .tex only for explicitly requested standalone LaTeX PDF; see modes/apply.md and references/layout-review.md."
+    "2e0de3eeb3710e5c": "2026-09-13 user-requested reference-layout acceptance: replace separate per-format rendering and unconditional TeX delivery with a final DOCX-derived PDF. Keep .tex only for explicitly requested standalone LaTeX PDF; see modes/apply.md and references/layout-review.md.",
+    "64de85cc9af1c027": "2026-09-14 campus screening fix: Expand ATS output with NON_KEYWORD_REQUIREMENTS so motivation, subjective traits and explicitly by-start credentials remain visible outside keyword coverage.",
+    "29af0c6222ba91bb": "2026-09-14 campus screening fix: Read NON_KEYWORD_REQUIREMENTS together with keyword coverage and format findings; preserve all employer requirements.",
+    "cefaff598aa3fa23": "2026-09-14 campus screening fix: Correct the input count from two to three to match the existing posting, CV and CV-language list.",
+    "262eff02b95284d6": "2026-09-14 campus screening fix: Use only keyword-scoped must-haves in the denominator; keep every excluded requirement in NON_KEYWORD_REQUIREMENTS. Zero keyword requirements produce n/a.",
+    "921a305a35c6cc52": "2026-09-14 campus screening fix: Separate keyword evidence from subjective human review and explicitly by-start eligibility; do not drop original requirements or count preferred keywords as must-haves.",
+    "7fdaf8a648654baf": "2026-09-14 campus screening fix: Replace unsupported claims about ATS section weighting with neutral evidence-location notes.",
+    "b30d9979d8236a2d": "2026-09-14 campus screening fix: Remove the unsupported claim that most ATS parsers assign more weight to Skills; preserve the section-location observation.",
+    "b734e66be4a3ac44": "2026-09-14 campus screening fix: Avoid keyword stuffing based on invented ATS section weights; report evidence location without changing coverage.",
+    "d3fb819f9deacae7": "2026-09-14 campus screening fix: Recognize Internship and Project Experience and their localized equivalents for graduate CVs while preserving readable Education and Skills headings.",
+    "a0042cae884b0d53": "2026-09-14 campus screening fix: Label the denominator keyword-scoped must-haves and support n/a when none exist; excluded requirements remain separately reported.",
+    "53bc631d6436d588": "2026-09-14 campus screening fix: Apply present/partial/absent classification to keyword-scoped requirements after routing; human and by-start requirements remain explicitly preserved outside coverage.",
+    "b567a90c3b0ed76f": "2026-09-14 campus screening fix: Label the example keyword-scoped and correct its arithmetic: (5 + 0.5 * 2) / 7 rounds to 86, not 83."
   },
   "deleted_files": {
     "assets/cv/template.tex": {

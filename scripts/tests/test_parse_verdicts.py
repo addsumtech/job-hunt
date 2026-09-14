@@ -263,3 +263,12 @@ def test_a_genuinely_new_round_still_records_and_exits_zero(tmp_path):
     last = journal.read_receipts(ws, "parse_verdicts")[-1]
     assert last["verdict"] == "recorded"
     assert not any(f.startswith("SAME_JUDGEMENTS") for f in last["findings"])
+
+
+def test_non_keyword_requirements_are_kept_without_changing_the_verdict():
+    result = pv.parse_judge(ATS_PASS.replace('MISSING_OR_WEAK:',
+        'NON_KEYWORD_REQUIREMENTS:\n  - 诚信正直 — human_review (requires an example)\n  - 正式入职前通过考试 — by_start (unknown)\nMISSING_OR_WEAK:'))
+    assert result['verdict'] == 'PASS'
+    assert result['non_keyword_requirements'] == [
+        '诚信正直 — human_review (requires an example)',
+        '正式入职前通过考试 — by_start (unknown)']
