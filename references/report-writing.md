@@ -126,7 +126,7 @@ When following a report example, copy its information structure as well as its
 typography. For the consultation-report pattern, preserve: a priority table;
 numbered key jobs with consistent “匹配依据 / 经验缺口 / 投递准备” fields; a table
 of remaining jobs and tradeoffs; numbered preparation steps; an interview
-preparation list/table; and a numbered job directory with company, full title,
+preparation list/table; and a job directory with company, full title,
 location, reading status and usable source links. Use a linked contents list
 for a multi-section report. Scale the rows to the actual evidence; never copy
 the example's job count or fabricate entries to fill it.
@@ -142,9 +142,12 @@ Name the role a tailored CV or interview plan targets, especially when the repor
 compares several roles; distinguish an existing deliverable from a suggested
 future version. These are section purposes, not mandatory headings or counts.
 
-Use one stable displayed number per job throughout the priority table, detailed
-sections and directory. A company-grouped directory may change row order, but
-must not renumber those jobs. If a section promises the key or priority jobs,
+Keep job identities consistent across the priority table, detailed sections
+and directory. Prefer an unnumbered company-grouped directory: company, full
+job title and original link identify the role without an awkward reordered rank
+sequence. If the user requests displayed job numbers, retain each number across
+sections; do not renumber merely because company grouping changes row order.
+If a section promises the key or priority jobs,
 its selection and order must follow the stated priority list; put the remaining
 jobs in the remaining-jobs section. A deliberately different selection needs a
 clear section label and a reason visible to the reader. An internal limit on
@@ -284,6 +287,33 @@ rewrite job quotations or fail a table merely for repeating a useful label.
 
 ## Review the rendered report before delivery
 
+This is a separate full-report review step, not a few wording checks folded
+into drafting or a synonym for layout inspection. Complete it for every report:
+
+1. Read the current report from beginning to end without relying on the private
+   work notes to fill gaps. Include summaries, every table and the directory;
+   reading only changed passages or excerpts is not a full read.
+2. Assess **reasonableness**: recommendations follow the real job requirements,
+   client constraints and known experience; gaps and proposed actions agree.
+   Assess **logic**: the recommendation, selection and preparation form a clear
+   sequence, identities agree and adjacent sections have distinct purposes.
+   Assess **readability**: the client can understand the terms, references and
+   next steps without internal assessment language, needless repetition or an
+   explanation from the author. Use the detailed questions below.
+3. Correct the findings, then reread the entire revised report for regressions
+   and broken transitions. Repeat when a substantive issue remains. Do not
+   preserve a known contradiction merely because each section reads well alone.
+4. After rendering, read the final PDF from first page to last and perform the
+   visual/link review. Content or order changes after that invalidate the full
+   read. Record the reviewed revision (source/PDF fingerprint), concrete findings,
+   corrections and remaining issues in private work notes. Stop delivery if an
+   unresolved issue makes the advice unsupported, contradictory or unclear.
+
+A brief clean-review record should state the actual recommendation/action chain
+checked, not just “全文通读：PASS”. Never invent a full read, an independent
+reviewer or a numerical readability score. Script receipts check their own
+inputs; they do not establish these editorial judgments.
+
 First fix passages the user has identified. Then read the whole report as its
 intended reader, checking:
 
@@ -297,7 +327,8 @@ intended reader, checking:
 5. Did the revision preserve facts, uncertainty, sources, consent boundaries and
    distinctions between completed work and suggestions?
 6. Do the priority list, key-job section, remaining-job section and directory
-   refer to the same jobs with stable numbers? Check every identity and order;
+   refer to the same jobs, keeping any displayed numbers stable? Check identities
+   and order;
    correct an unexplained mismatch even when all section counts are correct.
 7. Is each role visibly attached to its company? Inspect the rendered group
    boundaries, including page breaks: merge company cells clearly or repeat
