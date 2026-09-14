@@ -137,17 +137,23 @@ same inspected preview. The gate checks hashes, page coverage and the completed
 comparison; the agent remains responsible for making the visual judgment.
 
 For reports, author `report.pdf` in the workspace with the selected visual system.
+Complete the separate full-report reader review in `report-writing.md`; this
+layout review does not replace it. Read the final PDF from first page to last
+as well as inspecting its visual layout, and reopen the full read after any
+content or order change. Keep its editorial findings in private work notes.
 Before rendering, inventory the reference's tables, column names, list types,
 numbering, repeated job fields, contents and source directory. Put the expected
 block structure under `expectations.content_order`; compare the actual Markdown
 and PDF against it in `checks.content_order` and `checks.headings_and_rules`.
 Under `checks.content_order`, record the actual job identities/numbers in the
-priority list, key-job section, remaining-job section and directory. Also record
+priority list, key-job section, remaining-job section and directory; an unnumbered
+directory is matched by company, full title and original link. Also record
 what each preparation section helps the client do, which role/version it targets,
 and where any repeated case adds a different action. Read the sections in order;
 separate headings and correct page layout do not prove a coherent workflow. Reject
 unexplained selection/order mismatches or changed numbers; company grouping may
-change directory row order without changing job numbers. Under
+change directory row order without changing any displayed job numbers. Prefer
+an unnumbered company-grouped directory unless the user requests numbers. Under
 `checks.headings_and_rules`, record whether shared company names use visible
 row-spanning cells or repeat on every row. Inspect internal dividers and page
 breaks; blank company cells with full-width dividers fail this comparison.

@@ -112,9 +112,12 @@ internal source audit, ownership chain, annual-report citations or explanations
 of unstated restrictions. Keep that evidence private. Put only facts that change
 the client's decision or next action beside the relevant job, stated once.
 Group the directory's rows by company, with separate company, position, location
-and original-link columns. Keep distinct roles and posting links within each group.
-Report review must reconcile priority order, key-job selection and stable job
-numbers across sections, and verify that each role remains visibly attached to
+and original-link columns. Prefer an unnumbered company-grouped directory; use
+company, full job title and original link to identify each role. Keep distinct
+roles and posting links within each group.
+Report review must reconcile priority order, key-job selection and job
+identities across sections; keep any displayed job numbers stable, and verify
+that each role remains visibly attached to
 its company. Use clear merged company cells in PDF or repeat names; repeat names
 in Markdown tables. Follow the concrete checks in `references/report-writing.md`
 and record them in the report layout review before delivery. Read adjacent
@@ -122,6 +125,18 @@ sections as one client workflow: distinguish application tasks from interview
 practice, state the target role/version, and remove duplicated preparation.
 Name the CV or specific experience directly instead of narrating an internal
 assessment of vague “materials”; give the next action while preserving real gaps.
+
+**Full-report reader review is a separate required step before delivery.**
+After drafting, stop editing individual sections and read the entire report in
+order as the client would, including every table, summary and directory. Assess
+reasonableness, logical flow and readability using `references/report-writing.md`.
+Fix the findings, then reread the whole revised report. After rendering, read the
+final PDF from first page to last alongside its visual checks; a later content or
+ordering change reopens this review. Record the reviewed revision, concrete
+findings/corrections and remaining issues privately. Do not deliver while a
+known issue makes a recommendation unsupported, the sequence contradictory or
+an action unclear. Spot checks, a clean lint and layout hashes cannot substitute
+for this full read or justify claiming it happened.
 
 After authoring `report.md`, run `lint_no_prediction.py --workspace <ws>`.
 Delivery also refuses prediction language in the report.
@@ -972,8 +987,10 @@ believing you vetted it.
 ## Self-check — run through this before reporting the package as done
 
 - [ ] Drafting or revising a client report? Read `references/report-writing.md`,
-      apply its readability revision, preserve every grouped posting's city and
-      link, and inspect the final pages, navigation and approved typography.
+      complete the separate full-report reader review: read every section/table,
+      assess reasonableness, logic and readability, fix and reread the entire
+      revision, then read the final PDF. Record concrete findings privately;
+      preserve every posting's city/link and inspect navigation and typography.
 - [ ] Domestic job discovery? Reconcile the WeChat source plan with captured
       queries, original articles and recruitment conditions; identify unread or
       inaccessible leads. A successful search command is not completed research.
