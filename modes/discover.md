@@ -44,7 +44,9 @@ Keep a collection manifest with the requested count, maximum rounds, completed
 round workspaces, deduplicated posting URLs/IDs, and shortfall reasons. Continue
 independent sources while a site awaits login or recovery. Refusal locks and
 per-consultation limits survive round changes; a new folder never resets them.
-Reaching the collection target ends lead gathering, not the consultation. Before
+Reaching the collection target does not end lead gathering: every registered
+source and direction still needs its result and every observed lead a
+disposition (`references/search-coverage.md`). Before
 final delivery, read the full description for every retained posting, including
 each city/ID under a grouped title. Continue within the existing source caps;
 never reset a stop lock or raise a cap to finish. If agreed rounds are exhausted,

@@ -53,6 +53,17 @@ Record `resume_from`, site, reason and the user confirmation in the new
 `recovery.md`; point back to the old raw evidence and stopped journal. Run
 `enter_mode.py --mode discover` for the new workspace as usual.
 
+Register the new round with search coverage before its first read, including
+the access check below (`references/search-coverage.md`). The coverage owner is
+the collection owner, or the original workspace for a single-round search. In
+the owner, list every round this consultation delivers (normally the original
+round and the new one) in `collection.yaml` and in `plan.rounds` of
+`search-coverage.yaml`, then run
+`python3 scripts/check_search_coverage.py --workspace <owner> --record-plan`.
+A round read before its registration can never pass complete delivery. Close
+the remaining source/direction checks at the owner with evidence from the new
+round (`evidence.workspace: ../<slug>-resume-1`).
+
 This is a new round in the same conversation, not permission to retry inside the
 stopped journal. Never delete/reforge receipts, relabel the site, raise caps or
 switch backend/profile/account/proxy to get around its stop. Use the same source

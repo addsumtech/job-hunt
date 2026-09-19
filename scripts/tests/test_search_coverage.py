@@ -412,3 +412,37 @@ def test_a_relevant_lead_left_out_must_stay_visible_in_the_report(tmp_path):
     assert "not_selected" in gate.inspect(ws)[0]
     (ws / "report.md").write_text("Other relevant roles: https://example.com/jobs/job-1001\n")
     assert gate.inspect(ws) == []
+
+
+# 2026-09-19 review: user-recovery.md resumes a stopped search in a new linked
+# round. These pin the order that references/user-recovery.md now documents.
+def resume_round(tmp_path, register_first):
+    owner, data = build(tmp_path)
+    capture(owner, [], classification="platform_limit")  # human verification stop
+    resume = tmp_path / "search-resume-1"
+    (resume / "raw").mkdir(parents=True)
+    (resume / "shortlist.yaml").write_text("rows: []\n")
+    rounds = [".", "../search-resume-1"]
+    (owner / "collection.yaml").write_text(yaml.safe_dump(
+        {"rounds": [{"workspace": r} for r in rounds]}))
+    if not register_first:
+        ref = capture(resume, [])
+    data["plan"]["rounds"] = rounds
+    save(owner, data)
+    gate.record_plan(owner)
+    if register_first:
+        ref = capture(resume, [])
+    else:  # the controlled chronology of a read made before registration
+        records = journal._records(resume)
+        records[-1]["ts"] = "2000-01-01T00:00:00Z"
+        (resume / "journal.jsonl").write_text("\n".join(json.dumps(r) for r in records) + "\n")
+    close(owner, data, {**ref, "workspace": "../search-resume-1"})
+    return owner
+
+
+def test_a_resume_round_registered_at_the_owner_before_reading_completes(tmp_path):
+    assert gate.inspect(resume_round(tmp_path, register_first=True)) == []
+
+
+def test_a_resume_round_read_before_registration_cannot_complete(tmp_path):
+    assert "read before" in gate.inspect(resume_round(tmp_path, register_first=False))[0]
