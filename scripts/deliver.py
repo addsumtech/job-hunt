@@ -1083,7 +1083,10 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
                 source = visible_markdown(src)
                 if src.name == "report.md" and reviewed_report:
                     shutil.copy2(workspace / "report.pdf", pdf)
-                    ok, why = _verify_pdf(pdf, source, has_cjk(source), src.read_text(encoding="utf-8"))
+                    # check_layout --report above already bound every visible
+                    # Markdown line and table cell to this PDF's text. The CJK
+                    # count would refuse a merged company cell, which that passes.
+                    ok, why = _verify_pdf(pdf, source, False, src.read_text(encoding="utf-8"))
                     if ok:
                         written.append(pdf)
                     else:

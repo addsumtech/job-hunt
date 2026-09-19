@@ -5,8 +5,54 @@ These checks supplement, never replace, page-by-page visual comparison.
 from __future__ import annotations
 
 import math
+import re
+import unicodedata
 import zipfile
 from xml.etree import ElementTree as ET
+
+_FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+_COMMENT = re.compile(r"<!--.*?-->", re.S)
+_LINK = re.compile(r"!?\[([^\]]*)\]\([^)]*\)")
+_AUTOLINK = re.compile(r"<(https?://[^\s>]+)>")
+_TAG = re.compile(r"</?[A-Za-z][^>]*>")
+_CJK = re.compile(r"[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]")
+
+
+def _ink_key(text):
+    """Letters and digits only: layout, hyphenation, ligatures and quotes vary."""
+    return "".join(ch for ch in unicodedata.normalize("NFKC", text).casefold() if ch.isalnum())
+
+
+def report_text_units(markdown):
+    """Visible report.md text as lines and table cells, with their ink keys."""
+    units, fence = [], None
+    for line in _COMMENT.sub("", markdown).splitlines():
+        opening = _FENCE.match(line)
+        if fence:
+            if opening and opening[1][0] == fence[0] and len(opening[1]) >= len(fence):
+                fence = None
+            continue
+        if opening:
+            fence = opening[1]
+            continue
+        line = _TAG.sub(" ", _LINK.sub(r"\1", _AUTOLINK.sub(r"\1", line)))
+        for cell in (line.strip().strip("|").split("|") if line.count("|") >= 2 else [line]):
+            key = _ink_key(cell)
+            if len(key) >= (2 if _CJK.search(key) else 4):
+                units.append((cell.strip(), key))
+    return units
+
+
+def missing_report_text(markdown, pdf_text):
+    """Current report.md units absent from the PDF's text, in reading order.
+
+    Binds a reviewed PDF to the Markdown it claims to render: an edited
+    recommendation that was never re-rendered is absent. A merged table cell,
+    a wrapped or hyphenated line and a generated contents page are not failures.
+    Text deleted from the Markdown but left in the PDF is not detected here.
+    """
+    ink = _ink_key(pdf_text)
+    return [text for text, key in report_text_units(markdown) if key not in ink]
 
 
 def measure(ws, requirements, report=False):

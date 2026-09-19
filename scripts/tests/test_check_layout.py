@@ -309,3 +309,55 @@ def test_printed_content_at_the_bottom_fills_the_page(tmp_path):
                                   "The role designs synthetic candidate routes for new APIs."])
 def test_audience_check_delivers_real_practice_and_posting_language(text):
     assert deliver.report_audience_findings(text) == []
+
+
+# 2026-09-19 review: the reviewed report.pdf was bound to report.md only by
+# hashes the agent writes. Re-hashing an edited report.md without re-rendering
+# delivered a PDF saying "Apply to Acme now" beside Markdown saying "Do not apply".
+def reviewed_report_with(tmp_path, markdown, lines):
+    ws = reviewed_report(tmp_path)
+    (ws / "report.md").write_text(markdown, encoding="utf-8")
+    doc = pymupdf.open()
+    page = doc.new_page()
+    page.insert_font(fontname="cjk", fontbuffer=pymupdf.Font("china-s").buffer)
+    page.insert_text((72, 72), "Test Candidate", fontsize=11, fontname="helv")
+    for y, text in lines:
+        page.insert_text((72, y), text, fontsize=11,
+                         fontname="cjk" if deliver.has_cjk(text) else "helv")
+    doc.save(ws / "new.pdf")
+    doc.close()
+    (ws / "new.pdf").replace(ws / "report.pdf")
+    review = yaml.safe_load((ws / "report-layout-review.yaml").read_text())
+    review["source_sha256"] = journal.sha256_file(ws / "report.md")
+    review["artifacts"]["report.pdf"]["sha256"] = journal.sha256_file(ws / "report.pdf")
+    (ws / "report-layout-review.yaml").write_text(yaml.safe_dump(review))
+    return ws
+
+
+def test_a_reviewed_report_pdf_must_carry_the_current_markdown(tmp_path):
+    ws = reviewed_report_with(tmp_path, "# Test Candidate\n\nDo not apply to Acme: German C1 is required.\n",
+                              [(100, "Apply to Acme now.")])
+    findings, _ = check_layout.inspect(ws, report=True)
+    assert any("REPORT_PDF_TEXT_MISMATCH" in f and "Do not apply" in f for f in findings)
+    written, problems = deliver.deliver(ws, tmp_path / "out", "test")
+    assert written == [] and any("REPORT_PDF_TEXT_MISMATCH" in p for p in problems)
+
+
+def test_a_rerendered_report_pdf_passes_the_text_binding(tmp_path):
+    ws = reviewed_report_with(tmp_path, "# Test Candidate\n\nDo not apply to Acme: German C1 is required.\n",
+                              [(100, "Do not apply to Acme: German C1 is"), (114, "required.")])
+    findings, _ = check_layout.inspect(ws, report=True)
+    assert not [f for f in findings if "REPORT_PDF_TEXT_MISMATCH" in f]
+
+
+def test_merged_company_cells_in_a_reviewed_report_are_delivered(tmp_path):
+    company, roles = "中信建投证券股份有限公司", ["投行分析师", "债券分析师", "并购分析师",
+                                          "保荐承销岗", "财务顾问岗", "资产证券化岗"]
+    markdown = "# Test Candidate\n\n| 公司 | 岗位 | 地点 |\n|---|---|---|\n" + "".join(
+        f"| {company} | {role} | 上海 |\n" for role in roles)
+    # The PDF names the company once in a merged cell, as report-writing.md prefers.
+    lines = [(100, "公司 岗位 地点"), (114, f"{company} {roles[0]} 上海")] + [
+        (128 + 14 * i, f"{role} 上海") for i, role in enumerate(roles[1:])]
+    ws = reviewed_report_with(tmp_path, markdown, lines)
+    written, problems = deliver.deliver(ws, tmp_path / "out", "test")
+    assert any(p.parent.name == "报告" and p.suffix == ".pdf" for p in written), problems
