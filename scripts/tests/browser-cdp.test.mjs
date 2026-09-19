@@ -283,9 +283,27 @@ test('a complete SPA login wall stops immediately when detail text is missing',a
 const ACTION_LABELS=['立即沟通','继续沟通','聊一聊','感兴趣','关注','关注公司','收藏职位','举报','分享',
   '立即申请','申请职位','一键投递','Follow','Connect','Message','I\'m interested','Easy Apply','Save job',
   'Solliciteer nu','Solliciteren','Inloggen','Aanmelden','Jetzt bewerben','Anmelden','Postuler','Se connecter',
-  'Sign up','Log on'];
+  'Sign up','Log on',
+  // adversarial pass: verb plus object/modifier, and state toggles
+  '申请该职位','在线申请','收藏该职位','应聘该职位','取消收藏','已收藏','立即报名','一键申请','免费注册',
+  'Save this job','Unsave','Follow company','Message recruiter','Report this job','Share this job',
+  'Vacature opslaan','Job speichern','Bewerben Sie sich','Apply on company site','Jetzt bewerben ›','立即沟通 >','感兴趣 ♡',
+  // independent reviewer's list (not tuned by the author of the matcher)
+  '投个简历','关注他','关注TA','联系HR','打招呼','I’m interested','Following','Merken','Reageer direct',
+  'Envoyer ma candidature','Je postule','エントリーする','気になる','즉시지원','입사지원','Create job alert',
+  'Chat with recruiter','立即 沟通','Ａｐｐｌｙ','登录/注册','登录后查看','提交申请','Log in to apply','Sign in with Google','Register now',
+  '申请加入','私信','发消息','立即咨询','Send message','Bericht sturen','Contacteer ons','Nachricht senden','Kontakt aufnehmen','Envoyer un message','Save for later','I am interested'];
 const JOB_TITLES=['Design Intern','Registered Nurse','注册会计师（审计）','Catalog Integration Engineer',
-  '专利申请代理人','Chat Support Agent','Report Writer','Connected Vehicle Engineer','（2027届校招）投资银行股权业务线助理'];
+  '专利申请代理人','Chat Support Agent','Report Writer','Connected Vehicle Engineer','（2027届校招）投资银行股权业务线助理',
+  'CDL-A Truck Driver – $5,000 Sign-On Bonus','Single Sign-On (SSO) Engineer','Recruiting Specialist Bewerbermanagement (m/w/d)',
+  'Medewerker Sollicitatiebeheer','一键部署平台研发','艺术品收藏顾问','注册会计师','Submittals Coordinator','Subscriber Growth Analyst',
+  'Contact Center Agent','Share Plan Administrator','Follow-up Coordinator','Merkenbeheerder',
+  'Purchase Manager','Senior Purchase Engineer','邮政投递员','订阅业务运营经理','统一登录平台开发工程师','Register Clerk',
+  'Registration Coordinator','Login Security Engineer','Save the Children – Program Officer','Message Queue Engineer',
+  '提交测试工程师','举报受理专员','Sign Language Interpreter','Logistics Planner','Blog Editor','Catalog Specialist',
+  'Werkstudent Bewerbungsmanagement','Sachbearbeiter Bewerbermanagement','Applied Scientist',
+  'Customer Contact Specialist','Message Broker Developer','发消息推送后端开发','私信风控策略','咨询顾问','Kontaktmanager Vertrieb',
+  'Report Analyst (Power BI)','Checkout Engineer (Payments)','Registered Dietitian','申请人服务专员'];
 
 test('application, contact and account controls never click in any served language',async()=>{
   const {clickExpression}=await import('../browser_cdp.mjs');

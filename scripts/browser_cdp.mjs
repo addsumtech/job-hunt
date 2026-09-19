@@ -24,13 +24,22 @@ export async function dailyEndpoint(browser, {platform = process.platform, home 
 export const REFUSAL = /(?:verify|verifying|confirm) (?:that )?you are (?:a )?human|checking your browser|access denied|too many requests|please (?:sign|log) in|请先登[录入]|访问受限|人机验证|真人验证|请按住滑块|请完成.{0,12}验证码/i;
 export const SNAPSHOT_EXPRESSION = `({url:location.href,title:document.title,retrieved_at:new Date().toISOString(),text:document.body?.innerText||'',links:[...new Set([...document.querySelectorAll('a[href]')].map(a=>a.href).filter(u=>/^https?:/.test(u)))],http_status:null})`;
 // Application, contact and account controls. A backstop for the agent's own
-// read-only rule, in the languages of the markets this skill serves. Words that
-// also occur inside job titles (注册会计师, Registered Nurse, Chat Support Agent)
-// are refused only as a whole control label; unambiguous actions anywhere.
-export const ACTION_ANYWHERE = /(?:立即沟通|继续沟通|去沟通|聊一聊|聊聊|感兴趣|投递|一键|登录|登入|订阅|举报|确认支付|提交|发送|删除|応募|ログイン|지원하기|로그인)|\b(?:apply|submit|sign[ -]?(?:in|up|on)|log[ -]?(?:in|on)|register|subscribe|unsubscribe|purchase|delete|i'?m interested|sollicit\w*|inloggen|aanmelden|registreren|bewerb\w*|anmelden|registrieren|postuler|postulez|candidater|se connecter|s'inscrire)\b/i;
-export const ACTION_LABEL = /^(?:立即|马上|一键|我要|去)?(?:申请|应聘|报名|注册|关注|收藏|保存|分享|沟通)(?:职位|岗位|公司|简历)?$|^(?:save|save job|send|send message|message|chat|chat now|contact|contact recruiter|follow|follow company|unfollow|connect|share|report|interested|opslaan|volgen|delen|speichern|folgen|teilen|enregistrer|suivre|partager)$/i;
+// read-only rule, in the languages of the markets this skill serves. A verb that
+// also occurs inside job titles (投递员, 注册会计师, Register Clerk, Login Security
+// Engineer) is refused only as a whole control label: optional modifier, verb,
+// optional object. Phrases that never name a job are refused anywhere.
+export const ACTION_ANYWHERE = /(?:立即沟通|继续沟通|去沟通|聊一聊|聊聊|感兴趣|打招呼|投个简历|确认支付|删除|応募|ログイン|エントリーする|気になる|지원하기|즉시지원|입사지원|로그인)|\b(?:apply|submit|sign[ -]?(?:in|up)|subscribe|unsubscribe|delete|i(?:'m| am) interested|job alerts?|sollicit(?:eer|eren)|reageer|inloggen|aanmelden|registreren|opslaan|bewaren|bewerben|bewerbung|anmelden|registrieren|speichern|postuler|postulez|je postule|envoyer (?:ma|votre) candidature|candidater|se connecter|s'inscrire|sauvegarder|enregistrer|bericht (?:sturen|versturen)|neem contact op|contacteer(?: ons)?|nachricht (?:senden|schreiben)|kontakt aufnehmen|envoyer un message)\b/i;
+export const ACTION_LABEL = /^(?:请|立即|马上|一键|我要|去|在线|点击|取消|已|快速|免费|确认)?(?:申请|应聘|报名|注册|关注|收藏|保存|分享|沟通|投递|订阅|举报|提交|发送|联系|登录|登入|私信|发消息|咨询)(?:该|此|这个)?(?:职位|岗位|公司|简历|企业|账号|工作|他|她|ta|hr|招聘者|招聘方|boss|消息|申请|资料|加入|一下|我们|客服|后查看|查看|\/注册|\/登录)?$|^(?:un)?(?:save|saved|follow|following|share|report|message|contact|chat|connect|email|send|interested|log ?in|login|log ?on|register|purchase|buy|checkout)(?: (?:this|the|to|with|a|an|for|now))?(?: (?:job|role|position|posting|vacancy|company|employer|recruiter|hiring manager|hiring team|page|now|me|us|account|free|apply|view|continue|google|linkedin|apple|email|message|messages|later))*$|^(?:(?:stelle|job|vacature|offre|bedrijf|unternehmen|entreprise) )?(?:merken|volgen|delen|folgen|teilen|suivre|partager)$/i;
+// Full-width letters, curly apostrophes and a space typed inside a CJK button
+// label must not dodge the lists above.
+export function normalizeActionLabel(label) {
+  return String(label || '').normalize('NFKC').replace(/[‘’ʼ`´]/g, "'")
+    .replace(/\s+/g, ' ').trim()
+    .replace(/([\p{sc=Han}\p{sc=Hiragana}\p{sc=Katakana}\p{sc=Hangul}]) (?=[\p{sc=Han}\p{sc=Hiragana}\p{sc=Katakana}\p{sc=Hangul}])/gu, '$1')
+    .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+}
 export function isActionControl(label) {
-  const text = String(label || '').replace(/\s+/g, ' ').trim().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+  const text = normalizeActionLabel(label);
   return ACTION_ANYWHERE.test(text) || ACTION_LABEL.test(text);
 }
 export function clickExpression(text, selector = '') {
@@ -39,7 +48,8 @@ export function clickExpression(text, selector = '') {
     const norm = value => (value || '').replace(/\\s+/g, ' ').trim();
     const visible = node => Boolean(node.getClientRects().length) && getComputedStyle(node).visibility !== 'hidden';
     const anywhere = new RegExp(${JSON.stringify(ACTION_ANYWHERE.source)}, 'i'), whole = new RegExp(${JSON.stringify(ACTION_LABEL.source)}, 'i');
-    const forbidden = {test: value => {const t = norm(value).replace(/^[^\\p{L}\\p{N}]+|[^\\p{L}\\p{N}]+$/gu, ''); return anywhere.test(t) || whole.test(t);}};
+    const normalizeActionLabel = ${normalizeActionLabel.toString()};
+    const forbidden = {test: value => {const t = normalizeActionLabel(value); return anywhere.test(t) || whole.test(t);}};
     if (forbidden.test(label)) return {error:'Only read-only job/detail/pagination navigation is allowed'};
     let nodes;
     try {nodes = [...document.querySelectorAll(selector || 'body *')].filter(n => visible(n) && norm(n.innerText) === norm(label));}
