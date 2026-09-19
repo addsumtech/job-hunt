@@ -4,6 +4,7 @@ These checks supplement, never replace, page-by-page visual comparison.
 """
 from __future__ import annotations
 
+import html
 import math
 import re
 import unicodedata
@@ -12,10 +13,22 @@ from xml.etree import ElementTree as ET
 
 _FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 _COMMENT = re.compile(r"<!--.*?-->", re.S)
-_LINK = re.compile(r"!?\[([^\]]*)\]\([^)]*\)")
+_IMAGE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
+_LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")
+_REF_LINK = re.compile(r"\[([^\]]+)\]\[[^\]]*\]")
+_REF_DEF = re.compile(r"^ {0,3}\[(?!\^)[^\]]+\]:\s*\S")
+_FOOTNOTE_DEF = re.compile(r"^ {0,3}\[\^[^\]]+\]:\s*")
+_FOOTNOTE_REF = re.compile(r"\[\^[^\]]+\]")
 _AUTOLINK = re.compile(r"<(https?://[^\s>]+)>")
 _TAG = re.compile(r"</?[A-Za-z][^>]*>")
-_CJK = re.compile(r"[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]")
+_HEADING = re.compile(r"^ {0,3}#{1,6}\s+")
+_LIST = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?")
+_QUOTE = re.compile(r"^\s*>\s?")
+_NUMBERING = re.compile(r"^\s*\d+(?:\.\d+)*[.)、]?\s+")
+_TABLE_SEP = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)*\|?\s*$")
+_GAP = r"\d{0,4}"     # a footnote number or superscript printed inside a line
+_PAGE_REACH = 300     # letters/digits of page furniture tolerated around a page break
+_SHORT = 3            # shorter cells ("是", "1", "No") are required but never move the cursor
 
 
 # Characters that occupy a line without printing: whitespace, format characters
@@ -34,36 +47,179 @@ def _ink_key(text):
     return "".join(ch for ch in unicodedata.normalize("NFKC", text).casefold() if ch.isalnum())
 
 
-def report_text_units(markdown):
-    """Visible report.md text as lines and table cells, with their ink keys."""
-    units, fence = [], None
-    for line in _COMMENT.sub("", markdown).splitlines():
+def _fragments(text):
+    """Ink keys of visible inline text, split where a footnote number prints."""
+    text = _LINK.sub(r"\1", _REF_LINK.sub(r"\1", _AUTOLINK.sub(r"\1", _IMAGE.sub(" ", text))))
+    text = html.unescape(_TAG.sub(" ", text))
+    return [k for k in (_ink_key(part) for part in _FOOTNOTE_REF.split(text)) if k]
+
+
+def _report_blocks(markdown):
+    """Visible report.md blocks in reading order: para, note, row or header."""
+    lines = _COMMENT.sub("", markdown).splitlines()
+    blocks, para, fence = [], None, None
+
+    def flush():
+        nonlocal para
+        if para is not None:
+            blocks.append(para)
+        para = None
+
+    for index, line in enumerate(lines):
         opening = _FENCE.match(line)
         if fence:
             if opening and opening[1][0] == fence[0] and len(opening[1]) >= len(fence):
                 fence = None
             continue
         if opening:
+            flush()
             fence = opening[1]
             continue
-        line = _TAG.sub(" ", _LINK.sub(r"\1", _AUTOLINK.sub(r"\1", line)))
-        for cell in (line.strip().strip("|").split("|") if line.count("|") >= 2 else [line]):
-            key = _ink_key(cell)
-            if len(key) >= (2 if _CJK.search(key) else 4):
-                units.append((cell.strip(), key))
-    return units
+        if not line.strip() or _REF_DEF.match(line) or ("|" in line and _TABLE_SEP.match(line)):
+            flush()
+            continue
+        if line.count("|") >= 2:
+            flush()
+            following = lines[index + 1] if index + 1 < len(lines) else ""
+            kind = "header" if "|" in following and _TABLE_SEP.match(following) else "row"
+            cells = line.strip().strip("|").split("|")
+            blocks.append({"kind": kind, "text": line.strip(), "cells": [_fragments(c) for c in cells]})
+            continue
+        note, heading, item = _FOOTNOTE_DEF.match(line), _HEADING.match(line), _LIST.match(line)
+        if note or heading or item:
+            flush()
+            text = (line[note.end():] if note else _NUMBERING.sub("", line[heading.end():])
+                    if heading else line[item.end():])
+            para = {"kind": "note" if note else "para", "text": text}
+            if heading:
+                flush()
+            continue
+        line = _QUOTE.sub("", line)
+        if para is None:
+            para = {"kind": "para", "text": line}
+        else:
+            para["text"] += " " + line
+    flush()
+    for block in blocks:
+        if block["kind"] in ("para", "note"):
+            block["fragments"] = _fragments(block["text"])
+    return [b for b in blocks if b.get("fragments") or any(b.get("cells", []))]
 
 
-def missing_report_text(markdown, pdf_text):
-    """Current report.md units absent from the PDF's text, in reading order.
+def report_text_problems(markdown, pages):
+    """Current report.md text the PDF does not carry, in order, as snippets.
 
-    Binds a reviewed PDF to the Markdown it claims to render: an edited
-    recommendation that was never re-rendered is absent. A merged table cell,
-    a wrapped or hyphenated line and a generated contents page are not failures.
-    Text deleted from the Markdown but left in the PDF is not detected here.
+    ``pages`` holds each PDF page's extracted text, one PDF line per newline.
+    Paragraphs, headings and list items must occupy whole PDF lines, allowing
+    only a list number, digits or another Markdown label beside them, so an
+    edit that removed words ("Do not apply" -> "Apply") is caught. Table body
+    rows must appear in order; a cell equal to the one above it may be a merged
+    cell. Any block may cross a page break with furniture (page numbers,
+    headers, a repeated table header) in between. Header rows are optional:
+    card layouts omit them. Known limit: text deleted from the Markdown is not
+    detected when the stale PDF still reads as whole blocks, e.g. a removed
+    paragraph, and a PDF that prints link targets inline does not bind.
     """
-    ink = _ink_key(pdf_text)
-    return [text for text, key in report_text_units(markdown) if key not in ink]
+    import bisect
+    stream, spans, page_start = [], [], []
+    offset = 0
+    for page in pages:
+        page_start.append(offset)
+        for line in page.splitlines():
+            key = _ink_key(line)
+            if key:
+                spans.append((offset, offset + len(key)))
+                stream.append(key)
+                offset += len(key)
+    page_start.append(offset)
+    stream = "".join(stream)
+    line_starts = [a for a, _ in spans]
+    blocks = _report_blocks(markdown)
+    labels = {"".join(b["fragments"]) for b in blocks if b.get("fragments")}
+    labels |= {"".join(c) for b in blocks for c in b.get("cells", []) if c}
+
+    def beside(text):
+        return not text or text.isdigit() or text in labels
+
+    def anchored(start, end):
+        at = bisect.bisect_right(line_starts, start) - 1
+        until = bisect.bisect_right(line_starts, end - 1) - 1
+        return (at >= 0 and until >= 0 and beside(stream[spans[at][0]:start])
+                and beside(stream[end:spans[until][1]]))
+
+    def across_breaks(start, key, breaks):
+        """End of ``key`` read from ``start``, hopping page furniture at breaks."""
+        same = 0
+        while same < len(key) and start + same < len(stream) and stream[start + same] == key[same]:
+            same += 1
+        if same == len(key):
+            return start + same
+        if not breaks:
+            return None
+        # The page may end with furniture that happens to continue the text.
+        for used in range(same, max(same - 8, 1), -1):
+            boundary = next((b for b in page_start[1:-1] if b >= start + used), None)
+            if boundary is None or boundary - (start + used) > _PAGE_REACH:
+                continue
+            rest = key[used:]
+            resume = stream.find(rest[:8], boundary, boundary + _PAGE_REACH + 1)
+            while resume >= 0:
+                end = across_breaks(resume, rest, breaks - 1)
+                if end is not None:
+                    return end
+                resume = stream.find(rest[:8], resume + 1, boundary + _PAGE_REACH + 1)
+        return None
+
+    def locate(fragments, cursor, whole):
+        pattern = re.compile(_GAP.join(re.escape(f) for f in fragments))
+        found, contiguous = pattern.search(stream, cursor), None
+        while found:
+            if not whole or anchored(found.start(), found.end()):
+                contiguous = found.start(), found.end()
+                break
+            found = pattern.search(stream, found.start() + 1)
+        key = "".join(fragments)
+        if len(key) < 4 or len(pages) < 2:
+            return contiguous
+        # A nearer copy split by a page break wins over a later contiguous copy
+        # (repeated wording, or the next paragraph saying the same thing).
+        limit = contiguous[0] if contiguous else len(stream)
+        lead = key[:3]  # the part before a page break may be only a few characters
+        start = stream.find(lead, cursor, limit)
+        while start >= 0:
+            end = across_breaks(start, key, 3)
+            if end is not None and (not whole or anchored(start, end)):
+                return start, end
+            start = stream.find(lead, start + 1, limit)
+        return contiguous
+
+    problems, cursor, above = [], 0, None
+    for block in blocks:
+        if block["kind"] == "header":
+            above = None
+            continue
+        if block["kind"] == "row":
+            starts = []
+            for column, fragments in enumerate(block["cells"]):
+                if not fragments or (above and column < len(above) and above[column] == fragments):
+                    continue
+                spot = locate(fragments, cursor, whole=False)
+                if spot is None:
+                    problems.append(" ".join(fragments))
+                elif len("".join(fragments)) >= _SHORT:
+                    starts.append(spot[0])
+            above = block["cells"]
+            if starts:
+                cursor = max(starts) + 1
+            continue
+        above = None
+        note = block["kind"] == "note"
+        spot = locate(block["fragments"], 0 if note else cursor, whole=True)
+        if spot is None:
+            problems.append(block["text"].strip())
+        elif not note:
+            cursor = spot[1]
+    return [p[:60] for p in problems]
 
 
 def measure(ws, requirements, report=False):

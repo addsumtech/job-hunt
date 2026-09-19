@@ -386,3 +386,67 @@ def test_fixture_narration_variants_are_refused(text):
 
 def test_fictional_test_data_advice_for_a_qa_role_is_delivered():
     assert deliver.report_audience_findings("面试前准备测试用的虚构数据集，并说明边界用例的设计。") == []
+
+
+# 2026-09-19 adversarial pass on the report text binding. Page texts mimic
+# PyMuPDF extraction: one string per page, one PDF line per "\n".
+def binding(markdown, *pages):
+    import layout_requirements
+    return layout_requirements.report_text_problems(markdown, list(pages))
+
+
+@pytest.mark.parametrize("markdown,pdf", [
+    ("Apply to Acme Imaging now.\n", "Do not apply to Acme Imaging now.\n"),
+    ("建议投递第一个岗位。\n", "不建议投递第一个岗位。\n"),
+    ("Apply to Acme now.\n", "Apply to Acme now, but only after German C1.\n"),
+])
+def test_text_removed_from_the_markdown_is_caught(markdown, pdf):
+    assert binding(markdown, pdf)
+
+
+TABLE = "| 优先级 | 岗位 | 薪资 |\n|---|---|---|\n| 1 | 投行分析师 | 30-50K |\n| 2 | 债券分析师 | 20-30K |\n| 3 | 并购分析师 | 25-40K |\n"
+TABLE_PDF = "优先级 岗位 薪资\n1 投行分析师 30-50K\n2 债券分析师 20-30K\n3 并购分析师 25-40K\n"
+
+
+def test_an_honest_table_binds():
+    assert binding(TABLE, TABLE_PDF) == []
+
+
+@pytest.mark.parametrize("edit", [
+    ("| 1 | 投行分析师 |", "| 1 | 债券分析师 |"),  # priorities swapped...
+    ("| 3 | 并购分析师 | 25-40K |", "| 3 | 并购分析师 | 30-50K |"),  # value copied from another row
+])
+def test_a_table_edit_using_values_from_other_rows_is_caught(edit):
+    changed = TABLE.replace(*edit)
+    if edit[1] == "| 1 | 债券分析师 |":
+        changed = changed.replace("| 2 | 债券分析师 |", "| 2 | 投行分析师 |")
+    assert binding(changed, TABLE_PDF)
+
+
+def test_a_paragraph_across_a_page_break_with_furniture_binds():
+    markdown = "## Summary\n\nThe Leiden role matches your reconstruction thesis and the team hires graduates each spring.\n"
+    page1 = "Career report\nSummary\nThe Leiden role matches your reconstruction\nPage 1 of 2\n"
+    page2 = "Career report\nthesis and the team hires graduates each spring.\nPage 2 of 2\n"
+    assert binding(markdown, page1, page2) == []
+
+
+def test_a_table_cell_across_a_page_break_with_a_repeated_header_binds():
+    markdown = "| 公司 | 岗位 | 地点 |\n|---|---|---|\n| 中信建投证券股份有限公司 | 投资银行部股权业务线分析师 | 上海 |\n"
+    page1 = "公司 岗位 地点\n中信建投证券股份有限公司 投资银行部股权\n第 1 页\n"
+    page2 = "公司 岗位 地点\n业务线分析师 上海\n第 2 页\n"
+    assert binding(markdown, page1, page2) == []
+
+
+def test_common_markdown_forms_bind():
+    markdown = ("1. First step\n1. Second step\n1. Third step\n\n"
+                "Read the [posting][p] before applying.\n\n[p]: https://example.com/jobs/12345\n\n"
+                "Salary &amp; benefits&nbsp;are listed.\n\n"
+                "The team uses PyTorch[^tools] daily.\n\n[^tools]: Per the posting.\n")
+    pdf = ("1. First step\n2. Second step\n3. Third step\nRead the posting before applying.\n"
+           "Salary & benefits are listed.\nThe team uses PyTorch1 daily.\n1 Per the posting.\n")
+    assert binding(markdown, pdf) == []
+
+
+def test_card_layouts_may_omit_table_header_labels():
+    markdown = "| 优先级 | 公司与地点 |\n|---|---|\n| 1 | 联影医疗·上海 |\n"
+    assert binding(markdown, "1\n联影医疗·上海\n") == []
