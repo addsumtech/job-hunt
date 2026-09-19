@@ -284,3 +284,131 @@ def test_detail_timeout_does_not_close_an_unrelated_lead(tmp_path):
     save(ws, data)
     (ws / "report.md").write_text(reason)
     assert "does not identify this blocked lead" in gate.inspect(ws)[0]
+
+
+# --- 2026-09-19 review: real adapter row shapes and capture path spellings ---
+
+def build_for(tmp_path, site):
+    ws = tmp_path / "search"
+    (ws / "raw").mkdir(parents=True)
+    (ws / "brief.yaml").write_text("target_count: 18\n")
+    (ws / "shortlist.yaml").write_text("rows: []\n")
+    (ws / "report.md").write_text("Search report\n")
+    data = {"plan": {"sources": [{"id": "a", "site": site, "label": site, "method": "search"}],
+                     "directions": [{"id": "ib", "label": "Investment banking", "query": "IB Analyst"}]},
+            "checks": [], "leads": []}
+    save(ws, data)
+    assert gate.main(["--workspace", str(ws), "--record-plan"]) == 0
+    return ws, data
+
+
+def rewrite_last_record(ws, **fields):
+    records = journal._records(ws)
+    records[-1].update(fields)
+    (ws / "journal.jsonl").write_text("\n".join(json.dumps(r) for r in records) + "\n")
+
+
+def test_an_absolute_capture_path_inside_the_workspace_counts(tmp_path):
+    # check_opencli_result stores the caller's spelling; discover.md never says
+    # it must be relative, and check_candidate_match already accepts this.
+    ws, data = build(tmp_path)
+    ref = capture(ws, [])
+    rewrite_last_record(ws, stdout_file=str(ws / ref["file"]))
+    close(ws, data, ref)
+    assert gate.inspect(ws) == []
+    data["checks"][0]["evidence"]["file"] = str(ws / ref["file"])
+    save(ws, data)
+    assert gate.inspect(ws) == []
+
+
+def test_an_absolute_capture_path_outside_the_workspace_is_refused(tmp_path):
+    ws, data = build(tmp_path)
+    ref = capture(ws, [])
+    elsewhere = tmp_path / "elsewhere" / "raw"
+    elsewhere.mkdir(parents=True)
+    (elsewhere / "copy.json").write_bytes((ws / ref["file"]).read_bytes())
+    rewrite_last_record(ws, stdout_file=str(elsewhere / "copy.json"))
+    close(ws, data, ref)
+    assert "missing raw retrieval evidence" in gate.inspect(ws)[0]
+
+
+BOSS_ROW = {"name": "MRI Research Scientist", "salary": "30-50K", "company": "Example",
+            "security_id": "SMzaHPdmtJoWE-M1zr66ObwG5zSONfydn5a",
+            "url": "https://www.zhipin.com/job_detail/77657ebca4c7a4c90nF73ty-GVVS.html"}
+
+
+def test_boss_rows_are_leads_keyed_like_the_shortlist(tmp_path):
+    ws, data = build_for(tmp_path, "boss")
+    ref = capture(ws, [BOSS_ROW], site="boss")
+    close(ws, data, {**ref, "quote": "MRI Research Scientist"})
+    assert "boss/77657ebca4c7a4c90nF73ty-GVVS" in " ".join(gate.inspect(ws))
+    (ws / "shortlist.yaml").write_text(yaml.safe_dump({"rows": [
+        {"source_site": "boss", "source_id": "77657ebca4c7a4c90nF73ty-GVVS",
+         "id": "boss-77657ebca4c7a4c90nF73ty-GVVS"}]}))
+    assert gate.inspect(ws) == []
+
+
+def test_indeed_rows_with_empty_titles_are_still_leads(tmp_path):
+    ws, data = build_for(tmp_path, "indeed")
+    row = {"title": "", "company": "Example", "location": "Austin, TX", "salary": "",
+           "id": "7f1d2c3b4a5e6f70", "url": "https://www.indeed.com/viewjob?jk=7f1d2c3b4a5e6f70"}
+    ref = capture(ws, [row], site="indeed")
+    ref["quote"] = "Austin, TX"
+    close(ws, data, ref)
+    assert "indeed/7f1d2c3b4a5e6f70" in " ".join(gate.inspect(ws))
+
+
+def test_a_linkedin_search_url_and_view_url_are_one_lead(tmp_path):
+    ws, data = build_for(tmp_path, "linkedin")
+    rows = [{"rank": "1", "title": "ML Engineer", "company": "Example",
+             "url": "https://www.linkedin.com/jobs/view/4453121690"},
+            {"title": "ML Engineer", "company": "Example",
+             "url": "https://www.linkedin.com/jobs/search/?currentJobId=4453121690&keywords=ml"}]
+    close(ws, data, capture(ws, rows, site="linkedin"))
+    assert "linkedin/4453121690" in gate.inspect(ws)[0]
+    (ws / "shortlist.yaml").write_text(yaml.safe_dump({"rows": [
+        {"source_site": "linkedin", "source_id": "4453121690", "id": "linkedin-4453121690"}]}))
+    assert gate.inspect(ws) == []
+
+
+def test_a_disposition_may_name_the_lead_by_its_url(tmp_path):
+    # Runs made while the gate keyed LinkedIn leads by full URL wrote that URL
+    # as source_id; the same posting must still resolve to the same lead.
+    ws, data = build_for(tmp_path, "linkedin")
+    rows = [{"title": "ML Engineer", "company": "Example", "location": "Delft",
+             "url": "https://www.linkedin.com/jobs/view/4453121690"}]
+    ref = capture(ws, rows, site="linkedin")
+    close(ws, data, ref)
+    data["leads"] = [{"site": "linkedin", "source_id": rows[0]["url"], "status": "excluded",
+                      "reason_code": "wrong_location", "reason": "Outside the commute radius",
+                      "evidence": {**ref, "quote": "Delft"}}]
+    save(ws, data)
+    assert gate.inspect(ws) == []
+
+
+def test_an_article_lead_can_be_excluded_as_not_a_posting(tmp_path):
+    ws, data = build_for(tmp_path, "weixin")
+    rows = [{"rank": "1", "page": "1", "title": "2026 投行行业展望",
+             "url": "https://mp.weixin.qq.com/s/AAA111bbb222", "summary": "行业分析",
+             "publish_time": "2026-09-01"}]
+    ref = capture(ws, rows, site="weixin")
+    close(ws, data, ref)
+    data["leads"] = [{"site": "weixin", "source_id": "AAA111bbb222", "status": "excluded",
+                      "reason_code": "not_a_posting", "reason": "Industry commentary, no opening",
+                      "evidence": {**ref, "quote": "行业分析"}}]
+    save(ws, data)
+    assert gate.inspect(ws) == []
+
+
+def test_a_relevant_lead_left_out_must_stay_visible_in_the_report(tmp_path):
+    ws, data = build(tmp_path)
+    rows = [{"id": "job-1001", "title": "IB Analyst", "url": "https://example.com/jobs/job-1001"}]
+    ref = capture(ws, rows)
+    close(ws, data, ref)
+    data["leads"] = [{"site": "employer", "source_id": "job-1001", "status": "excluded",
+                      "reason_code": "not_selected", "reason": "Lower priority than retained roles",
+                      "evidence": ref}]
+    save(ws, data)
+    assert "not_selected" in gate.inspect(ws)[0]
+    (ws / "report.md").write_text("Other relevant roles: https://example.com/jobs/job-1001\n")
+    assert gate.inspect(ws) == []

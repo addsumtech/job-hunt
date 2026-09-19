@@ -135,18 +135,27 @@ def _detail_files(calls: list[dict], workspace: pathlib.Path | None = None) -> d
             continue
         for field in ("stdout_file", "snapshot_file", "rows_file"):
             name = record.get(field)
-            # The classifier preserves the caller's path spelling. Accept an
-            # absolute capture only when it resolves inside this workspace.
-            if isinstance(name, str) and pathlib.Path(name).is_absolute():
-                if workspace is None:
-                    continue
-                try:
-                    name = pathlib.Path(name).resolve().relative_to(workspace.resolve()).as_posix()
-                except (OSError, ValueError, RuntimeError):
-                    continue
+            if isinstance(name, str) and pathlib.Path(name).is_absolute() and workspace is None:
+                continue
+            name = workspace_relative(workspace, name) if workspace is not None else name
             if isinstance(name, str) and name.startswith("raw/"):
                 out.setdefault(name, []).append(record)
     return out
+
+
+def workspace_relative(workspace: pathlib.Path, name: object) -> object:
+    """A journaled capture path in the workspace-relative spelling gates compare.
+
+    The classifier preserves the caller's path spelling. An absolute capture is
+    accepted only when it resolves inside this workspace; anything else returns
+    None. Relative names pass through unchanged for ``_safe_path`` to validate.
+    """
+    if isinstance(name, str) and pathlib.Path(name).is_absolute():
+        try:
+            return pathlib.Path(name).resolve().relative_to(workspace.resolve()).as_posix()
+        except (OSError, ValueError, RuntimeError):
+            return None
+    return name
 
 
 def _record_mentions_row(record: dict, row: dict, source_text: str) -> bool:

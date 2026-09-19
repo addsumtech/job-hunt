@@ -12,17 +12,26 @@ import argparse
 import datetime as dt
 import json
 import pathlib
+import re
 import shlex
 import sys
+from urllib.parse import parse_qs, urlsplit
 
 import journal
-from check_candidate_match import _quote_in_capture, _safe_path
+from check_candidate_match import _quote_in_capture, _safe_path, workspace_relative
+from check_opencli_result import IDENTITY_FIELD
 from record_browser_capture import read_retrieval_calls, validate_record, STOP_CLASSES
 
 FILE = "search-coverage.yaml"
 ACTION = "search_plan"
 EXCLUSIONS = {"wrong_year", "closed", "wrong_location", "wrong_role", "wrong_level",
-              "eligibility", "duplicate"}
+              "eligibility", "duplicate", "not_a_posting", "not_selected"}
+# Adapter rows name the posting in different fields: boss uses `name`, and
+# indeed returns rows whose `title` is present but empty (discovery-sources.md).
+TITLE_KEYS = ("title", "jobName", "job_name")
+ID_KEYS = ("source_id", "jobId", "job_id", "id", "jobkey")
+URL_ID_PARAMS = ("currentJobId", "jk", "jobId", "job_id")
+_PAGE_SUFFIX = re.compile(r"\.(?:s?html?|php|aspx?|jsp)$", re.I)
 
 
 def _nonempty(value):
@@ -106,19 +115,43 @@ def record_plan(workspace):
         "ts": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "plan": plan}))
 
 
-def _job_rows(value):
+def _url_ids(url):
+    """Posting ids a URL carries: known query parameters, then path segments."""
+    parts = urlsplit(str(url).strip())
+    if parts.scheme not in ("http", "https") or not parts.netloc:
+        return []
+    query = parse_qs(parts.query)
+    ids = [query[p][0].strip() for p in URL_ID_PARAMS if query.get(p) and query[p][0].strip()]
+    ids += [_PAGE_SUFFIX.sub("", s) for s in reversed(parts.path.split("/")) if _PAGE_SUFFIX.sub("", s)]
+    return ids
+
+
+def _lead_id(value):
+    """The identity a shortlist row records as source_id; a URL names its posting."""
+    text = str(value).strip()
+    return next(iter(_url_ids(text)), text)
+
+
+def _lead_ids(row):
+    """Every spelling of this row's identity that a shortlist source_id may use."""
+    ids = [str(row[k]).strip() for k in ID_KEYS if row.get(k) not in (None, "")]
+    ids += _url_ids(row.get("url") or "")
+    return [i for i in dict.fromkeys(ids) if i]
+
+
+def _job_rows(value, site=None):
     if isinstance(value, list):
         for item in value:
-            yield from _job_rows(item)
+            yield from _job_rows(item, site)
     elif isinstance(value, dict):
-        title = value.get("title") or value.get("jobName") or value.get("job_name")
-        identity = next((value[k] for k in ("source_id", "jobId", "job_id", "id", "url")
-                         if value.get(k)), None)
-        if title and identity:
-            yield str(identity), str(title), value
+        keys = tuple(dict.fromkeys((IDENTITY_FIELD.get(site, "title"),) + TITLE_KEYS))
+        ids = _lead_ids(value)
+        if ids and any(k in value for k in keys):
+            title = next((str(value[k]) for k in keys if value.get(k)), "")
+            yield ids[0], title, value
         else:
             for item in value.values():
-                yield from _job_rows(item)
+                yield from _job_rows(item, site)
 
 
 def inspect(workspace):
@@ -187,7 +220,7 @@ def _inspect(workspace):
             if call.get("action") == "browser_call" and validate_record(call, root):
                 raise ValueError(f"invalid browser coverage evidence: {site}")
             name = call.get("rows_file") or call.get("stdout_file")
-            path = _safe_path(root, name, raw=True)
+            path = _safe_path(root, workspace_relative(root, name), raw=True)
             if path is None:
                 raise ValueError(f"missing raw retrieval evidence: {site}")
             if call.get("classification") != "ok":
@@ -196,7 +229,7 @@ def _inspect(workspace):
                 value = json.loads(path.read_text(encoding="utf-8"))
             except ValueError as exc:
                 raise ValueError(f"successful retrieval needs structured rows: {name}") from exc
-            for identity, title, row in _job_rows(value):
+            for identity, title, row in _job_rows(value, site):
                 observed.setdefault((site, identity), []).append((root, title, row))
 
     def evidence(ref, site):
@@ -205,7 +238,7 @@ def _inspect(workspace):
         root = (workspace / ref.get("workspace", ".")).expanduser().resolve()
         if root not in calls:
             raise ValueError("coverage evidence is outside declared rounds")
-        name = ref.get("file")
+        name = workspace_relative(root, ref.get("file"))
         path = _safe_path(root, name, raw=True)
         if path is None or journal.sha256_file(path) != ref.get("sha256"):
             raise ValueError("coverage capture hash changed or path is invalid")
@@ -213,7 +246,8 @@ def _inspect(workspace):
         if not _nonempty(ref.get("quote")) or not _quote_in_capture(ref["quote"], text):
             raise ValueError("coverage quote is absent from capture")
         matches = [c for c in calls[root] if c.get("site") == site and name in
-                   [c.get(k) for k in ("stdout_file", "stderr_file", "snapshot_file", "rows_file")]]
+                   [workspace_relative(root, c.get(k))
+                    for k in ("stdout_file", "stderr_file", "snapshot_file", "rows_file")]]
         if not matches:
             raise ValueError("coverage capture lacks a same-source retrieval record")
         return matches[-1], text
@@ -261,10 +295,13 @@ def _inspect(workspace):
     dispositions = data.get("leads", [])
     if not isinstance(dispositions, list) or any(not isinstance(d, dict) for d in dispositions):
         raise ValueError("coverage leads must be a list of dispositions")
-    handled = set(retained) & set(observed)
+    # A delivered posting retains its lead under any spelling of its identity
+    # (explicit id, URL query id or URL path id), as check_shortlist accepts.
+    handled = {key for key, values in observed.items()
+               if any((key[0], i) in retained for _, _, row in values for i in _lead_ids(row))}
     seen = set()
     for item in dispositions:
-        key = (item.get("site"), str(item.get("source_id")))
+        key = (item.get("site"), _lead_id(item.get("source_id")))
         if key not in observed or key in seen:
             raise ValueError("unknown or duplicate lead disposition")
         seen.add(key)
@@ -292,6 +329,11 @@ def _inspect(workspace):
                     raise ValueError("exclusion quote must belong to this observed lead")
                 if key[1] not in text:
                     raise ValueError("exclusion capture must identify this lead")
+                if item["reason_code"] == "not_selected" and not any(
+                        str(row.get("url") or title) in report
+                        for _, title, row in observed[key] if row.get("url") or title):
+                    raise ValueError("not_selected lead must stay visible in report.md: "
+                                     f"list {key[0]}/{key[1]} with its posting link")
         else:
             raise ValueError("pending lead disposition")
         handled.add(key)
