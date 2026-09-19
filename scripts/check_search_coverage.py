@@ -34,6 +34,10 @@ ID_KEYS = ("source_id", "jobId", "job_id", "id", "jobkey")
 # over the id in the posting URL, which is what shortlists normally record.
 EXTRA_ID_KEYS = ("security_id", "securityId", "encryptJobId")
 _URL = re.compile(r"https?://[^\s)\]>\"'<]+")
+# Path words that name no posting; the full URL is then the identity.
+GENERIC_SEGMENTS = {"link", "apply", "job", "jobs", "detail", "details", "view", "viewjob",
+                    "index", "default", "home", "redirect", "position", "positions", "search",
+                    "vacancy", "vacancies", "vacature", "vacatures", "stelle", "stellen", "offre", "page"}
 URL_ID_PARAMS = ("currentJobId", "jk", "jobId", "job_id")
 _PAGE_SUFFIX = re.compile(r"\.(?:s?html?|php|aspx?|jsp)$", re.I)
 
@@ -126,11 +130,17 @@ def _url_ids(url):
         return []
     query = parse_qs(parts.query)
     ids = [query[p][0].strip() for p in URL_ID_PARAMS if query.get(p) and query[p][0].strip()]
-    # A path word ("link" on weixin.sogou.com, "view", "apply", a title slug)
-    # names no posting; only a segment carrying a digit is treated as an id.
-    ids += [seg for part in reversed(parts.path.split("/"))
-            if (seg := _PAGE_SUFFIX.sub("", part)) and any(ch.isdigit() for ch in seg)]
-    return ids
+    segments = [seg for part in parts.path.split("/") if (seg := _PAGE_SUFFIX.sub("", part))]
+    if segments and segments[-1].casefold() not in GENERIC_SEGMENTS:
+        # The last segment names the posting: a numeric id, or the title slug
+        # boards such as Workday, Philips and 实习僧 use. A generic word
+        # ("link" on weixin.sogou.com, "apply", "view") names nothing, and a
+        # dated or categorised parent ("/vacatures/2026/") is not an identity.
+        ids.append(segments[-1])
+        ids += [token for token in re.split(r"[-_]", segments[-1])
+                if any(ch.isdigit() for ch in token) and any(ch.isalpha() for ch in token)]
+    ids += [seg for seg in reversed(segments[:-1]) if any(ch.isdigit() for ch in seg)]
+    return [i for i in dict.fromkeys(ids) if i]
 
 
 def _lead_id(value):

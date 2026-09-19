@@ -512,3 +512,47 @@ def test_a_round_stopped_before_shortlisting_is_not_listed_on_resume(tmp_path):
     ref = capture(resume, [])
     close(owner, data, {**ref, "workspace": "../search-resume-1"})
     assert gate.inspect(owner) == []
+
+
+# 2026-09-19 second adversarial pass: a dated or categorised path must not
+# become the posting identity, and a slug id must match what a shortlist records.
+def test_dated_url_paths_do_not_merge_two_postings(tmp_path):
+    ws, data = build_for(tmp_path, "employer")
+    rows = [{"title": "AI Engineer", "url": "https://werk.example.nl/vacatures/2026/ai-engineer"},
+            {"title": "MRI Reconstruction Engineer",
+             "url": "https://werk.example.nl/vacatures/2026/mri-reconstruction-engineer"}]
+    ref = capture(ws, rows)
+    close(ws, data, {**ref, "quote": "AI Engineer"})
+    data["leads"] = [{"site": "employer", "source_id": "ai-engineer", "status": "excluded",
+                      "reason_code": "wrong_role", "reason": "Not reconstruction",
+                      "evidence": {**ref, "quote": "AI Engineer"}}]
+    save(ws, data)
+    assert "mri-reconstruction-engineer" in " ".join(gate.inspect(ws))
+
+
+@pytest.mark.parametrize("url,source_id", [
+    ("https://www.shixiseng.com/intern/inn_xkbzvqfrmlaw", "inn_xkbzvqfrmlaw"),
+    ("https://acme.wd3.myworkdayjobs.com/en-US/careers/job/Amsterdam/AI-Engineer_R12345", "R12345"),
+    ("https://boards.greenhouse.io/acme/jobs/4567890", "4567890"),
+])
+def test_a_slug_or_suffix_id_retains_its_shortlist_row(tmp_path, url, source_id):
+    ws, data = build_for(tmp_path, "employer")
+    ref = capture(ws, [{"title": "Engineer", "url": url}])
+    close(ws, data, {**ref, "quote": "Engineer"})
+    (ws / "shortlist.yaml").write_text(yaml.safe_dump({"rows": [
+        {"source_site": "employer", "source_id": source_id, "id": f"employer-{source_id}"}]}))
+    assert gate.inspect(ws) == []
+
+
+def test_not_selected_visibility_ignores_a_tracking_query(tmp_path):
+    ws, data = build_for(tmp_path, "employer")
+    row = {"title": "MRI Engineer", "location": "Best",
+           "url": "https://www.philips.com/careers/job/mri-engineer?src=linkedin"}
+    ref = capture(ws, [row])
+    close(ws, data, {**ref, "quote": "MRI Engineer"})
+    data["leads"] = [{"site": "employer", "source_id": "mri-engineer", "status": "excluded",
+                      "reason_code": "not_selected", "reason": "Lower priority",
+                      "evidence": {**ref, "quote": "Best"}}]
+    save(ws, data)
+    (ws / "report.md").write_text("Other roles: https://www.philips.com/careers/job/mri-engineer\n")
+    assert gate.inspect(ws) == []
