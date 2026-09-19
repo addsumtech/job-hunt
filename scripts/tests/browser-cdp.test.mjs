@@ -277,3 +277,31 @@ test('a complete SPA login wall stops immediately when detail text is missing',a
   assert.equal(commands.filter(c=>c.params.expression==='document.readyState').length,1);
   assert.equal(commands.at(-1).method,'Target.closeTarget');
 });
+
+// 2026-09-19 review: BOSS's 立即沟通 messages the recruiter (irreversible), and
+// the skill serves nl/de/fr markets whose apply/login words the list lacked.
+const ACTION_LABELS=['立即沟通','继续沟通','聊一聊','感兴趣','关注','关注公司','收藏职位','举报','分享',
+  '立即申请','申请职位','一键投递','Follow','Connect','Message','I\'m interested','Easy Apply','Save job',
+  'Solliciteer nu','Solliciteren','Inloggen','Aanmelden','Jetzt bewerben','Anmelden','Postuler','Se connecter',
+  'Sign up','Log on'];
+const JOB_TITLES=['Design Intern','Registered Nurse','注册会计师（审计）','Catalog Integration Engineer',
+  '专利申请代理人','Chat Support Agent','Report Writer','Connected Vehicle Engineer','（2027届校招）投资银行股权业务线助理'];
+
+test('application, contact and account controls never click in any served language',async()=>{
+  const {clickExpression}=await import('../browser_cdp.mjs');
+  for(const label of ACTION_LABELS){
+    const f=navigationDom([label]);
+    const result=runInNewContext(clickExpression(label),f.context);
+    assert.ok(result.error,`clicked ${label}`);
+    assert.deepEqual(f.clicks,[],label);
+  }
+});
+
+test('job titles that merely contain an action word still navigate',async()=>{
+  const {clickExpression}=await import('../browser_cdp.mjs');
+  for(const label of JOB_TITLES){
+    const f=navigationDom([label]);
+    assert.equal(runInNewContext(clickExpression(label),f.context).performed,true,label);
+    assert.deepEqual(f.clicks,[label]);
+  }
+});

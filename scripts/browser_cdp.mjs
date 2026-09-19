@@ -23,12 +23,23 @@ export async function dailyEndpoint(browser, {platform = process.platform, home 
 // Navigation-only helpers: data arguments are never interpolated as page code.
 export const REFUSAL = /(?:verify|verifying|confirm) (?:that )?you are (?:a )?human|checking your browser|access denied|too many requests|please (?:sign|log) in|请先登[录入]|访问受限|人机验证|真人验证|请按住滑块|请完成.{0,12}验证码/i;
 export const SNAPSHOT_EXPRESSION = `({url:location.href,title:document.title,retrieved_at:new Date().toISOString(),text:document.body?.innerText||'',links:[...new Set([...document.querySelectorAll('a[href]')].map(a=>a.href).filter(u=>/^https?:/.test(u)))],http_status:null})`;
+// Application, contact and account controls. A backstop for the agent's own
+// read-only rule, in the languages of the markets this skill serves. Words that
+// also occur inside job titles (注册会计师, Registered Nurse, Chat Support Agent)
+// are refused only as a whole control label; unambiguous actions anywhere.
+export const ACTION_ANYWHERE = /(?:立即沟通|继续沟通|去沟通|聊一聊|聊聊|感兴趣|投递|一键|登录|登入|订阅|举报|确认支付|提交|发送|删除|応募|ログイン|지원하기|로그인)|\b(?:apply|submit|sign[ -]?(?:in|up|on)|log[ -]?(?:in|on)|register|subscribe|unsubscribe|purchase|delete|i'?m interested|sollicit\w*|inloggen|aanmelden|registreren|bewerb\w*|anmelden|registrieren|postuler|postulez|candidater|se connecter|s'inscrire)\b/i;
+export const ACTION_LABEL = /^(?:立即|马上|一键|我要|去)?(?:申请|应聘|报名|注册|关注|收藏|保存|分享|沟通)(?:职位|岗位|公司|简历)?$|^(?:save|save job|send|send message|message|chat|chat now|contact|contact recruiter|follow|follow company|unfollow|connect|share|report|interested|opslaan|volgen|delen|speichern|folgen|teilen|enregistrer|suivre|partager)$/i;
+export function isActionControl(label) {
+  const text = String(label || '').replace(/\s+/g, ' ').trim().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+  return ACTION_ANYWHERE.test(text) || ACTION_LABEL.test(text);
+}
 export function clickExpression(text, selector = '') {
   return `(() => {
     const label = ${JSON.stringify(text)}, selector = ${JSON.stringify(selector)};
     const norm = value => (value || '').replace(/\\s+/g, ' ').trim();
     const visible = node => Boolean(node.getClientRects().length) && getComputedStyle(node).visibility !== 'hidden';
-    const forbidden = /申请|应聘|投递|提交|登录|注册|收藏|订阅|删除|保存|发送|确认支付|apply|submit|sign[ -]?in|log[ -]?in|register|save|delete|subscribe|send|purchase/i;
+    const anywhere = new RegExp(${JSON.stringify(ACTION_ANYWHERE.source)}, 'i'), whole = new RegExp(${JSON.stringify(ACTION_LABEL.source)}, 'i');
+    const forbidden = {test: value => {const t = norm(value).replace(/^[^\\p{L}\\p{N}]+|[^\\p{L}\\p{N}]+$/gu, ''); return anywhere.test(t) || whole.test(t);}};
     if (forbidden.test(label)) return {error:'Only read-only job/detail/pagination navigation is allowed'};
     let nodes;
     try {nodes = [...document.querySelectorAll(selector || 'body *')].filter(n => visible(n) && norm(n.innerText) === norm(label));}
