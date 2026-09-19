@@ -18,6 +18,17 @@ _TAG = re.compile(r"</?[A-Za-z][^>]*>")
 _CJK = re.compile(r"[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]")
 
 
+# Characters that occupy a line without printing: whitespace, format characters
+# (ZWSP, BOM) and the blank "filler" letters used to pad a line.
+_BLANK_LETTERS = {"\u2800", "\u3164", "\uffa0", "\u115f", "\u1160"}
+
+
+def is_ink(char):
+    """Whether a text character paints anything on the page."""
+    return not (char.isspace() or char in _BLANK_LETTERS
+                or unicodedata.category(char) in ("Cf", "Cc", "Zs", "Zl", "Zp"))
+
+
 def _ink_key(text):
     """Letters and digits only: layout, hyphenation, ligatures and quotes vary."""
     return "".join(ch for ch in unicodedata.normalize("NFKC", text).casefold() if ch.isalnum())
@@ -74,13 +85,14 @@ def measure(ws, requirements, report=False):
 
         A span's own box includes its spaces: exporters end wrapped lines with a
         trailing space past the last glyph, and NBSP-only paragraphs occupy a
-        line without printing anything. Neither is text on the page.
+        line without printing anything. Neither is text on the page. Known
+        limit: text painted in the background colour is not detected.
         """
         for page in doc:
             for block in page.get_text("rawdict")["blocks"]:
                 for line in block.get("lines", []):
                     for span in line["spans"]:
-                        ink = [c["bbox"] for c in span["chars"] if not c["c"].isspace()]
+                        ink = [c["bbox"] for c in span["chars"] if is_ink(c["c"])]
                         if ink:
                             yield ("".join(c["c"] for c in span["chars"]).strip(),
                                    (min(b[0] for b in ink), min(b[1] for b in ink),

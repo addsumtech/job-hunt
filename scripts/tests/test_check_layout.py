@@ -361,3 +361,28 @@ def test_merged_company_cells_in_a_reviewed_report_are_delivered(tmp_path):
     ws = reviewed_report_with(tmp_path, markdown, lines)
     written, problems = deliver.deliver(ws, tmp_path / "out", "test")
     assert any(p.parent.name == "报告" and p.suffix == ".pdf" for p in written), problems
+
+
+# MuPDF's built-in fonts draw a visible "\u00b7" for these, so the rule is tested
+# on characters; the effect was checked on real Chrome-rendered filler PDFs.
+@pytest.mark.parametrize("char", ["\u2800", "\u3164", "\u200b", "\ufeff", "\uffa0", "\u115f", "\u00a0", " "])
+def test_invisible_filler_characters_are_not_ink(char):
+    import layout_requirements
+    assert not layout_requirements.is_ink(char)
+
+
+@pytest.mark.parametrize("char", ["A", "\u4e2d", "\u00b7", "\u2022", "_", "-", "1"])
+def test_printed_characters_are_ink(char):
+    import layout_requirements
+    assert layout_requirements.is_ink(char)
+
+
+@pytest.mark.parametrize("text", ["本次使用固定虚构简历完成演练。", "这份测试用的虚构履历只用于演示。",
+                                  "本次围绕固定虚构\n履历进行了问答。", "This fixed fictional\nprofile was used.",
+                                  "A fixed fictional CV was used for this run."])
+def test_fixture_narration_variants_are_refused(text):
+    assert deliver.report_audience_findings(text)
+
+
+def test_fictional_test_data_advice_for_a_qa_role_is_delivered():
+    assert deliver.report_audience_findings("面试前准备测试用的虚构数据集，并说明边界用例的设计。") == []

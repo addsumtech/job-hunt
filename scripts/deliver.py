@@ -62,9 +62,12 @@ def report_audience_findings(source: str) -> list[str]:
     ('本轮只练了技术面', 'a mock is not a real interview') is normal advice to a
     real client, and 'synthetic candidate' is chemistry vocabulary.
     """
-    markers = ("固定虚构履历", "固定的虚构履历", "fixed fictional profile",
-               "synthetic candidate profile")
-    folded = source.casefold()
+    markers = ("固定虚构履历", "固定的虚构履历", "固定虚构简历", "固定的虚构简历",
+               "测试用的虚构履历", "测试用虚构履历", "测试用的虚构简历", "测试用虚构简历",
+               "fixed fictional", "synthetic candidate profile")
+    # A Markdown line break must not split a marker.
+    folded = re.sub(r"\s+", " ", source.casefold())
+    folded = re.sub(r"(?<=[^\x00-\x7f]) (?=[^\x00-\x7f])", "", folded)
     return [f"REPORT_INTERNAL_NARRATION: {marker!r}; move test-process notes to the private audit and write advice for the client"
             for marker in markers if marker in folded]
 
