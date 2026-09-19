@@ -446,3 +446,69 @@ def test_a_resume_round_registered_at_the_owner_before_reading_completes(tmp_pat
 
 def test_a_resume_round_read_before_registration_cannot_complete(tmp_path):
     assert "read before" in gate.inspect(resume_round(tmp_path, register_first=False))[0]
+
+
+# 2026-09-19 adversarial pass on the fixes above.
+SOGOU = "https://weixin.sogou.com/link?url=dn9a_{}&type=2&query=%E6%A0%A1%E6%8B%9B"
+
+
+def test_wechat_search_links_stay_distinct_leads(tmp_path):
+    # opencli weixin search returns weixin.sogou.com/link?url=... for every
+    # article; a path word such as "link" is not a posting id.
+    ws, data = build_for(tmp_path, "weixin")
+    rows = [{"title": t, "url": SOGOU.format(x), "summary": s}
+            for t, x, s in [("行业评论", "AAA111", "行业分析"), ("2027校招公告", "BBB222", "招聘"),
+                            ("校招补录", "CCC333", "补录")]]
+    ref = capture(ws, rows, site="weixin")
+    close(ws, data, ref)
+    data["leads"] = [{"site": "weixin", "source_id": rows[0]["url"], "status": "excluded",
+                      "reason_code": "not_a_posting", "reason": "Industry commentary",
+                      "evidence": {**ref, "quote": "行业分析"}}]
+    save(ws, data)
+    pending = " ".join(gate.inspect(ws))
+    assert "BBB222" in pending and "CCC333" in pending
+
+
+def test_not_selected_lead_is_visible_through_its_clean_posting_link(tmp_path):
+    ws, data = build_for(tmp_path, "51job")
+    row = {"jobId": "171782851", "title": "算法工程师", "location": "北京",
+           "url": "https://jobs.51job.com/beijing/171782851.html?s=sou_sou_soulb&t=0_0"}
+    ref = capture(ws, [row], site="51job")
+    close(ws, data, {**ref, "quote": "算法工程师"})
+    data["leads"] = [{"site": "51job", "source_id": "171782851", "status": "excluded",
+                      "reason_code": "not_selected", "reason": "Lower priority",
+                      "evidence": {**ref, "quote": "北京"}}]
+    save(ws, data)
+    (ws / "report.md").write_text("其他相关岗位：[算法工程师](https://jobs.51job.com/beijing/171782851.html)\n")
+    assert gate.inspect(ws) == []
+
+
+def test_boss_security_id_is_an_identity_spelling(tmp_path):
+    ws, data = build_for(tmp_path, "boss")
+    no_url = {**BOSS_ROW, "url": ""}
+    ref = capture(ws, [BOSS_ROW, {**no_url, "name": "Second Role", "security_id": "SECOND-security-99"}],
+                  site="boss")
+    close(ws, data, {**ref, "quote": "MRI Research Scientist"})
+    assert "boss/SECOND-security-99" in " ".join(gate.inspect(ws))
+    (ws / "shortlist.yaml").write_text(yaml.safe_dump({"rows": [
+        {"source_site": "boss", "source_id": BOSS_ROW["security_id"], "id": "boss-a"},
+        {"source_site": "boss", "source_id": "SECOND-security-99", "id": "boss-b"}]}))
+    assert gate.inspect(ws) == []
+
+
+def test_a_round_stopped_before_shortlisting_is_not_listed_on_resume(tmp_path):
+    # The stopped round has no shortlist; only the new round is delivered. The
+    # owner's own captures are still checked, so nothing it read can vanish.
+    owner, data = build(tmp_path)
+    (owner / "shortlist.yaml").unlink()
+    capture(owner, [], classification="platform_limit")
+    resume = tmp_path / "search-resume-1"
+    (resume / "raw").mkdir(parents=True)
+    (resume / "shortlist.yaml").write_text("rows: []\n")
+    (owner / "collection.yaml").write_text(yaml.safe_dump({"rounds": [{"workspace": "../search-resume-1"}]}))
+    data["plan"]["rounds"] = ["../search-resume-1"]
+    save(owner, data)
+    gate.record_plan(owner)
+    ref = capture(resume, [])
+    close(owner, data, {**ref, "workspace": "../search-resume-1"})
+    assert gate.inspect(owner) == []

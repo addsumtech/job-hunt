@@ -30,6 +30,10 @@ EXCLUSIONS = {"wrong_year", "closed", "wrong_location", "wrong_role", "wrong_lev
 # indeed returns rows whose `title` is present but empty (discovery-sources.md).
 TITLE_KEYS = ("title", "jobName", "job_name")
 ID_KEYS = ("source_id", "jobId", "job_id", "id", "jobkey")
+# Secondary spellings a shortlist may use (boss: security_id); never preferred
+# over the id in the posting URL, which is what shortlists normally record.
+EXTRA_ID_KEYS = ("security_id", "securityId", "encryptJobId")
+_URL = re.compile(r"https?://[^\s)\]>\"'<]+")
 URL_ID_PARAMS = ("currentJobId", "jk", "jobId", "job_id")
 _PAGE_SUFFIX = re.compile(r"\.(?:s?html?|php|aspx?|jsp)$", re.I)
 
@@ -122,20 +126,28 @@ def _url_ids(url):
         return []
     query = parse_qs(parts.query)
     ids = [query[p][0].strip() for p in URL_ID_PARAMS if query.get(p) and query[p][0].strip()]
-    ids += [_PAGE_SUFFIX.sub("", s) for s in reversed(parts.path.split("/")) if _PAGE_SUFFIX.sub("", s)]
+    # A path word ("link" on weixin.sogou.com, "view", "apply", a title slug)
+    # names no posting; only a segment carrying a digit is treated as an id.
+    ids += [seg for part in reversed(parts.path.split("/"))
+            if (seg := _PAGE_SUFFIX.sub("", part)) and any(ch.isdigit() for ch in seg)]
     return ids
 
 
 def _lead_id(value):
-    """The identity a shortlist row records as source_id; a URL names its posting."""
+    """The identity a shortlist row records as source_id; a URL names its posting,
+    or is itself the identity when it carries no id."""
     text = str(value).strip()
     return next(iter(_url_ids(text)), text)
 
 
 def _lead_ids(row):
-    """Every spelling of this row's identity that a shortlist source_id may use."""
+    """Every spelling of this row's identity; the first is its lead key."""
     ids = [str(row[k]).strip() for k in ID_KEYS if row.get(k) not in (None, "")]
-    ids += _url_ids(row.get("url") or "")
+    url = str(row.get("url") or "").strip()
+    ids += _url_ids(url)
+    if urlsplit(url).scheme in ("http", "https"):
+        ids.append(url)
+    ids += [str(row[k]).strip() for k in EXTRA_ID_KEYS if row.get(k) not in (None, "")]
     return [i for i in dict.fromkeys(ids) if i]
 
 
@@ -299,10 +311,19 @@ def _inspect(workspace):
     # (explicit id, URL query id or URL path id), as check_shortlist accepts.
     handled = {key for key, values in observed.items()
                if any((key[0], i) in retained for _, _, row in values for i in _lead_ids(row))}
+    spellings = {}
+    for key, values in observed.items():
+        for _, _, row in values:
+            for spelling in _lead_ids(row):
+                spellings.setdefault((key[0], spelling), key)
+    report_ids = set()
+    for url in _URL.findall(report):
+        report_ids.update([url, *_url_ids(url)])
     seen = set()
     for item in dispositions:
-        key = (item.get("site"), _lead_id(item.get("source_id")))
-        if key not in observed or key in seen:
+        named = str(item.get("source_id")).strip()
+        key = spellings.get((item.get("site"), named)) or spellings.get((item.get("site"), _lead_id(named)))
+        if key is None or key in seen:
             raise ValueError("unknown or duplicate lead disposition")
         seen.add(key)
         status = item.get("status")
@@ -329,9 +350,12 @@ def _inspect(workspace):
                     raise ValueError("exclusion quote must belong to this observed lead")
                 if key[1] not in text:
                     raise ValueError("exclusion capture must identify this lead")
+                # Visible means its posting link (any spelling of its id, so a
+                # tracking query does not matter) or, lacking a URL, its title.
                 if item["reason_code"] == "not_selected" and not any(
-                        str(row.get("url") or title) in report
-                        for _, title, row in observed[key] if row.get("url") or title):
+                        any(i in report_ids for i in _lead_ids(row) if len(i) >= 4)
+                        or (not row.get("url") and title and title in report)
+                        for _, title, row in observed[key]):
                     raise ValueError("not_selected lead must stay visible in report.md: "
                                      f"list {key[0]}/{key[1]} with its posting link")
         else:

@@ -56,9 +56,11 @@ Record `resume_from`, site, reason and the user confirmation in the new
 Register the new round with search coverage before its first read, including
 the access check below (`references/search-coverage.md`). The coverage owner is
 the collection owner, or the original workspace for a single-round search. In
-the owner, list every round this consultation delivers (normally the original
-round and the new one) in `collection.yaml` and in `plan.rounds` of
-`search-coverage.yaml`, then run
+the owner, list every round this consultation delivers in `collection.yaml` and
+in `plan.rounds` of `search-coverage.yaml`: the new round, plus the original
+round only if it already has its own shortlist that passed its gates. A round
+stopped before shortlisting is not listed; the owner's own captures are checked
+regardless. Registered rounds can never be removed, so decide first, then run
 `python3 scripts/check_search_coverage.py --workspace <owner> --record-plan`.
 A round read before its registration can never pass complete delivery. Close
 the remaining source/direction checks at the owner with evidence from the new
