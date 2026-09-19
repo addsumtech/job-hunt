@@ -100,11 +100,13 @@ all four modes; a clean vocabulary lint alone does not establish readability.
 
 Client reports must not narrate the test harness or fixture provenance. Even
 when testing the skill with a fictional profile, keep statements such as
-“固定虚构履历进行了11个问答”“并非真人面试” and “本轮只练了” in the private
-test record. Write the client report directly as role choices, evidence gaps,
+“固定虚构履历进行了11个问答” and which test stages ran in the private test
+record. Write the client report directly as role choices, evidence gaps,
 resume advice and next actions. Do not describe generated fixture answers as a
-real user's interview performance. `deliver.py` rejects these specific internal
-test markers; still read the whole report for other process narration.
+real user's interview performance. `deliver.py` rejects fixture-profile markers
+only; practice scope for a real client (“本轮只练了技术面”, “a mock is not a
+real interview”) is normal advice. Still read the whole report for other
+process narration.
 
 The job directory and its original posting links already serve as the report's
 source list. Do not append a separate “来源与信息范围” section or reproduce the

@@ -7,8 +7,10 @@ rewrite source quotations, schema keys, IDs, required labels or computed counts.
 
 Before delivery, remove internal test narration from the whole report, including
 the title, body and footer. A fictional-profile test still produces a sample
-client report: do not insert “固定虚构履历”“并非真人面试”“本轮只练了” or describe
+client report: do not insert fixture provenance such as “固定虚构履历” or describe
 which software test stages ran. Store that provenance in the private test record.
+Telling a real client what this practice round covered (“本轮只练了技术面”) or
+that a mock is not a real interview is ordinary advice, not test narration.
 Turn any useful result into concrete preparation advice without inventing actual
 user interview performance. The delivery marker check is a backstop; reading the
 whole report for its intended audience remains mandatory.

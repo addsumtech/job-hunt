@@ -298,3 +298,14 @@ def test_printed_content_at_the_bottom_fills_the_page(tmp_path):
     ws, review = reviewed_workspace(tmp_path)
     replace_pdf(ws, review, [((72, 765), "References available")], requirements={"minimum_content_bottom_pt": 760})
     assert not [f for f in layout_findings(ws) if "excessive lower-page whitespace" in f]
+
+
+# 2026-09-19 review: interview mode runs one round per dispatch, so a real
+# client's report naturally says what this round covered and that a mock is not
+# a real interview; a chemistry posting can ask for synthetic candidate routes.
+@pytest.mark.parametrize("text", ["本轮只练了技术面，行为面下次再练。",
+                                  "这只是练习，并非真人面试，请把反馈当作准备建议。",
+                                  "This mock is not a real interview; treat the scores as practice notes.",
+                                  "The role designs synthetic candidate routes for new APIs."])
+def test_audience_check_delivers_real_practice_and_posting_language(text):
+    assert deliver.report_audience_findings(text) == []

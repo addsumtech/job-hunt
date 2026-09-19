@@ -57,12 +57,13 @@ _PDF_WARNING = "\u26a0"
 def report_audience_findings(source: str) -> list[str]:
     """Keep fixture provenance in the private audit, not the client report.
 
-    Match specific internal-test narration, not words such as '测试' or
-    '模拟面试': those are ordinary job requirements and preparation advice.
+    Match fixture provenance only, not words such as '测试' or '模拟面试':
+    those are ordinary job requirements and preparation advice. Practice scope
+    ('本轮只练了技术面', 'a mock is not a real interview') is normal advice to a
+    real client, and 'synthetic candidate' is chemistry vocabulary.
     """
-    markers = ("固定虚构履历", "固定的虚构履历", "并非真人面试",
-               "本轮只练了", "synthetic candidate", "fixed fictional profile",
-               "not a real interview")
+    markers = ("固定虚构履历", "固定的虚构履历", "fixed fictional profile",
+               "synthetic candidate profile")
     folded = source.casefold()
     return [f"REPORT_INTERNAL_NARRATION: {marker!r}; move test-process notes to the private audit and write advice for the client"
             for marker in markers if marker in folded]
