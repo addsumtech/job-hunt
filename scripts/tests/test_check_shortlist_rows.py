@@ -37,6 +37,33 @@ def test_source_id_absent_from_raw_fires(tmp_path, capsys):
     assert "51job-1.json" in captured.out
 
 
+@pytest.mark.parametrize("ensure_ascii", [False, True])
+def test_multiline_source_id_is_verified_from_decoded_capture(tmp_path, ensure_ascii):
+    import json
+    source_id = "项目经理-债券承做（2人） \n 国新证券"
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    url = "https://example.test/campus"
+    capture = json.dumps({"rows": [{"source_id": source_id, "url": url}]},
+                         ensure_ascii=ensure_ascii)
+    (raw / "guoxin-detail.json").write_text(capture, encoding="utf-8")
+    row = {"source_id": source_id, "url": url}
+    assert cs._check_provenance("role", row, "guoxin", cs.load_raw_texts(tmp_path)) == []
+    assert (raw / "guoxin-detail.json").read_text(encoding="utf-8") == capture
+
+
+def test_source_id_does_not_confuse_literal_backslash_with_json_escape():
+    import json
+    actual = "role\ncompany"
+    literal = r"role\ncompany"
+    assert not cs._contains_source_id(actual, json.dumps({"source_id": literal}))
+    assert not cs._contains_source_id(literal, json.dumps({"source_id": actual}))
+    assert not cs._contains_source_id(actual, json.dumps(["role", "company"]))
+    assert not cs._contains_source_id(actual, '{"source_id": "role\\ncompany"')
+    assert cs._contains_source_id("173215361", json.dumps({"jobId": 173215361}))
+    assert cs._contains_source_id(actual, actual)  # Non-JSON adapter output.
+
+
 def test_a_short_source_id_is_rejected_before_the_substring_search(tmp_path, capsys):
     workspace = fx.build_workspace(tmp_path)
     data = fx.load_shortlist(workspace)

@@ -122,7 +122,9 @@ def test_the_self_check_names_every_script():
             "candidate_match.py",
             # Renderer host diagnostics are shared by doctor and render_cv;
             # there is no standalone run step for a user to invoke.
-            "host_execution.py"}
+            "host_execution.py",
+            # Imported by the browser launcher and evidence gates; no CLI.
+            "browser_budget.py"}
     section = _self_check_items()
     for f in sorted((ROOT / "scripts").glob("*.py")):
         if f.name in skip:

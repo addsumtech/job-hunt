@@ -197,6 +197,13 @@ export async function main(argv) {
         try {s=JSON.parse(await readFile(stateFile,'utf8'));} catch {}
         if (s?.pid===child.pid) {
           if (failed(s.state) || s.state === 'closed') throw Error(connectionHelp(browser));
+          // An already authorized browser commonly opens the socket just
+          // after serve writes its first state. Allow that handshake to finish
+          // before telling the user that a consent prompt needs attention.
+          if (s.state === 'waiting_for_consent' && i < 20) {
+            await new Promise(r=>setTimeout(r,50));
+            continue;
+          }
           console.log(JSON.stringify({state:s.state,browser,pid:s.pid,reused:false}));return;
         }
         await new Promise(r=>setTimeout(r,50));

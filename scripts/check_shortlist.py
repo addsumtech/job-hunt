@@ -179,8 +179,7 @@ MAX_PAGES_PER_SITE_CEILING = 2
 
 
 def load_raw_texts(workspace):
-    """{site: {filename: text}} over raw/<site>-*.json. Never parsed as JSON:
-    the check is a verbatim substring search over the bytes we captured."""
+    """{site: {filename: text}} over raw/<site>-*.json, preserving captured text."""
     out = {}
     raw_dir = pathlib.Path(workspace) / "raw"
     if not raw_dir.is_dir():
@@ -242,6 +241,24 @@ def _raw_text_coverage(raw_text, captures):
     return (total - lost) / total, missing
 
 
+def _contains_source_id(source_id, text):
+    """Match captured values, without confusing JSON escapes with literal IDs."""
+    try:
+        value = json.loads(text)
+    except ValueError:
+        return source_id in text
+    pending = [value]
+    while pending:
+        value = pending.pop()
+        if isinstance(value, dict):
+            pending.extend(value.values())
+        elif isinstance(value, list):
+            pending.extend(value)
+        elif isinstance(value, (str, int, float)) and source_id in str(value):
+            return True
+    return False
+
+
 def _check_provenance(label, row, site, raw_texts):
     findings = []
     source_id = str(row.get("source_id") or "").strip()
@@ -262,7 +279,7 @@ def _check_provenance(label, row, site, raw_texts):
             f"NO_RAW_CAPTURE_FOR_SITE: {label} claims source_site {site!r} but "
             f"raw/ holds no {site}-*.json capture")
         return findings
-    if not any(source_id in text for text in captures.values()):
+    if not any(_contains_source_id(source_id, text) for text in captures.values()):
         findings.append(
             f"SOURCE_ID_NOT_IN_RAW: {label} source_id {source_id!r} does not "
             f"appear verbatim in any of {', '.join(sorted(captures))}")
@@ -880,9 +897,12 @@ def _pages_per_site(calls):
     """
     pages: dict = {}
     for call in calls:
+        site = str(call.get("site") or "").strip().casefold()
+        if 'search_pages' in call:
+            pages.setdefault(site, set()).update(call['search_pages'])
+            continue
         if call.get("command") != "search" or call.get("exit_code") != 0:
             continue
-        site = str(call.get("site") or "").strip().casefold()
         if call.get("action") == ACTION:
             page = call.get("page")
             if type(page) is int and page > 0:
@@ -939,8 +959,9 @@ def _check_caps_against_the_run(brief, shortlist, rows, calls):
                 site = str(row.get("source_site") or "").strip().casefold()
                 retained[site] = retained.get(site, 0) + 1
         for call in calls:
-            count = call.get("row_count")
-            if (call.get("command") == "search" and call.get("exit_code") == 0
+            count = call.get("search_row_count", call.get("row_count"))
+            if (('search_row_count' in call or
+                 (call.get("command") == "search" and call.get("exit_code") == 0))
                     and type(count) is int and count >= 0):
                 site = str(call.get("site") or "").strip().casefold()
                 returned[site] = returned.get(site, 0) + count
@@ -1066,11 +1087,8 @@ def _check_browser_rows(workspace, rows, calls, brief, exceptions=()):
               and (row.get("extraction_method") == "public_page"
                    or row.get("source_site") not in adapter_sites)):
             findings.append("BROWSER_METHOD_MISMATCH: browser capture rows must use browser_page")
-    cap = brief.get("max_rows_per_round")
-    if type(cap) is int:
-        for site, captured in evidence.items():
-            if len({r["source_id"] for r in captured}) > cap:
-                findings.append(f"ROWS_ABOVE_CAP: {site} browser captures exceed the round row cap {cap}")
+    # Search rows (including repeat pages) are counted by _check_caps_against_the_run.
+    # Detail identities remain evidence, not additional search results.
     return findings
 
 
