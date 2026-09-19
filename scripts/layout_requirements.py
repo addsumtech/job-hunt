@@ -23,6 +23,23 @@ def measure(ws, requirements, report=False):
         # PDF subset prefixes and PostScript separators are not font changes.
         return str(value).split("+")[-1].replace("-", "").replace(" ", "").lower()
 
+    def painted(doc):
+        """(text, ink box) per span, from its non-whitespace glyphs only.
+
+        A span's own box includes its spaces: exporters end wrapped lines with a
+        trailing space past the last glyph, and NBSP-only paragraphs occupy a
+        line without printing anything. Neither is text on the page.
+        """
+        for page in doc:
+            for block in page.get_text("rawdict")["blocks"]:
+                for line in block.get("lines", []):
+                    for span in line["spans"]:
+                        ink = [c["bbox"] for c in span["chars"] if not c["c"].isspace()]
+                        if ink:
+                            yield ("".join(c["c"] for c in span["chars"]).strip(),
+                                   (min(b[0] for b in ink), min(b[1] for b in ink),
+                                    max(b[2] for b in ink), max(b[3] for b in ink)))
+
     pdf = ws / ("report.pdf" if report else "cv.pdf")
     if pdf.is_file():
         try:
@@ -50,7 +67,7 @@ def measure(ws, requirements, report=False):
                     if type(minimum_bottom) not in (int, float) or not math.isfinite(minimum_bottom) or minimum_bottom <= 0:
                         fail("minimum_content_bottom_pt must be a positive finite number")
                     else:
-                        bottom = max((span["bbox"][3] for line in lines for span in line["spans"]), default=0)
+                        bottom = max((box[3] for _, box in painted(doc)), default=0)
                         if bottom < minimum_bottom - .6:
                             fail(f"content ends at {bottom:.2f} pt, required at least {minimum_bottom:.2f} pt; excessive lower-page whitespace")
                 for sample in samples:
@@ -94,12 +111,10 @@ def measure(ws, requirements, report=False):
                 if not isinstance(bounds, list) or len(bounds) != 4 or any(type(v) not in (int, float) or not math.isfinite(v) for v in bounds):
                     fail("text_bounds_pt must specify left, top, right, bottom")
                 else:
-                    for line in lines:
-                        for span in line["spans"]:
-                            x0, y0, x1, y1 = span["bbox"]
-                            if (x0 < bounds[0] - .6 or y0 < bounds[1] - .6
-                                    or x1 > bounds[2] + .6 or y1 > bounds[3] + .6):
-                                fail(f"text outside required bounds: {span['text'][:30]!r}")
+                    for text, (x0, y0, x1, y1) in painted(doc):
+                        if (x0 < bounds[0] - .6 or y0 < bounds[1] - .6
+                                or x1 > bounds[2] + .6 or y1 > bounds[3] + .6):
+                            fail(f"text outside required bounds: {text[:30]!r}")
         except Exception as exc:
             fail(f"cannot measure PDF: {exc}")
     elif report:

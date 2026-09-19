@@ -245,3 +245,56 @@ def test_delivery_blocks_stale_or_removed_report_review(tmp_path, changed):
     written, problems = deliver.deliver(ws, tmp_path / "delivery", "test", include_applications=False)
     assert written == [] and problems
     assert not (tmp_path / "delivery").exists()
+
+
+# 2026-09-19 review: a span's box includes its whitespace. LibreOffice exports
+# wrapped lines with a trailing space, so the skill's own English example CV
+# "overflowed" by 1.5 pt of blank, while invisible NBSP padding "filled" a page.
+def replace_pdf(ws, review, lines, *, requirements=None):
+    doc = pymupdf.open()
+    page = doc.new_page()
+    for origin, text in [((72, 72), "Test Candidate"), *lines]:
+        page.insert_text(origin, text, fontsize=11, fontname="helv")
+    doc.save(ws / "new.pdf")
+    doc.close()
+    (ws / "new.pdf").replace(ws / "cv.pdf")
+    (ws / "word-export.pdf").write_bytes((ws / "cv.pdf").read_bytes())
+    review["artifacts"]["cv.pdf"]["sha256"] = journal.sha256_file(ws / "cv.pdf")
+    review["word_export"]["sha256"] = journal.sha256_file(ws / "cv.pdf")
+    if requirements:
+        path = ws / "layout-requirements.yaml"
+        data = yaml.safe_load(path.read_text())
+        data.update(requirements)
+        path.write_text(yaml.safe_dump(data))
+        review["requirements_sha256"] = journal.sha256_file(path)
+    write_review(ws, review)
+
+
+def layout_findings(ws):
+    check_layout.main(["--workspace", str(ws)])
+    return journal.read_receipts(ws, "check_layout")[-1]["findings"]
+
+
+def test_trailing_spaces_past_the_margin_are_not_painted_text(tmp_path):
+    ws, review = reviewed_workspace(tmp_path)
+    # Glyphs end at x=516.9; the three trailing spaces extend the span to 526.1.
+    replace_pdf(ws, review, [((350, 120), "Compared six competing products   ")])
+    assert not [f for f in layout_findings(ws) if "outside required bounds" in f]
+
+
+def test_painted_text_past_the_margin_still_fails(tmp_path):
+    ws, review = reviewed_workspace(tmp_path)
+    replace_pdf(ws, review, [((400, 120), "Compared six competing products")])
+    assert [f for f in layout_findings(ws) if "outside required bounds" in f]
+
+
+def test_invisible_padding_does_not_fill_the_page(tmp_path):
+    ws, review = reviewed_workspace(tmp_path)
+    replace_pdf(ws, review, [((72, 765), "  ")], requirements={"minimum_content_bottom_pt": 760})
+    assert [f for f in layout_findings(ws) if "excessive lower-page whitespace" in f]
+
+
+def test_printed_content_at_the_bottom_fills_the_page(tmp_path):
+    ws, review = reviewed_workspace(tmp_path)
+    replace_pdf(ws, review, [((72, 765), "References available")], requirements={"minimum_content_bottom_pt": 760})
+    assert not [f for f in layout_findings(ws) if "excessive lower-page whitespace" in f]
