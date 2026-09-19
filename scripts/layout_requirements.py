@@ -26,6 +26,11 @@ _LIST = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?")
 _QUOTE = re.compile(r"^\s*>\s?")
 _NUMBERING = re.compile(r"^\s*\d+(?:\.\d+)*[.)、]?\s+")
 _TABLE_SEP = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)*\|?\s*$")
+_ATTRIBUTES = re.compile(r"\s*\{[#.][^}]*\}\s*$")     # pandoc heading attributes
+_RAW_MACRO = re.compile(r"^\s*\\[a-zA-Z]+\*?(?:\[[^\]]*\])?(?:\{[^}]*\})*\s*$")
+_BLOCK_TAG = re.compile(r"^\s*<(style|script)\b", re.I)
+_BLOCK_END = re.compile(r"</(style|script)>", re.I)
+_MARKER = re.compile(r"^(?:\d{0,4}|[ivxlcdm]{1,6}|[a-z]|[一二三四五六七八九十百]{1,3})$")
 _GAP = r"\d{0,4}"     # a footnote number or superscript printed inside a line
 _PAGE_REACH = 300     # letters/digits of page furniture tolerated around a page break
 _SHORT = 3            # shorter cells ("是", "1", "No") are required but never move the cursor
@@ -57,7 +62,11 @@ def _fragments(text):
 def _report_blocks(markdown):
     """Visible report.md blocks in reading order: para, note, row or header."""
     lines = _COMMENT.sub("", markdown).splitlines()
-    blocks, para, fence = [], None, None
+    if lines and lines[0].strip() == "---":                  # YAML front matter
+        closing = next((n for n, l in enumerate(lines[1:], 1) if l.strip() in ("---", "...")), None)
+        if closing:
+            lines = lines[closing + 1:]
+    blocks, para, fence, raw = [], None, None, None
 
     def flush():
         nonlocal para
@@ -66,6 +75,19 @@ def _report_blocks(markdown):
         para = None
 
     for index, line in enumerate(lines):
+        if raw:
+            if _BLOCK_END.search(line):
+                raw = None
+            continue
+        if _BLOCK_TAG.match(line):
+            flush()
+            raw = True
+            if _BLOCK_END.search(line):
+                raw = None
+            continue
+        if _RAW_MACRO.match(line):
+            flush()
+            continue
         opening = _FENCE.match(line)
         if fence:
             if opening and opening[1][0] == fence[0] and len(opening[1]) >= len(fence):
@@ -88,7 +110,9 @@ def _report_blocks(markdown):
         note, heading, item = _FOOTNOTE_DEF.match(line), _HEADING.match(line), _LIST.match(line)
         if note or heading or item:
             flush()
-            text = (line[note.end():] if note else _NUMBERING.sub("", line[heading.end():])
+            # A heading keeps its own numbering (an edited "1." matters); a list
+            # item loses its marker, which renderers renumber legitimately.
+            text = (line[note.end():] if note else _ATTRIBUTES.sub("", line[heading.end():])
                     if heading else line[item.end():])
             para = {"kind": "note" if note else "para", "text": text}
             if heading:
@@ -110,45 +134,88 @@ def report_text_problems(markdown, pages):
     """Current report.md text the PDF does not carry, in order, as snippets.
 
     ``pages`` holds each PDF page's extracted text, one PDF line per newline.
-    Paragraphs, headings and list items must occupy whole PDF lines, allowing
-    only a list number, digits or another Markdown label beside them, so an
-    edit that removed words ("Do not apply" -> "Apply") is caught. Table body
-    rows must appear in order; a cell equal to the one above it may be a merged
-    cell. Any block may cross a page break with furniture (page numbers,
-    headers, a repeated table header) in between. Header rows are optional:
-    card layouts omit them. Known limit: text deleted from the Markdown is not
-    detected when the stale PDF still reads as whole blocks, e.g. a removed
-    paragraph, and a PDF that prints link targets inline does not bind.
+    Every block must match at word boundaries of the PDF's own text, so an edit
+    hidden beside what is printed ("14 of the 25" read as "4 of the 25") does
+    not pass. Paragraphs, headings and list items must occupy whole PDF lines,
+    beside at most a list marker or the preceding block's label; table cells
+    must sit beside their own row's other cells. Header rows are required only
+    when the PDF prints them, since card layouts drop the labels. A block may
+    cross a page break, but only over furniture: page numbers and lines that
+    repeat on other pages, such as a running header or a repeated table header.
+    Known limits. A table cell is only required to be present somewhere, so a
+    value swapped or copied between rows of a table passes: wrapped columns
+    interleave in the extracted text and CJK columns can run together, which
+    leaves no reliable reading of where a cell stands. (PyMuPDF's table
+    reconstruction was measured against these reports and paired the wrong one
+    of a document's repeated per-job tables.) Text deleted from the Markdown is
+    invisible while the stale PDF still reads as whole blocks; link targets are
+    not compared, and a PDF that prints them inline does not bind.
     """
     import bisect
-    stream, spans, page_start = [], [], []
-    offset = 0
-    for page in pages:
+    lines, starts, ends, page_start, offset = [], set(), set(), [], 0
+    for number, page in enumerate(pages):
         page_start.append(offset)
-        for line in page.splitlines():
-            key = _ink_key(line)
+        for text in page.splitlines():
+            key, fresh = "", True
+            for char in text:
+                part = "".join(c for c in unicodedata.normalize("NFKC", char).casefold()
+                               if c.isalnum())
+                if part:
+                    if fresh:
+                        starts.add(offset + len(key))
+                    key, fresh = key + part, False
+                elif not fresh:
+                    ends.add(offset + len(key))
+                    fresh = True
+            if not fresh:
+                ends.add(offset + len(key))
             if key:
-                spans.append((offset, offset + len(key)))
-                stream.append(key)
+                lines.append({"key": key, "start": offset, "end": offset + len(key), "page": number})
                 offset += len(key)
     page_start.append(offset)
-    stream = "".join(stream)
-    line_starts = [a for a, _ in spans]
+    stream = "".join(line["key"] for line in lines)
+    line_starts = [line["start"] for line in lines]
+    word_start, word_end, edge = [0] * len(stream), [len(stream)] * len(stream), 0
+    for position in range(len(stream)):
+        if position in starts:
+            edge = position
+        word_start[position] = edge
+    edge = len(stream)
+    for position in reversed(range(len(stream))):
+        if position + 1 in ends:
+            edge = position + 1
+        word_end[position] = edge
+    seen = {}
+    for line in lines:
+        seen.setdefault(re.sub(r"\d+", "#", line["key"]), set()).add(line["page"])
+    furniture = [line["key"].isdigit() or len(seen[re.sub(r"\d+", "#", line["key"])]) > 1
+                 for line in lines]
+
+    def at(position):
+        return bisect.bisect_right(line_starts, position) - 1
+
+    def opens(position, glued=False):
+        """A word starts here; a footnote definition may carry a glued number."""
+        return position in starts or (glued and stream[word_start[position]:position].isdigit())
+
+    def closes(position):
+        return position in ends or (position < len(stream)
+                                    and stream[position:word_end[position]].isdigit())
+
     blocks = _report_blocks(markdown)
-    labels = {"".join(b["fragments"]) for b in blocks if b.get("fragments")}
-    labels |= {"".join(c) for b in blocks for c in b.get("cells", []) if c}
+    # A footnote prints at the foot of its page, between a paragraph and the
+    # page break, so it is page furniture for the purpose of a hop.
+    footnotes = "".join("".join(b["fragments"]) for b in blocks if b["kind"] == "note")
 
-    def beside(text):
-        return not text or text.isdigit() or text in labels
+    def skippable(index):
+        text = lines[index]["key"].lstrip("0123456789")
+        return furniture[index] or bool(text) and text in footnotes
 
-    def anchored(start, end):
-        at = bisect.bisect_right(line_starts, start) - 1
-        until = bisect.bisect_right(line_starts, end - 1) - 1
-        return (at >= 0 and until >= 0 and beside(stream[spans[at][0]:start])
-                and beside(stream[end:spans[until][1]]))
+    def between(start, end):
+        """Whether only page furniture lies between two matched halves."""
+        return all(skippable(i) for i in range(at(start - 1) + 1, at(end)))
 
     def across_breaks(start, key, breaks):
-        """End of ``key`` read from ``start``, hopping page furniture at breaks."""
         same = 0
         while same < len(key) and start + same < len(stream) and stream[start + same] == key[same]:
             same += 1
@@ -162,63 +229,110 @@ def report_text_problems(markdown, pages):
             if boundary is None or boundary - (start + used) > _PAGE_REACH:
                 continue
             rest = key[used:]
-            resume = stream.find(rest[:8], boundary, boundary + _PAGE_REACH + 1)
+            resume = stream.find(rest[:3], boundary, boundary + _PAGE_REACH + 1)
             while resume >= 0:
-                end = across_breaks(resume, rest, breaks - 1)
-                if end is not None:
-                    return end
-                resume = stream.find(rest[:8], resume + 1, boundary + _PAGE_REACH + 1)
+                if (start + used == lines[at(start + used - 1)]["end"]
+                        and resume in starts and between(start + used, resume)):
+                    end = across_breaks(resume, rest, breaks - 1)
+                    if end is not None:
+                        return end
+                resume = stream.find(rest[:3], resume + 1, boundary + _PAGE_REACH + 1)
         return None
 
-    def locate(fragments, cursor, whole):
+    def beside(fragments, cursor, accept, glued=False):
+        """First match at or after ``cursor`` whose neighbours ``accept``."""
         pattern = re.compile(_GAP.join(re.escape(f) for f in fragments))
-        found, contiguous = pattern.search(stream, cursor), None
+        key, contiguous = "".join(fragments), None
+        found = pattern.search(stream, cursor)
         while found:
-            if not whole or anchored(found.start(), found.end()):
+            if opens(found.start(), glued) and closes(found.end()) and accept(found.start(), found.end()):
                 contiguous = found.start(), found.end()
                 break
             found = pattern.search(stream, found.start() + 1)
-        key = "".join(fragments)
         if len(key) < 4 or len(pages) < 2:
             return contiguous
-        # A nearer copy split by a page break wins over a later contiguous copy
-        # (repeated wording, or the next paragraph saying the same thing).
+        # A nearer copy split by a page break wins over a later contiguous copy.
         limit = contiguous[0] if contiguous else len(stream)
-        lead = key[:3]  # the part before a page break may be only a few characters
-        start = stream.find(lead, cursor, limit)
-        while start >= 0:
-            end = across_breaks(start, key, 3)
-            if end is not None and (not whole or anchored(start, end)):
-                return start, end
-            start = stream.find(lead, start + 1, limit)
+        for start in sorted({p for p in starts if cursor <= p < limit}):
+            if stream.startswith(key[:1], start):
+                end = across_breaks(start, key, 3)
+                if end is not None and closes(end) and accept(start, end):
+                    return start, end
         return contiguous
 
-    problems, cursor, above = [], 0, None
-    for block in blocks:
-        if block["kind"] == "header":
-            above = None
-            continue
-        if block["kind"] == "row":
-            starts = []
-            for column, fragments in enumerate(block["cells"]):
-                if not fragments or (above and column < len(above) and above[column] == fragments):
-                    continue
-                spot = locate(fragments, cursor, whole=False)
-                if spot is None:
+    def cell_present(fragments):
+        """Whether a table cell's text is in the PDF at all.
+
+        Neither position nor word boundaries can be required here: a renderer
+        that wraps a narrow column interleaves the pieces of one row, and
+        extracted CJK columns can run together with no separator between
+        them. Where a cell stands is checked against the reconstructed table
+        instead (_table_problems).
+        """
+        key = "".join(fragments)
+        if key in stream:
+            return True
+        for size in (12, 8, 6, 4, 3, 2):  # a cell wrapped, perhaps after two characters
+            if size < len(key) and (key[:size] in stream or key[-size:] in stream):
+                return True
+        return False
+
+    def whole_line(before, after):
+        def accept(start, end):
+            head = stream[lines[at(start)]["start"]:start]
+            tail = stream[end:lines[at(end - 1)]["end"]]
+            return ((_MARKER.match(head) or head in before)
+                    and (_MARKER.match(tail) or tail in after))
+        return accept
+
+    def own_row(keys):
+        def strip(text):
+            for key in sorted(keys, key=len, reverse=True):
+                if key:
+                    text = text.replace(key, "")
+            return re.sub(r"\d+", "", text)
+
+        def accept(start, end):
+            # A cell carried over a page break sits beside the remainder of a
+            # neighbour, so a head may end one and a tail may begin one.
+            head, tail = strip(stream[lines[at(start)]["start"]:start]), strip(
+                stream[end:lines[at(end - 1)]["end"]])
+            return ((not head or any(k.endswith(head) for k in keys))
+                    and (not tail or any(k.startswith(tail) for k in keys)))
+        return accept
+
+    # One ordered pass places paragraphs, headings and list items, which must
+    # occupy whole PDF lines. Table cells are only required to be present at a
+    # word boundary: a renderer that wraps a narrow column interleaves the
+    # pieces of a row, so their order in the extracted text means nothing.
+    problems, cursor, above, labels = [], 0, None, {""}
+    for index, block in enumerate(blocks):
+        if block["kind"] in ("row", "header"):
+            cells = [(c, column) for column, c in enumerate(block["cells"]) if c]
+            labels |= {"".join(c) for c, _ in cells}
+            if block["kind"] == "header" and not any(
+                    sum(1 for c, _ in cells if "".join(c) in line["key"]) > 1 for line in lines):
+                above = None        # a card layout prints no header row
+                continue
+            for fragments, column in cells:
+                if (block["kind"] == "row" and above and column < len(above)
+                        and above[column] == fragments):
+                    continue        # the cell above, merged downwards
+                if not cell_present(fragments):
                     problems.append(" ".join(fragments))
-                elif len("".join(fragments)) >= _SHORT:
-                    starts.append(spot[0])
-            above = block["cells"]
-            if starts:
-                cursor = max(starts) + 1
+            above = block["cells"] if block["kind"] == "row" else None
             continue
         above = None
         note = block["kind"] == "note"
-        spot = locate(block["fragments"], 0 if note else cursor, whole=True)
+        following = blocks[index + 1] if index + 1 < len(blocks) else None
+        after = {"".join(following["fragments"])} if following and following.get("fragments") else set()
+        spot = beside(block["fragments"], 0 if note else cursor,
+                      whole_line(labels, after | {""}), glued=note)
         if spot is None:
             problems.append(block["text"].strip())
         elif not note:
             cursor = spot[1]
+        labels = {"".join(block["fragments"]), ""}
     return [p[:60] for p in problems]
 
 
