@@ -31,6 +31,9 @@ OpenCLI capability diagnosis first, following
    `chrome://inspect/#remote-debugging` and accepts Chrome's connection prompt.
    Start `python scripts/run_tool.py browser-session start` once and wait for
    consent; use `browser-session status` instead of repeated starts while waiting.
+   Startup briefly waits for an already authorized handshake. If it still reports
+   `waiting_for_consent`, check status once before asking the user to find a prompt;
+   an updated `connected` state needs no further manual action.
    A missing or stale endpoint, a disconnected session, or an expired consent
    request must be handed back with the command's setup guidance. Keep failed
    starts distinct from `waiting_for_consent`; never report them as connected.

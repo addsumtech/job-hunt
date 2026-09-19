@@ -215,7 +215,7 @@ def test_query_coverage_and_changed_shortlist_row(tmp_path):
     data["rows"][0].update(extraction_method="browser_page", retrieved_at=snap["retrieved_at"],
                             url="https://fake.example/job")
     assert cs._check_browser_rows(ws, data["rows"], [call], fx.BRIEF)
-    assert cs._check_browser_rows(ws, [], [call], {"max_rows_per_round": 1})
+    assert cs._check_caps_against_the_run({"max_rows_per_round": 1}, {}, [], [call])
 
 
 @pytest.mark.parametrize("field,value", [("url", "javascript:alert(1)"),
@@ -376,3 +376,47 @@ def test_unknown_backend_even_with_valid_receipt_is_rejected(tmp_path):
     call["backend"] = "unrecognized-browser"
     call = journal.sign_receipt(call)
     assert browser.validate_record(call, ws)
+
+@pytest.mark.parametrize('status, classification', [(404, 'transport'), (500, 'transport'), (403, 'platform_limit'), (200, 'ok')])
+def test_http_failure_is_recorded_and_never_an_empty_success(tmp_path, status, classification):
+    ws, _, snap, _, args = setup_capture(tmp_path, text='Page not found', status=status)
+    call = record(ws, args)
+    assert call['classification'] == classification
+    assert call['empty_result'] == (status == 200)
+    assert call['exit_code'] == (0 if status == 200 else 1)
+    assert browser.validate_record(call, ws) == []
+    if status in (404, 500):
+        assert str(status) in call['remedy']
+
+
+def test_http_error_cannot_import_jobs(tmp_path):
+    _, _, snap, rows, _ = setup_capture(tmp_path, status=404)
+    with pytest.raises(ValueError, match='HTTP failure'):
+        browser.validate_snapshot(snap, rows)
+
+
+def test_browser_details_do_not_spend_search_budget(tmp_path):
+    ws, data, _, _, args = setup_capture(tmp_path)
+    search = record(ws, args)
+    detail = dict(search, command='detail')
+    detail = journal.sign_receipt(detail)
+    assert not any(f.startswith('ROWS_ABOVE_CAP') for f in cs._check_browser_rows(
+        ws, data['rows'], [search, detail], {'max_rows_per_round':len(data['rows'])}))
+
+
+def test_browser_and_importer_share_refusal_language():
+    source = (Path(browser.__file__).parent / 'browser_cdp.mjs').read_text()
+    assert 'export const REFUSAL = /' + browser.WALL.pattern + '/i;' in source
+
+
+@pytest.mark.parametrize('counts, over', [([12, 12], False), ([13, 13], True), ([12, 12, 12], True)])
+def test_search_budget_counts_repeated_pages_before_identity_dedup(counts, over):
+    calls = [dict(site='caitong', command='search', exit_code=0, row_count=n) for n in counts]
+    calls += [dict(site='caitong', command='detail', exit_code=0, row_count=1)] * 2
+    findings = cs._check_caps_against_the_run({'max_rows_per_round':25}, {}, [], calls)
+    assert any(f.startswith('ROWS_ABOVE_CAP') for f in findings) == over
+
+
+def test_visible_captcha_split_across_text_nodes_still_stops(tmp_path):
+    _, _, snap, _, _ = setup_capture(tmp_path, text='请输入\n验证码')
+    assert browser.validate_snapshot(snap, []) == 'platform_limit'

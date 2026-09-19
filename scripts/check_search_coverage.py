@@ -16,13 +16,27 @@ import shlex
 import sys
 
 import journal
+import browser_budget
 from check_candidate_match import _quote_in_capture, _safe_path
+from check_shortlist import _contains_source_id
 from record_browser_capture import read_retrieval_calls, validate_record, STOP_CLASSES
 
 FILE = "search-coverage.yaml"
 ACTION = "search_plan"
 EXCLUSIONS = {"wrong_year", "closed", "wrong_location", "wrong_role", "wrong_level",
               "eligibility", "duplicate"}
+
+
+def _capture_path(root, name):
+    """Normalize historical journal paths, keeping evidence inside round/raw."""
+    if not isinstance(name, str) or not name:
+        return None
+    try:
+        path = (root / name).resolve()
+        relative = path.relative_to(root.resolve()).as_posix()
+    except (ValueError, OSError, RuntimeError):
+        return None
+    return _safe_path(root, relative, raw=True)
 
 
 def _nonempty(value):
@@ -187,9 +201,14 @@ def _inspect(workspace):
             if call.get("action") == "browser_call" and validate_record(call, root):
                 raise ValueError(f"invalid browser coverage evidence: {site}")
             name = call.get("rows_file") or call.get("stdout_file")
-            path = _safe_path(root, name, raw=True)
+            path = _capture_path(root, name)
             if path is None:
                 raise ValueError(f"missing raw retrieval evidence: {site}")
+            if call.get('action') == 'browser_call':
+                snapshot = json.loads(_capture_path(root, call.get('snapshot_file')).read_text(encoding='utf-8'))
+                for view in browser_budget.views(snapshot):
+                    for identity, title, row in _job_rows(view.get('catalog_rows', [])):
+                        observed.setdefault((site, identity), []).append((root, title, row))
             if call.get("classification") != "ok":
                 continue
             try:
@@ -212,8 +231,8 @@ def _inspect(workspace):
         text = path.read_text(encoding="utf-8")
         if not _nonempty(ref.get("quote")) or not _quote_in_capture(ref["quote"], text):
             raise ValueError("coverage quote is absent from capture")
-        matches = [c for c in calls[root] if c.get("site") == site and name in
-                   [c.get(k) for k in ("stdout_file", "stderr_file", "snapshot_file", "rows_file")]]
+        matches = [c for c in calls[root] if c.get("site") == site and path in
+                   [_capture_path(root, c.get(k)) for k in ("stdout_file", "stderr_file", "snapshot_file", "rows_file")]]
         if not matches:
             raise ValueError("coverage capture lacks a same-source retrieval record")
         return matches[-1], text
@@ -290,7 +309,7 @@ def _inspect(workspace):
                 if not any(_quote_in_capture(quote, json.dumps(row, ensure_ascii=False))
                            for _, _, row in observed[key]):
                     raise ValueError("exclusion quote must belong to this observed lead")
-                if key[1] not in text:
+                if not _contains_source_id(key[1], text):
                     raise ValueError("exclusion capture must identify this lead")
         else:
             raise ValueError("pending lead disposition")

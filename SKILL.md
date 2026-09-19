@@ -1012,6 +1012,8 @@ believing you vetted it.
 - [ ] Browser capture: read `references/browser-fallback.md` and record each
       actual snapshot with `scripts/record_browser_capture.py` before another read.
       Use `browser_page` evidence and stop across tools after a site refusal.
+      Navigation requires a journal-derived budget and a catalog selector for
+      every stage; final-page rows alone cannot establish round compliance.
 
 Read-when:
 - [ ] Reviewing a Word or PDF CV? Follow `references/layout-review.md` and compare every rendered page with the supplied template and the user's later changes.

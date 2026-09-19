@@ -15,6 +15,7 @@ import sys
 from urllib.parse import urlsplit
 
 import journal
+import browser_budget
 from check_opencli_result import GUEST_LOGIN_WALL, read_journal, recovery_guidance
 
 ACTION = "browser_call"
@@ -30,7 +31,8 @@ WALL = re.compile(
     r"请按住滑块[，,\s]*拖动到最右边|为了更好的访问体验[，,\s]*请进行验证|"
     r"(?:验证|确认)(?:您|你)(?:是否)?是(?:真人|人类)|(?:正在|请|需要).{0,8}(?:真人验证|人机验证)|"
     r"验证成功[。.!！\s]*正在等待|verification successful[.!\s]*waiting for|checking your browser|"
-    r"認証が必要|ログインが必要|로그인이 필요|접근이 제한", re.I)
+    r"認証が必要|ログインが必要|로그인이 필요|접근이 제한|人机验证|真人验证|请按住滑块|"
+    r"unusual traffic|需要进行其他验证", re.I)
 
 
 def web_url(value):
@@ -78,17 +80,20 @@ def validate_snapshot(snapshot, rows):
     load_timed_out = snapshot.get("load_timed_out", False)
     if type(load_timed_out) is not bool:
         raise ValueError("load_timed_out must be boolean")
-    if GUEST_LOGIN_WALL.search(snapshot["text"]):
+    visible_text = " ".join(snapshot["text"].split())
+    if GUEST_LOGIN_WALL.search(visible_text):
         if rows:
             raise ValueError("login wall must have no extracted rows")
         return "not_logged_in"
-    if (blocked or status in (401, 403, 429) or WALL.search(snapshot["text"])
+    if (blocked or status in (401, 403, 429) or WALL.search(visible_text)
             or known_security_page(snapshot["url"])):
         if rows:
             raise ValueError("site refusal must have no extracted rows")
         return "platform_limit"
     if status is not None and status >= 400:
-        raise ValueError("HTTP failure is not a successful page capture")
+        if rows:
+            raise ValueError("HTTP failure must have no extracted rows")
+        return "transport"
     urls = set(links) | {snapshot["url"]}
     seen = set()
     for row in rows:
@@ -110,7 +115,8 @@ def validate_snapshot(snapshot, rows):
     # A loading or textless page is not evidence of zero matches. Image-only
     # recruitment landing pages can settle successfully without exposing a JD.
     # Actual rows still require the same verbatim-text and URL checks above.
-    return "transport" if not rows and (load_timed_out or not snapshot["text"].strip()) else "ok"
+    return "transport" if (snapshot.get('navigation_error') or snapshot.get('budget_exceeded') or snapshot.get('catalog_accounting_pending')
+                           or (not rows and (load_timed_out or not snapshot["text"].strip()))) else "ok"
 
 
 def _host(record):
@@ -266,11 +272,36 @@ def validate_record(record, workspace):
             files.append(json.loads(path.read_text(encoding="utf-8")))
         snapshot, rows = files
         classification = validate_snapshot(snapshot, rows)
+        accounting = browser_budget.usage(snapshot, validate_rows=validate_snapshot)
+        if accounting is not None:
+            count, pages, _ = accounting
+            if record.get('search_row_count') != count or record.get('search_pages') != pages:
+                raise ValueError('NAVIGATION_BUDGET: imported counts differ from intermediate catalogs')
+            budget = snapshot['navigation_budget']
+            if budget.get('workspace') != str(root) or budget.get('site') != record['site']:
+                raise ValueError('NAVIGATION_BUDGET: capture belongs to another round/source')
+            prior = []
+            for call in read_retrieval_calls(root):
+                if call.get('snapshot_file') == record['snapshot_file']:
+                    break
+                prior.append(call)
+            used_rows, used_pages = browser_budget.used(prior, record['site'])
+            if budget.get('used_rows') != used_rows or budget.get('used_pages') != used_pages:
+                raise ValueError('NAVIGATION_BUDGET: prior round consumption changed or was omitted')
+            brief = journal.load_yaml(root / 'brief.yaml', dict)
+            if (budget.get('max_rows') != brief.get('max_rows_per_round') or
+                    budget.get('max_pages') != brief.get('max_pages_per_site')):
+                raise ValueError('NAVIGATION_BUDGET: limits differ from the search brief')
+            if snapshot.get('budget_exceeded'):
+                raise ValueError('NAVIGATION_BUDGET_EXCEEDED: the page returned more rows than reserved')
+        if snapshot.get('navigation_error'):
+            raise ValueError('NAVIGATION_INCOMPLETE: inspect the preserved partial journey before continuing')
         if (type(record["row_count"]) is not int
                 or type(record["exit_code"]) is not int):
             raise ValueError("counts and exit code must be integers")
         if (classification != record["classification"] or len(rows) != record["row_count"]
                 or record["exit_code"] != (0 if classification == "ok" else 1)
+                or record.get('empty_result') != (classification == 'ok' and not rows and not (accounting and accounting[0]))
                 or record["retrieved_at"] != snapshot["retrieved_at"]
                 or record["url"] != snapshot["url"]
                 or type(record["page"]) is not int or record["page"] < 1
@@ -338,6 +369,18 @@ def main(argv=None):
             "rows_file": paths[1].relative_to(root).as_posix(),
             "input_hashes": {p.relative_to(root).as_posix(): journal.sha256_file(p) for p in paths},
         }
+        # Always preserve an actual retrieval, including an unaccounted legacy
+        # journey. Its missing accounting fails validation instead of vanishing.
+        try:
+            accounting = browser_budget.usage(snapshot, validate_rows=validate_snapshot)
+            if accounting is not None:
+                record['search_row_count'], record['search_pages'], _ = accounting
+                record['empty_result'] = classification == 'ok' and not rows and accounting[0] == 0
+        except ValueError as exc:
+            record['budget_error'] = str(exc)
+            if classification == 'ok':
+                classification = 'transport'
+                record.update(classification=classification, exit_code=1, empty_result=False)
         if classification == "not_logged_in":
             record["remedy"] = ("The site identifies this session as a guest and requires login. "
                                 + recovery_guidance("login"))
@@ -345,12 +388,22 @@ def main(argv=None):
             kind = "rate_limit" if snapshot.get("http_status") == 429 else "platform"
             record["remedy"] = recovery_guidance(kind)
         elif classification == "transport":
-            reason = ("Page load deadline reached without extracted rows. "
+            reason = ("Catalog accounting is incomplete or exceeded its allowance; inspect the preserved stage evidence. "
+                      if record.get('budget_error') or snapshot.get('budget_exceeded') else
+                      "Navigation stopped before completion; earlier catalogs are preserved in the snapshot. "
+                      if snapshot.get('navigation_error') else
+                      f"HTTP {snapshot['http_status']} returned no successful page. "
+                      if (snapshot.get("http_status") or 0) >= 400 else
+                      "Page load deadline reached without extracted rows. "
                       if snapshot.get("load_timed_out") else
                       "The page exposed no readable text or extracted rows. ")
-            record["remedy"] = (reason +
-                                "Inspect the preserved snapshot and follow references/network-recovery.md; "
-                                "this is not an empty search result.")
+            if record.get('budget_error') or snapshot.get('budget_exceeded'):
+                record['remedy'] = (reason + 'Follow references/browser-fallback.md to inspect the DOM and its accounting; '
+                                   'do not retry an unaccounted catalog or call it an empty search result.')
+            else:
+                record["remedy"] = (reason +
+                                    "Inspect the preserved snapshot and follow references/network-recovery.md; "
+                                    "this is not an empty search result.")
         record = journal.sign_receipt(record)
         journal.append(root, record)
         print(json.dumps(record, ensure_ascii=False))

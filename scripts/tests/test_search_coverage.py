@@ -79,6 +79,23 @@ def test_complete_empty_search_and_receipt_recheck(tmp_path):
     assert "pending" in gate.inspect(ws)[0]
 
 
+def test_multiline_source_identity_can_be_excluded_with_its_own_capture(tmp_path):
+    ws, data = build(tmp_path)
+    source_id = "机构业务经理助理（1人） \n 国新证券"
+    ref = capture(ws, [{"source_id": source_id, "title": "Asset management sales"}])
+    close(ws, data, ref)
+    data['leads'] = [{"site": "employer", "source_id": source_id, "status": "excluded",
+                      "reason_code": "wrong_role", "reason": "Asset management sales, not IB.",
+                      "evidence": ref}]
+    save(ws, data)
+    assert gate.inspect(ws) == []
+    # A sibling capture with the same quote cannot vouch for this identity.
+    other = capture(ws, [{"source_id": "other-posting", "title": "Asset management sales"}])
+    data['leads'][0]['evidence'] = other
+    save(ws, data)
+    assert "capture must identify this lead" in gate.inspect(ws)[0]
+
+
 def test_target_count_does_not_close_remaining_leads(tmp_path):
     ws, data = build(tmp_path)
     rows = [{"id": str(i), "title": "IB Analyst"} for i in range(19)]
@@ -284,3 +301,28 @@ def test_detail_timeout_does_not_close_an_unrelated_lead(tmp_path):
     save(ws, data)
     (ws / "report.md").write_text(reason)
     assert "does not identify this blocked lead" in gate.inspect(ws)[0]
+
+
+def test_absolute_journal_capture_matches_relative_coverage_reference(tmp_path):
+    ws, data = build(tmp_path)
+    ref = capture(ws, [])
+    path = ws / 'journal.jsonl'
+    records = [json.loads(line) for line in path.read_text().splitlines()]
+    records[-1]['stdout_file'] = str(ws / ref['file'])
+    path.write_text(''.join(json.dumps(r) + '\n' for r in records))
+    close(ws, data, ref)
+    assert gate.inspect(ws) == []
+
+
+def test_capture_paths_cannot_escape_raw_directory(tmp_path):
+    ws, _ = build(tmp_path)
+    outside = tmp_path / 'outside.json'
+    outside.write_text('[]')
+    alias = ws / 'raw' / 'escape.json'
+    alias.symlink_to(outside)
+    inside = ws / 'raw' / 'ok.json'
+    inside.write_text('[]')
+    assert gate._capture_path(ws, str(inside)) == inside
+    assert gate._capture_path(ws, 'raw/ok.json') == inside
+    for name in [str(outside), str(alias), 'raw/escape.json', str(ws / 'brief.yaml')]:
+        assert gate._capture_path(ws, name) is None

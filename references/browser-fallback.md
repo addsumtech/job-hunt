@@ -80,16 +80,12 @@ other account mutation are not. Record every retrieved search/detail page,
 including empty results and refusal pages, immediately and before another read of the same site. Independent sites may
 be in flight; one coordinator imports captures serially.
 Save the actual tool output; do not ask a model to recreate a snapshot from memory.
-When the tool supports a read-only JavaScript expression, this snapshot shape can
-be returned directly (HTTP status is unknown unless the tool actually reports it):
-
-```javascript
-JSON.stringify({url: location.href, retrieved_at: new Date().toISOString(),
-  text: document.body.innerText,
-  links: [...new Set([...document.querySelectorAll('a[href]')]
-    .map(a => a.href).filter(u => /^https?:\/\//.test(u)))],
-  http_status: null})
-```
+Use the bundled reader's `SNAPSHOT_EXPRESSION` for rendered text. Do not use
+`body.innerText` alone: an unrendered body can fall back to script/style source
+and falsely report a captcha. Hidden and non-content nodes are excluded; a
+textless page is a transport failure, not a successful empty search. Actual
+visible verification text and HTTP 401/403/429 still stop the source and require
+[user recovery](user-recovery.md).
 
 For the bundled reader, capture directly to a new workspace file:
 
@@ -110,10 +106,65 @@ same task-owned tab:
 
 ```sh
 python3 scripts/run_tool.py --browser chrome browser \
+  --workspace '<ws>' --site '<site>' --budget-plan '<ws>/catalog-budget.json' \
   --url '<catalog-url>' \
   --click-text '<exact visible job title>' --wait-for-text '任职资格' \
   --output '<ws>/raw/<site>-detail.json'
 ```
+
+For a filter that requires opening a menu before choosing an option, use
+`--steps-file <plan.json>` with an array such as
+`[{"text":"Location"},{"text":"Mainland China","selector":"label[for=location-mainland-china]"}]`.
+Use only controls observed on the source page. A plan allows at most eight
+read-only clicks within the same owned tab; each step preserves before/after
+snapshots under `navigation_steps` and stops on a refusal before proceeding.
+Do not combine it with `--click-text`. A visible `Apply filters` / `Apply all filters` button may be selected with
+an observed selector only when it is outside a form. Form and
+account/application controls remain forbidden. Single-click navigation uses the
+same accounting requirement as a multi-step plan.
+
+Before navigation, supply `--workspace`, `--site` and `--budget-plan`. The JSON
+plan contains one `stages` entry for the initial page and each click destination:
+`{"stages":[{"row_selector":".observed-job-card","page":1,"max_rows":10},
+{"row_selector":".observed-job-card","page":1,"max_rows":0}]}`.
+The second entry in this example is a detail page with no catalog cards. These
+are examples only: inspect the actual DOM before choosing a selector. Match all
+visible catalog cards, never a selected subset. `max_rows` reserves the expected
+maximum; it is not an instruction to truncate the DOM. Use zero only for a stage
+that exposes no catalog, and retain the page evidence establishing that.
+
+For an already observed home/detail page without any catalog, use
+`"row_selector": null, "max_rows": 0`. When the first catalog's DOM structure
+is unknown, a final inspection stage may instead use `row_selector: null` and
+reserve the brief's full row allowance (`max_rows: 25` by default), but only
+with zero prior consumption and zero-row preceding
+stages. Pair it with `--inspect-text` for an observed role label. The capture
+includes up to three ancestor containers to establish the actual card selector.
+It stops there with `catalog_accounting_pending: true` and an unknown row count;
+it is never a completed or empty search. Import the diagnostic, inspect its
+actual rows and selector, then preserve it and make a new bounded verification
+round using the observed selector. The pending diagnostic cannot pass gates or
+authorize another read in its original round. Do not use this inspection path
+to repeat an over-budget read or to recover after a source refusal.
+
+The wrapper derives consumed rows/pages from the round's journal, using its
+prepared Python runtime. The reader rejects plans above the remaining allowance
+before creating a tab. It saves every stage's full DOM and all matching cards,
+counts a previous result/source checkpoint once, and stops further clicks if a
+page unexpectedly exceeds its reservation. Repeated catalog visits consume the
+allowance again; distinct page numbers determine the page cap. This accounting
+is deliberately conservative for catalog context used on a detail journey: it
+does not infer that repeated cards can be ignored. Prefer an already observed
+detail URL when available. Narrow the route before a read that cannot fit;
+never split or relabel evidence after reading it to erase a violation.
+
+Import the snapshot before another same-source read. A pending capture, invalid
+prior accounting, unexpected overflow or incomplete journey blocks continuation.
+If a later click fails, the reader keeps the earlier stages with
+`navigation_error`; import this evidence, diagnose it, and do not call it a
+completed search. Intermediate cards also enter source-coverage checks, even
+when the final page is empty or a login wall. Historical navigation captures
+without stage accounting remain preserved but cannot pass current gates.
 
 If the label is ambiguous or not the actual clickable control, first capture
 `--inspect-text '<observed label>'`. The snapshot includes that node's parent
@@ -125,7 +176,7 @@ the original label and timestamp, and the resulting page. The final expected
 text must be the detail's actual heading; a timeout or unchanged catalog is not
 a complete JD. Import/classify before further same-site work. Reopening a known
 catalog solely to follow an already observed title is navigation, not a new
-search query; new rows discovered there still count against the source budget.
+search query; its visible cards still need the conservative accounting above.
 
 Links which normally open a new window are directed into the capture's own tab;
 no unrelated browser tab is selected. Refusal checks apply before interaction
@@ -228,3 +279,7 @@ is outside the top three. Follow the detail cap before fetching, not after.
 These checks establish consistency of recorded evidence. They cannot prove a
 snapshot's browser origin or detect operations absent from the journal. Keep the
 actual tool trace and never claim that a hash proves an unlogged action was safe.
+
+HTTP 404/5xx captures with no extracted rows are recorded as `transport` with
+their status and original evidence. They are never successful empty searches;
+malformed captures and rows attributed to failed HTTP pages are rejected.
