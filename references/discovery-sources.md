@@ -55,6 +55,11 @@ adapters:
       title, salary and tags while id/company/location/url are populated. The
       rows exist — follow every id with `opencli indeed job <id>` to recover the
       title. `job` has aliases `detail` and `view`.
+      This adapter is US-only — its origin is hardcoded to www.indeed.com — but
+      Indeed is not. Outside the US the country site (cn/nl/de/uk.indeed.com) is
+      read through the diagnosed browser route, never through this adapter; see
+      the region table in modes/discover.md. Expect a bot-block there: a
+      Cloudflare challenge on 2026-09-08, HTTP 403 to a plain HEAD on 2026-09-20.
   linkedin:
     domain: www.linkedin.com
     login_state_2026_08_09: logged_in

@@ -403,3 +403,36 @@ def test_the_table_defers_to_discovery_sources_for_everything_else():
     t = text()
     assert "references/discovery-sources.md" in t
     assert "source of truth" in t
+
+
+def test_a_european_round_is_not_left_with_linkedin_alone():
+    """The table said "do not use: indeed" and stopped there, while the prose
+    forty lines later said the restriction is the ADAPTER's, not Indeed's site.
+
+    Measured 2026-09-20 on a live NL round: one of three directions was lost to
+    LinkedIn navigation refusals, two of ten descriptions never loaded, and the
+    delivered report had to say only one source was searched. A reader who
+    follows the table never reaches the country-site paragraph, so the table is
+    where the second route has to appear.
+    """
+    body = text()
+    table = body[body.index("| region |"):body.index("**A site being absent")]
+    europe = next(line for line in table.splitlines() if "rest of Europe" in line)
+    columns = [cell.strip() for cell in europe.split("|")]
+    assert columns[2] != "—", (
+        "the no-login column for Europe is the hole: LinkedIn alone makes every "
+        "European round single-sourced and login-dependent")
+    assert "country site" in europe, europe
+    # Named, so a round does not have to fetch a directory mid-search.
+    for domain in ("nl.indeed.com", "de.indeed.com", "uk.indeed.com"):
+        assert domain in body, domain
+    # And the reason it may still fail, so a 403 is never read as "no jobs here".
+    assert "bot-block" in body or "Cloudflare" in body
+
+
+def test_the_country_site_route_is_not_the_us_only_adapter():
+    """Naming the country sites must not invite feeding them to `opencli indeed`,
+    whose origin is hardcoded to www.indeed.com."""
+    body = text()
+    assert "US gazetteer" in body          # the adapter restriction survives
+    assert "diagnosed browser" in body or "browser route" in body

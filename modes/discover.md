@@ -288,8 +288,34 @@ before calling anything outside SKILL.md's four.
 |---|---|---|---|
 | United States | `indeed` (its native site) | `linkedin` | — |
 | China | `51job` | `boss` | — |
-| Netherlands · Germany · UK · rest of Europe | — | `linkedin` | **`indeed`** — it resolves locations against a US gazetteer and answers a London search with Ohio |
-| Middle East · anywhere with no convention table | — | `linkedin` | `target_market: other`; say plainly there is no convention data for this market |
+| Netherlands · Germany · UK · rest of Europe | Indeed's **country site** (`nl.indeed.com`, `de.indeed.com`, `uk.indeed.com`) through the diagnosed browser route — see below | `linkedin` | the **`indeed` adapter** — it resolves locations against a US gazetteer and answers a London search with Ohio |
+| Middle East · anywhere with no convention table | Indeed's country site **if the official country directory lists one**, through the same browser route | `linkedin` | the **`indeed` adapter**, same reason; `target_market: other`, and say plainly there is no convention data for this market |
+
+**The Europe row used to read "— / `linkedin` / do not use: indeed", and that
+cost a round.** The ban belongs to the **installed adapter**, whose origin is
+hardcoded to `www.indeed.com`; it was never a statement about Indeed's Dutch,
+German or British site. But the table is what a round reads, and the paragraph
+that says so sits forty lines further down under Step 2 — so a European round
+stopped at "LinkedIn only", which is one source that needs a login. Measured
+2026-09-20 on a live Netherlands round: one of three directions was lost to
+LinkedIn navigation refusals, two of ten descriptions never loaded, and the
+delivered report had to tell the user only one source had been searched.
+
+So the country site is now in the no-login column, and it is reached the same way
+the Chinese site is — the diagnosed built-in browser route, never the adapter.
+**Expect it to refuse automated access**: Indeed served a Cloudflare challenge to
+the adapter on 2026-09-08, and a plain HEAD to `nl.indeed.com`, `de.indeed.com`
+and `uk.indeed.com` from this environment returned HTTP 403 on 2026-09-20 (the
+hosts resolve and answer, so the domains are right; the bot-block is real). A
+403 or a challenge is a **site refusal** — stop that site for the round and say
+so. It is never evidence that the country has no matching jobs.
+
+**No adapter covers a market's own boards, and that does not put them out of
+reach.** Employer career pages and market-native boards are readable through the
+same browser route, using the site's own search box — for research and academic
+roles in the Netherlands, `academictransfer.com` is the canonical one. None of
+them were measured here, so treat a named board as a place to look rather than a
+verified adapter, and record what was actually read.
 
 **A site being absent from the "job listings" columns does not make it useless,
 and saying it has "no search command" is wrong.** `nowcoder` has a search command;
@@ -536,8 +562,10 @@ worldwide website. Select the country site from Indeed's official
 [country directory](https://www.indeed.com/countries), then use this round's
 `brief.locations` for cities within that country. Never reuse a previous test's
 `New York, NY` or infer the target country from the browser's current page.
-For `cn`, Indeed's country site is `https://cn.indeed.com/`; a Chinese request
-must not run against `www.indeed.com` with only `--location` changed to China.
+For `cn`, Indeed's country site is `https://cn.indeed.com/`; for `nl`, `de` and
+`uk` they are `https://nl.indeed.com/`, `https://de.indeed.com/` and
+`https://uk.indeed.com/`. A request for any of those markets must not run against
+`www.indeed.com` with only `--location` changed to the country.
 With the current US-only adapter, use the diagnosed built-in browser route on
 the Chinese site if Indeed is needed, or use the already-supported Chinese
 sources (`51job`, `boss`). Keep the original country-domain URLs for both
