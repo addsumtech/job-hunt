@@ -65,7 +65,45 @@ def test_the_catalogue_states_which_adapters_were_never_run():
     assert table["51job"]["runtime_verified"] is True
     assert table["indeed"]["runtime_verified"] is True
     assert table["boss"]["runtime_verified"] is False
-    assert table["linkedin"]["runtime_verified"] is False
+    # linkedin was upgraded on 2026-09-20 by a live NL round: 4 search calls
+    # (2 ok) and 13 job-detail calls (8 ok), captures retained. The flag says
+    # only "a command ran", so the date has to travel with it — the block
+    # header dates everything else to 2026-08-09.
+    assert table["linkedin"]["runtime_verified"] is True
+    assert table["linkedin"]["runtime_verified_on"] == "2026-09-20"
+
+
+def test_a_verified_adapter_says_which_flags_were_never_exercised():
+    """`runtime_verified: true` means a command ran, not that every documented
+    flag works.
+
+    The linkedin search_command advertises --experience-level and --job-type,
+    and the 2026-09-20 round exercised neither. Flipping the flag without
+    saying so would turn "search runs" into "this whole command line is
+    verified", which is the same over-claim the false->true rule exists to
+    stop — and the help text has no `choices` enum, so a bad value is not
+    rejected by the CLI either.
+    """
+    text = SOURCES.read_text(encoding="utf-8")
+    for flag in ("--experience-level", "--job-type"):
+        assert flag in text, flag
+    assert "not exercised" in text.casefold()   # the doc capitalises for emphasis
+
+
+def test_the_linkedin_navigation_refusal_is_recorded_as_transport_not_a_stop():
+    """Intermittent `Navigation rejected` must not become a stop-signal.
+
+    Measured 2026-09-20: it hit 2 of 4 searches and 5 of 13 detail reads, and
+    one bounded retry recovered one of three. Adding it to
+    risk-control-signals.yaml would stop the only European job-listing source
+    that needs no country site, on a failure a retry is allowed to clear.
+    """
+    text = SOURCES.read_text(encoding="utf-8")
+    signals = yaml.safe_load(SIGNALS.read_text(encoding="utf-8"))
+    assert "Navigation rejected" in text
+    assert not any("Navigation rejected" in str(s.get("pattern", ""))
+                   for s in signals["signals"]), (
+        "a transport failure a bounded retry may clear is not a platform stop")
 
 
 def test_maimai_is_marked_as_having_no_job_search():

@@ -10,8 +10,12 @@ with `SOURCE_REPORT_MISSING` when that entry is absent.
 Everything here was read out of the tool's own introspection
 (`opencli <site> --help -f yaml`, `opencli list -f yaml`, `opencli auth status`) on
 **2026-08-09** with opencli v1.8.6. `runtime_verified: true` means the command was
-actually executed that day; `false` means only the help text was read. Do not
-upgrade a `false` to a `true` without running the command and recording the output.
+actually executed; `false` means only the help text was read. An entry upgraded
+later carries its own `runtime_verified_on` date, because the header date does
+not travel with it — read that field before trusting the flag. Do not
+upgrade a `false` to a `true` without running the command and recording the
+output, and say in the notes which flags the run did **not** exercise: the flag
+means a command ran, never that every documented option works.
 
 For newer evidence, see [2026-09-12 live source acceptance](../docs/testing/live-sources-2026-09-12.md).
 It records the tested job/interview sources, including partial LinkedIn results.
@@ -63,7 +67,8 @@ adapters:
   linkedin:
     domain: www.linkedin.com
     login_state_2026_08_09: logged_in
-    runtime_verified: false
+    runtime_verified: true
+    runtime_verified_on: "2026-09-20"
     identity_field: title
     search_command: 'opencli linkedin search "<keyword>" --location "<loc>" --experience-level mid-senior --job-type full-time --date-posted week --start 0 --limit 10 --window background -f json'
     detail_command: "opencli linkedin job-detail <job-url>"
@@ -77,6 +82,24 @@ adapters:
       top three verdict levels only. `people-search` carries a verbatim
       rate-limit warning about LinkedIn's monthly Commercial Use Limit and is
       NOT a job-discovery path — do not call it in discover mode.
+      RUN 2026-09-20 (opencli 1.8.6, logged in, Netherlands round): `search` 4
+      invocations, 2 exit 0 returning 8 and 10 rows with every documented column
+      populated and `title` non-empty on all 18; `job-detail` 13 invocations, 8
+      exit 0 returning title/company/location/workplace_type/job_type/listed/
+      applicants/apply_url/description. The row `url` is a direct
+      /jobs/view/<id> link, while a detail capture's own `url` is the
+      /jobs/search/?currentJobId=<id> form — take the posting link from the
+      search row. Exercised --location, --date-posted month, --start, --limit,
+      --window background, -f json. NOT exercised, so still help-text only:
+      --experience-level, --job-type, --date-posted week, --details, and every
+      value enum (there is none, per the note above).
+      The other 4 searches and 5 detail reads failed as `transport` with
+      "Pre-navigation to https://www.linkedin.com failed: Navigation rejected."
+      This is intermittent, NOT a platform stop: it is deliberately absent from
+      risk-control-signals.yaml, and one bounded retry recovered 1 of 3 retried
+      calls. Treat it under network-recovery.md, retry once, and if it persists
+      record the row as detail_unavailable with the captured failure rather than
+      stopping the site.
   boss:
     domain: www.zhipin.com
     login_state_2026_08_09: logged_in
