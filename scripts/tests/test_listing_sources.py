@@ -236,3 +236,30 @@ def test_case_and_padding_do_not_switch_the_check_off(tmp_path, capsys, spelling
     fx.save_shortlist(workspace, data)
     _, captured = run(workspace, capsys)
     assert "NOT_A_LISTING_SOURCE" in codes(captured.out), spelling
+
+
+def test_another_site_s_capture_cannot_vouch_for_this_row(tmp_path, capsys):
+    """A row's provenance is ITS OWN site's captures.
+
+    Found by re-reading the function against _check_provenance, which scopes
+    captures by site while this one did not. `_contains_source_id` is a
+    SUBSTRING search and MIN_SOURCE_ID_LEN is 4, so a short id lands inside
+    other sites' longer ids constantly — "9597" is already inside the fixture's
+    own 51job id 173199597. Any such collision pulled that capture's command
+    into the row's evidence, and a `search` from an unrelated site then vouched
+    for a row its own site never listed.
+    """
+    workspace = fx.build_workspace(tmp_path)
+    # linkedin's people-search is documented as NOT a job-discovery path, so a
+    # row retrieved only by it must be refused.
+    person = {"id": "9597", "title": "Donghang Lyu",
+              "url": "https://www.linkedin.com/in/9597"}
+    row = dict(NOWCODER_ROW, id="linkedin-9597", source_site="linkedin",
+               source_id="9597", title="Donghang Lyu", company="LUMC",
+               url="https://www.linkedin.com/in/9597",
+               raw_text="Donghang Lyu | LUMC")
+    add_site(workspace, "linkedin", "people-search", [person], row)
+    _, captured = run(workspace, capsys)
+    assert "NOT_A_LISTING_SOURCE" in codes(captured.out), (
+        "the 51job fixture capture contains 9597 inside 173199597; its `search` "
+        "must not vouch for a linkedin row")

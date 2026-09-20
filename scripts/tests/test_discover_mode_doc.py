@@ -436,3 +436,21 @@ def test_the_country_site_route_is_not_the_us_only_adapter():
     body = text()
     assert "US gazetteer" in body          # the adapter restriction survives
     assert "diagnosed browser" in body or "browser route" in body
+
+
+def test_skill_md_and_the_region_table_agree_about_indeed():
+    """Two files carried the same routing advice and only one was updated.
+
+    SKILL.md still said "for a uk/nl/de market, prefer linkedin" after the
+    region table had opened the country-site route, so whichever file a round
+    happened to read decided whether Europe had one source or two.
+    """
+    skill = (pathlib.Path(__file__).resolve().parents[2] / "SKILL.md").read_text(
+        encoding="utf-8")
+    assert "prefer `linkedin` and record that `indeed`" not in skill
+    assert "nl.indeed.com" in skill
+    # and the adapter restriction is still stated in both places. Compare on
+    # joined whitespace: SKILL.md wraps this very phrase across "US\ngazetteer",
+    # which is the hazard test_the_trigger_sentence_survives_line_wrapping names.
+    assert "US gazetteer" in " ".join(skill.split())
+    assert "US gazetteer" in " ".join(text().split())

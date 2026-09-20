@@ -4,6 +4,8 @@ import re
 
 import yaml
 
+import discovery_catalogue
+
 REPO = pathlib.Path(__file__).resolve().parents[2]
 SOURCES = REPO / "references" / "discovery-sources.md"
 SIGNALS = REPO / "references" / "risk-control-signals.yaml"
@@ -14,11 +16,13 @@ NON_INLINED = ("upwork", "nowcoder", "maimai")
 
 
 def adapters():
-    text = SOURCES.read_text(encoding="utf-8")
-    match = re.search(r"```yaml\n(.*?)\n```", text, re.S)
-    assert match, "discovery-sources.md has no fenced yaml block"
-    block = yaml.safe_load(match.group(1))
-    return block["adapters"]
+    """One parser, the same one check_shortlist judges rows with.
+
+    This file used to re-implement the fence regex. Two copies of "how the
+    catalogue is read" can disagree, and the disagreement would show up as the
+    tests policing a document the gate parses differently.
+    """
+    return discovery_catalogue.adapters()
 
 
 def test_every_adapter_in_the_capability_matrix_is_catalogued():
@@ -183,3 +187,22 @@ def test_sandbox_local_cdp_diagnosis_precedes_browser_fallback():
         assert "host-local or unsandboxed" in text
         assert "site refusal" in text
         assert "EADDRINUSE" in text
+
+
+def test_a_listing_command_is_one_the_catalogue_can_show_returns_postings():
+    """Guards the field against the over-claim it exists to prevent.
+
+    Caught in self-review 2026-09-20: `hot` and `feed` were added to
+    51job/upwork from their command lists, but nothing in this file records
+    what either returns. Blessing an unmeasured command makes the gate vouch
+    for output nobody has seen — the same mistake as an unearned
+    runtime_verified, one layer down.
+    """
+    for site, entry in adapters().items():
+        evidence = " ".join(str(entry.get(field) or "") for field in
+                            ("search_command", "detail_command", "notes"))
+        for command in entry.get("listing_commands") or []:
+            assert command in evidence, (
+                f"{site}.listing_commands names {command!r}, but this entry's "
+                "search_command, detail_command and notes never show what it "
+                "returns — measure it and record that first")

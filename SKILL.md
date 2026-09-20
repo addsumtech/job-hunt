@@ -857,9 +857,12 @@ gazetteer.** A non-US place name does not fail — it silently returns US rows:
 25 miles away), exit 0, `classification: ok`, and `--location "Manchester, United
 Kingdom"` returned California and New York (measured 2026-08-16; the adapter's own
 `opencli indeed --help` describes it as "rendered DOM via browser session, US
-site"). So for a `uk`/`nl`/`de` market, prefer `linkedin` and record that `indeed`
-was skipped and why — and if you use it anyway, read every returned `location`
-before it becomes a row. This is a third shape of risk-register row 2: not
+site"). So for a `uk`/`nl`/`de` market this ADAPTER is the wrong tool — but that
+is not a reason to stop at `linkedin` alone, which needs a login. Indeed's own
+country site (`nl.indeed.com`, `de.indeed.com`, `uk.indeed.com`) is read through
+the diagnosed browser route; the region table in `modes/discover.md` carries it,
+along with the bot-block to expect there. If you use the adapter anyway, read
+every returned `location` before it becomes a row. This is a third shape of risk-register row 2: not
 found-nothing and not all-adapters-failed, but **adapter-succeeded-and-searched-
 the-wrong-country**, where every receipt is green and the honest conclusion
 ("there are no London backend roles") is the wrong one. `check_shortlist.py`

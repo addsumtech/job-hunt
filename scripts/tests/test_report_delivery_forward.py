@@ -248,3 +248,22 @@ def test_a_wide_entry_separates_the_company_from_the_position(tmp_path):
         text = '\n'.join(page.get_text() for page in doc)
         assert 'MarvelX AI AI Engineer' not in text
         assert 'MarvelX AI' in text and 'AI Engineer' in text
+
+
+@pytest.mark.parametrize("tail", ["。", ".", "，", " ", "；"])
+def test_a_link_with_trailing_punctuation_is_still_painted_once(tmp_path, tail):
+    """`[打开职位](url)。` is ordinary Chinese authoring, and the fullmatch that
+    spots a link-only value did not survive one full stop — so the cell fell
+    back to the inline-text-plus-duplicate path the fix exists to remove."""
+    md, pdf = tmp_path / 'report.md', tmp_path / 'report.pdf'
+    md.write_text(
+        '# 岗位建议\n\n先确认工作地点，再决定是否申请。\n\n'
+        '| 公司 | 职位 | 地点 | 判断 | 原链接 |\n'
+        '|---|---|---|---|---|\n'
+        f'| Pera | ML Developer | 登博思 | 够一够 | [打开职位](https://example.test/posting){tail} |\n',
+        encoding='utf-8')
+    assert deliver.render_pdf(md, pdf, None) == (True, '')
+    with pymupdf.open(pdf) as doc:
+        text = '\n'.join(page.get_text() for page in doc)
+        assert text.count('打开职位') == 1, text
+        assert doc[0].get_links()[0]['uri'] == 'https://example.test/posting'

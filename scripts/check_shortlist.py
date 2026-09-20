@@ -640,18 +640,27 @@ def _check_listing_sources(workspace, rows, calls):
                 "a job board from a forum, so no row's source was checked."]
     # Read each capture once, not once per row: a round with 25 rows and 17
     # captures would otherwise re-read the same megabytes 425 times.
+    # Keyed by SITE, the way _check_provenance scopes its captures. Sharing one
+    # flat map across sites let another site's capture vouch for this row, and
+    # _contains_source_id is a substring search over a 4-character floor, so
+    # collisions are ordinary rather than exotic: "9597" sits inside 173199597.
     by_capture = {}
     for call in calls:
         name = call.get("stdout_file") or call.get("snapshot_file")
-        if name and call.get("command"):
-            by_capture.setdefault(str(name).replace("\\", "/"), set()).add(
+        site = str(call.get("site") or "").strip().casefold()
+        if name and site and call.get("command"):
+            key = str(name).replace("\\", "/")
+            by_capture.setdefault(site, {}).setdefault(key, set()).add(
                 str(call["command"]))
     texts = {}
-    for name in by_capture:
-        try:
-            texts[name] = (workspace / name).read_text(encoding="utf-8")
-        except (OSError, UnicodeError):
-            continue
+    for captures in by_capture.values():
+        for name in captures:
+            if name in texts:
+                continue
+            try:
+                texts[name] = (workspace / name).read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                continue
     for index, row in enumerate(rows):
         if not isinstance(row, dict):
             continue
@@ -672,7 +681,7 @@ def _check_listing_sources(workspace, rows, calls):
         if not source_id:
             continue    # NO_SOURCE_ID already owns this row
         used = set()
-        for name, commands in by_capture.items():
+        for name, commands in by_capture.get(site.casefold(), {}).items():
             if name in texts and _contains_source_id(source_id, texts[name]):
                 used |= commands
         if used and not (used & allowed):

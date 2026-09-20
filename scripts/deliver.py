@@ -636,7 +636,11 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
         nothing but `[打开职位](…)` came out as dead text AND a clickable
         duplicate beneath it — on exactly the layout report-writing.md asks for.
         """
-        stripped = value.strip()
+        # A trailing full stop is ordinary authoring, in either script, and it
+        # must not send the cell back to the duplicate path. Only closing
+        # punctuation is shed: anything else after the link is real prose that
+        # still has to be painted.
+        stripped = value.strip().rstrip("。．.,，、;；:：!！?？ \t")
         return bool(_MD_LINK.fullmatch(stripped) or _RAW_ANGLE_URL.fullmatch(stripped))
 
     def add_block(value: str, size: float, color: tuple[float, float, float], gap: float) -> bool:

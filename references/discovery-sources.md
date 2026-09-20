@@ -17,6 +17,15 @@ upgrade a `false` to a `true` without running the command and recording the
 output, and say in the notes which flags the run did **not** exercise: the flag
 means a command ran, never that every documented option works.
 
+`listing_commands` lists the commands whose OUTPUT IS A JOB POSTING, and
+`check_shortlist.py` refuses a shortlist row retrieved by anything else. It is
+a different question from whether a command is a read: `nowcoder search`
+returns 面经 and `maimai search-talents` returns people, so both sites list
+none. Put a command here only when this file already shows what it returns —
+`51job hot` and `upwork feed` are reads whose output nobody recorded, so they
+stay off until someone measures them. An unmeasured command on this list is
+the same over-claim as an unearned `runtime_verified`.
+
 For newer evidence, see [2026-09-12 live source acceptance](../docs/testing/live-sources-2026-09-12.md).
 It records the tested job/interview sources, including partial LinkedIn results.
 The catalogue retains dated 2026-08-09 measurements for the remaining adapters;
@@ -35,7 +44,7 @@ adapters:
     login_state_2026_08_09: no_auth_adapter
     runtime_verified: true
     identity_field: title
-    listing_commands: [search, detail, hot]
+    listing_commands: [search, detail]
     search_command: 'opencli 51job search "<keyword>" --area <city> --sort 最新 --page 1 --limit 20 --window background -f json'
     detail_command: "opencli 51job detail <jobId> --url <captured-url>"
     pagination: "--page 1-based (default 1) + --limit (help: 1-50, default 20)"
@@ -86,8 +95,11 @@ adapters:
       rate-limit warning about LinkedIn's monthly Commercial Use Limit and is
       NOT a job-discovery path — do not call it in discover mode.
       RUN 2026-09-20 (opencli 1.8.6, logged in, Netherlands round): `search` 4
-      invocations, 2 exit 0 returning 8 and 10 rows with every documented column
-      populated and `title` non-empty on all 18; `job-detail` 13 invocations, 8
+      invocations, 2 exit 0 returning 8 and 10 rows. rank/title/company/location/
+      listed/url were non-empty on all 18 rows; `salary` was EMPTY on 17 of 18,
+      so a round that filters LinkedIn cards on pay discards almost everything
+      and must recover pay from the detail read or leave the field empty.
+      `job-detail` 13 invocations, 8
       exit 0 returning title/company/location/workplace_type/job_type/listed/
       applicants/apply_url/description. The row `url` is a direct
       /jobs/view/<id> link, while a detail capture's own `url` is the
@@ -127,7 +139,7 @@ adapters:
     login_state_2026_08_09: not_logged_in
     runtime_verified: false
     identity_field: title
-    listing_commands: [search, detail, feed]
+    listing_commands: [search, detail]
     search_command: 'opencli upwork search "<keyword>" --location "<loc>" --sort recency --page 1 --per_page 10 -f json'
     detail_command: "opencli upwork detail <id>"
     pagination: "--page 1-based + --per_page (help: 10-50). NOTE the underscore: --per_page, not --per-page."
