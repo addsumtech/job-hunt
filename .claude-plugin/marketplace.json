@@ -7,14 +7,14 @@
   },
   "metadata": {
     "description": "job-hunt skill — find roles, judge them, build and pressure-test the application, and rehearse the interview, for Claude Code and Codex",
-    "version": "1.0.1"
+    "version": "1.1.0"
   },
   "plugins": [
     {
       "name": "job-hunt",
       "source": "./",
       "description": "A career coach that reads your real history and refuses to embellish it. Four modes: discover what is out there worth looking at, assess whether one posting is worth applying to, apply by building and pressure-testing the package, and interview by rehearsing and debriefing. Three rules are enforced by scripts rather than by prose: it never invents a skill, title, date or metric, and every claim entering the CV has to trace to your own profile, an answer you gave, or a paper or repository of yours it actually read; it never predicts an interview or offer probability, and never emits a 0-100 score, in English or Chinese; and it never grades its own work, since an ATS parser, a recruiter and a hiring manager each read the package in a fresh context and all three must pass it. Personal data follows the market rather than a template: photo, date of birth and age are stripped for the US, Canada, the UK, Ireland, Australia and New Zealand and the suppression is stated out loud, kept where the local convention keeps them, and withheld for a market it has no table for. Five convention tables ship with it, each entry carrying its source URL and a review date, and a stale entry renders under a banner saying so. Renders CV and motivation letter to Markdown, .docx and PDF through LaTeX, plus a Japanese rirekisho form and the per-criterion supporting statement that UK NHS and Civil Service applications are actually scored on, in Dutch, German, French, Spanish, Italian, Chinese, Japanese and Korean as well as English. Runs on your own machine: it executes this repo's Python scripts, reads and writes under a job-profiles workspace and your Downloads folder, and reaches a job platform only through an adapter you have logged into yourself. It never submits an application, never logs in for you, and never predicts your odds.",
-      "version": "1.0.1",
+      "version": "1.1.0",
       "author": {
         "name": "Addsum",
         "url": "https://github.com/addsumtech"
