@@ -58,13 +58,17 @@ _PDF_WARNING = "\u26a0"
 def report_audience_findings(source: str) -> list[str]:
     """Keep fixture provenance in the private audit, not the client report.
 
-    Match specific internal-test narration, not words such as '测试' or
-    '模拟面试': those are ordinary job requirements and preparation advice.
+    Match fixture provenance only, not words such as '测试' or '模拟面试':
+    those are ordinary job requirements and preparation advice. Practice scope
+    ('本轮只练了技术面', 'a mock is not a real interview') is normal advice to a
+    real client, and 'synthetic candidate' is chemistry vocabulary.
     """
-    markers = ("固定虚构履历", "固定的虚构履历", "并非真人面试",
-               "本轮只练了", "synthetic candidate", "fixed fictional profile",
-               "not a real interview")
-    folded = source.casefold()
+    markers = ("固定虚构履历", "固定的虚构履历", "固定虚构简历", "固定的虚构简历",
+               "测试用的虚构履历", "测试用虚构履历", "测试用的虚构简历", "测试用虚构简历",
+               "fixed fictional", "synthetic candidate profile")
+    # A Markdown line break must not split a marker.
+    folded = re.sub(r"\s+", " ", source.casefold())
+    folded = re.sub(r"(?<=[^\x00-\x7f]) (?=[^\x00-\x7f])", "", folded)
     return [f"REPORT_INTERNAL_NARRATION: {marker!r}; move test-process notes to the private audit and write advice for the client"
             for marker in markers if marker in folded]
 
@@ -1090,7 +1094,10 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
                 source = visible_markdown(src)
                 if src.name == "report.md" and reviewed_report:
                     shutil.copy2(workspace / "report.pdf", pdf)
-                    ok, why = _verify_pdf(pdf, source, has_cjk(source), src.read_text(encoding="utf-8"))
+                    # check_layout --report above already bound every visible
+                    # Markdown line and table cell to this PDF's text. The CJK
+                    # count would refuse a merged company cell, which that passes.
+                    ok, why = _verify_pdf(pdf, source, False, src.read_text(encoding="utf-8"))
                     if ok:
                         written.append(pdf)
                     else:

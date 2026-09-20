@@ -95,6 +95,20 @@ def inspect(ws: pathlib.Path, report=False):
     artifacts = journal.as_mapping(review.get("artifacts"))
     if report:
         bind("report.md", review.get("source_sha256"), "report source")
+        if (ws / "report.md").is_file() and (ws / "report.pdf").is_file():
+            try:
+                import pymupdf
+                with pymupdf.open(ws / "report.pdf") as doc:
+                    pages = [page.get_text() for page in doc]
+                missing = layout_requirements.report_text_problems(
+                    (ws / "report.md").read_text(encoding="utf-8"), pages)
+            except Exception as exc:  # an unreadable PDF cannot vouch for its source
+                missing = [f"<unreadable report.pdf: {exc}>"]
+            if missing:
+                more = f" and {len(missing) - 3} more" if len(missing) > 3 else ""
+                findings.append("REPORT_PDF_TEXT_MISMATCH: report.pdf does not carry the current "
+                                "report.md text, in order: " + ", ".join(repr(m[:50]) for m in missing[:3]) + more
+                                + "; re-render report.pdf from the current report.md and review it again")
     elif (ws / "cv.docx").is_file() and (ws / "cv.pdf").is_file():
         export = journal.as_mapping(review.get("word_export"))
         evidence = bind(export.get("path"), export.get("sha256"), "Word export PDF")

@@ -220,10 +220,10 @@ test('Chrome and Edge discovery covers macOS, Windows and Linux daily profiles',
 
 // Execute the actual page expression against observed DOM-like nodes, rather
 // than merely asserting that a click-shaped CDP command was emitted.
-function navigationDom(labels, {form=false, tag='DIV', href=null}={}) {
+function navigationDom(labels, {form=false, tag='DIV', href=null, role=null, value=null}={}) {
   const clicks=[], events=[], assignments=[];
-  const nodes=labels.map(label=>({innerText:label,tagName:tag,disabled:false,
-    getClientRects:()=>[{}],getAttribute:key=>key==='href'?href:null,
+  const nodes=labels.map(label=>({innerText:label,value,tagName:tag,disabled:false,
+    getClientRects:()=>[{}],getAttribute:key=>key==='href'?href:key==='role'?role:null,
     contains:()=>false,closest(selector){return selector==='form'?(form?{}:null):this;},
     click(){clicks.push(label);}}));
   const context={URL,location:{href:'https://example.com/jobs',assign:url=>assignments.push(url)},
@@ -459,4 +459,129 @@ test('a refused diagnostic remains a site stop, not pending catalog accounting',
   assert.equal(result.blocked,true);
   assert.equal(result.catalog_accounting_pending,undefined);
   assert.equal(result.navigation_budget.observed_rows,0);
+});
+
+// 2026-09-19 review: BOSS's 立即沟通 messages the recruiter (irreversible), and
+// the skill serves nl/de/fr markets whose apply/login words the list lacked.
+const ACTION_LABELS=['立即沟通','继续沟通','聊一聊','感兴趣','关注','关注公司','收藏职位','举报','分享',
+  '立即申请','申请职位','一键投递','Follow','Connect','Message','I\'m interested','Easy Apply','Save job',
+  'Solliciteer nu','Solliciteren','Inloggen','Aanmelden','Jetzt bewerben','Anmelden','Postuler','Se connecter',
+  'Sign up','Log on',
+  // adversarial pass: verb plus object/modifier, and state toggles
+  '申请该职位','在线申请','收藏该职位','应聘该职位','取消收藏','已收藏','立即报名','一键申请','免费注册',
+  'Save this job','Unsave','Follow company','Message recruiter','Report this job','Share this job',
+  'Vacature opslaan','Job speichern','Bewerben Sie sich','Apply on company site','Jetzt bewerben ›','立即沟通 >','感兴趣 ♡',
+  // independent reviewer's list (not tuned by the author of the matcher)
+  '投个简历','关注他','关注TA','联系HR','打招呼','I’m interested','Following','Merken','Reageer direct',
+  'Envoyer ma candidature','Je postule','エントリーする','気になる','즉시지원','입사지원','Create job alert',
+  'Chat with recruiter','立即 沟通','Ａｐｐｌｙ','登录/注册','登录后查看','提交申请','Log in to apply','Sign in with Google','Register now',
+  '申请加入','私信','发消息','立即咨询','Send message','Bericht sturen','Contacteer ons','Nachricht senden','Kontakt aufnehmen','Envoyer un message','Save for later','I am interested',
+  '이력서 등록하기','会員登録する','Bewaar deze vacature','Jobalarm erstellen','Add to my jobs','Upload your CV',
+  // 2026-09-20 review: 88 labels harvested from real boards; these 56 were not refused.
+  '投简历','发简历','简历投递','职位申请','附件简历投递','同意并投递','登录后投递','扫码登录','微信登录','验证码登录',
+  '手机号登录','上传简历','完善简历','电话联系','微信联系','预约面试','预约宣讲会','报名参加',
+  'Start Your Application','Use My Last Application','Autofill with Resume','Create Account','Join now',
+  'Continue with Google','Post your resume','Upload your resume','Attach resume','Withdraw application',
+  'Add a Salary','Write a review','Add to favorites','Add to my jobs','Bewaar vacature','Maak jobalert',
+  'Jobalarm erstellen','Konto erstellen','Créer une alerte emploi','Contacter le recruteur',
+  'キープする','保存する','会員登録','メッセージを送る','스크랩','회원가입','메시지 보내기','이력서 등록'];
+const JOB_TITLES=['Design Intern','Registered Nurse','注册会计师（审计）','Catalog Integration Engineer',
+  '专利申请代理人','Chat Support Agent','Report Writer','Connected Vehicle Engineer','（2027届校招）投资银行股权业务线助理',
+  'CDL-A Truck Driver – $5,000 Sign-On Bonus','Single Sign-On (SSO) Engineer','Recruiting Specialist Bewerbermanagement (m/w/d)',
+  'Medewerker Sollicitatiebeheer','一键部署平台研发','艺术品收藏顾问','注册会计师','Submittals Coordinator','Subscriber Growth Analyst',
+  'Contact Center Agent','Share Plan Administrator','Follow-up Coordinator','Merkenbeheerder',
+  'Purchase Manager','Senior Purchase Engineer','邮政投递员','订阅业务运营经理','统一登录平台开发工程师','Register Clerk',
+  'Registration Coordinator','Login Security Engineer','Save the Children – Program Officer','Message Queue Engineer',
+  '提交测试工程师','举报受理专员','Sign Language Interpreter','Logistics Planner','Blog Editor','Catalog Specialist',
+  'Werkstudent Bewerbungsmanagement','Sachbearbeiter Bewerbermanagement','Applied Scientist',
+  'Customer Contact Specialist','Message Broker Developer','发消息推送后端开发','私信风控策略','咨询顾问','Kontaktmanager Vertrieb',
+  'Report Analyst (Power BI)','Checkout Engineer (Payments)','Registered Dietitian','申请人服务专员',
+  // 2026-09-20 review: real titles the anywhere-lists wrongly refused. A verb that
+  // also lives inside a title may only match as a whole control label.
+  '数据删除合规专员','Job Alerts Product Manager','応募者管理担当','ログイン基盤エンジニア',
+  '입사지원서 검토 담당자','로그인 보안 엔지니어'];
+
+test('application, contact and account controls never click in any served language',async()=>{
+  const {clickExpression}=await import('../browser_cdp.mjs');
+  for(const label of ACTION_LABELS){
+    const f=navigationDom([label]);
+    const result=runInNewContext(clickExpression(label),f.context);
+    assert.ok(result.error,`clicked ${label}`);
+    assert.deepEqual(f.clicks,[],label);
+  }
+});
+
+test('job titles that merely contain an action word still navigate',async()=>{
+  const {clickExpression}=await import('../browser_cdp.mjs');
+  for(const label of JOB_TITLES){
+    const f=navigationDom([label]);
+    assert.equal(runInNewContext(clickExpression(label),f.context).performed,true,label);
+    assert.deepEqual(f.clicks,[label]);
+  }
+});
+
+// Structural rule. A catalog job title is a link; application, contact and
+// account controls are buttons. No word list can keep up with every board, so a
+// button-like control is refused unless it reads as pagination or a detail link.
+test('a button-like control is refused even when no word list names it',async()=>{
+  const {clickExpression}=await import('../browser_cdp.mjs');
+  const cases=[
+    ['立即投递',{tag:'BUTTON'}], ['Create Account',{tag:'BUTTON'}],
+    ['一键直达',{tag:'BUTTON'}],        // in no word list: refused by shape alone
+    ['Quick action',{tag:'BUTTON'}],
+    ['Weiter zum Profil',{tag:'BUTTON'}],
+    ['Create Account',{tag:'DIV',role:'button'}],
+    ['立即投递',{tag:'DIV',role:'button'}],
+    ['Senior Platform Engineer',{tag:'BUTTON'}], // a title on a button is still a button
+    ['提交',{tag:'INPUT',value:'提交'}],
+  ];
+  for(const [label,options] of cases){
+    const f=navigationDom([label],options);
+    const result=runInNewContext(clickExpression(label),f.context);
+    assert.ok(result.error,`clicked ${label} (${JSON.stringify(options)})`);
+    assert.deepEqual(f.clicks,[],label);
+  }
+});
+
+test('pagination and detail controls still navigate, as buttons or as links',async()=>{
+  const {clickExpression}=await import('../browser_cdp.mjs');
+  const cases=[
+    ['下一页',{tag:'BUTTON'}], ['上一页',{tag:'BUTTON'}], ['Next',{tag:'BUTTON'}],
+    ['Previous',{tag:'BUTTON'}], ['»',{tag:'BUTTON'}], ['‹',{tag:'BUTTON'}],
+    ['2',{tag:'BUTTON'}], ['第 3 页',{tag:'BUTTON'}], ['Next page',{tag:'BUTTON'}],
+    ['查看详情',{tag:'BUTTON'}], ['职位详情',{tag:'BUTTON'}], ['查看更多',{tag:'BUTTON'}],
+    ['展开',{tag:'BUTTON'}], ['收起',{tag:'BUTTON'}], ['View details',{tag:'BUTTON'}],
+    ['Show more',{tag:'BUTTON'}], ['Meer tonen',{tag:'BUTTON'}], ['Mehr anzeigen',{tag:'BUTTON'}],
+    ['Voir plus',{tag:'BUTTON'}], ['もっと見る',{tag:'BUTTON'}], ['더보기',{tag:'BUTTON'}],
+    ['Volgende',{tag:'BUTTON'}], ['Nächste Seite',{tag:'BUTTON'}], ['Suivant',{tag:'BUTTON'}],
+    ['次へ',{tag:'BUTTON'}], ['다음',{tag:'BUTTON'}],
+    ['下一页',{tag:'DIV',role:'button'}],
+    ['Senior Platform Engineer',{tag:'A',href:'/jobs/42'}],
+    ['（2027届校招）投资银行股权业务线助理',{tag:'A',href:'/jobs/7'}],
+    ['数据删除合规专员',{tag:'A',href:'/jobs/8'}],
+  ];
+  for(const [label,options] of cases){
+    const f=navigationDom([label],options);
+    const result=runInNewContext(clickExpression(label),f.context);
+    assert.equal(result.performed,true,`refused ${label} (${JSON.stringify(options)})`);
+    assert.deepEqual(f.clicks,[label],label);
+  }
+});
+
+test('the page expression and isActionControl share one vocabulary',async()=>{
+  const {clickExpression,isActionControl,isSafeNavigationLabel}=await import('../browser_cdp.mjs');
+  // The structural allowance is the same predicate the page expression inlines.
+  for(const label of ['下一页','»','2','查看详情','View details','더보기','Senior Platform Engineer','Create Account','一键极速投递']){
+    const f=navigationDom([label],{tag:'BUTTON'});
+    const navigated=runInNewContext(clickExpression(label),f.context).performed===true;
+    assert.equal(navigated,isSafeNavigationLabel(label) && !isActionControl(label),`button branch disagrees on ${label}`);
+  }
+  for(const label of ACTION_LABELS) assert.equal(isActionControl(label),true,`isActionControl missed ${label}`);
+  for(const label of JOB_TITLES) assert.equal(isActionControl(label),false,`isActionControl refused title ${label}`);
+  // Same decision when reached through the page expression, on a plain link.
+  for(const label of [...ACTION_LABELS,...JOB_TITLES]){
+    const f=navigationDom([label],{tag:'A',href:'/x'});
+    const refused=Boolean(runInNewContext(clickExpression(label),f.context).error);
+    assert.equal(refused,isActionControl(label),`page expression and isActionControl disagree on ${label}`);
+  }
 });

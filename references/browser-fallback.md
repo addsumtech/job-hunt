@@ -100,7 +100,9 @@ existing tab. Read/classify and import this file before the next read of the sam
 site. Navigation failures return an error, not an empty success. The reader
 supports known HTTP(S) URLs and explicit read-only navigation to an observed
 job title, detail control or pagination label. It never submits forms or clicks
-application/account controls. A rendered catalog without hrefs is not evidence
+application, contact or account controls (投递/申请, BOSS's 立即沟通 which messages
+the recruiter, 关注/收藏, Follow/Connect, Solliciteer/Bewerben/Postuler, login).
+The helper refuses these labels in code as a backstop; never pass one. A rendered catalog without hrefs is not evidence
 that no job details exist. Inspect the observed label, then navigate within the
 same task-owned tab:
 

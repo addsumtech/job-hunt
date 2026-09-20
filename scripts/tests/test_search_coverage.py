@@ -326,3 +326,274 @@ def test_capture_paths_cannot_escape_raw_directory(tmp_path):
     assert gate._capture_path(ws, 'raw/ok.json') == inside
     for name in [str(outside), str(alias), 'raw/escape.json', str(ws / 'brief.yaml')]:
         assert gate._capture_path(ws, name) is None
+
+# --- 2026-09-19 review: real adapter row shapes and capture path spellings ---
+
+def build_for(tmp_path, site):
+    ws = tmp_path / "search"
+    (ws / "raw").mkdir(parents=True)
+    (ws / "brief.yaml").write_text("target_count: 18\n")
+    (ws / "shortlist.yaml").write_text("rows: []\n")
+    (ws / "report.md").write_text("Search report\n")
+    data = {"plan": {"sources": [{"id": "a", "site": site, "label": site, "method": "search"}],
+                     "directions": [{"id": "ib", "label": "Investment banking", "query": "IB Analyst"}]},
+            "checks": [], "leads": []}
+    save(ws, data)
+    assert gate.main(["--workspace", str(ws), "--record-plan"]) == 0
+    return ws, data
+
+
+def rewrite_last_record(ws, **fields):
+    records = journal._records(ws)
+    records[-1].update(fields)
+    (ws / "journal.jsonl").write_text("\n".join(json.dumps(r) for r in records) + "\n")
+
+
+def test_an_absolute_capture_path_inside_the_workspace_counts(tmp_path):
+    # check_opencli_result stores the caller's spelling; discover.md never says
+    # it must be relative, and check_candidate_match already accepts this.
+    ws, data = build(tmp_path)
+    ref = capture(ws, [])
+    rewrite_last_record(ws, stdout_file=str(ws / ref["file"]))
+    close(ws, data, ref)
+    assert gate.inspect(ws) == []
+    data["checks"][0]["evidence"]["file"] = str(ws / ref["file"])
+    save(ws, data)
+    assert gate.inspect(ws) == []
+
+
+def test_an_absolute_capture_path_outside_the_workspace_is_refused(tmp_path):
+    ws, data = build(tmp_path)
+    ref = capture(ws, [])
+    elsewhere = tmp_path / "elsewhere" / "raw"
+    elsewhere.mkdir(parents=True)
+    (elsewhere / "copy.json").write_bytes((ws / ref["file"]).read_bytes())
+    rewrite_last_record(ws, stdout_file=str(elsewhere / "copy.json"))
+    close(ws, data, ref)
+    assert "missing raw retrieval evidence" in gate.inspect(ws)[0]
+
+
+BOSS_ROW = {"name": "MRI Research Scientist", "salary": "30-50K", "company": "Example",
+            "security_id": "SMzaHPdmtJoWE-M1zr66ObwG5zSONfydn5a",
+            "url": "https://www.zhipin.com/job_detail/77657ebca4c7a4c90nF73ty-GVVS.html"}
+
+
+def test_boss_rows_are_leads_keyed_like_the_shortlist(tmp_path):
+    ws, data = build_for(tmp_path, "boss")
+    ref = capture(ws, [BOSS_ROW], site="boss")
+    close(ws, data, {**ref, "quote": "MRI Research Scientist"})
+    assert "boss/77657ebca4c7a4c90nF73ty-GVVS" in " ".join(gate.inspect(ws))
+    (ws / "shortlist.yaml").write_text(yaml.safe_dump({"rows": [
+        {"source_site": "boss", "source_id": "77657ebca4c7a4c90nF73ty-GVVS",
+         "id": "boss-77657ebca4c7a4c90nF73ty-GVVS"}]}))
+    assert gate.inspect(ws) == []
+
+
+def test_indeed_rows_with_empty_titles_are_still_leads(tmp_path):
+    ws, data = build_for(tmp_path, "indeed")
+    row = {"title": "", "company": "Example", "location": "Austin, TX", "salary": "",
+           "id": "7f1d2c3b4a5e6f70", "url": "https://www.indeed.com/viewjob?jk=7f1d2c3b4a5e6f70"}
+    ref = capture(ws, [row], site="indeed")
+    ref["quote"] = "Austin, TX"
+    close(ws, data, ref)
+    assert "indeed/7f1d2c3b4a5e6f70" in " ".join(gate.inspect(ws))
+
+
+def test_a_linkedin_search_url_and_view_url_are_one_lead(tmp_path):
+    ws, data = build_for(tmp_path, "linkedin")
+    rows = [{"rank": "1", "title": "ML Engineer", "company": "Example",
+             "url": "https://www.linkedin.com/jobs/view/4453121690"},
+            {"title": "ML Engineer", "company": "Example",
+             "url": "https://www.linkedin.com/jobs/search/?currentJobId=4453121690&keywords=ml"}]
+    close(ws, data, capture(ws, rows, site="linkedin"))
+    assert "linkedin/4453121690" in gate.inspect(ws)[0]
+    (ws / "shortlist.yaml").write_text(yaml.safe_dump({"rows": [
+        {"source_site": "linkedin", "source_id": "4453121690", "id": "linkedin-4453121690"}]}))
+    assert gate.inspect(ws) == []
+
+
+def test_a_disposition_may_name_the_lead_by_its_url(tmp_path):
+    # Runs made while the gate keyed LinkedIn leads by full URL wrote that URL
+    # as source_id; the same posting must still resolve to the same lead.
+    ws, data = build_for(tmp_path, "linkedin")
+    rows = [{"title": "ML Engineer", "company": "Example", "location": "Delft",
+             "url": "https://www.linkedin.com/jobs/view/4453121690"}]
+    ref = capture(ws, rows, site="linkedin")
+    close(ws, data, ref)
+    data["leads"] = [{"site": "linkedin", "source_id": rows[0]["url"], "status": "excluded",
+                      "reason_code": "wrong_location", "reason": "Outside the commute radius",
+                      "evidence": {**ref, "quote": "Delft"}}]
+    save(ws, data)
+    assert gate.inspect(ws) == []
+
+
+def test_an_article_lead_can_be_excluded_as_not_a_posting(tmp_path):
+    ws, data = build_for(tmp_path, "weixin")
+    rows = [{"rank": "1", "page": "1", "title": "2026 投行行业展望",
+             "url": "https://mp.weixin.qq.com/s/AAA111bbb222", "summary": "行业分析",
+             "publish_time": "2026-09-01"}]
+    ref = capture(ws, rows, site="weixin")
+    close(ws, data, ref)
+    data["leads"] = [{"site": "weixin", "source_id": "AAA111bbb222", "status": "excluded",
+                      "reason_code": "not_a_posting", "reason": "Industry commentary, no opening",
+                      "evidence": {**ref, "quote": "行业分析"}}]
+    save(ws, data)
+    assert gate.inspect(ws) == []
+
+
+def test_a_relevant_lead_left_out_must_stay_visible_in_the_report(tmp_path):
+    ws, data = build(tmp_path)
+    rows = [{"id": "job-1001", "title": "IB Analyst", "url": "https://example.com/jobs/job-1001"}]
+    ref = capture(ws, rows)
+    close(ws, data, ref)
+    data["leads"] = [{"site": "employer", "source_id": "job-1001", "status": "excluded",
+                      "reason_code": "not_selected", "reason": "Lower priority than retained roles",
+                      "evidence": ref}]
+    save(ws, data)
+    assert "not_selected" in gate.inspect(ws)[0]
+    (ws / "report.md").write_text("Other relevant roles: https://example.com/jobs/job-1001\n")
+    assert gate.inspect(ws) == []
+
+
+# 2026-09-19 review: user-recovery.md resumes a stopped search in a new linked
+# round. These pin the order that references/user-recovery.md now documents.
+def resume_round(tmp_path, register_first):
+    owner, data = build(tmp_path)
+    capture(owner, [], classification="platform_limit")  # human verification stop
+    resume = tmp_path / "search-resume-1"
+    (resume / "raw").mkdir(parents=True)
+    (resume / "shortlist.yaml").write_text("rows: []\n")
+    rounds = [".", "../search-resume-1"]
+    (owner / "collection.yaml").write_text(yaml.safe_dump(
+        {"rounds": [{"workspace": r} for r in rounds]}))
+    if not register_first:
+        ref = capture(resume, [])
+    data["plan"]["rounds"] = rounds
+    save(owner, data)
+    gate.record_plan(owner)
+    if register_first:
+        ref = capture(resume, [])
+    else:  # the controlled chronology of a read made before registration
+        records = journal._records(resume)
+        records[-1]["ts"] = "2000-01-01T00:00:00Z"
+        (resume / "journal.jsonl").write_text("\n".join(json.dumps(r) for r in records) + "\n")
+    close(owner, data, {**ref, "workspace": "../search-resume-1"})
+    return owner
+
+
+def test_a_resume_round_registered_at_the_owner_before_reading_completes(tmp_path):
+    assert gate.inspect(resume_round(tmp_path, register_first=True)) == []
+
+
+def test_a_resume_round_read_before_registration_cannot_complete(tmp_path):
+    assert "read before" in gate.inspect(resume_round(tmp_path, register_first=False))[0]
+
+
+# 2026-09-19 adversarial pass on the fixes above.
+SOGOU = "https://weixin.sogou.com/link?url=dn9a_{}&type=2&query=%E6%A0%A1%E6%8B%9B"
+
+
+def test_wechat_search_links_stay_distinct_leads(tmp_path):
+    # opencli weixin search returns weixin.sogou.com/link?url=... for every
+    # article; a path word such as "link" is not a posting id.
+    ws, data = build_for(tmp_path, "weixin")
+    rows = [{"title": t, "url": SOGOU.format(x), "summary": s}
+            for t, x, s in [("行业评论", "AAA111", "行业分析"), ("2027校招公告", "BBB222", "招聘"),
+                            ("校招补录", "CCC333", "补录")]]
+    ref = capture(ws, rows, site="weixin")
+    close(ws, data, ref)
+    data["leads"] = [{"site": "weixin", "source_id": rows[0]["url"], "status": "excluded",
+                      "reason_code": "not_a_posting", "reason": "Industry commentary",
+                      "evidence": {**ref, "quote": "行业分析"}}]
+    save(ws, data)
+    pending = " ".join(gate.inspect(ws))
+    assert "BBB222" in pending and "CCC333" in pending
+
+
+def test_not_selected_lead_is_visible_through_its_clean_posting_link(tmp_path):
+    ws, data = build_for(tmp_path, "51job")
+    row = {"jobId": "171782851", "title": "算法工程师", "location": "北京",
+           "url": "https://jobs.51job.com/beijing/171782851.html?s=sou_sou_soulb&t=0_0"}
+    ref = capture(ws, [row], site="51job")
+    close(ws, data, {**ref, "quote": "算法工程师"})
+    data["leads"] = [{"site": "51job", "source_id": "171782851", "status": "excluded",
+                      "reason_code": "not_selected", "reason": "Lower priority",
+                      "evidence": {**ref, "quote": "北京"}}]
+    save(ws, data)
+    (ws / "report.md").write_text("其他相关岗位：[算法工程师](https://jobs.51job.com/beijing/171782851.html)\n")
+    assert gate.inspect(ws) == []
+
+
+def test_boss_security_id_is_an_identity_spelling(tmp_path):
+    ws, data = build_for(tmp_path, "boss")
+    no_url = {**BOSS_ROW, "url": ""}
+    ref = capture(ws, [BOSS_ROW, {**no_url, "name": "Second Role", "security_id": "SECOND-security-99"}],
+                  site="boss")
+    close(ws, data, {**ref, "quote": "MRI Research Scientist"})
+    assert "boss/SECOND-security-99" in " ".join(gate.inspect(ws))
+    (ws / "shortlist.yaml").write_text(yaml.safe_dump({"rows": [
+        {"source_site": "boss", "source_id": BOSS_ROW["security_id"], "id": "boss-a"},
+        {"source_site": "boss", "source_id": "SECOND-security-99", "id": "boss-b"}]}))
+    assert gate.inspect(ws) == []
+
+
+def test_a_round_stopped_before_shortlisting_is_not_listed_on_resume(tmp_path):
+    # The stopped round has no shortlist; only the new round is delivered. The
+    # owner's own captures are still checked, so nothing it read can vanish.
+    owner, data = build(tmp_path)
+    (owner / "shortlist.yaml").unlink()
+    capture(owner, [], classification="platform_limit")
+    resume = tmp_path / "search-resume-1"
+    (resume / "raw").mkdir(parents=True)
+    (resume / "shortlist.yaml").write_text("rows: []\n")
+    (owner / "collection.yaml").write_text(yaml.safe_dump({"rounds": [{"workspace": "../search-resume-1"}]}))
+    data["plan"]["rounds"] = ["../search-resume-1"]
+    save(owner, data)
+    gate.record_plan(owner)
+    ref = capture(resume, [])
+    close(owner, data, {**ref, "workspace": "../search-resume-1"})
+    assert gate.inspect(owner) == []
+
+
+# 2026-09-19 second adversarial pass: a dated or categorised path must not
+# become the posting identity, and a slug id must match what a shortlist records.
+def test_dated_url_paths_do_not_merge_two_postings(tmp_path):
+    ws, data = build_for(tmp_path, "employer")
+    rows = [{"title": "AI Engineer", "url": "https://werk.example.nl/vacatures/2026/ai-engineer"},
+            {"title": "MRI Reconstruction Engineer",
+             "url": "https://werk.example.nl/vacatures/2026/mri-reconstruction-engineer"}]
+    ref = capture(ws, rows)
+    close(ws, data, {**ref, "quote": "AI Engineer"})
+    data["leads"] = [{"site": "employer", "source_id": "ai-engineer", "status": "excluded",
+                      "reason_code": "wrong_role", "reason": "Not reconstruction",
+                      "evidence": {**ref, "quote": "AI Engineer"}}]
+    save(ws, data)
+    assert "mri-reconstruction-engineer" in " ".join(gate.inspect(ws))
+
+
+@pytest.mark.parametrize("url,source_id", [
+    ("https://www.shixiseng.com/intern/inn_xkbzvqfrmlaw", "inn_xkbzvqfrmlaw"),
+    ("https://acme.wd3.myworkdayjobs.com/en-US/careers/job/Amsterdam/AI-Engineer_R12345", "R12345"),
+    ("https://boards.greenhouse.io/acme/jobs/4567890", "4567890"),
+])
+def test_a_slug_or_suffix_id_retains_its_shortlist_row(tmp_path, url, source_id):
+    ws, data = build_for(tmp_path, "employer")
+    ref = capture(ws, [{"title": "Engineer", "url": url}])
+    close(ws, data, {**ref, "quote": "Engineer"})
+    (ws / "shortlist.yaml").write_text(yaml.safe_dump({"rows": [
+        {"source_site": "employer", "source_id": source_id, "id": f"employer-{source_id}"}]}))
+    assert gate.inspect(ws) == []
+
+
+def test_not_selected_visibility_ignores_a_tracking_query(tmp_path):
+    ws, data = build_for(tmp_path, "employer")
+    row = {"title": "MRI Engineer", "location": "Best",
+           "url": "https://www.philips.com/careers/job/mri-engineer?src=linkedin"}
+    ref = capture(ws, [row])
+    close(ws, data, {**ref, "quote": "MRI Engineer"})
+    data["leads"] = [{"site": "employer", "source_id": "mri-engineer", "status": "excluded",
+                      "reason_code": "not_selected", "reason": "Lower priority",
+                      "evidence": {**ref, "quote": "Best"}}]
+    save(ws, data)
+    (ws / "report.md").write_text("Other roles: https://www.philips.com/careers/job/mri-engineer\n")
+    assert gate.inspect(ws) == []

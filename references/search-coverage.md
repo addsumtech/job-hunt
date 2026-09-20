@@ -69,8 +69,13 @@ source's directions without retrying a stopped site. Other sources still need
 their own results. A successful capture, time budget, row limit, target count or
 shortfall cannot justify a blocked status. Pending work prevents full delivery.
 
-Leads in structured captures are matched by `site` and `source_id`. A matching
-posting selected for delivery is retained automatically. Otherwise use `leads`:
+Leads in structured captures are matched by `site` and `source_id`. A row is a
+lead when it has the adapter's title field (`name` for `boss`; `title` otherwise,
+even when empty as on `indeed`) and an identity: an explicit id field, else the
+posting id in its URL (`currentJobId`/`jk` query values, else the last path
+segment without `.html`). A posting selected for delivery is retained
+automatically when its `source_id` is any of those spellings. Journal paths may
+be workspace-relative or absolute inside the workspace. Otherwise use `leads`:
 
 ```yaml
 leads:
@@ -87,8 +92,13 @@ leads:
 ```
 
 Allowed exclusion codes: `wrong_year`, `closed`, `wrong_location`, `wrong_role`,
-`wrong_level`, `eligibility`, `duplicate`. Quotes must belong to the specified
-lead, not another row in the same file. Blocked leads require the same captured
+`wrong_level`, `eligibility`, `duplicate`, `not_a_posting` (an article, news item
+or company page returned by the search, e.g. a WeChat industry commentary) and
+`not_selected` (a relevant posting left out of the detailed selection). A
+`not_selected` lead must stay visible to the client: list its posting link in
+`report.md`, for example under other relevant roles not yet read in full. Never
+use another code for a relevant posting merely to shorten the report. Quotes must
+belong to the specified lead, not another row in the same file. Blocked leads require the same captured
 failure and report visibility as blocked checks. When a catalog title identity
 resolves to a different detail id, use `status: retained` and `row_id` of a selected
 shortlist row with the same site and title. Unprocessed or unknown leads fail.

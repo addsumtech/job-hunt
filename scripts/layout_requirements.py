@@ -4,9 +4,336 @@ These checks supplement, never replace, page-by-page visual comparison.
 """
 from __future__ import annotations
 
+import html
 import math
+import re
+import unicodedata
 import zipfile
 from xml.etree import ElementTree as ET
+
+_FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+_COMMENT = re.compile(r"<!--.*?-->", re.S)
+_IMAGE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
+_LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")
+_REF_LINK = re.compile(r"\[([^\]]+)\]\[[^\]]*\]")
+_REF_DEF = re.compile(r"^ {0,3}\[(?!\^)[^\]]+\]:\s*\S")
+_FOOTNOTE_DEF = re.compile(r"^ {0,3}\[\^[^\]]+\]:\s*")
+_FOOTNOTE_REF = re.compile(r"\[\^[^\]]+\]")
+_AUTOLINK = re.compile(r"<(https?://[^\s>]+)>")
+_TAG = re.compile(r"</?[A-Za-z][^>]*>")
+_HEADING = re.compile(r"^ {0,3}#{1,6}\s+")
+_LIST = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?")
+_QUOTE = re.compile(r"^\s*>\s?")
+_NUMBERING = re.compile(r"^\s*\d+(?:\.\d+)*[.)、]?\s+")
+_TABLE_SEP = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)*\|?\s*$")
+_ATTRIBUTES = re.compile(r"\s*\{[#.][^}]*\}\s*$")     # pandoc heading attributes
+_RAW_MACRO = re.compile(r"^\s*\\[a-zA-Z]+\*?(?:\[[^\]]*\])?(?:\{[^}]*\})*\s*$")
+_BLOCK_TAG = re.compile(r"^\s*<(style|script)\b", re.I)
+_BLOCK_END = re.compile(r"</(style|script)>", re.I)
+_MARKER = re.compile(r"^(?:\d{0,4}|[ivxlcdm]{1,6}|[a-z]|[一二三四五六七八九十百]{1,3})$")
+_GAP = r"\d{0,4}"     # a footnote number or superscript printed inside a line
+_PAGE_REACH = 300     # letters/digits of page furniture tolerated around a page break
+_SHORT = 3            # shorter cells ("是", "1", "No") are required but never move the cursor
+
+
+# Characters that occupy a line without printing: whitespace, format characters
+# (ZWSP, BOM) and the blank "filler" letters used to pad a line.
+_BLANK_LETTERS = {"\u2800", "\u3164", "\uffa0", "\u115f", "\u1160"}
+
+
+def is_ink(char):
+    """Whether a text character paints anything on the page."""
+    return not (char.isspace() or char in _BLANK_LETTERS
+                or unicodedata.category(char) in ("Cf", "Cc", "Zs", "Zl", "Zp"))
+
+
+def _ink_key(text):
+    """Letters and digits only: layout, hyphenation, ligatures and quotes vary."""
+    return "".join(ch for ch in unicodedata.normalize("NFKC", text).casefold() if ch.isalnum())
+
+
+def _fragments(text):
+    """Ink keys of visible inline text, split where a footnote number prints."""
+    text = _LINK.sub(r"\1", _REF_LINK.sub(r"\1", _AUTOLINK.sub(r"\1", _IMAGE.sub(" ", text))))
+    text = html.unescape(_TAG.sub(" ", text))
+    return [k for k in (_ink_key(part) for part in _FOOTNOTE_REF.split(text)) if k]
+
+
+def _report_blocks(markdown):
+    """Visible report.md blocks in reading order: para, note, row or header."""
+    lines = _COMMENT.sub("", markdown).splitlines()
+    if lines and lines[0].strip() == "---":                  # YAML front matter
+        closing = next((n for n, l in enumerate(lines[1:], 1) if l.strip() in ("---", "...")), None)
+        if closing:
+            lines = lines[closing + 1:]
+    blocks, para, fence, raw = [], None, None, None
+
+    def flush():
+        nonlocal para
+        if para is not None:
+            blocks.append(para)
+        para = None
+
+    for index, line in enumerate(lines):
+        if raw:
+            if _BLOCK_END.search(line):
+                raw = None
+            continue
+        if _BLOCK_TAG.match(line):
+            flush()
+            raw = True
+            if _BLOCK_END.search(line):
+                raw = None
+            continue
+        if _RAW_MACRO.match(line):
+            flush()
+            continue
+        opening = _FENCE.match(line)
+        if fence:
+            if opening and opening[1][0] == fence[0] and len(opening[1]) >= len(fence):
+                fence = None
+            continue
+        if opening:
+            flush()
+            fence = opening[1]
+            continue
+        if not line.strip() or _REF_DEF.match(line) or ("|" in line and _TABLE_SEP.match(line)):
+            flush()
+            continue
+        if line.count("|") >= 2:
+            flush()
+            following = lines[index + 1] if index + 1 < len(lines) else ""
+            kind = "header" if "|" in following and _TABLE_SEP.match(following) else "row"
+            cells = line.strip().strip("|").split("|")
+            blocks.append({"kind": kind, "text": line.strip(), "cells": [_fragments(c) for c in cells]})
+            continue
+        note, heading, item = _FOOTNOTE_DEF.match(line), _HEADING.match(line), _LIST.match(line)
+        if note or heading or item:
+            flush()
+            # A heading keeps its own numbering (an edited "1." matters); a list
+            # item loses its marker, which renderers renumber legitimately.
+            text = (line[note.end():] if note else _ATTRIBUTES.sub("", line[heading.end():])
+                    if heading else line[item.end():])
+            para = {"kind": "note" if note else "para", "text": text}
+            if heading:
+                flush()
+            continue
+        line = _QUOTE.sub("", line)
+        if para is None:
+            para = {"kind": "para", "text": line}
+        else:
+            para["text"] += " " + line
+    flush()
+    for block in blocks:
+        if block["kind"] in ("para", "note"):
+            block["fragments"] = _fragments(block["text"])
+    return [b for b in blocks if b.get("fragments") or any(b.get("cells", []))]
+
+
+def report_text_problems(markdown, pages):
+    """Current report.md text the PDF does not carry, in order, as snippets.
+
+    ``pages`` holds each PDF page's extracted text, one PDF line per newline.
+    Every block must match at word boundaries of the PDF's own text, so an edit
+    hidden beside what is printed ("14 of the 25" read as "4 of the 25") does
+    not pass. Paragraphs, headings and list items must occupy whole PDF lines,
+    beside at most a list marker or the preceding block's label; table cells
+    must sit beside their own row's other cells. Header rows are required only
+    when the PDF prints them, since card layouts drop the labels. A block may
+    cross a page break, but only over furniture: page numbers and lines that
+    repeat on other pages, such as a running header or a repeated table header.
+    Known limits. A table cell is only required to be present somewhere, so a
+    value swapped or copied between rows of a table passes: wrapped columns
+    interleave in the extracted text and CJK columns can run together, which
+    leaves no reliable reading of where a cell stands. (PyMuPDF's table
+    reconstruction was measured against these reports and paired the wrong one
+    of a document's repeated per-job tables.) Text deleted from the Markdown is
+    invisible while the stale PDF still reads as whole blocks; link targets are
+    not compared, and a PDF that prints them inline does not bind.
+    """
+    import bisect
+    lines, starts, ends, page_start, offset = [], set(), set(), [], 0
+    for number, page in enumerate(pages):
+        page_start.append(offset)
+        for text in page.splitlines():
+            key, fresh = "", True
+            for char in text:
+                part = "".join(c for c in unicodedata.normalize("NFKC", char).casefold()
+                               if c.isalnum())
+                if part:
+                    if fresh:
+                        starts.add(offset + len(key))
+                    key, fresh = key + part, False
+                elif not fresh:
+                    ends.add(offset + len(key))
+                    fresh = True
+            if not fresh:
+                ends.add(offset + len(key))
+            if key:
+                lines.append({"key": key, "start": offset, "end": offset + len(key), "page": number})
+                offset += len(key)
+    page_start.append(offset)
+    stream = "".join(line["key"] for line in lines)
+    line_starts = [line["start"] for line in lines]
+    word_start, word_end, edge = [0] * len(stream), [len(stream)] * len(stream), 0
+    for position in range(len(stream)):
+        if position in starts:
+            edge = position
+        word_start[position] = edge
+    edge = len(stream)
+    for position in reversed(range(len(stream))):
+        if position + 1 in ends:
+            edge = position + 1
+        word_end[position] = edge
+    seen = {}
+    for line in lines:
+        seen.setdefault(re.sub(r"\d+", "#", line["key"]), set()).add(line["page"])
+    furniture = [line["key"].isdigit() or len(seen[re.sub(r"\d+", "#", line["key"])]) > 1
+                 for line in lines]
+
+    def at(position):
+        return bisect.bisect_right(line_starts, position) - 1
+
+    def opens(position, glued=False):
+        """A word starts here; a footnote definition may carry a glued number."""
+        return position in starts or (glued and stream[word_start[position]:position].isdigit())
+
+    def closes(position):
+        return position in ends or (position < len(stream)
+                                    and stream[position:word_end[position]].isdigit())
+
+    blocks = _report_blocks(markdown)
+    # A footnote prints at the foot of its page, between a paragraph and the
+    # page break, so it is page furniture for the purpose of a hop.
+    footnotes = "".join("".join(b["fragments"]) for b in blocks if b["kind"] == "note")
+
+    def skippable(index):
+        text = lines[index]["key"].lstrip("0123456789")
+        return furniture[index] or bool(text) and text in footnotes
+
+    def between(start, end):
+        """Whether only page furniture lies between two matched halves."""
+        return all(skippable(i) for i in range(at(start - 1) + 1, at(end)))
+
+    def across_breaks(start, key, breaks):
+        same = 0
+        while same < len(key) and start + same < len(stream) and stream[start + same] == key[same]:
+            same += 1
+        if same == len(key):
+            return start + same
+        if not breaks:
+            return None
+        # The page may end with furniture that happens to continue the text.
+        for used in range(same, max(same - 8, 1), -1):
+            boundary = next((b for b in page_start[1:-1] if b >= start + used), None)
+            if boundary is None or boundary - (start + used) > _PAGE_REACH:
+                continue
+            rest = key[used:]
+            resume = stream.find(rest[:3], boundary, boundary + _PAGE_REACH + 1)
+            while resume >= 0:
+                if (start + used == lines[at(start + used - 1)]["end"]
+                        and resume in starts and between(start + used, resume)):
+                    end = across_breaks(resume, rest, breaks - 1)
+                    if end is not None:
+                        return end
+                resume = stream.find(rest[:3], resume + 1, boundary + _PAGE_REACH + 1)
+        return None
+
+    def beside(fragments, cursor, accept, glued=False):
+        """First match at or after ``cursor`` whose neighbours ``accept``."""
+        pattern = re.compile(_GAP.join(re.escape(f) for f in fragments))
+        key, contiguous = "".join(fragments), None
+        found = pattern.search(stream, cursor)
+        while found:
+            if opens(found.start(), glued) and closes(found.end()) and accept(found.start(), found.end()):
+                contiguous = found.start(), found.end()
+                break
+            found = pattern.search(stream, found.start() + 1)
+        if len(key) < 4 or len(pages) < 2:
+            return contiguous
+        # A nearer copy split by a page break wins over a later contiguous copy.
+        limit = contiguous[0] if contiguous else len(stream)
+        for start in sorted({p for p in starts if cursor <= p < limit}):
+            if stream.startswith(key[:1], start):
+                end = across_breaks(start, key, 3)
+                if end is not None and closes(end) and accept(start, end):
+                    return start, end
+        return contiguous
+
+    def cell_present(fragments):
+        """Whether a table cell's text is in the PDF at all.
+
+        Neither position nor word boundaries can be required here: a renderer
+        that wraps a narrow column interleaves the pieces of one row, and
+        extracted CJK columns can run together with no separator between
+        them. Where a cell stands is checked against the reconstructed table
+        instead (_table_problems).
+        """
+        key = "".join(fragments)
+        if key in stream:
+            return True
+        for size in (12, 8, 6, 4, 3, 2):  # a cell wrapped, perhaps after two characters
+            if size < len(key) and (key[:size] in stream or key[-size:] in stream):
+                return True
+        return False
+
+    def whole_line(before, after):
+        def accept(start, end):
+            head = stream[lines[at(start)]["start"]:start]
+            tail = stream[end:lines[at(end - 1)]["end"]]
+            return ((_MARKER.match(head) or head in before)
+                    and (_MARKER.match(tail) or tail in after))
+        return accept
+
+    def own_row(keys):
+        def strip(text):
+            for key in sorted(keys, key=len, reverse=True):
+                if key:
+                    text = text.replace(key, "")
+            return re.sub(r"\d+", "", text)
+
+        def accept(start, end):
+            # A cell carried over a page break sits beside the remainder of a
+            # neighbour, so a head may end one and a tail may begin one.
+            head, tail = strip(stream[lines[at(start)]["start"]:start]), strip(
+                stream[end:lines[at(end - 1)]["end"]])
+            return ((not head or any(k.endswith(head) for k in keys))
+                    and (not tail or any(k.startswith(tail) for k in keys)))
+        return accept
+
+    # One ordered pass places paragraphs, headings and list items, which must
+    # occupy whole PDF lines. Table cells are only required to be present at a
+    # word boundary: a renderer that wraps a narrow column interleaves the
+    # pieces of a row, so their order in the extracted text means nothing.
+    problems, cursor, above, labels = [], 0, None, {""}
+    for index, block in enumerate(blocks):
+        if block["kind"] in ("row", "header"):
+            cells = [(c, column) for column, c in enumerate(block["cells"]) if c]
+            labels |= {"".join(c) for c, _ in cells}
+            if block["kind"] == "header" and not any(
+                    sum(1 for c, _ in cells if "".join(c) in line["key"]) > 1 for line in lines):
+                above = None        # a card layout prints no header row
+                continue
+            for fragments, column in cells:
+                if (block["kind"] == "row" and above and column < len(above)
+                        and above[column] == fragments):
+                    continue        # the cell above, merged downwards
+                if not cell_present(fragments):
+                    problems.append(" ".join(fragments))
+            above = block["cells"] if block["kind"] == "row" else None
+            continue
+        above = None
+        note = block["kind"] == "note"
+        following = blocks[index + 1] if index + 1 < len(blocks) else None
+        after = {"".join(following["fragments"])} if following and following.get("fragments") else set()
+        spot = beside(block["fragments"], 0 if note else cursor,
+                      whole_line(labels, after | {""}), glued=note)
+        if spot is None:
+            problems.append(block["text"].strip())
+        elif not note:
+            cursor = spot[1]
+        labels = {"".join(block["fragments"]), ""}
+    return [p[:60] for p in problems]
 
 
 def measure(ws, requirements, report=False):
@@ -22,6 +349,24 @@ def measure(ws, requirements, report=False):
     def font_name(value):
         # PDF subset prefixes and PostScript separators are not font changes.
         return str(value).split("+")[-1].replace("-", "").replace(" ", "").lower()
+
+    def painted(doc):
+        """(text, ink box) per span, from its non-whitespace glyphs only.
+
+        A span's own box includes its spaces: exporters end wrapped lines with a
+        trailing space past the last glyph, and NBSP-only paragraphs occupy a
+        line without printing anything. Neither is text on the page. Known
+        limit: text painted in the background colour is not detected.
+        """
+        for page in doc:
+            for block in page.get_text("rawdict")["blocks"]:
+                for line in block.get("lines", []):
+                    for span in line["spans"]:
+                        ink = [c["bbox"] for c in span["chars"] if is_ink(c["c"])]
+                        if ink:
+                            yield ("".join(c["c"] for c in span["chars"]).strip(),
+                                   (min(b[0] for b in ink), min(b[1] for b in ink),
+                                    max(b[2] for b in ink), max(b[3] for b in ink)))
 
     pdf = ws / ("report.pdf" if report else "cv.pdf")
     if pdf.is_file():
@@ -50,7 +395,7 @@ def measure(ws, requirements, report=False):
                     if type(minimum_bottom) not in (int, float) or not math.isfinite(minimum_bottom) or minimum_bottom <= 0:
                         fail("minimum_content_bottom_pt must be a positive finite number")
                     else:
-                        bottom = max((span["bbox"][3] for line in lines for span in line["spans"]), default=0)
+                        bottom = max((box[3] for _, box in painted(doc)), default=0)
                         if bottom < minimum_bottom - .6:
                             fail(f"content ends at {bottom:.2f} pt, required at least {minimum_bottom:.2f} pt; excessive lower-page whitespace")
                 for sample in samples:
@@ -94,12 +439,10 @@ def measure(ws, requirements, report=False):
                 if not isinstance(bounds, list) or len(bounds) != 4 or any(type(v) not in (int, float) or not math.isfinite(v) for v in bounds):
                     fail("text_bounds_pt must specify left, top, right, bottom")
                 else:
-                    for line in lines:
-                        for span in line["spans"]:
-                            x0, y0, x1, y1 = span["bbox"]
-                            if (x0 < bounds[0] - .6 or y0 < bounds[1] - .6
-                                    or x1 > bounds[2] + .6 or y1 > bounds[3] + .6):
-                                fail(f"text outside required bounds: {span['text'][:30]!r}")
+                    for text, (x0, y0, x1, y1) in painted(doc):
+                        if (x0 < bounds[0] - .6 or y0 < bounds[1] - .6
+                                or x1 > bounds[2] + .6 or y1 > bounds[3] + .6):
+                            fail(f"text outside required bounds: {text[:30]!r}")
         except Exception as exc:
             fail(f"cannot measure PDF: {exc}")
     elif report:

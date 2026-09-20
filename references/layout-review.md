@@ -172,6 +172,13 @@ for `report.md`, use `artifacts: {report.pdf: ...}` with all pages, and omit
 `word_export`. Then run `python scripts/check_layout.py --workspace <workspace>
 --report`. `deliver.py` checks these current inputs before copying an authored
 report PDF; it preserves its bytes rather than rebuilding it with default styles.
+The gate also reads the PDF's text (`REPORT_PDF_TEXT_MISMATCH`): every
+paragraph, heading and list item of the current `report.md` must occupy whole
+PDF lines, in order (page numbers, running headers and a footnote at the page
+foot are stepped over). A table cell only has to be present somewhere, because
+wrapped and CJK columns interleave in extracted text. After any Markdown edit
+re-render the PDF; refreshing the review hashes is not enough. It cannot see a
+deleted paragraph, nor a value swapped between rows of one table.
 Missing/stale requirements or a failed check block that delivery. The default
 Markdown renderer remains available for initial report generation; create the
 workspace PDF and complete this review before the final handoff.
