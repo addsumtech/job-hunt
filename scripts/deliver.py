@@ -27,6 +27,7 @@ import lint_no_prediction
 import vocab
 from render_cv import has_rtl
 from pdf_glyphs import glyph_findings
+from docx_content import docx_findings
 
 SKIP_DIRS = {"raw"}
 SKIP_NAMES = {"journal.jsonl", ".DS_Store", "master-fingerprint.json"}
@@ -1043,6 +1044,13 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
     sources = [p for p in sorted(workspace.rglob("*"))
                if p.is_file() and is_deliverable(p, workspace, include_applications)
                and not (make_pdf and p.name == "report.pdf")]
+
+    # Validate all requested Word files before copying anything. This also covers
+    # hand-authored reports/statements and formatting split across Word runs.
+    word_problems = [problem for src in sources if src.suffix == ".docx"
+                     for problem in docx_findings(src)]
+    if word_problems:
+        return [], word_problems
 
     claimed: dict = {}
     for src in sources:

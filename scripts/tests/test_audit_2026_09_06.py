@@ -182,7 +182,10 @@ def test_one_unreadable_file_does_not_abandon_the_round(tmp_path, monkeypatch):
     ws.mkdir()
     (ws / "cv.md").write_text("A\n", encoding="utf-8")
     blocked = ws / "cv.docx"
-    blocked.write_text("B\n", encoding="utf-8")
+    from docx import Document
+    doc = Document()
+    doc.add_paragraph("Candidate CV")
+    doc.save(blocked)
     (ws / "letter.md").write_text("C\n", encoding="utf-8")
     # Windows copy2 can use CopyFile2 without Python open(); stage the OS
     # failure at the copy boundary while retaining real copies for other files.

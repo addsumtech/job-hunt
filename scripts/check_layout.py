@@ -14,6 +14,7 @@ import sys
 
 import journal
 import layout_requirements
+from docx_content import docx_findings
 
 GATE = "check_layout"
 CHECKS = ("fonts", "font_sizes", "page_geometry", "headings_and_rules",
@@ -23,10 +24,12 @@ CHECKS = ("fonts", "font_sizes", "page_geometry", "headings_and_rules",
 
 def inspect(ws: pathlib.Path, report=False):
     findings, hashes = [], {}
+    if not report and (ws / "cv.docx").is_file():
+        findings.extend(docx_findings(ws / "cv.docx"))
     prefix = "report-" if report else ""
     path = ws / f"{prefix}layout-review.yaml"
     if not path.is_file():
-        return [f"NO_LAYOUT_REVIEW: render and inspect every page against the supplied template, then write {path.name}"], hashes
+        return findings + [f"NO_LAYOUT_REVIEW: render and inspect every page against the supplied template, then write {path.name}"], hashes
     hashes[path.name] = journal.sha256_file(path)
     try:
         review = journal.load_yaml(path, dict)

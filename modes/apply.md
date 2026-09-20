@@ -141,6 +141,9 @@ A worked file, including a retracted row, is in `assets/claims.example.yaml`.
   `raw/layout/word-export.pdf`, then copy that export to `cv.pdf`. Inspect both
   final formats. Keep the export and its source DOCX hash in `layout-review.yaml`.
   Do not separately generate a LaTeX CV PDF when delivering the matching Word/PDF pair.
+  Word prose must not contain Markdown or LaTeX source. Follow
+  `references/word-resume-layout.md` to repair notation in the tailored copy;
+  `DOCX_MARKUP` requires correction, a fresh render/export and another review.
   The renderer supports these individual formats:
 
   ```bash

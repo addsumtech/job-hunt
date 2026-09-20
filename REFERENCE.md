@@ -128,6 +128,7 @@ job-hunt/
     ├── check_no_write.py            # discover is read-only — a journaled write command fails
     ├── record_browser_capture.py    # Browser snapshot importer and evidence checks
     ├── browser_budget.py            # Intermediate-catalog accounting (library)
+    ├── docx_content.py              # Visible Markdown/LaTeX residue checks (library)
     ├── check_opencli_result.py      # adapter result classifier (wrapper, not a gate)
     ├── opencli_compat.py            # Check/apply/revert known local adapter fixes
     ├── check_pages.py               # page count + the text actually inside the delivered PDF

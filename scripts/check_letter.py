@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Gate: the letter constraints render_letter.py will not enforce.
 
-render_letter passes each body string straight into Markdown, docx and LaTeX
-with no stripping, so '**bold**' prints four asterisks on the PDF and a sender
+render_letter passes each body string straight into Markdown and LaTeX
+with no stripping (Word now refuses source markup), so '**bold**' prints four
+asterisks on the PDF and a sender
 name written into `closing` prints twice — the renderer appends it already.
 These are exact string and count checks documented only in prose today, which is
 the same failure class as a format string rendered raw onto a slide.

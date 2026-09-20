@@ -18,6 +18,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 import journal
 import render_cv
+from docx_content import DocxMarkupError, save_clean_docx
 
 
 def load(path):
@@ -67,7 +68,7 @@ def render_docx(d, out_path):
     if closing_for(d):
         doc.add_paragraph(closing_for(d))
     doc.add_paragraph(s.get("name", ""))
-    doc.save(str(out_path))
+    save_clean_docx(doc, out_path)
 
 
 # Salutations for an UNNAMED recipient, quoted from references/motivation-letter.md
@@ -243,7 +244,11 @@ def main(argv=None):
     if args.format == "md":
         out.write_text(render_markdown(d), encoding="utf-8")
     elif args.format == "docx":
-        render_docx(d, out)
+        try:
+            render_docx(d, out)
+        except DocxMarkupError as exc:
+            print(f"cannot render Word: {exc}", file=sys.stderr)
+            return 1
     else:
         reasons = []
         ok = render_pdf(d, out, reasons=reasons)

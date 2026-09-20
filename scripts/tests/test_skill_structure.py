@@ -124,7 +124,9 @@ def test_the_self_check_names_every_script():
             # there is no standalone run step for a user to invoke.
             "host_execution.py",
             # Imported by the browser launcher and evidence gates; no CLI.
-            "browser_budget.py"}
+            "browser_budget.py",
+            # Shared Word artifact validation; renderers and delivery invoke it.
+            "docx_content.py"}
     section = _self_check_items()
     for f in sorted((ROOT / "scripts").glob("*.py")):
         if f.name in skip:

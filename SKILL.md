@@ -65,6 +65,15 @@ Deliver the reviewed Word export as the CV PDF and preserve the reviewed report
 PDF byte-for-byte. A later edit or export invalidates the review. The eight visual
 checks and measured format checks are separate from content judges.
 
+**Word must contain formatted content, not Markdown or LaTeX source.** Keep
+profile/letter prose fields plain; use Word styles, runs, lists and hyperlinks
+for formatting. Before rendering, rewrite simple inline notation faithfully:
+`$8 \times \text{H200}$` becomes `8 × H200`, preserving the hardware, counts and
+claims. Read `references/word-resume-layout.md` for the repair procedure. On
+`DOCX_MARKUP`, repair the tailored copy, render again and inspect the final Word
+and its PDF export; never waive the finding or deliver an older export. Check
+all Word deliverables, including letters, statements, tables and page furniture.
+
 A report reference also controls how information is organized. Preserve its
 tables, numbered sections, comparable job fields, preparation lists and linked
 directory; matching only fonts and colors is insufficient. Record these blocks

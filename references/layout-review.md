@@ -81,6 +81,11 @@ correct page count, or readable Chinese a template match.
    The opening label must cover the whole bullet. A mixed education paragraph
    starting with GPA and continuing with courses, research or awards stays plain;
    do not bold GPA just because it is followed by a colon.
+   Inspect visible text for Markdown and LaTeX residue, including tables,
+   headers/footers and formula fragments split across lines. `$8 \times
+   \text{H200}$` is source text, not a formatted hardware quantity; use
+   `8 × H200`. Follow the repair procedure in `word-resume-layout.md` and reject
+   `DOCX_MARKUP` findings before recording a passed review.
 4. Fix unapproved differences and render again. After the final inspection,
    write `layout-review.yaml` using the example below, replacing every hash with
    the actual SHA-256. No supplied template means `reference: null`; it does not
