@@ -1029,6 +1029,8 @@ request permits `report_scope: preliminary` with `preliminary_request` recorded.
 | `CAP_MISSING` / `CAP_ABOVE_CEILING` | `brief.yaml`'s round caps are absent or raised | read `references/source-policy.md`; the caps are its enforceable half |
 | `SHORTFALL_NO_REASON` | fewer rows than `target_count`, no reason written | write the reason. Never pad. |
 | `SOURCE_REPORT_CONTRADICTS_JOURNAL` | `sources:` disagrees with the receipts | the receipts are right; fix the report |
+| `NOT_A_LISTING_SOURCE` | a row cites a source that publishes no job postings, or was retrieved by a command of that source which does not | the row asserts a vacancy exists and this capture cannot support that. A 面经 thread, a recruiter-side person record or a forum post is a **pointer for the report**, not a row — move it there and delete the row from `shortlist.yaml` AND `shortlist.md`. Which commands publish postings is `listing_commands` in `references/discovery-sources.md`; if a command really does return vacancies, measure it and record it there rather than editing the row. |
+| `CATALOGUE_UNREADABLE` | `references/discovery-sources.md` is missing or its yaml block will not parse | no row's source was checked this run. Restore the file; this is a broken install, not a finding about the round. |
 | `WRITE_COMMAND` | a write command was journaled | stop. Tell the user exactly what ran. It cannot be undone. |
 | `UNKNOWN_ACCESS` | a command's access could not be resolved | save `opencli <site> --help -f yaml` into `raw/opencli-help/` and re-run |
 

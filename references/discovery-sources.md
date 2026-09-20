@@ -35,6 +35,7 @@ adapters:
     login_state_2026_08_09: no_auth_adapter
     runtime_verified: true
     identity_field: title
+    listing_commands: [search, detail, hot]
     search_command: 'opencli 51job search "<keyword>" --area <city> --sort 最新 --page 1 --limit 20 --window background -f json'
     detail_command: "opencli 51job detail <jobId> --url <captured-url>"
     pagination: "--page 1-based (default 1) + --limit (help: 1-50, default 20)"
@@ -49,6 +50,7 @@ adapters:
     login_state_2026_08_09: no_auth_adapter
     runtime_verified: true
     identity_field: title
+    listing_commands: [search, job, detail, view]
     search_command: 'opencli indeed search "<keyword>" --location "<loc>" --fromage 7 --sort date --start 0 --limit 15 --window background -f json'
     detail_command: "opencli indeed job <id>"
     pagination: "--start 0-based multiple of 10 + --limit (help: 1-25, one page)"
@@ -70,6 +72,7 @@ adapters:
     runtime_verified: true
     runtime_verified_on: "2026-09-20"
     identity_field: title
+    listing_commands: [search, job-detail]
     search_command: 'opencli linkedin search "<keyword>" --location "<loc>" --experience-level mid-senior --job-type full-time --date-posted week --start 0 --limit 10 --window background -f json'
     detail_command: "opencli linkedin job-detail <job-url>"
     pagination: "--start offset (default 0) + --limit (help: max 100, default 10)"
@@ -105,6 +108,7 @@ adapters:
     login_state_2026_08_09: logged_in
     runtime_verified: false
     identity_field: name
+    listing_commands: [search, detail, recommend]
     search_command: 'opencli boss search "<keyword>" --city <城市> --experience 3-5年 --degree 硕士 --page 1 --limit 15 --window background -f json'
     detail_command: "opencli boss detail <security_id>"
     pagination: "--page 1-based (default 1) + --limit (default 15)"
@@ -123,6 +127,7 @@ adapters:
     login_state_2026_08_09: not_logged_in
     runtime_verified: false
     identity_field: title
+    listing_commands: [search, detail, feed]
     search_command: 'opencli upwork search "<keyword>" --location "<loc>" --sort recency --page 1 --per_page 10 -f json'
     detail_command: "opencli upwork detail <id>"
     pagination: "--page 1-based + --per_page (help: 10-50). NOTE the underscore: --per_page, not --per-page."
@@ -138,6 +143,7 @@ adapters:
     login_state_2026_08_09: not_logged_in
     runtime_verified: false
     identity_field: title
+    listing_commands: []
     search_command: 'opencli nowcoder search "<company> 面经" --type post --limit 10 -f json'
     detail_command: "opencli nowcoder detail <id>"
     pagination: "`search` takes ONLY --limit (default 10) — there is no --page, so search depth is hard-capped at one page. `experience` takes --page + --limit."
@@ -157,6 +163,7 @@ adapters:
     login_state_2026_08_09: not_logged_in
     runtime_verified: false
     identity_field: "n/a"
+    listing_commands: []
     search_command: null
     detail_command: null
     pagination: "--page is ZERO-based here (default 0) + --size (default 20)."

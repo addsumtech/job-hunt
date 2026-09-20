@@ -126,7 +126,11 @@ def test_the_self_check_names_every_script():
             # Imported by the browser launcher and evidence gates; no CLI.
             "browser_budget.py",
             # Shared Word artifact validation; renderers and delivery invoke it.
-            "docx_content.py"}
+            "docx_content.py",
+            # Reads references/discovery-sources.md for check_shortlist; there is
+            # no run step, and a self-check line telling a round to "run the
+            # catalogue" would describe work nobody does.
+            "discovery_catalogue.py"}
     section = _self_check_items()
     for f in sorted((ROOT / "scripts").glob("*.py")):
         if f.name in skip:

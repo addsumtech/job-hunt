@@ -150,6 +150,8 @@ job-hunt/
     ├── pdf_glyphs.py                # inspect painted PDF glyph IDs, including missing CJK
     ├── deliver.py                   # hand-off: the round's readable artifacts land
     │                                #   in ~/Downloads/<workspace>/; requires a client report PDF
+    ├── discovery_catalogue.py       # reads references/discovery-sources.md; says which
+    │                                #   commands publish job postings (library)
     ├── enter_mode.py                # mode entry + the mode file's content hash
     ├── evidence_blocks.py           # cuts posting and CV into addressable JD-nnn / CV-nnn blocks
     ├── journal.py                   # gate receipts in journal.jsonl (library)

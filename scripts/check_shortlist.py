@@ -44,6 +44,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import journal  # noqa: E402  (Plan 1)
 import enter_mode  # noqa: E402  (Plan 1)
 import paths       # noqa: E402  (Plan 1)
+import discovery_catalogue  # noqa: E402
 from record_browser_capture import (read_retrieval_calls, validate_record,
                                     check_stop_order, ACTION)  # noqa: E402
 from vocab import EFFORT, VERDICTS  # noqa: E402  (Plan 1 — the ONE vocabulary)
@@ -598,6 +599,89 @@ def _check_sources(workspace, shortlist, rows, calls):
                 findings.append(
                     f"SOURCE_REPORT_MISSING_RAW: sources[{site}] names "
                     f"{name!r}, which does not exist")
+    return findings
+
+
+def _check_listing_sources(workspace, rows, calls):
+    """A row claims a posting exists; the source has to be one that publishes them.
+
+    Every other provenance anchor holds for a 面经 thread — the id really is in
+    the capture, the raw_text really was copied, the URL really came from the
+    adapter — so none of them can tell a vacancy from a write-up of an interview
+    someone already sat. Reproduced 2026-09-20: such a row passed this gate in
+    silence, carrying `verdict: stretch`.
+
+    Three deliberate choices, each one a false positive avoided:
+
+    * The verdict lives in references/discovery-sources.md, not in a set spelled
+      here. A hardcoded {nowcoder, maimai} goes stale the day an adapter is
+      added and nothing reports it.
+    * An UNCATALOGUED site passes. modes/discover.md routes European rounds to
+      Indeed's country sites and to market-native boards through the browser,
+      and none of those is an adapter in that file — an allow-list would refuse
+      exactly the rows that route was opened for.
+    * `listing_commands` includes the DETAIL spellings, and a row is judged by
+      the commands whose captures actually hold its id. Ranking mode starts from
+      pasted URLs, so its rows appear only in a detail capture; demanding a
+      search capture would fire on that whole mode.
+    """
+    findings = []
+    sites = {str(row.get("source_site") or "").strip()
+             for row in rows if isinstance(row, dict)}
+    if not sites - {""}:
+        return findings
+    try:
+        discovery_catalogue.adapters()
+    except discovery_catalogue.CatalogueUnreadable as exc:
+        # One finding, not one per row, and never a traceback: this gate's
+        # contract is findings on stdout, and a broken install is a fact the
+        # reader can act on rather than a stack trace to decode.
+        return [f"CATALOGUE_UNREADABLE: {exc}. Without it this run cannot tell "
+                "a job board from a forum, so no row's source was checked."]
+    # Read each capture once, not once per row: a round with 25 rows and 17
+    # captures would otherwise re-read the same megabytes 425 times.
+    by_capture = {}
+    for call in calls:
+        name = call.get("stdout_file") or call.get("snapshot_file")
+        if name and call.get("command"):
+            by_capture.setdefault(str(name).replace("\\", "/"), set()).add(
+                str(call["command"]))
+    texts = {}
+    for name in by_capture:
+        try:
+            texts[name] = (workspace / name).read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            continue
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            continue
+        site = str(row.get("source_site") or "").strip()
+        source_id = str(row.get("source_id") or "").strip()
+        if not site or not discovery_catalogue.is_catalogued(site):
+            continue
+        allowed = set(discovery_catalogue.listing_commands(site))
+        if not allowed:
+            findings.append(
+                f"NOT_A_LISTING_SOURCE: row {index} (id={row.get('id')!r}) cites "
+                f"source_site {site!r}, which references/discovery-sources.md "
+                "records as publishing no job postings — its reads return "
+                "threads or people, not vacancies. A row asserts a posting "
+                "exists, and this source cannot support that. Keep it as a "
+                "pointer in the report instead, or correct the source_site.")
+            continue
+        if not source_id:
+            continue    # NO_SOURCE_ID already owns this row
+        used = set()
+        for name, commands in by_capture.items():
+            if name in texts and _contains_source_id(source_id, texts[name]):
+                used |= commands
+        if used and not (used & allowed):
+            findings.append(
+                f"NOT_A_LISTING_SOURCE: row {index} (id={row.get('id')!r}) was "
+                f"retrieved by {', '.join(sorted(used))} on {site!r}, and "
+                "references/discovery-sources.md lists that site's posting "
+                f"commands as {', '.join(sorted(allowed))}. The capture behind "
+                "this row is not a job posting.")
     return findings
 
 
@@ -1171,6 +1255,7 @@ def check_run(workspace, shortlist, brief, md_text, calls):
     findings.extend(_check_detail_cap(shortlist, rows))
     findings.extend(_check_browser_rows(workspace, rows, calls, brief,
                                         shortlist.get("detail_fetch_exceptions") or []))
+    findings.extend(_check_listing_sources(workspace, rows, calls))
     findings.extend(_check_market_fit(brief, rows))
     return findings
 
