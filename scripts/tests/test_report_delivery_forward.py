@@ -190,3 +190,61 @@ def test_names_in_mixed_titles_do_not_override_the_report_body_language(
         assert text.splitlines()[0] == footer
         assert title in text
         assert ''.join(body.split()) in ''.join(text.split())
+
+
+DIRECTORY_MD = (
+    '# 岗位建议\n\n先确认工作地点，再决定是否申请。\n\n'
+    '| 公司 | 职位 | 地点 | 判断 | 原链接 |\n'
+    '|---|---|---|---|---|\n'
+    '| Pera | ML Python Developer | 登博思 | 够一够 | '
+    '[打开职位](https://example.test/posting) |\n'
+)
+
+NARROW_DIRECTORY_MD = (
+    '# 岗位建议\n\n先确认工作地点，再决定是否申请。\n\n'
+    '| 公司 | 原链接 |\n'
+    '|---|---|\n'
+    '| Pera | [打开职位](https://example.test/posting) |\n'
+)
+
+
+@pytest.mark.parametrize('source', [DIRECTORY_MD, NARROW_DIRECTORY_MD])
+def test_a_link_only_table_cell_is_painted_once(tmp_path, source):
+    """references/report-writing.md asks for a directory with an original-link
+    column, and that column rendered TWICE.
+
+    Measured 2026-09-20 on a delivered NL discover report: every row showed
+    `原链接：打开职位` as dead text and then `链接：打开职位` as the clickable
+    line beneath it. `add_block` already skips the inline copy when a block is
+    nothing but a link; `add_entry`'s fields and `cell_data`'s cells did not,
+    so the one layout the report guidance actually prescribes was the one that
+    duplicated. Every gate passed the file; only rendering it showed this.
+    """
+    md, pdf = tmp_path / 'report.md', tmp_path / 'report.pdf'
+    md.write_text(source, encoding='utf-8')
+    assert deliver.render_pdf(md, pdf, None) == (True, '')
+    with pymupdf.open(pdf) as doc:
+        text = '\n'.join(page.get_text() for page in doc)
+        assert text.count('打开职位') == 1, text
+        assert doc[0].get_links()[0]['uri'] == 'https://example.test/posting'
+
+
+def test_a_wide_entry_separates_the_company_from_the_position(tmp_path):
+    """"MarvelX AI" + "AI Engineer" joined by a space reads as one mangled name.
+
+    Seen in a delivered report on 2026-09-20. The reader cannot tell where the
+    employer ends and the role begins, which is the one thing a job directory
+    has to make obvious.
+    """
+    md, pdf = tmp_path / 'report.md', tmp_path / 'report.pdf'
+    md.write_text(
+        '# 岗位建议\n\n先确认工作地点，再决定是否申请。\n\n'
+        '| 公司 | 职位 | 地点 | 判断 | 原链接 |\n'
+        '|---|---|---|---|---|\n'
+        '| MarvelX AI | AI Engineer | 阿姆斯特丹 | 够一够 | '
+        '[打开职位](https://example.test/posting) |\n', encoding='utf-8')
+    assert deliver.render_pdf(md, pdf, None) == (True, '')
+    with pymupdf.open(pdf) as doc:
+        text = '\n'.join(page.get_text() for page in doc)
+        assert 'MarvelX AI AI Engineer' not in text
+        assert 'MarvelX AI' in text and 'AI Engineer' in text

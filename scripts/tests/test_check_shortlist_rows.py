@@ -507,3 +507,37 @@ def test_a_two_letter_code_and_a_district_are_not_countries(location, market, wa
     found = cs._check_market_fit({"markets": [market]},
                                  [{"id": "r", "location": location}])
     assert bool(found) is warns, found
+
+
+def test_a_middle_dot_joined_card_is_accepted(tmp_path, capsys):
+    """`·` is the separator LinkedIn's own adapter emits, so a card copied with
+    it must not read as unsupported.
+
+    Measured 2026-09-20 on a live NL round: every field of every row was copied
+    verbatim out of raw/, joined with " · " the way the adapter itself renders a
+    card ("Epona · Breda-Tilburg Area (Hybrid)"), and all ten rows fired
+    RAW_TEXT_NOT_IN_RAW at 9-12% coverage. The splitter knew `|,，、;；/` and not
+    the one separator the capture actually used, so the whole card stayed a
+    single segment that is nowhere contiguous in the JSON. A gate that fires on
+    a correctly copied row is worse than no gate.
+    """
+    workspace = fx.build_workspace(tmp_path)
+    data = fx.load_shortlist(workspace)
+    data["rows"][0]["raw_text"] = ("高级AI算法工程师(J10032) · 拓荆键科（海宁）半导体设备"
+                                   " · 海宁 · 1.7-3.4万·15薪")
+    fx.save_shortlist(workspace, data)
+    code, captured = run(workspace, capsys)
+    assert "RAW_TEXT_NOT_IN_RAW" not in codes(captured.out)
+    assert code == 0
+
+
+def test_a_middle_dot_card_that_invents_a_field_still_fires(tmp_path, capsys):
+    """Splitting on `·` must not become a way to smuggle an unsupported claim."""
+    workspace = fx.build_workspace(tmp_path)
+    data = fx.load_shortlist(workspace)
+    data["rows"][0]["raw_text"] = ("高级AI算法工程师(J10032) · 拓荆键科（海宁）半导体设备"
+                                   " · 年薪一百二十万不设上限并配股权激励")
+    fx.save_shortlist(workspace, data)
+    code, captured = run(workspace, capsys)
+    assert code == 1
+    assert "RAW_TEXT_NOT_IN_RAW" in codes(captured.out)

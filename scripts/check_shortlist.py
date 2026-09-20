@@ -83,7 +83,16 @@ MIN_SOURCE_ID_LEN = 4
 # substring of the JSON. Split it on the separators people join with, then ask
 # how much of it the capture accounts for, weighted by length so that one
 # invented sentence outweighs three copied words.
-_RAW_TEXT_SPLIT = re.compile(r"[|｜,，、;；/\n\r\t]+")
+#
+# The middle dots are here because an adapter uses them ITSELF: LinkedIn returns
+# `"location": "Epona · Breda-Tilburg Area (Hybrid)"`, so `·` is what a card
+# copied from that capture is joined with. Measured 2026-09-20, a live NL round
+# whose every field was verbatim failed all ten rows at 9-12% coverage, because
+# the whole card stayed one segment and no capture holds it contiguously.
+# Splitting more finely can only help an honest row: if the capture contains the
+# joined whole, it contains each part — so this widens no gap. A segment the
+# capture does not hold still fails, which the paired test pins.
+_RAW_TEXT_SPLIT = re.compile(r"[|｜,，、;；/·・･‧•\n\r\t]+")
 _WHITESPACE = re.compile(r"\s+")
 MIN_RAW_TEXT_SEGMENT = 2
 # Deliberately below 1.0 — hand-joined summaries lose characters to punctuation

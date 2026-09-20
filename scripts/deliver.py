@@ -628,10 +628,21 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
         value = _MD_BOLD.sub(r"\1", value)
         return _MD_CODE.sub(r"\1", value), links
 
+    def only_a_link(value: str) -> bool:
+        """Whether this whole value is one link, so its label needs painting once.
+
+        `add_block` has always skipped the inline copy in that case. The two
+        table paths below did not, which is why a directory column holding
+        nothing but `[打开职位](…)` came out as dead text AND a clickable
+        duplicate beneath it — on exactly the layout report-writing.md asks for.
+        """
+        stripped = value.strip()
+        return bool(_MD_LINK.fullmatch(stripped) or _RAW_ANGLE_URL.fullmatch(stripped))
+
     def add_block(value: str, size: float, color: tuple[float, float, float], gap: float) -> bool:
         nonlocal cursor
         display, links = text_and_links(value)
-        standalone_link = _MD_LINK.fullmatch(value.strip()) or _RAW_ANGLE_URL.fullmatch(value.strip())
+        standalone_link = only_a_link(value)
         if not standalone_link:
             if not write_lines(wrap(display, size, right - left), left, size, color,
                                size * 1.35):
@@ -655,6 +666,18 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
         if not add_block(title, 12.6, heading_color, 5):
             return False
         for label, value in fields:
+            if only_a_link(value):
+                # The field label already says what the link is, so paint one
+                # clickable `原链接：打开职位` instead of that line plus a
+                # `链接：打开职位` copy of it.
+                _, links = text_and_links(value)
+                for link_label, url in links:
+                    if not write_lines(
+                            wrap(f"{label}{style['separator']}{link_label}", 12,
+                                 right - left), left, 12, link_color, 16.2, url):
+                        return False
+                    cursor += 4
+                continue
             if not add_block(f"{label}{style['separator']}{value}", 12, body_color, 4):
                 return False
         cursor += 6
@@ -670,7 +693,10 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
             for row in rows:
                 if len(row) != len(header):
                     continue
-                title = " ".join(piece for piece in row[:2] if piece)
+                # " — ", not " ", because the first two columns are usually
+                # employer then role: "MarvelX AI" + "AI Engineer" joined by a
+                # space reads as one mangled name with no visible boundary.
+                title = " — ".join(piece for piece in row[:2] if piece)
                 fields = [(label, value) for label, value in zip(header[2:], row[2:]) if value]
                 if not add_entry(title, fields):
                     return False
@@ -685,10 +711,13 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
             cells = []
             for value, width in zip(values, widths):
                 display, links = text_and_links(value)
-                entries = [(wrap(display, size, width - 12), None)]
+                # A cell that is nothing but a link gets the clickable line
+                # alone; anything else keeps its prose and appends the link.
+                entries = [] if only_a_link(value) else [
+                    (wrap(display, size, width - 12), None)]
                 entries.extend((wrap(f"{style['link']}{label}", size, width - 12), url)
                                for label, url in links)
-                cells.append(entries)
+                cells.append(entries or [(wrap(display, size, width - 12), None)])
             return cells
 
         def row_height(cells):
