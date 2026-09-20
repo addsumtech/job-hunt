@@ -36,6 +36,7 @@ import unicodedata
 # "this file is not usable" across the whole skill is the point of having one reader.
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import journal  # noqa: E402
+from docx_content import DocxMarkupError, save_clean_docx  # noqa: E402
 from host_execution import HOST_EXECUTION_REQUIRED, tectonic_needs_host_execution  # noqa: E402
 
 
@@ -1422,7 +1423,7 @@ def render_docx(profile, out_path):
             paragraph.paragraph_format.first_line_indent = Pt(-17)
     # Keep section headings with their content via Word's heading style; avoid
     # inferring pagination from run boldness (a skill row may also be all bold).
-    doc.save(str(out_path))
+    save_clean_docx(doc, out_path)
 
 
 # ── LaTeX helpers ─────────────────────────────────────────────────────────────
@@ -2526,7 +2527,11 @@ def main(argv=None):
     if args.format == "md":
         out.write_text(render_markdown(profile), encoding="utf-8")
     elif args.format == "docx":
-        render_docx(profile, out)
+        try:
+            render_docx(profile, out)
+        except DocxMarkupError as exc:
+            print(f"cannot render Word: {exc}", file=sys.stderr)
+            return 1
     elif args.format == "pdf":
         reasons = []
         ok = render_pdf(profile, out, reasons=reasons)

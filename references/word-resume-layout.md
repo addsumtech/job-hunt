@@ -45,6 +45,7 @@ this layout. Inspect the final export, not only the Word editing view: paragraph
 markers and pagination squares are non-printing UI aids, not resume bullets.
 
 A supplied template takes precedence over these default fonts and sizes.
+
 For translated versions of the same example, reuse its approved template, section
 order, paragraph styles, margins, rules and date columns. Translate the content
 inside that layout; do not switch the English version to a different default
@@ -77,3 +78,30 @@ Record a requested Chinese font in `meta.cjk_font` of the workspace profile.
 Delivery honors that selection before its bundled report fonts; a missing selected
 font is reported instead of silently substituted. Without an explicit selection,
 the bundled report renderer remains available without a TeX installation.
+
+## Prevent source syntax in Word
+
+The YAML prose fields are plain text, not Markdown or LaTeX input. Word does not
+interpret `$...$`, `\times`, `\text{...}`, `**...**`, backticks or Markdown
+links when these strings are passed to `add_run` / `add_paragraph`.
+
+Before rendering, fix such content in the tailored copy, keeping the original
+profile and all facts intact. For example, write `8 × H200` instead of
+`$8 \times \text{H200}$`; retain the original training steps, duration and
+benchmark results. Never remove formula syntax by dropping its enclosed content
+or indiscriminately deleting punctuation. Preserve `C#`, `C++`, `A*`, code
+identifiers, currency and ordinary mathematical signs.
+
+Use the existing Word heading/list styles and approved label emphasis. Put links
+in the structured link fields or native Word hyperlinks, not `[label](url)`
+strings. When an actual formula is necessary, use a native Word equation (OMML)
+and inspect it in the Word export; do not insert raw LaTeX as ordinary text.
+
+The three bundled Word renderers refuse detected source syntax with `DOCX_MARKUP`
+and a part/paragraph location. `check_layout.py` checks the final CV bytes, and
+`deliver.py` checks every selected Word file before copying any deliverables,
+including externally authored reports and statements. Tables, split text runs,
+text boxes, headers and footers are included. Native Word equations are allowed.
+Fix the indicated source or native formatting, re-render, re-export any paired
+PDF and repeat the visual review. A text check supplements page-by-page review;
+it cannot identify every ambiguous notation or replace inspection of the output.

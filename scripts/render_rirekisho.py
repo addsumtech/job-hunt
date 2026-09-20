@@ -299,7 +299,7 @@ def render_docx(profile, out_path):
     if jp.get("personal_request"):
         _box(doc, "本人希望記入欄", jp["personal_request"])
 
-    doc.save(str(out_path))
+    render_cv.save_clean_docx(doc, out_path)
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
@@ -329,7 +329,11 @@ def main(argv=None):
     if args.format == "md":
         out.write_text(render_markdown(profile), encoding="utf-8")
     else:
-        render_docx(profile, out)
+        try:
+            render_docx(profile, out)
+        except render_cv.DocxMarkupError as exc:
+            print(f"cannot render Word: {exc}", file=sys.stderr)
+            return 1
     print(f"Wrote {out}")
     return 0
 
