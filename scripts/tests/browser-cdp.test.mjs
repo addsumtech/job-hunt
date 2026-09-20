@@ -585,3 +585,17 @@ test('the page expression and isActionControl share one vocabulary',async()=>{
     assert.equal(refused,isActionControl(label),`page expression and isActionControl disagree on ${label}`);
   }
 });
+
+test('a wait stage checks at least once, even when its budget is already spent',async()=>{
+  // The refusal check lives INSIDE `while (Date.now() < deadline)`, so a stage
+  // whose budget elapses before the first iteration performs no check at all
+  // and reports no refusal. Measured 2026-09-20: this is why CI failed test 26
+  // on a commit that had passed six minutes earlier — two `node --test` files
+  // run as concurrent child processes, and 1ms of scheduling jitter is enough.
+  // waitStagesMs:[0] makes that race deterministic rather than occasional.
+  const {Socket,commands}=fixture({refuseAfterClick:true,pageTextReady:[true,false]});
+  const result=await capture({endpoint:'ws://localhost/devtools/browser/test',url:'https://example.com/',
+    steps:[{text:'Location'},{text:'Mainland China'}],waitStagesMs:[0],settleMs:0,WebSocketImpl:Socket});
+  assert.equal(result.blocked,true);
+  assert.equal(commands.at(-1).method,'Target.closeTarget');
+});

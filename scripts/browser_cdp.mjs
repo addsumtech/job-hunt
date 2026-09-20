@@ -298,7 +298,13 @@ export async function capture({endpoint, url, settleMs = 1500, timeoutMs = 15000
       for (const waitMs of waitStagesMs) {
         renderWaits.push(waitMs);
         const deadline = Date.now() + waitMs;
-        while (Date.now() < deadline) {
+        // do/while, not while: a stage whose budget is already spent when it
+        // starts must still CHECK once. As `while`, a short stage could run
+        // zero iterations, leave `refused` false and report no refusal at all —
+        // a 403 the page really served, silently dropped. Production stages are
+        // 15s and never hit it; two concurrent `node --test` processes did, and
+        // turned CI red on a commit that had passed minutes earlier.
+        do {
           refused = responses.some(x => x.frameId === frameId && [401, 403, 429].includes(x.response.status));
           if (refused) break;
           const r = await send('Runtime.evaluate', {expression:'document.readyState', returnByValue:true});
@@ -314,8 +320,9 @@ export async function capture({endpoint, url, settleMs = 1500, timeoutMs = 15000
           });
           if (wallNow.result?.value === true) {refused = true;break;}
           }
+          if (Date.now() >= deadline) break;
           await new Promise(r => setTimeout(r, Math.max(1, Math.min(250, deadline - Date.now()))));
-        }
+        } while (Date.now() < deadline);
         if (ready || refused) break;
         // Inspect a stalled page before waiting longer; never wait through a
         // known human-verification wall merely because its load event is pending.

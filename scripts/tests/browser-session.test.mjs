@@ -137,3 +137,34 @@ exports.WebSocketServer=class extends EventEmitter {close(){}};
     await rm(root,{recursive:true,force:true});
   }
 });
+
+test('a slow start does not spend the handshake grace before the socket opens', async()=>{
+  // The consent grace was `i < 20` on a counter that starts at loop entry, so
+  // the wait for `serve` to write its first state ate the window meant for the
+  // handshake. On a loaded machine an ALREADY AUTHORIZED browser then reports
+  // waiting_for_consent and the user is sent to accept a prompt that will never
+  // appear. Here `require('ws')` blocks for a second, which spends the old
+  // budget deterministically instead of waiting for CI to be unlucky.
+  const root=await realpath(await mkdtemp(join(tmpdir(),'browser-slow-start-')));
+  const run=action=>promisify(execFile)(process.execPath,[join(root,'browser_session.mjs'),action,'--root',root,'--browser','chrome'],{timeout:20000});
+  try {
+    await writeFile(join(root,'browser_session.mjs'),await readFile(new URL('../browser_session.mjs',import.meta.url)));
+    await writeFile(join(root,'browser_cdp.mjs'),"export async function dailyEndpoint(){return 'ws://127.0.0.1:1/devtools/browser/authorized';}");
+    await mkdir(join(root,'node_modules/ws'),{recursive:true});
+    await writeFile(join(root,'runtime.json'),JSON.stringify({opencli:join(root,'opencli.js')}));
+    await writeFile(join(root,'node_modules/ws/index.js'),`
+Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,1000);
+const {EventEmitter}=require('node:events');
+exports.WebSocket=class extends EventEmitter {
+ constructor(){super();this.readyState=0;setTimeout(()=>{this.readyState=1;this.emit('open');},120);}
+ close(){this.readyState=3;this.emit('close');}
+};
+exports.WebSocketServer=class extends EventEmitter {close(){}};
+`);
+    assert.equal(JSON.parse((await run('start')).stdout).state,'connected');
+  } finally {
+    try {await run('stop');} catch {}
+    await new Promise(r=>setTimeout(r,100));
+    await rm(root,{recursive:true,force:true});
+  }
+});
