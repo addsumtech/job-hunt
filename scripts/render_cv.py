@@ -1059,8 +1059,12 @@ def group_label(group):
     "Ml/ai" and "Programming Languages" became "Programming languages". We only
     upper-case the first character (so a lazily-lowercased "languages" still
     reads as "Languages") and leave the rest exactly as written.
+
+    An underscore is a key separator, never a character to print: a real apply
+    run shipped a CV whose skills line read "Llm_and_agents:", because a YAML
+    key was printed verbatim onto the page.
     """
-    g = str(group)
+    g = str(group).replace("_", " ")
     return g[:1].upper() + g[1:] if g else g
 
 
@@ -1162,6 +1166,10 @@ def render_markdown(profile):
             if link_strs:
                 proj_line += " — " + ", ".join(link_strs)
             out += ["", proj_line]     # see the note in experience()
+            # Bullets are how every other entry carries its detail. Dropping
+            # them silently cost a real run its strongest evidence.
+            for line in as_list(pr.get("bullets")):
+                out.append(f"- {normalize_text(item_str(line))}")
         return out
 
     def simple_list(key):
@@ -1394,6 +1402,8 @@ def render_docx(profile, out_path):
             for i, (label, url) in enumerate(resolved):
                 p.add_run(" — " if i == 0 else ", ")
                 _add_hyperlink(p, label, url)
+            for line in as_list(pr.get("bullets")):
+                doc.add_paragraph(normalize_text(item_str(line)), style="List Bullet 2")
 
     def simple_list(key):
         items = as_list(profile.get(key))
@@ -2140,6 +2150,11 @@ def build_latex(profile, cjk=None, engine=None, asset_dir=None, asset_stem="cv")
             if link_strs:
                 proj_line += " --- " + ", ".join(link_strs)
             parts.append(proj_line + r"\\")
+            lines = as_list(pr.get("bullets"))
+            if lines:
+                parts.append(r"\begin{itemize}[leftmargin=*,itemsep=1pt,topsep=2pt]")
+                parts.extend(r"\item %s" % e(normalize_text(item_str(line))) for line in lines)
+                parts.append(r"\end{itemize}")
 
     def simple_list(key):
         items = as_list(profile.get(key))

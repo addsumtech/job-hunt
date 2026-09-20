@@ -182,3 +182,33 @@ deleted paragraph, nor a value swapped between rows of one table.
 Missing/stale requirements or a failed check block that delivery. The default
 Markdown renderer remains available for initial report generation; create the
 workspace PDF and complete this review before the final handoff.
+
+## When the user supplied no reference
+
+`reference: null` does not waive `layout-requirements.yaml`; it changes where the
+requirements come from. Record the renderer's own defaults, which are these
+(`scripts/render_cv.py`, the DOCX page setup) rather than something to rediscover
+by measuring your own output:
+
+| Property | Default |
+| --- | --- |
+| Paper | A4 210 x 297 mm; US Letter 215.9 x 279.4 mm for a `us`/`ca` target or `meta.paper` |
+| Margins | 12.7 mm left and right, 10 mm top, 12 mm bottom (720 / 567 / 680 twips) |
+| Body size | 11 pt, including section headings and bullets |
+| Name | 16 pt bold (the Title style) |
+| Face | Times New Roman for English; SimSun for Chinese, Yu Mincho for Japanese, Malgun Gothic for Korean |
+
+Derive `text_bounds_pt` from those margins rather than from the ink of one render,
+and measure the sizes on the final export before writing them down: a review that
+records 11 pt for the name is wrong, and the measurement check will say so.
+
+## Look at the page break itself
+
+`pagination_and_clipping` is not only about clipped text. Open the boundary between
+every pair of pages and confirm that no entry is split across it — an institution
+line at the foot of one page with its degree line at the top of the next is the
+common case, and it looks like carelessness to a reader. A section heading must
+never be the last printed line on a page. This is inspected, not measured: a
+rule of "the page ends on a bold line" was tried against real renders and
+reported a CV whose final entry legitimately ended the page, so no gate enforces
+it. Fix a split by adjusting content length or spacing, never by shrinking type.

@@ -507,3 +507,4 @@ def test_a_sentence_deleted_next_to_a_page_break_is_caught():
     page1 = "求职建议报告\n荷兰岗位的月薪区间需要自行核对。按荷兰法定最低假期工资比例折算，月基本工资约 3086 至 3858 欧元。\n第 1 页\n"
     page2 = "求职建议报告\n请在面试前确认合同细节。\n第 2 页\n"
     assert binding(markdown, page1, page2)
+
