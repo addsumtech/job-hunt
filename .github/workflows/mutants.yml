@@ -10,6 +10,11 @@
 # the existing debt does not block anyone and new blindness does. It is separate
 # from checks.yml because it takes minutes to hours: a slow job wired into every
 # push is a job someone eventually deletes.
+#
+# One job per target file. As a single job the three files ran in series and the
+# run of 2026-09-21 had spent 1h56m before reaching render_cv.py, whose 203
+# mutants alone need more than the old 180-minute limit. The matrix must list
+# exactly DEFAULT_TARGETS in scripts/mutants.py; test_ci.py holds them together.
 name: mutants
 
 on:
@@ -20,7 +25,14 @@ on:
 jobs:
   mutants:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - scripts/check_apply.py
+          - scripts/check_claims.py
+          - scripts/render_cv.py
     steps:
       - uses: actions/checkout@v4
         with:
@@ -28,6 +40,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      # The suite runs the node tests too; use the same Node as checks.yml, not
+      # whatever the runner image happens to ship.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - run: pip install -r requirements.txt pytest
       - name: mutation testing against the recorded baseline
-        run: python3 scripts/mutants.py --ci
+        run: python3 scripts/mutants.py --ci --targets ${{ matrix.target }}

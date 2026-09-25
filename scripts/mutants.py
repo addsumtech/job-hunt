@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import pathlib
 import re
 import shutil
@@ -188,15 +189,42 @@ def generate(path: pathlib.Path, relative: str) -> list:
 # would fail for every mutant, making all of them look killed.
 DESELECT = ("test_install.py",)
 
+# No bytecode cache in the mutation copy. A .pyc is trusted when the source's
+# mtime (whole seconds) and size match the ones it was compiled from, and most
+# operators here keep the size: `==` -> `!=` is the same length. A mutant that
+# dies in under a second is restored within the second it was written, so the
+# mutated .pyc stays "fresh" and every later run imports the mutant instead of
+# the restored source. The last mutant of check_claims.py flips its
+# `if __name__ == "__main__":`, the stale module exits on import, and from then
+# on the pristine copy fails: the scheduled run of 2026-09-21 stopped on the
+# first render_cv.py mutant for exactly that reason. The same race runs the other
+# way too: a mutant written in the second after a green run is served the
+# pristine .pyc and "survives" without ever running, so a baseline recorded
+# before this fix may list survivors that were never tested. Children inherit
+# the env, so the python subprocesses the suite spawns write no cache either.
+_ENV = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
 
-def _pytest(cwd: pathlib.Path, targets: list) -> bool:
-    """True when the suite PASSES (i.e. the mutant survived this run)."""
+
+def _run_pytest(cwd: pathlib.Path, targets: list) -> subprocess.CompletedProcess:
     argv = [sys.executable, "-m", "pytest", "-q", "-x", "--no-header", "-p", "no:cacheprovider"]
     for name in DESELECT:
         argv += ["--ignore", str(cwd / "scripts" / "tests" / name)]
     argv += [str(cwd / "scripts" / "tests" / t) for t in targets] if targets else [str(cwd / "scripts" / "tests")]
-    proc = subprocess.run(argv, cwd=str(cwd), capture_output=True, text=True, encoding="utf-8")
-    return proc.returncode == 0
+    return subprocess.run(argv, cwd=str(cwd), capture_output=True, text=True,
+                          encoding="utf-8", env=_ENV)
+
+
+def _pytest(cwd: pathlib.Path, targets: list) -> bool:
+    """True when the suite PASSES (i.e. the mutant survived this run)."""
+    return _run_pytest(cwd, targets).returncode == 0
+
+
+def _tail(proc: subprocess.CompletedProcess, lines: int = 30) -> str:
+    """The end of a red run, for the two verdicts that stop the harness. The
+    runs of 2026-08-31 and 2026-09-07 said only "not green before mutating",
+    and nothing on the page said which test."""
+    text = (proc.stdout or "") + (proc.stderr or "")
+    return "\n".join(text.rstrip().splitlines()[-lines:])
 
 
 def survives(work: pathlib.Path, mutation: Mutation) -> bool:
@@ -233,12 +261,14 @@ def survives(work: pathlib.Path, mutation: Mutation) -> bool:
         # hand. So the failure is attributed only after the PRISTINE copy is shown
         # to be green.
         target.write_text(source, encoding="utf-8")
-        if _pytest(work, []):
+        pristine = _run_pytest(work, [])
+        if pristine.returncode == 0:
             return False            # genuinely killed by a distant test
         raise Unattributable(
             f"the suite fails on the UNMUTATED copy while checking "
             f"{mutation.path}:{mutation.lineno}. Every mutant would be scored "
-            f"'killed' from here, which reports blindness as coverage.")
+            f"'killed' from here, which reports blindness as coverage.\n"
+            f"{_tail(pristine)}")
     finally:
         target.write_text(source, encoding="utf-8")
 
@@ -287,10 +317,12 @@ def main(argv=None) -> int:
     shutil.copytree(ROOT, work, ignore=shutil.ignore_patterns(
         ".git", "__pycache__", ".pytest_cache", "*.pyc"))
     try:
-        if not _pytest(work, []):
+        pristine = _run_pytest(work, [])
+        if pristine.returncode != 0:
             print("cannot run: the suite is not green before mutating — fix that "
                   "first, or every mutant will look like it survived",
                   file=sys.stderr)
+            print(_tail(pristine), file=sys.stderr)
             return 2
 
         found, new, invalid = {}, [], 0

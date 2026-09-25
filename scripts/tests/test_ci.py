@@ -66,6 +66,20 @@ def test_mutation_testing_is_not_wired_into_the_fast_gate():
         "checks.yml runs on every push and must not carry the mutation job"
 
 
+def test_the_mutation_matrix_covers_exactly_the_default_targets():
+    """CI runs one job per target file. A target added to mutants.py but not to
+    the matrix is a file nobody mutates on schedule, and nothing would say so."""
+    import yaml
+
+    import mutants
+
+    job = yaml.safe_load(MUTANTS_WORKFLOW.read_text(encoding="utf-8"))["jobs"]["mutants"]
+    assert job["strategy"]["matrix"]["target"] == list(mutants.DEFAULT_TARGETS)
+    assert job["strategy"]["fail-fast"] is False, \
+        "one file's new survivor must not cancel the other files' runs"
+    assert "--targets ${{ matrix.target }}" in MUTANTS_WORKFLOW.read_text(encoding="utf-8")
+
+
 def test_ci_cannot_rewrite_the_mutation_baseline():
     """`--record` in CI would let the harness update its own baseline, which
     reports success by forgetting what it used to catch."""
