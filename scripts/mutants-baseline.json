@@ -54,6 +54,7 @@
   "37cb088b808e9bf8": "scripts/render_cv.py:625 [guard->False] if not p: — recorded, not explained",
   "9038de9bb62ea3bc": "scripts/render_cv.py:628 [guard->False] if not path.is_file(): — recorded, not explained",
   "3488bc9144e4c43c": "scripts/render_cv.py:644 [guard->False] if str(path) in _PHOTO_WARNED: — recorded, not explained",
+  "493e467b228878e8": "scripts/render_cv.py:677 [guard->False] if not words: — EQUIVALENT, not blindness. Recorded 2026-09-25 after the first complete run. An empty `words` also satisfies the next line, `all(w in _ARRANGEMENT_WORDS for w in words)`, because all() of an empty list is True, so both paths `continue` and no input can tell them apart.",
   "641b88e6a11717d9": "scripts/render_cv.py:694 [guard->False] if v is None: — recorded, not explained",
   "c3dcf836c9819009": "scripts/render_cv.py:795 [guard->False] if not any(sk.values()): — recorded, not explained",
   "afb609e0c5307acb": "scripts/render_cv.py:826 [guard->False] if not items: — recorded, not explained",

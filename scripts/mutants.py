@@ -56,7 +56,8 @@ DEFAULT_TARGETS = (
 # instead of costing a full suite run. Survival is always confirmed against the
 # WHOLE suite — a mutant that only the targeted module misses is still killed.
 FAST_TESTS = {
-    "check_apply.py": ["test_check_apply.py", "test_receipts_bind_to_bytes.py"],
+    "check_apply.py": ["test_check_apply.py", "test_receipts_bind_to_bytes.py",
+                       "test_structured_only_apply.py"],
     "check_claims.py": ["test_check_claims.py"],
     "render_cv.py": ["test_render_cv.py", "test_render_artifact_integrity.py",
                      "test_render_pdf_compile.py"],

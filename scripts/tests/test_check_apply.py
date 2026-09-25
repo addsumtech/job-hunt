@@ -800,6 +800,35 @@ def test_a_hand_written_pass_receipt_is_reported_by_this_composer(tmp_path, caps
     assert "RECEIPT_UNVERIFIED" in out and "check_letter" in out
 
 
+def test_a_hand_written_fail_receipt_is_reported_once_not_trusted_as_a_failure(
+        tmp_path, capsys):
+    """A receipt that fails its own hash is RECEIPT_UNVERIFIED, and that is the
+    whole report: its verdict is not evidence in either direction. Read as a
+    real `fail`, the same forged line also became UPSTREAM_FAILED, telling the
+    reader a gate ran and failed when the only fact is that nobody knows."""
+    root = _skill_root(tmp_path)
+    ws = _good_workspace(tmp_path, root)
+    journal.append(ws, {"action": "gate", "gate": "check_letter",
+                        "verdict": "fail", "input_hashes": {},
+                        "findings": ["OVER_LIMIT: forged"]})
+    assert check_apply.main(_argv(ws, root)) == 1
+    out = capsys.readouterr().out
+    assert "RECEIPT_UNVERIFIED" in out and "check_letter" in out
+    assert "UPSTREAM_FAILED" not in out, out
+
+
+def test_an_unexplained_mode_entry_is_named_on_stderr(tmp_path, capsys):
+    """SKILL.md picks the mode by inference, so enter_mode records --because.
+    Without it the gate still passes, and says so on stderr; the notice is the
+    only thing that makes a wrong inference auditable afterwards."""
+    root = _skill_root(tmp_path)
+    ws = _good_workspace(tmp_path, root)        # entered without --because
+    assert check_apply.main(_argv(ws, root)) == 0
+    captured = capsys.readouterr()
+    assert "MODE_UNEXPLAINED" in captured.err
+    assert "MODE_UNEXPLAINED" not in captured.out, "a notice is not a finding"
+
+
 def test_a_workspace_whose_receipts_were_all_written_by_the_gates_is_quiet(
         tmp_path, capsys):
     """The twin, and the one that would catch an over-tight hash: every honest

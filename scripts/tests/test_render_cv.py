@@ -510,8 +510,11 @@ CLUSTER1_SPELLINGS = [
 # "Netherlands"; leaving a DOB on a US CV is an automatic rejection and was
 # silent. Bare codes are unaffected — "nl", "NL-based" and "NL-remote" all still
 # resolve to 2, which is why they are still in this list.
+# "Netherlands, NL" and "Germany, DE" have the `<place>, <CODE>` shape, but the
+# place is the country the code names, so there is nothing ambiguous to withhold.
 KNOWN_NON_CLUSTER1_SPELLINGS = [
     "nl", "Netherlands", "Amsterdam, Netherlands", "NL-based", "NL-remote",
+    "Netherlands, NL", "Germany, DE",
     "Germany", "Munich, Germany", "Remote — EU", "Austria", "Switzerland",
     "cn", "China", "中国", "Japan", "Tokyo, Japan", "South Korea", "Singapore",
 ]
@@ -1296,3 +1299,106 @@ def test_an_unknown_key_still_falls_back_rather_than_raising():
     interlock names, which is what the parametrized test above covers."""
     assert render_cv.personal_label("driving_licence", "zh") == "Driving Licence"
     assert render_cv.personal_label("age", "en") == "Age"
+
+
+# ---------------------------------------------------------------------------
+# Pinned by the first complete mutation run (2026-09-25). Each test below failed
+# to exist while its line could be broken with the whole suite green. Several of
+# these paths are exercised only by a real TeX compile, and CI has no engine, so
+# they are tested here without one.
+# ---------------------------------------------------------------------------
+
+def test_the_ambiguous_code_warning_prints_once_per_market(monkeypatch, capsys):
+    """md, docx and pdf resolve one profile three times; the same WARNING three
+    times is how a warning gets trained away."""
+    monkeypatch.setattr(render_cv, "_AMBIGUOUS_WARNED", [])
+    for _ in range(3):
+        assert render_cv.resolve_cluster("Wilmington, DE") == 1
+    assert capsys.readouterr().err.count("WARNING") == 1
+
+
+@pytest.mark.parametrize("market, paper", [
+    ("Remote United States", "letterpaper"),
+    ("Toronto Canada", "letterpaper"),
+    ("Munich Germany", "a4paper"),
+])
+def test_a_letter_country_inside_a_longer_segment_gets_letter_paper(market, paper):
+    """Without a comma the country is one phrase inside a longer segment, so only
+    the phrase scan can see it."""
+    assert render_cv.paper_for({"target_market": market}) == paper
+
+
+@pytest.mark.parametrize("market, width_mm, height_mm", [
+    ("United States", 215.9, 279.4),
+    ("Germany", 210.0, 297.0),
+])
+def test_the_docx_page_is_the_market_s_paper(tmp_path, market, width_mm, height_mm):
+    """The .docx sets its own page size; nothing else checked it, so a US CV
+    could come out on A4 while the PDF of the same profile was on Letter."""
+    from docx import Document
+    out = tmp_path / "cv.docx"
+    render_cv.render_docx({"meta": {"name": "Z", "target_market": market},
+                           "contact": {"email": "z@x.com"}}, out)
+    section = Document(str(out)).sections[0]
+    assert section.page_width.mm == pytest.approx(width_mm, abs=0.1)
+    assert section.page_height.mm == pytest.approx(height_mm, abs=0.1)
+
+
+def test_an_entry_with_no_right_column_is_a_plain_full_width_heading():
+    """With no dates or place there is nothing to measure. The title gets the
+    whole line as an ordinary paragraph, not a parbox 1em short of it."""
+    assert (render_cv._tex_entry_heading("Engineer", "")
+            == r"\smallskip\noindent Engineer\par")
+    assert r"\setbox0" in render_cv._tex_entry_heading("Engineer", "2020")
+
+
+def test_a_list_section_the_profile_does_not_have_is_not_printed():
+    """section_order() lists every section, present or not. An empty one has to
+    print nothing: a heading over an empty itemize is a LaTeX error, which only
+    a real compile would show."""
+    p = {"meta": {"name": "Z"}, "contact": {"email": "z@x.com"}, "awards": []}
+    tex = render_cv.build_latex(p)
+    h = render_cv.headings(p)
+    for key in ("publications", "awards", "certifications", "achievements",
+                "board", "volunteer"):
+        assert r"\section*{%s}" % h[key] not in tex, key
+    assert "\\begin{itemize}\n\\end{itemize}" not in tex
+
+
+def _engine_that_reports(out, log):
+    """A stand-in for a TeX engine: it writes a PDF, exits 0 and prints `log`."""
+    def fake_run(cmd, **kw):
+        out.write_bytes(b"%PDF-1.5\n")
+        class R:
+            returncode = 0
+            stdout = log
+            stderr = ""
+        return R()
+    return fake_run
+
+
+def test_a_line_past_the_margin_deletes_the_pdf(tmp_path, monkeypatch):
+    """The real-compile version of this test needs an engine and is skipped
+    without one, which left the off-page refusal untested in CI."""
+    tex, out = tmp_path / "cv.tex", tmp_path / "cv.pdf"
+    tex.write_text("x", encoding="utf-8")
+    monkeypatch.setattr(render_cv.subprocess, "run", _engine_that_reports(
+        out, "Overfull \\hbox (86.0pt too wide) in paragraph at lines 9--10\n"))
+    reasons = []
+    assert render_cv.compile_latex("tectonic", tex, out, reasons=reasons) is False
+    assert reasons == [render_cv.TEXT_OFF_PAGE]
+    assert not out.exists()
+
+
+def test_a_line_into_the_margin_warns_and_keeps_the_pdf(tmp_path, monkeypatch, capsys):
+    """The twin: inside the margin the text is still on the paper, so the PDF
+    stays and the run says so on stderr."""
+    tex, out = tmp_path / "cv.tex", tmp_path / "cv.pdf"
+    tex.write_text("x", encoding="utf-8")
+    monkeypatch.setattr(render_cv.subprocess, "run", _engine_that_reports(
+        out, "Overfull \\hbox (12.5pt too wide) in paragraph at lines 4--5\n"))
+    reasons = []
+    assert render_cv.compile_latex("tectonic", tex, out, reasons=reasons) is True
+    assert reasons == []
+    assert out.exists()
+    assert "WARNING" in capsys.readouterr().err

@@ -95,7 +95,9 @@ def test_any_cv_artifact_restores_three_judge_requirement(tmp_path, capsys, ext)
     assert "MISSING_RECEIPT: lint_cv" in output
 
 
-@pytest.mark.parametrize("change", ["missing_plan", "string_false", "unstructured", "uppercase_structured", "cv_required_true", "outside_source", "symlink_source", "missing_quote", "generated_source", "nul_source", "empty_source", "dot_source"])
+# empty_quote: "" is a substring of every file, so without its own check an empty
+# source_quote passes the verbatim test and skips the three judges on no evidence.
+@pytest.mark.parametrize("change", ["missing_plan", "string_false", "unstructured", "uppercase_structured", "cv_required_true", "outside_source", "symlink_source", "missing_quote", "empty_quote", "generated_source", "nul_source", "empty_source", "dot_source"])
 def test_no_implicit_or_unsubstantiated_review_bypass(tmp_path, capsys, change):
     ws, root = _workspace(tmp_path)
     plan = yaml.safe_load((ws / "application-plan.yaml").read_text())
@@ -113,6 +115,7 @@ def test_no_implicit_or_unsubstantiated_review_bypass(tmp_path, capsys, change):
             (ws / "input.md").unlink()
             (ws / "input.md").symlink_to(outside)
         elif change == "missing_quote": plan["source_quote"] = "A quote never supplied."
+        elif change == "empty_quote": plan["source_quote"] = ""
         elif change == "generated_source": plan["source_ref"] = "interview-brief.md"
         elif change == "nul_source": plan["source_ref"] = "raw/bad\x00.txt"
         elif change == "empty_source": plan["source_ref"] = ""
@@ -121,6 +124,21 @@ def test_no_implicit_or_unsubstantiated_review_bypass(tmp_path, capsys, change):
     capsys.readouterr()
     assert _check(ws, root) == 1
     assert "MISSING_RECEIPT: parse_verdicts" in capsys.readouterr().out
+
+
+def test_a_plan_that_requires_a_cv_is_valid_not_malformed(tmp_path, capsys):
+    """`cv_required: true` is the ordinary answer: the CV goes through the three
+    judges as usual. Only a non-boolean is BAD_APPLICATION_PLAN, and calling the
+    ordinary answer malformed sends the reader to fix a plan that is correct."""
+    ws, root = _workspace(tmp_path)
+    plan = yaml.safe_load((ws / "application-plan.yaml").read_text())
+    plan["cv_required"] = True
+    _write(ws / "application-plan.yaml", plan)
+    capsys.readouterr()
+    assert _check(ws, root) == 1
+    out = capsys.readouterr().out
+    assert "MISSING_RECEIPT: parse_verdicts" in out
+    assert "BAD_APPLICATION_PLAN" not in out
 
 
 @pytest.mark.parametrize("file", ["application-plan.yaml", "input.md", "posting.yaml"])
