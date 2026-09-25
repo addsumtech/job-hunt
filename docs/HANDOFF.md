@@ -91,6 +91,9 @@ check_conventions --ci: exit 0
 
 3. **规矩**：只 stage 具名路径（不要 `git add -A`）；不要用 `-c` 覆盖 git identity
    （`dong845 <ldh199803@gmail.com>`）；**除非当次明确要求，否则不 push**。
+   发版：main 上 CI 绿了再打 tag；**tag 推送后不再移动**，发版后的修复进下一个补丁版本。
+   `git fetch` 默认不会更新已有 tag，挪过的 tag 会让同一个版本号在不同人手里是不同代码
+   （v1.0.0、v1.1.0 都发生过）。
 
 ---
 

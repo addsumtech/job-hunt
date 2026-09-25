@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="许可证：MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg"></a>
   <img alt="适用于 Claude Code 和 Codex" src="https://img.shields.io/badge/agents-Claude_Code_·_Codex-5b5bd6">
-  <a href="https://github.com/addsumtech/job-hunt/releases"><img alt="版本：v1.1.0" src="https://img.shields.io/badge/release-v1.1.0-1f883d"></a>
+  <a href="https://github.com/addsumtech/job-hunt/releases"><img alt="版本：v1.1.1" src="https://img.shields.io/badge/release-v1.1.1-1f883d"></a>
   <a href="https://skillhub.cn/skills/user_f486c577/best-job-hunt"><img alt="SkillHub：best-job-hunt" src="https://img.shields.io/badge/SkillHub-best--job--hunt-e8590c"></a>
   <a href="https://clawhub.ai/dong845/skills/job-hunt"><img alt="ClawHub：job-hunt" src="https://img.shields.io/badge/ClawHub-job--hunt-0f766e"></a>
 </p>
