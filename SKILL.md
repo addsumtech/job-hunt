@@ -88,7 +88,7 @@ user asks to fill the page, record a `minimum_content_bottom_pt` requirement and
 verify it alongside one-page pagination; a large blank bottom requires rework.
 Do not add invented experience, repeated claims or empty paragraphs to fill space.
 
-Delivery uses two child folders: `简历/` for `简历.docx`, `简历.pdf` and other requested application documents; `报告/` for `求职建议报告.pdf` and its editable text. Filenames never include the employer, role or internal workspace slug.
+Delivery uses two child folders, whose names `deliver.py` writes in Chinese for every client: `简历/` (application documents) for `简历.docx`, `简历.pdf` and other requested application documents; `报告/` (report) for `求职建议报告.pdf` (the advice report) and its editable text. Filenames never include the employer, role or internal workspace slug.
 
 In `discover`, `assess` and `interview`, an existing CV is source material, so
 delivery copies only the report by default. Use `--include-applications` only
@@ -109,16 +109,17 @@ all four modes; a clean vocabulary lint alone does not establish readability.
 
 Client reports must not narrate the test harness or fixture provenance. Even
 when testing the skill with a fictional profile, keep statements such as
-“固定虚构履历进行了11个问答” and which test stages ran in the private test
-record. Write the client report directly as role choices, evidence gaps,
+“ran 11 questions on the fixed fictional profile” and which test stages ran in
+the private test record. Write the client report directly as role choices, evidence gaps,
 resume advice and next actions. Do not describe generated fixture answers as a
 real user's interview performance. `deliver.py` rejects fixture-profile markers
-only; practice scope for a real client (“本轮只练了技术面”, “a mock is not a
+only (in Chinese reports, markers such as “固定虚构履历”); practice scope for a
+real client (“this round covered only the technical interview”, “a mock is not a
 real interview”) is normal advice. Still read the whole report for other
 process narration.
 
 The job directory and its original posting links already serve as the report's
-source list. Do not append a separate “来源与信息范围” section or reproduce the
+source list. Do not append a separate “Sources and scope” section or reproduce the
 internal source audit, ownership chain, annual-report citations or explanations
 of unstated restrictions. Keep that evidence private. Put only facts that change
 the client's decision or next action beside the relevant job, stated once.
@@ -715,11 +716,11 @@ checks the language's explicit anchor; a free paraphrase may still fail as `NO_D
 > is your call.
 
 Every item inside N and K is printed with its evidence reference, so the denominator
-is auditable. `强证据` counts only `strong`; `partial` and `gap` are never folded into
+is auditable. The strongly evidenced count takes only `strong`; `partial` and `gap` are never folded into
 a "covered" number; evidence that is only `dated` counts as `partial`, never `strong`.
 When the input cannot support a conclusion at all, the whole block is replaced by
-`证据不足—不出结论` and the reason — that is a refusal, not a sixth level, and it is
-never softened into `可以冲刺`.
+the refusal, `insufficient_evidence` (zh `证据不足—不出结论`), and the reason. That is
+a refusal, not a sixth level, and it is never softened into `stretch`.
 
 ## Words this skill does not put in its output
 
@@ -803,7 +804,7 @@ a fabrication the candidate then repeats back), and the shortlist's `why_matched
 | Contradictions | `scripts/consistency.py` | verdict vs effort, loose knockouts, gaps with no action, work-authorization conflicts — reports, never repairs |
 | Coverage counts | `scripts/count_coverage.py` | the only count-producing path **wherever a `fit-assessment.yaml` exists** — assess mode, and apply mode resumed from one. Apply mode without an assessment has no file for it to read and hand-counts its FIT SNAPSHOT instead; that is a second path, so it must apply the identical rule (below), and it is why the rule is written out in both places rather than trusted to memory. The card renders in **zh, en, ja, ko or es** using the same counts; pair it with the required text in [report-localization.md](references/report-localization.md). Other languages embed an English or Chinese card and required labels. Missing judgements, evidence and disclaimers remain failures in every supported language |
 | Market tables | `scripts/check_conventions.py` | digits/percent in prose, source provenance, protected traits, duplicate ids, expired `review_by` (CI-hard) |
-| Assess | `scripts/check_assessment.py` | composes the six above and requires their receipts; disclaimer, disqualifier section, the 「那该怎么办」 half, verbatim conventions, stale-review banner; a top-level `level_direction` or `effort` the card prints but nobody assessed, and a work-authorization token spelled outside its set |
+| Assess | `scripts/check_assessment.py` | composes the six above and requires their receipts; disclaimer, disqualifier section, the “What to do instead” half, verbatim conventions, stale-review banner; a top-level `level_direction` or `effort` the card prints but nobody assessed, and a work-authorization token spelled outside its set |
 | Migration losslessness (CI only) | `scripts/check_skill_lossless.py` | a baseline line that exists nowhere in this tree |
 | Adapter classification | `scripts/check_opencli_result.py` | *(wrapper, not a gate)* a non-zero exit, a login wall, a platform stop-signal, or an empty identity field |
 | First-run environment | `scripts/doctor.py` | *(precondition, not a gate)* every capability the skill needs, checked by USING it — the PDF check renders a PDF, because an earlier `command -v xelatex` check called a working machine broken while tectonic was installed. `--install` installs the Python packages; the agent prepares required tools and daily-browser CDP via `references/agent-setup.md` |
@@ -849,7 +850,7 @@ transport failure that has not yet established a fallback reason.
 | `51job` | `opencli 51job search "<kw>" --area <city> --page 1 --limit 20 --window background -f json` | `opencli 51job detail <jobId>` | no auth adapter | `title` |
 | `indeed` | `opencli indeed search "<kw>" --location "<loc>" --fromage 7 --start 0 --limit 15 --window background -f json` | `opencli indeed job <id>` | no auth adapter | `title` — **measured EMPTY**, recover via detail. **US site only**, see below |
 | `linkedin` | `opencli linkedin search "<kw>" --location "<loc>" --date-posted week --start 0 --limit 10 --window background -f json` | `opencli linkedin job-detail <job-url>` | logged in (cookie session) | `title` |
-| `boss` | `opencli boss search "<kw>" --city <城市> --page 1 --limit 15 --window background -f json` | `opencli boss detail <security_id>` | logged in (cookie session) | `name`, **not** `title` |
+| `boss` | `opencli boss search "<kw>" --city <city> --page 1 --limit 15 --window background -f json` | `opencli boss detail <security_id>` | logged in (cookie session) | `name`, **not** `title` |
 
 **`indeed` serves the US site, and `--location` is resolved against a US
 gazetteer.** A non-US place name does not fail — it silently returns US rows:

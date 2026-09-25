@@ -297,7 +297,7 @@ of the five stops it:
   phrasing problem — still want to apply?" If the user says yes, proceed and do the
   work properly. Ask once, not every step; a second ask is nagging, and a silent
   refusal is deciding for them.
-- `证据不足—不出结论` — this is a refusal, not a level. Say what could not be read
+- `证据不足—不出结论` (insufficient_evidence) — this is a refusal, not a level. Say what could not be read
   (the posting, the CV, an illegible region of an image source) and get that first.
 
 No assessment at all is not a blocker either: run apply, and say plainly that no
@@ -431,7 +431,7 @@ every mode is a command, not a claim:
 python3 scripts/deliver.py --workspace <ws>
 ```
 
-Delivery uses two child folders: `简历/` for `简历.docx`, `简历.pdf` and other requested application documents; `报告/` for `求职建议报告.pdf` and its editable text. Filenames never include the employer, role or internal workspace slug.
+Delivery uses two child folders, whose names `deliver.py` writes in Chinese for every client: `简历/` (application documents) for `简历.docx`, `简历.pdf` and other requested application documents; `报告/` (report) for `求职建议报告.pdf` (the advice report) and its editable text. Filenames never include the employer, role or internal workspace slug.
 
 Author `report.md` for **every consultation**, answering the client's actual
 question in their language: conclusion, supporting evidence, relevant career

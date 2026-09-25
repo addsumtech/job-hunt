@@ -320,7 +320,7 @@ The verdict marker is load-bearing: `check_assessment.py` recognises the five
 language-specific labels produced by `count_coverage.py`. Paste its output unchanged;
 do not translate the label or recompute the numbers by hand.
 
-`强证据` counts `strong` only. `partial` and `gap` are never merged into a covered
+The strongly evidenced count takes `strong` only. `partial` and `gap` are never merged into a covered
 number. Evidence that is only `dated` counts as `partial`.
 
 The middle three lines come from three different places, and mixing them up is how a
@@ -461,7 +461,7 @@ every mode is a command, not a claim:
 python3 scripts/deliver.py --workspace <ws>
 ```
 
-Delivery uses two child folders: `简历/` for `简历.docx`, `简历.pdf` and other requested application documents; `报告/` for `求职建议报告.pdf` and its editable text. Filenames never include the employer, role or internal workspace slug.
+Delivery uses two child folders, whose names `deliver.py` writes in Chinese for every client: `简历/` (application documents) for `简历.docx`, `简历.pdf` and other requested application documents; `报告/` (report) for `求职建议报告.pdf` (the advice report) and its editable text. Filenames never include the employer, role or internal workspace slug.
 
 Author `report.md` for **every consultation**, answering the client's actual
 question in their language: conclusion, supporting evidence, relevant career
