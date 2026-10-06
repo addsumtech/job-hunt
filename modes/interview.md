@@ -398,6 +398,12 @@ three CV judges read a page, and the page does not stammer.
 
 `check_mock.py` requires this section whenever `PROBE-COLLAPSE`, `OVER-CLAIM`, or
 `CONTRADICTED` fired, and requires an entry quoting **each** such finding.
+A proposed walk-back records an open issue; it does not resolve an
+`UNSOURCED-FACT`, even when the same quote also triggered `OVER-CLAIM`. Resolve
+that fact only after the candidate confirms it or withdraws it. For a completed
+withdrawal or correction, record `status: withdrawn` or `status: applied` and
+retain the actual confirmation or edit evidence. Never relabel `proposed` merely
+to satisfy the gate.
 
 **(b) Promote a confirmed-but-absent fact.** An `UNSOURCED-FACT` usually resolves to "it's
 true, it's just not on my CV". Ask the candidate where it came from **before** it enters the
@@ -476,12 +482,12 @@ python3 scripts/deliver.py --workspace <ws>
 
 Delivery uses two child folders, whose names `deliver.py` writes in Chinese for every client: `简历/` (application documents) for `简历.docx`, `简历.pdf` and other requested application documents; `报告/` (report) for `求职建议报告.pdf` (the advice report) and its editable text. Filenames never include the employer, role or internal workspace slug.
 
-Author `report.md` for **every consultation**, answering the client's actual
+Author `report.md` for **every full consultation**, respecting explicit chat-only/no-file requests and answering the client's actual
 question in their language: conclusion, supporting evidence, relevant career
 constraints or facts still to confirm, and practical next steps. Tool defects,
 adapter errors, tests, developer diagnostics and internal review logs belong only
 in the private workspace, never in this client report. Do not copy an internal
-`completion.md` into it. A general question still receives a PDF reply report.
+`completion.md` into it. A narrow text edit remains in chat; it does not initiate report delivery.
 
 Before drafting, read `references/report-writing.md`; revise the report for clear
 recommendations, specific reasons and actionable advice, then inspect the rendered
@@ -516,3 +522,77 @@ Do not automatically start a mock interview or another mode.
 - [ ] `scripts/check_mock.py` exited 0 and its receipt is in `journal.jsonl`
 
 **Voice.** The debrief tells someone what they got wrong. `SKILL.md`, "How this skill writes to the user", governs its prose — quote them rather than characterise them, and say the finding before the cushioning.
+
+## Mock interview — the anti-coaching line
+
+### Rehearse retrieval, never rehearse content
+
+A mock interview may help the candidate FIND, ORDER, and COMPRESS a true story they
+already lived. It may not help them ACQUIRE one. The test is where the fact came from:
+
+- If a detail traces to the profile, to the provenance map in `interview-brief.md`, or to
+  something the candidate told you earlier in this session — helping them say it better is
+  preparation.
+- If a detail first appears in YOUR mouth — a number, a tool, a scope, a motive, a
+  result — it is fabrication, however plausible, and it stays fabrication after the candidate
+  agrees with it.
+
+**Four hard rules.**
+
+1. **Never write an answer for the candidate.** You may name what is missing ("your answer
+   never said what changed as a result"). You may not supply the missing part. Naming a gap
+   is feedback; filling it is ghostwriting a lie.
+
+2. **A leading question is a fabrication vector.** "So you'd say you owned the migration?"
+   hands the candidate an over-claim they will repeat in the real room and will not be able
+   to defend. Ask "who owned the migration?" — open, and let the answer be whatever it is.
+   This applies to your interview questions too: never build a question on a premise the CV
+   does not support ("when you led that team of twelve").
+
+3. **An undefendable claim is a CV bug, not a story to drill.** If the candidate cannot
+   truthfully support a CV claim under ONE follow-up, that is a tailoring error. Log it to
+   the walk-back list and change the CV. This is `references/interview-prep.md`'s over-reach
+   rule — the mock interview is the stage where it actually fires, because the three CV
+   judges only read the page and the page does not stammer.
+
+4. **Never rehearse a gap into a non-gap.** For an HONEST-GAP the only preparation is the
+   truthful framing already chosen in the tailoring plan. Do not produce a smoother version
+   that implies experience the candidate lacks. "I haven't done X" must survive rehearsal
+   intact; only the sentence around it may improve.
+
+**The tripwire.** Any figure, tool, employer, title, or scope that appears in the
+candidate's answer and is in NEITHER the profile, NOR `interview-brief.md`, NOR an earlier
+answer this session, is tagged `UNSOURCED-FACT` (or `OVER-CLAIM` if it exceeds a recorded
+source fact) and the candidate is asked where it came from BEFORE it may enter the answer
+bank. Usually the answer is "it's true, it's just not on my CV" — that is a real finding and
+it should probably go on the CV. Sometimes it is drift under pressure. Either way it gets
+resolved, never silently kept: an answer-bank entry containing an unsourced fact is worse
+than no answer bank, because the candidate will say it out loud in the real interview
+believing you vetted it.
+
+### Mock-interview session mechanics
+
+- **Information isolation.** The interviewer is inline and sees everything. The first
+  assessment pass sees the transcript, `posting.yaml` and `cv.md` — **the first assessment
+  pass does not see `interview-brief.md` or `claims.yaml`**, so it cannot credit the
+  candidate for a source fact they never said out loud. The second pass sees the transcript,
+  `claims.yaml` and `interview-brief.md` but not the rubric, and emits only
+  `UNSOURCED-FACT` / `OVER-CLAIM` / `CONTRADICTED`. Feeding the two passes different inputs
+  is what turns the honesty tripwire from an intention into a mechanism.
+- **One round per dispatch.** Assess, write the artifacts, stop. Round n+1 carries an
+  open-loops summary, never the full transcript.
+- **Flush the transcript after every answer**, not at the end of the round. A crashed
+  session then loses one answer instead of a round, and the assessors read a file rather
+  than this conversation.
+- **Bands, not scores.** `not_present` / `asserted` / `instanced` / `held_under_probe`, plus
+  the non-band flag `contradicted`. They are unnumbered so they cannot be averaged, and
+  `held_under_probe` is the ceiling on purpose: a higher band would require knowing what
+  this employer expects at this level, and this skill does not.
+- **The interviewer and both assessors may not emit** a score, grade, percentage or invented
+  "X out of Y"; a probability, likelihood or odds; "you would pass / fail / they would hire
+  you"; "strong candidate" / "weak candidate" / "hire" / "no-hire"; any comparison to other
+  candidates; any claim about what the interviewer thought or would conclude; or a rating on
+  a scale the employer did not publish. **The one exception**: where the employer publishes
+  its own rubric, you may walk the candidate through that published scale in the employer's
+  own wording, attributed, as a checklist of what the panel is told to look for. Quoting an
+  employer's scale is reporting; applying it as a verdict is fabrication.

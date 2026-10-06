@@ -1,6 +1,7 @@
 import datetime
 import pathlib
 import sys
+import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -190,11 +191,23 @@ def test_walking_the_fact_back_also_resolves_it(tmp_path):
     walkback = WALKBACK.replace(
         "- quote: It went really well after that.",
         "- quote: then wrote DICOMs back to the PACS",
-    ).replace("- defect: PROBE-COLLAPSE", "- defect: CONTRADICTED")
+    ).replace("- defect: PROBE-COLLAPSE", "- defect: CONTRADICTED").replace(
+        "- status: proposed", "- status: withdrawn")
     findings = run(
         F.build(tmp_path, assessment=assessment_with(UNSOURCED), brief=F.BRIEF + walkback)
     )
     assert not [f for f in findings if f.startswith("UNRESOLVED_FACT:")]
+
+
+@pytest.mark.parametrize("status", ["proposed", "pending", "",
+    "proposed only; not confirmed, accepted or applied"])
+def test_an_unconfirmed_walkback_does_not_resolve_an_unsourced_fact(tmp_path, status):
+    walkback = WALKBACK.replace("It went really well after that.",
+        "then wrote DICOMs back to the PACS").replace("PROBE-COLLAPSE", "OVER-CLAIM")
+    walkback = walkback.replace("- status: proposed", "- status: " + status)
+    findings = run(F.build(tmp_path, assessment=assessment_with(UNSOURCED),
+                           brief=F.BRIEF + walkback))
+    assert any(f.startswith("UNRESOLVED_FACT:") for f in findings)
 
 
 def test_the_ordinary_claims_file_is_not_flagged(tmp_path):

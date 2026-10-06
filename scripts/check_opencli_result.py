@@ -208,7 +208,18 @@ def classify(site, command, exit_code, stdout_text, stderr_text,
         "remedy": None,
     }
 
-    # ---- exit code first, always -------------------------------------
+    # The bundled CDP cleanup emits this exact lifecycle marker after handing
+    # a visible wall to the user. It is not posting text or an adapter's generic
+    # navigation error. Even an adapter that returned rows before the wall must
+    # stop; do not turn the later verification into a transport retry.
+    if re.search(r"(?m)^\[cdp\] USER_ACTION_REQUIRED:", stderr_text or ""):
+        result["classification"] = "platform_limit"
+        result["signal_id"] = "cdp-user-action-required"
+        result["error_message"] = "The daily-browser page requires user action and was kept open."
+        result["remedy"] = "Stop this site for this round; do not retry. " + recovery_guidance()
+        return result
+
+    # ---- exit code before adapter output -----------------------------
     if exit_code != 0:
         message = _error_message(stderr_text)
         result["error_message"] = message

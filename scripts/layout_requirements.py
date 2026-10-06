@@ -33,7 +33,6 @@ _BLOCK_END = re.compile(r"</(style|script)>", re.I)
 _MARKER = re.compile(r"^(?:\d{0,4}|[ivxlcdm]{1,6}|[a-z]|[一二三四五六七八九十百]{1,3})$")
 _GAP = r"\d{0,4}"     # a footnote number or superscript printed inside a line
 _PAGE_REACH = 300     # letters/digits of page furniture tolerated around a page break
-_SHORT = 3            # shorter cells ("是", "1", "No") are required but never move the cursor
 
 
 # Characters that occupy a line without printing: whitespace, format characters
@@ -105,7 +104,8 @@ def _report_blocks(markdown):
             following = lines[index + 1] if index + 1 < len(lines) else ""
             kind = "header" if "|" in following and _TABLE_SEP.match(following) else "row"
             cells = line.strip().strip("|").split("|")
-            blocks.append({"kind": kind, "text": line.strip(), "cells": [_fragments(c) for c in cells]})
+            blocks.append({"kind": kind, "text": line.strip(), "raw_cells": cells,
+                           "cells": [_fragments(c) for c in cells]})
             continue
         note, heading, item = _FOOTNOTE_DEF.match(line), _HEADING.match(line), _LIST.match(line)
         if note or heading or item:
@@ -142,14 +142,11 @@ def report_text_problems(markdown, pages):
     when the PDF prints them, since card layouts drop the labels. A block may
     cross a page break, but only over furniture: page numbers and lines that
     repeat on other pages, such as a running header or a repeated table header.
-    Known limits. A table cell is only required to be present somewhere, so a
-    value swapped or copied between rows of a table passes: wrapped columns
-    interleave in the extracted text and CJK columns can run together, which
-    leaves no reliable reading of where a cell stands. (PyMuPDF's table
-    reconstruction was measured against these reports and paired the wrong one
-    of a document's repeated per-job tables.) Text deleted from the Markdown is
-    invisible while the stale PDF still reads as whole blocks; link targets are
-    not compared, and a PDF that prints them inline does not bind.
+    A row must consume all of its cells, in their original column order. Wrapped
+    columns may interleave after they start, but no partial cell is evidence for
+    the whole value. Ambiguous or unsupported extraction fails closed. Deleting
+    whole blocks and changing link targets also require the render-time source
+    binding; visible text alone cannot prove those changes reached the PDF.
     """
     import bisect
     lines, starts, ends, page_start, offset = [], set(), set(), [], 0
@@ -170,7 +167,8 @@ def report_text_problems(markdown, pages):
             if not fresh:
                 ends.add(offset + len(key))
             if key:
-                lines.append({"key": key, "start": offset, "end": offset + len(key), "page": number})
+                lines.append({"key": key, "text": text, "start": offset,
+                              "end": offset + len(key), "page": number})
                 offset += len(key)
     page_start.append(offset)
     stream = "".join(line["key"] for line in lines)
@@ -260,22 +258,89 @@ def report_text_problems(markdown, pages):
                     return start, end
         return contiguous
 
-    def cell_present(fragments):
-        """Whether a table cell's text is in the PDF at all.
+    def row_end(keys, cursor, header):
+        """Match a complete row, including interleaved wrapped columns.
 
-        Neither position nor word boundaries can be required here: a renderer
-        that wraps a narrow column interleaves the pieces of one row, and
-        extracted CJK columns can run together with no separator between
-        them. Where a cell stands is checked against the reconstructed table
-        instead (_table_problems).
+        States track how many characters each cell has consumed. A new column
+        can start only after the preceding column has started; continuation
+        lines may return to an earlier column. Every character must belong to
+        this row, so a negation or salary from another row cannot be ignored.
+        PDF lines bound the match, including when CJK cells have no spaces.
         """
-        key = "".join(fragments)
-        if key in stream:
-            return True
-        for size in (12, 8, 6, 4, 3, 2):  # a cell wrapped, perhaps after two characters
-            if size < len(key) and (key[:size] in stream or key[-size:] in stream):
-                return True
-        return False
+        keys = tuple(key for key in keys if key)
+        if not keys:
+            return cursor
+        goal = tuple(map(len, keys))
+        zero = (0,) * len(keys)
+        for first in range(max(0, at(cursor)), len(lines)):
+            if lines[first]["start"] < cursor:
+                continue
+            states, work = {(zero, -1)}, 0
+            for index in range(first, len(lines)):
+                line = lines[index]
+                saved = states
+                for position, char in enumerate(line["key"]):
+                    following = set()
+                    for state, active in states:
+                        for column, key in enumerate(keys):
+                            used = state[column]
+                            switch = (position == 0 or column == active or active < 0
+                                      or column > active and (state[active] == goal[active]
+                                          or line["start"] + position in starts))
+                            if (used < len(key) and key[used] == char
+                                    and switch and (used or column == 0 or state[column - 1])):
+                                advanced = list(state)
+                                advanced[column] += 1
+                                following.add((tuple(advanced), column))
+                    states = following
+                    work += len(states)
+                    if not states or len(states) > 2048 or work > 200000:
+                        states = set()
+                        break
+                # Only page-edge furniture may interrupt a row. Repeated body
+                # cells are not generally skippable just because they repeat.
+                edge = (index < 2 or index >= len(lines) - 2
+                        or lines[max(0, index - 2)]["page"] != line["page"]
+                        or lines[min(len(lines) - 1, index + 2)]["page"] != line["page"])
+                if index > first and edge and (line["key"] == header or skippable(index)):
+                    states |= saved
+                if any(state == goal for state, _ in states):
+                    return line["end"]
+                if not states:
+                    break
+        return None
+
+    def match_row(cells, cursor, headers, merged=0, raw_cells=()):
+        from itertools import product
+        keys = ["".join(cell) for cell in cells]
+        header = "".join("".join(cell) for cell in headers)
+        variants = []
+        for index, key in enumerate(keys):
+            links = _LINK.findall(raw_cells[index]) if index < len(raw_cells) else []
+            choices = [key]
+            if links:
+                labels = [_ink_key(label) for label in links]
+                for prefix in ("链接", "link", "リンク", "링크", "enlace"):
+                    decorated = "".join(prefix + label for label in labels)
+                    choices.append(decorated if key == "".join(labels) else key + decorated)
+            variants.append(choices)
+        # Default tables, and externally rendered tables with a leading merged
+        # company cell. Only leading cells proved in the previous row may merge.
+        for choice in product(*variants):
+            for omitted in range(merged + 1):
+                spot = row_end(choice[omitted:], cursor, header)
+                if spot is not None:
+                    return spot
+        # Wide/tall tables can be rendered as labeled entries. Labels are known
+        # source headers, never arbitrary intervening PDF text.
+        for title_columns in (1, 2):
+            labeled = [key if n < title_columns else "".join(headers[n]) + key
+                       for n, key in enumerate(keys)] if len(headers) == len(keys) else []
+            if labeled:
+                spot = row_end(labeled, cursor, header)
+                if spot is not None:
+                    return spot
+        return None
 
     def whole_line(before, after):
         def accept(start, end):
@@ -285,42 +350,36 @@ def report_text_problems(markdown, pages):
                     and (_MARKER.match(tail) or tail in after))
         return accept
 
-    def own_row(keys):
-        def strip(text):
-            for key in sorted(keys, key=len, reverse=True):
-                if key:
-                    text = text.replace(key, "")
-            return re.sub(r"\d+", "", text)
-
-        def accept(start, end):
-            # A cell carried over a page break sits beside the remainder of a
-            # neighbour, so a head may end one and a tail may begin one.
-            head, tail = strip(stream[lines[at(start)]["start"]:start]), strip(
-                stream[end:lines[at(end - 1)]["end"]])
-            return ((not head or any(k.endswith(head) for k in keys))
-                    and (not tail or any(k.startswith(tail) for k in keys)))
-        return accept
-
-    # One ordered pass places paragraphs, headings and list items, which must
-    # occupy whole PDF lines. Table cells are only required to be present at a
-    # word boundary: a renderer that wraps a narrow column interleaves the
-    # pieces of a row, so their order in the extracted text means nothing.
-    problems, cursor, above, labels = [], 0, None, {""}
+    problems, cursor, above, labels, headers = [], 0, None, {""}, []
     for index, block in enumerate(blocks):
         if block["kind"] in ("row", "header"):
             cells = [(c, column) for column, c in enumerate(block["cells"]) if c]
             labels |= {"".join(c) for c, _ in cells}
-            if block["kind"] == "header" and not any(
-                    sum(1 for c, _ in cells if "".join(c) in line["key"]) > 1 for line in lines):
-                above = None        # a card layout prints no header row
-                continue
-            for fragments, column in cells:
-                if (block["kind"] == "row" and above and column < len(above)
-                        and above[column] == fragments):
-                    continue        # the cell above, merged downwards
-                if not cell_present(fragments):
-                    problems.append(" ".join(fragments))
-            above = block["cells"] if block["kind"] == "row" else None
+            if block["kind"] == "header":
+                headers = block["cells"]
+            merged = 0
+            if block["kind"] == "row" and above:
+                for previous, current in zip(above, block["cells"]):
+                    if previous != current:
+                        break
+                    merged += 1
+                merged = min(merged, max(0, len(block["cells"]) - 1))
+            spot = match_row(block["cells"], cursor, headers, merged, block["raw_cells"])
+            if spot is None and block["kind"] == "header":
+                names = {"".join(c) for c, _ in cells}
+                printed = any(len(names & {_ink_key(word) for word in line["text"].split()}) > 1
+                              or (line["key"] in names and n + 1 < len(lines)
+                                  and lines[n + 1]["key"] in names)
+                              for n, line in enumerate(lines) if line["start"] >= cursor)
+                if not printed:
+                    above = None    # a card layout prints no header row
+                    continue
+            if spot is None:
+                problems.append(block["text"])
+                above = None
+            else:
+                cursor = spot
+                above = block["cells"] if block["kind"] == "row" else None
             continue
         above = None
         note = block["kind"] == "note"
@@ -334,6 +393,27 @@ def report_text_problems(markdown, pages):
             cursor = spot[1]
         labels = {"".join(block["fragments"]), ""}
     return [p[:60] for p in problems]
+
+
+def _sample_range(text, needle):
+    """Find literal sample ink while allowing exporter spacing beside CJK.
+
+    Word/PDF font changes can turn '访谈6位' into '访谈6 位'. Keep the
+    original offsets so every intersecting font span is still measured. Do not
+    remove English word boundaries or accept changed digits/punctuation.
+    """
+    start = text.find(needle)
+    if start >= 0:
+        return start, start + len(needle)
+    cjk = lambda ch: '\u3400' <= ch <= '\u9fff' or '\u3040' <= ch <= '\u30ff' or '\uac00' <= ch <= '\ud7af'
+    pattern = []
+    for index, char in enumerate(needle):
+        if index and not char.isspace() and not needle[index - 1].isspace() and (
+                cjk(char) or cjk(needle[index - 1])):
+            pattern.append(r"\s*")
+        pattern.append(re.escape(char))
+    match = re.search("".join(pattern), text)
+    return match.span() if match else None
 
 
 def measure(ws, requirements, report=False):
@@ -417,13 +497,14 @@ def measure(ws, requirements, report=False):
                             continue
                         spans = line["spans"]
                         text = "".join(s["text"] for s in spans)
-                        start = text.find(needle)
-                        if start < 0:
+                        sample_range = _sample_range(text, needle)
+                        if sample_range is None:
                             continue
+                        start, stop = sample_range
                         offset = 0
                         for span in spans:
                             end = offset + len(span["text"])
-                            if end > start and offset < start + len(needle):
+                            if end > start and offset < stop:
                                 matches.append(span)
                             offset = end
                     if not matches:

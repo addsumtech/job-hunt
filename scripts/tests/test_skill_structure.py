@@ -4,6 +4,7 @@ import re
 import sys
 
 import pytest
+from skill_docs import read_guidance, reachable_docs, skill_context
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 import check_apply
@@ -12,12 +13,12 @@ import vocab
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 SKILL = ROOT / "SKILL.md"
-ANCHORS = json.loads((pathlib.Path(__file__).parent / "required_inline.json")
+ANCHORS = json.loads((pathlib.Path(__file__).parent / "required_guidance.json")
                      .read_text(encoding="utf-8"))["anchors"]
 
 
 def _self_check_section() -> str:
-    text = SKILL.read_text(encoding="utf-8")
+    text = read_guidance("references/workflow-checklist.md")
     m = re.search(r"^## Self-check.*?(?=^## |\Z)", text, re.M | re.S)
     assert m, "SKILL.md has no '## Self-check' section"
     return m.group(0)
@@ -56,7 +57,7 @@ def test_the_self_check_is_the_last_section_so_its_boundary_is_known():
     and two reference files silently inherited a pass from prose inside the swallowed
     region (fixed in 54b20fc). Appending here is exactly what a later plan is told to
     do, so the invariant has to be a test rather than a convention."""
-    headings = re.findall(r"^## .*$", SKILL.read_text(encoding="utf-8"), re.M)
+    headings = re.findall(r"^## .*$", read_guidance("references/workflow-checklist.md"), re.M)
     assert headings[-1].startswith("## Self-check"), (
         f"SKILL.md's last section is {headings[-1]!r}, not the self-check. Move the new "
         f"section ABOVE '## Self-check' — the self-check has no closing marker, so "
@@ -64,11 +65,11 @@ def test_the_self_check_is_the_last_section_so_its_boundary_is_known():
 
 
 @pytest.mark.parametrize("anchor", ANCHORS, ids=lambda a: a["text"][:40])
-def test_every_layer1_rule_is_inline_in_skill_md(anchor):
+def test_every_rule_is_reachable_at_its_point_of_use(anchor):
     """Each of these fails SILENTLY if skipped — no lint, no artifact, no test
     reports it. `why` on each anchor records what goes wrong without it."""
-    assert anchor["text"] in SKILL.read_text(encoding="utf-8"), \
-        f"missing from SKILL.md: {anchor['text']!r} — {anchor['why']}"
+    assert anchor["text"] in read_guidance(anchor["runtime"]), \
+        f"missing from {anchor['runtime']}: {anchor['text']!r} — {anchor['why']}"
 
 
 def test_the_self_check_names_every_reference_file():
@@ -285,8 +286,8 @@ def test_a_mode_that_exists_is_not_still_described_as_not_yet_built():
 def test_skill_md_carries_the_apply_verdict_block_and_its_disclaimer():
     """spec §6: the block template AND the disclaimer, because the disclaimer is
     the only thing standing between a count and a prediction. New prose, so it
-    cannot be an anchor in required_inline.json (those must quote the baseline)."""
-    text = SKILL.read_text(encoding="utf-8")
+    cannot be an anchor in required_guidance.json (those must quote the baseline)."""
+    text = read_guidance("references/gap-analysis.md")
     # The disclaimer token below WAS 不是对面试或录用概率的预测 — a paraphrase that means
     # the right thing and that check_assessment.py does not match. This test pinned it,
     # so the drift was not merely undetected, it was enforced: layer 1 taught the model a
@@ -303,7 +304,7 @@ def test_skill_md_carries_the_apply_verdict_block_and_its_disclaimer():
 
 
 def test_skill_md_carries_the_banned_vocabulary_and_its_one_exception():
-    text = SKILL.read_text(encoding="utf-8")
+    text = read_guidance("references/gap-analysis.md")
     for token in ("likely to be hired", "strong candidate", "would pass",
                   "Success Profiles", "Quoting the employer's scale is reporting"):
         assert token in text, f"SKILL.md is missing {token!r} from the banned list"
@@ -314,7 +315,7 @@ def test_skill_md_lists_every_posting_field_including_company():
     salary_range and application_type, and `application_type: structured` is the
     ONLY signal that routes to the supporting-statement branch. `company` is new
     and load-bearing — check_letter.py hard-fails without it."""
-    text = SKILL.read_text(encoding="utf-8")
+    text = read_guidance("references/job-posting-extraction.md")
     for field in ("role_title", "company", "seniority", "location", "must_haves",
                   "nice_to_haves", "responsibilities", "keywords",
                   "company_values_tone", "red_flags", "salary_range",
@@ -327,7 +328,7 @@ def test_skill_md_carries_the_grounding_contract_summary():
     three separate rules and no account of why none of them substitutes for
     another — which is exactly when one gets treated as covering for a missing
     other."""
-    text = SKILL.read_text(encoding="utf-8")
+    text = read_guidance("references/gap-analysis.md")
     for token in ("check_evidence_refs.py", "claims.yaml", "check_conventions.py",
                   "a floor on credibility, not a proof",
                   "restated in exactly three places"):
@@ -345,7 +346,7 @@ NOT_YET_BUILT: dict[str, str] = {}
 def _named_scripts() -> dict[str, list[str]]:
     """Every `<name>.py` mentioned anywhere in SKILL.md or a mode file, and where."""
     found: dict[str, list[str]] = {}
-    files = [SKILL] + sorted((ROOT / "modes").glob("*.md"))
+    files = list(reachable_docs())
     for f in files:
         for name in set(re.findall(r"\b([a-z_]+\.py)\b", f.read_text(encoding="utf-8"))):
             found.setdefault(name, []).append(f.name)
@@ -381,81 +382,19 @@ def test_a_pending_script_that_now_exists_is_removed_from_the_declaration():
             f"entry so the declaration keeps meaning something")
 
 
-# ---------------------------------------------------------------------------
-# Layer 1 and layer 1.5 deliberately carry some of the same text: spec section 6
-# requires the judge-loop rules and the workspace conventions to be inline in
-# SKILL.md (nothing reports their absence), and modes/apply.md needs them at the
-# point of use. Duplication is the decision. Silent DRIFT between the copies is not.
-#
-# This is not hypothetical. The required disclaimer had already drifted: SKILL.md
-# said 不是对面试或录用概率的预测 while check_assessment.py looks for the literal
-# 不是对结果的预判, so a model following layer 1 verbatim failed the gate with
-# NO_DISCLAIMER — and the message read as "you forgot it", not "you paraphrased it".
-# Nothing caught that, because the two copies had already stopped being identical
-# and an exact-match scan only sees the pairs that have not drifted yet.
-
-_MODES = pathlib.Path(ROOT / "modes")
-
-
-def _paragraphs(path: pathlib.Path) -> list[str]:
-    """Whitespace-normalised paragraphs of at least 60 characters. Short lines are
-    excluded because headings and one-line list items collide across files for
-    reasons that are not duplication."""
-    text = path.read_text(encoding="utf-8")
-    out = []
-    for para in re.split(r"\n\s*\n", text):
-        flat = " ".join(para.split())
-        if len(flat) >= 60:
-            out.append(flat)
-    return out
-
-
-# The number of paragraphs SKILL.md and modes/apply.md carry word-for-word. Spec
-# section 6 requires the duplication; this pins its SIZE, which is the only thing that
-# moves when a copy drifts.
-# 17 since 2026-09-06. The new one is "Reusing a master carries their experience
-# forward, never their target", and the duplication is deliberate rather than
-# undecided: it guards `meta.target_market`, the field that arms the personal-data
-# interlock. SKILL.md is always loaded and apply.md only on mode entry, so a run
-# that read layer 1 alone would otherwise inherit a stale market off a saved
-# profile with nothing telling it not to — and inheriting `nl` for a US
-# application is how a date of birth reaches a CV that US employers bin for
-# carrying one.
-# 18 since 2026-09-06: "One candidate has one CV per language" joins it. Same
-# reasoning as 17 — the rule guards against silent data loss (a Chinese CV
-# overwriting an English master), SKILL.md is always loaded and apply.md only on
-# mode entry, and a run that read layer 1 alone would write the path by hand.
-# 19 since 2026-09-06: "The mechanism is replaceable; the isolation is not" joins
-# it. The review loop is called non-negotiable in layer 1, so the sentence saying
-# what to do on a host with no subagent tool has to be in layer 1 too — a codex run
-# reading only SKILL.md would otherwise hit "dispatch subagents" with no subagents
-# and no stated alternative.
-SHARED_WITH_APPLY = 26  # includes resolved profile-store lookup guidance
-
-
-def test_the_paragraphs_layer_1_shares_with_a_mode_file_are_byte_identical():
-    """Pinned as a COUNT, and the reason is worth keeping.
-
-    The obvious version of this test — `shared = set(skill) & set(mode); assert shared`
-    — cannot detect drift at all. A set intersection is byte-identical by construction,
-    so a paragraph that has drifted simply drops OUT of it: the assertion never sees the
-    changed text, and every drop moves toward the only condition being checked
-    (non-empty). Confirmed by mutating 15 of the 16 shared paragraphs — the whole suite
-    stayed green, and `check_skill_lossless` reported 1317/1317 too, because a paragraph
-    drifting between two CURRENT files leaves every BASELINE line still present.
-
-    Pinning the count goes red on drift and on deletion, with no threshold to tune and
-    no normalisation to get wrong. It does not say WHICH paragraph changed — read the
-    diff — but it says that one did, which is the part nothing else could see."""
-    skill = _paragraphs(SKILL)
-    shared = set(skill) & set(_paragraphs(_MODES / "apply.md"))
-    assert len(shared) == SHARED_WITH_APPLY, (
-        f"SKILL.md and modes/apply.md now share {len(shared)} word-for-word paragraphs, "
-        f"not {SHARED_WITH_APPLY}. FEWER means a copy DRIFTED (or was deleted) — the two "
-        f"layers now say different things about the same rule, which is how the required "
-        f"disclaimer came to fail its own gate. MORE means new duplication that spec "
-        f"section 6 has not decided on. Either way, look at the diff, then update this "
-        f"number deliberately.")
+def test_entry_routes_before_detail_and_keeps_the_narrow_path_small():
+    text = SKILL.read_text(encoding="utf-8")
+    assert len(text.encode("utf-8")) < 16000
+    assert text.index("## First: scope") < text.index("## The load-bearing rule")
+    assert text.index("Narrow text edit") < text.index("## Enter a full mode")
+    assert "needs no workspace" in text
+    assert "Stop after the edit" in text
+    assert "fit-snapshot.md" not in text  # mechanics belong at the point of use
+    for mode in enter_mode.MODES:
+        assert f"modes/{mode}.md" in text
+    apply = read_guidance("modes/apply.md")
+    assert "Combined verdict: PASS only if ALL THREE judges return" in apply
+    assert "The mechanism is replaceable; the isolation is not" in apply
 
 
 @pytest.mark.parametrize("phrase", [
@@ -467,7 +406,7 @@ def test_the_paragraphs_layer_1_shares_with_a_mode_file_are_byte_identical():
 def test_a_literally_matched_gate_string_appears_verbatim_in_layer_1(phrase):
     """check_assessment.py greps for these. If SKILL.md shows the model a different
     wording, the model writes the different wording and the gate rejects it."""
-    assert phrase in SKILL.read_text(encoding="utf-8"), (
+    assert phrase in read_guidance("references/gap-analysis.md"), (
         f"SKILL.md does not contain {phrase!r} verbatim — check_assessment.py matches "
         f"it literally, so layer 1 must show the exact string, not a paraphrase")
 
@@ -476,7 +415,7 @@ def test_layer_1_shows_both_language_shapes_of_the_advice_block():
     """count_coverage.py renders zh and en, check_assessment accepts both markers, and
     the block follows the USER's language. A layer 1 that shows only one shape leaves
     the other language to improvisation, and an improvised block loses the anchor."""
-    text = SKILL.read_text(encoding="utf-8")
+    text = read_guidance("references/gap-analysis.md")
     for marker in ("投递建议：", "apply verdict:"):
         assert marker in text, f"SKILL.md's advice block is missing the {marker!r} shape"
 
@@ -484,7 +423,7 @@ def test_layer_1_shows_both_language_shapes_of_the_advice_block():
 def test_every_verdict_is_offered_wherever_layer_1_lists_the_verdicts():
     """The FIT SNAPSHOT listed four of five and omitted `blocked` — a legal barrier
     silently downgraded to a weak screen-out, in the one section a model copies from."""
-    lines = SKILL.read_text(encoding="utf-8").split("\n")
+    lines = read_guidance("references/gap-analysis.md").split("\n")
     for i, line in enumerate(lines):
         if "APPLY VERDICT:" not in line and "apply verdict:" not in line:
             continue
@@ -528,7 +467,7 @@ def test_skill_md_does_not_credit_a_script_with_a_code_it_never_emits():
         return text
 
     wrong = []
-    for line in SKILL.read_text(encoding="utf-8").splitlines():
+    for line in skill_context().splitlines():
         named = [n for n in re.findall(r"scripts/([a-z_]+)\.py", line) if n in scripts]
         if not named:
             continue

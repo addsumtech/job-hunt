@@ -22,6 +22,7 @@ Two things this file pins that are easy to get wrong when widening a ban:
     normal on a CV; 成功/成长/成员/成果/成本 are normal after a numeral. A ban
     that fires on honest text is a ban everyone learns to switch off.
 """
+from skill_docs import read_guidance, skill_context
 import pathlib
 import sys
 
@@ -153,7 +154,7 @@ def test_skill_md_no_longer_claims_the_lint_covers_anything_rendered():
     """The registry said "in anything rendered", which was never true and could
     not become true — the CV is the one artifact where a percentage is required.
     Overstating a gate is how a reader stops checking the artifact themselves."""
-    text = (REPO / "SKILL.md").read_text(encoding="utf-8")
+    text = read_guidance("references/workflow-checklist.md")
     row = next(line for line in text.splitlines()
                if line.startswith("| Prediction lint |"))
     assert "anything rendered" not in row

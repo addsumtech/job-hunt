@@ -19,6 +19,28 @@ def test_actual_indeed_cloudflare_response_stops_site():
     assert 'doctor' not in result['remedy']
 
 
+@pytest.mark.parametrize('exit_code', [0, 1])
+def test_cdp_handoff_stops_even_when_adapter_reports_only_navigation_error(exit_code):
+    # BOSS live read, 2026-10-06: the bridge kept the verification page open,
+    # while the adapter's own error reported only a navigation interruption.
+    stderr = ('[cdp] USER_ACTION_REQUIRED: login or verification tab kept open '
+              'in the daily browser: owned-target\n'
+              'ok: false\nerror:\n  code: UNKNOWN\n'
+              '  message: Inspected target navigated or closed\n  exitCode: 1\n')
+    result = classifier.classify('boss', 'search', exit_code, '[]', stderr)
+    assert result['classification'] == 'platform_limit'
+    assert result['signal_id'] == 'cdp-user-action-required'
+    assert not result['empty_result']
+    assert 'do not retry' in result['remedy']
+    assert 'explicit user confirmation' in result['remedy']
+
+
+def test_handoff_words_in_a_job_title_are_not_a_transport_marker():
+    result = classifier.classify('boss', 'search', 0,
+        '[{"name":"[cdp] USER_ACTION_REQUIRED: developer"}]', '')
+    assert result['classification'] == 'ok'
+
+
 def test_recognised_challenge_takes_precedence_over_login_hint():
     result = classifier.classify('indeed', 'search', 1, '', RAW + '\nHTTP 403 Forbidden',
                                  signals=classifier.load_signals(classifier.DEFAULT_SIGNALS_FILE))

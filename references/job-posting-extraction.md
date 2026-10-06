@@ -299,3 +299,30 @@ Incorporate all corrections, then proceed to gap analysis.
 > **Red flags:** "We move fast" without team structure detail — worth verifying.
 >
 > Does this look right? Please correct or add anything before I run the gap analysis.
+
+## Extraction field table
+
+| Field | Type | How to populate |
+|---|---|---|
+| `role_title` | string | The exact title as written in the posting (e.g. "Senior Data Engineer", "Machine Learning Engineer II"). |
+| `company` | string | The exact public employer name as the posting writes it. `check_letter.py` verifies the letter's recipient against it, and the application workspace directory is named from it. |
+| `seniority` | enum: `intern / junior / mid / senior / lead` | Infer from title words, years-of-experience stated, and scope of responsibilities. See §2 for implicit seniority signals. |
+| `location` | string | The posting's own location text, verbatim and as one string (e.g. "Amsterdam, hybrid", "Remote — EU"). NOT a `{city, country, arrangement}` mapping: no script reads a structured location, and the two shapes travelling between modes is what let assess and apply write mutually incompatible `posting.yaml` files for the same posting. |
+| `must_haves[]` | list of strings | Hard requirements the posting marks as required, essential, must-have, or minimum. Include degrees/certs if stated as required (not just "preferred"). See §2 for phrasing heuristics. |
+| `nice_to_haves[]` | list of strings | Skills/experience the posting marks as preferred, bonus, a plus, nice to have, or "we'd love". Include items in a separate "Preferred Qualifications" section. |
+| `responsibilities[]` | list of strings | Day-to-day duties — what the person will actually do. Drawn from "What you'll do" / "Responsibilities" / "Day in the life" sections. Use the posting's own phrasing. |
+| `keywords[]` | list of strings | **Exact ATS terms** to mirror in the CV and cover letter: tool names, language names, frameworks, methodologies, certifications, domain-specific jargon. Extract casing exactly (e.g. "PyTorch", "CI/CD", "REST APIs", "Agile/Scrum"). |
+| `company_values_tone` | string | Culture signals + voice. Note: formal vs. casual writing style, mission language ("we believe", "our north star"), DEI statements, pace signals ("fast-moving", "startup within a larger company"), team descriptors ("collaborative", "autonomous"). This shapes the cover letter's register. |
+| `red_flags` | list of strings | Signals of a problematic role. See the full list of red-flag patterns in §2. |
+| `salary_range` | string or null | The stated pay range, if the posting gives one (e.g. "€65k–80k"); else `null`. Many EU/US postings now state a range. |
+| `application_type` | enum: `cv / structured` | `structured` when the employer asks for a supporting statement, criterion-by-criterion evidence, a competency response or a structured application form. Essential / Desirable headings or a framework name alone do not establish that requirement. Otherwise `cv`; preserve any explicitly requested CV alongside structured materials. Follow `references/structured-applications.md`. |
+
+**The `posting.yaml` field list, and it is exactly these twelve names in this order:**
+
+```
+role_title, company, seniority, location, must_haves, nice_to_haves,
+responsibilities, keywords, company_values_tone, red_flags, salary_range,
+application_type
+```
+
+`company` is the exact public employer name — `check_letter.py` hard-fails with `NO_COMPANY_IN_POSTING` without it, so a posting extracted without it breaks every downstream apply run. `location` is a **scalar string**, the posting's own location text, not a `{city, country, arrangement}` mapping. There is no `language` field: the CV's language follows the market and lives in `meta.language` on the profile. The old `SKILL.md:71` table silently dropped `salary_range` and `application_type`, and `application_type: structured` is the only signal routing to the supporting-statement branch — that condensation defect already shipped once.

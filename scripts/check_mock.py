@@ -769,7 +769,7 @@ def walkback_entries(brief_text: str) -> list:
         end = marks[index + 1].start() if index + 1 < len(marks) else len(body)
         chunk = body[mark.end():end]
         entry = {"id": mark.group(1), "claim": mark.group(2).strip(" —-")}
-        for field in ("quote", "softened", "defect", "transcript"):
+        for field in ("quote", "softened", "defect", "transcript", "status"):
             found = re.search(rf"^\s*-\s*{field}:\s*(.+)$", chunk, re.M)
             entry[field] = found.group(1).strip() if found else ""
         entries.append(entry)
@@ -991,7 +991,12 @@ def check_walkback(blocks: dict, brief_path: pathlib.Path, claims_path: pathlib.
 
     for record in unsourced:
         quote = MB.normalize_quote(record.fields["quote"])
-        walked = any(MB.quote_is_in(record.fields["quote"], e["quote"]) for e in entries)
+        # A proposed edit is still an open question. The same quote appearing
+        # under OVER-CLAIM must not silently discharge UNSOURCED-FACT before
+        # the claim has actually been withdrawn or the correction applied.
+        walked = any(MB.quote_is_in(record.fields["quote"], e["quote"])
+                     and e["status"].lower() in {"withdrawn", "applied"}
+                     for e in entries)
         # Whole-token matching, borrowed from the gate that already got this
         # right: a bare `in` let an honest `term: Java` row silently discharge an
         # unrelated finding about "the JavaScript dashboard".
@@ -1001,7 +1006,7 @@ def check_walkback(blocks: dict, brief_path: pathlib.Path, claims_path: pathlib.
                 f"UNRESOLVED_FACT: UNSOURCED-FACT at {record.fields['ref']} "
                 f"({quote[:50]!r}) is neither promoted to claims.yaml "
                 f"(source_kind: session-answer, source_ref naming {transcript_name}) nor "
-                "walked back — ask the candidate where it came from before it enters the "
+                "resolved by a walk-back with status: withdrawn or applied — ask the candidate where it came from before it enters the "
                 "answer bank"
             )
     return findings
@@ -1051,6 +1056,8 @@ def _inputs(workspace: pathlib.Path, round_no: int, answer_bank: pathlib.Path) -
         "mock/question-log.yaml": workspace / "mock" / "question-log.yaml",
         "mock/open-loops.md": workspace / "mock" / "open-loops.md",
         "mock/cheatsheet.md": workspace / "mock" / "cheatsheet.md",
+        "mock/answer-guide.md": workspace / "mock" / "answer-guide.md",
+        "fit-assessment.yaml": workspace / "fit-assessment.yaml",
         # The coverage check is now a claim about THESE bytes: "every must-have has a
         # row" is only auditable against the list it was checked against.
         "posting.yaml": workspace / "posting.yaml",

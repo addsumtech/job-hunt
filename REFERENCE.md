@@ -33,10 +33,10 @@ renderers can retain a `.tex` file for later compilation.
 
 ## How it runs
 
-One pipeline, in one place. `SKILL.md` holds the rules that must be in context on
-every run — the honesty rule, the NOT-ALLOWED table, the claim-provenance
-checkpoint, the gate table, the self-check. `modes/apply.md` holds the apply
-pipeline itself and is loaded unconditionally on entering the mode, with its
+One pipeline, in one place. `SKILL.md` holds the shared honesty and scope rules,
+the narrow text-edit path, and routing to the relevant mode and references.
+Detailed provenance, artifact and gate rules live at their point of use.
+`modes/apply.md` holds the apply pipeline and is loaded on entering that mode, with its
 content hash written to the workspace journal so that "it was loaded" is a fact
 rather than a hope.
 
@@ -79,6 +79,7 @@ job-hunt/
 │   ├── cv-craft.md                  # CV writing conventions (markets, links, bullets, ordering)
 │   ├── word-resume-layout.md        # Reviewed Word layout and fictional bilingual examples
 │   ├── layout-review.md             # Mandatory visual comparison with the user's template
+│   ├── workflow-checklist.md          # mode and artifact-specific checks, read on demand
 │   ├── browser-fallback.md          # Read-only browser capture and fallback
 │   ├── daily-browser.md            # Daily-browser CDP and bounded parallel sources
 │   ├── network-recovery.md         # Bounded retries and authorized route diagnostics
@@ -169,6 +170,7 @@ job-hunt/
     ├── snapshot_profile.py          # freezes the candidate profile for one discover round
     ├── candidate_match.py           # shared discovery matching policy and localized summaries (library)
     ├── render_cv.py                 # CV → md / docx / pdf(LaTeX)
+    ├── render_report.py              # bind report source and newly rendered PDF before review
     ├── render_letter.py             # motivation letter → md / docx / pdf
     ├── render_rirekisho.py          # Japanese 履歴書 form renderer
     ├── report_locales.py            # shared native report labels and gate anchors
@@ -179,7 +181,8 @@ job-hunt/
     ├── lossless-allowlist.json     # deliberate deletions, each with a written reason
     └── tests/
         ├── fixtures/
-        ├── required_inline.json    # layer-1 rules that must stay inline, each with its why
+        ├── required_guidance.json  # required rules and their reachable runtime locations
+        ├── skill_docs.py           # resolve the documentation graph from SKILL.md
         └── test_*.py               # one module per script above, plus the seam suites
 ```
 

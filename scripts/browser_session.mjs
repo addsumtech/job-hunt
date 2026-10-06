@@ -18,7 +18,7 @@ export async function createSession({endpoint, WebSocket, WebSocketServer,
   idleMs = 30 * 60 * 1000, consentMs = 120000, changed = () => {}}) {
   const token = randomBytes(24).toString('hex');
   const socketPath = `/devtools/browser/${token}`;
-  const pending = new Map(), owners = new Map(), targets = new Map(), clients = new Set();
+  const pending = new Map(), owners = new Map(), sessionTargets = new Map(), targets = new Map(), clients = new Set();
   let sequence = 0, state = 'waiting_for_consent', lastUse = Date.now(), closing = false;
   const server = createServer((req, res) => {
     if (!req.headers.origin && req.url === socketPath + '/status' && req.method === 'GET') {
@@ -52,6 +52,7 @@ export async function createSession({endpoint, WebSocket, WebSocketServer,
         return (params.url === 'about:blank' || ['http:', 'https:'].includes(u.protocol)) && !u.username && !u.password;
       } catch {return false;}
     }
+    if (method === 'JobHunt.handoffTarget') return !sessionId && targets.get(params.targetId) === client;
     if (['Target.attachToTarget','Target.closeTarget','Target.getTargetInfo','Target.activateTarget'].includes(method)) {
       return targets.get(params.targetId) === client;
     }
@@ -77,6 +78,20 @@ export async function createSession({endpoint, WebSocket, WebSocketServer,
       if (!allowed(client, command)) {
         send(client, {id:command.id,error:{code:-32000,message:'CDP operation is outside this client-owned tab/session'}});return;
       }
+      if (command.method === 'JobHunt.handoffTarget') {
+        // A login/verification page now belongs to the user. Release it before
+        // acknowledging, so disconnect/idle/stop cleanup cannot close it and
+        // this client cannot keep operating its formerly attached session.
+        const targetId = command.params.targetId;
+        targets.delete(targetId);
+        for (const [id, target] of sessionTargets) if (target === targetId) {
+          owners.delete(id);sessionTargets.delete(id);
+          forward(null, {method:'Target.detachFromTarget',params:{sessionId:id}}, true);
+        }
+        lastUse = Date.now();
+        forward(client, {id:command.id,method:'Target.activateTarget',params:{targetId}});
+        publish();return;
+      }
       lastUse = Date.now();forward(client, command);
     });
     client.on('close', () => {
@@ -99,13 +114,22 @@ export async function createSession({endpoint, WebSocket, WebSocketServer,
           // A client can disappear before its creation response arrives.
           if (!clients.has(client)) closeTarget(message.result.targetId);
         }
-        if (command.method === 'Target.attachToTarget' && message.result?.sessionId) owners.set(message.result.sessionId, client);
+        if (command.method === 'Target.attachToTarget' && message.result?.sessionId) {
+          if (targets.get(command.params.targetId) === client && clients.has(client)) {
+            owners.set(message.result.sessionId, client);
+            sessionTargets.set(message.result.sessionId, command.params.targetId);
+          } else {
+            // An attach can finish after handoff or client disconnect. Never
+            // restore access to a page that was already released to the user.
+            forward(null, {method:'Target.detachFromTarget',params:{sessionId:message.result.sessionId}}, true);
+          }
+        }
         if (command.method === 'Target.closeTarget' && message.result?.success) targets.delete(command.params.targetId);
-        if (command.method === 'Target.detachFromTarget') owners.delete(command.params.sessionId);
+        if (command.method === 'Target.detachFromTarget') {owners.delete(command.params.sessionId);sessionTargets.delete(command.params.sessionId);}
       }
       send(client, {...message,id:item.original});publish();return;
     }
-    if (message.method === 'Target.detachedFromTarget') owners.delete(message.params?.sessionId);
+    if (message.method === 'Target.detachedFromTarget') {owners.delete(message.params?.sessionId);sessionTargets.delete(message.params?.sessionId);}
     if (message.method === 'Target.targetDestroyed') targets.delete(message.params?.targetId);
     // Never broadcast another client's events or pre-existing browser tabs.
     const owner = owners.get(message.sessionId) || targets.get(message.params?.targetId);

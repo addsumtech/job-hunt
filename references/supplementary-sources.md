@@ -126,3 +126,27 @@ Tool diagnostics and the full source-selection audit stay in internal records.
 If a missing source limits a career conclusion, explain the fact that remains
 unverified. Deliver the verified report PDF with any requested CV in the same
 consultation folder.
+
+## Supplementary public research
+
+Use `references/supplementary-sources.md` when official web/news, WeChat
+public accounts or relevant GitHub projects can fill a concrete career evidence
+gap. It defines source selection, availability checks and evidence quality.
+These sources supplement formal posting evidence; select only what the current
+question needs.
+
+For China recruitment, WeChat public accounts are a priority research source.
+Use the prescribed OpenCLI/Sogou WeChat route for targeted employer, graduation
+year and role queries, prioritizing official recruitment, state-owned enterprise
+and university career accounts. Read relevant original articles and follow their
+application links. One broad query or a few search snippets do not establish
+source coverage; record unread articles as leads, not verified opportunities.
+
+For domestic job discovery, read `references/supplementary-sources.md` before
+selecting sources and apply its WeChat coverage procedure. A CV-only edit or a
+single supplied posting does not automatically start a new search.
+
+When a source requests human verification, immediately tell the user which site
+and page needs attention, ask them to complete it in the connected browser, and
+wait for an explicit completion reply before resuming that source. Follow
+`references/user-recovery.md`; announcing a site stop alone is not a hand-off.

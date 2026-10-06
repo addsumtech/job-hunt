@@ -11,7 +11,10 @@
     {
       "path": "dist/src/browser/cdp.js",
       "original": "d740bf357327a9ffcedb06aca3ac7384f9f56aa96bb72c8f42716e14b347d4b6",
-      "patched": "ba21bb84eb8a8fd6bb2e9f1bac035fa0a09fb1145d4f78f5c85f64405ec59624"
+      "patched": "6e84eec068defdc764d244ce8f350ac20f4cdc596965f12d94edc6f3028a2110",
+      "previous_patched": [
+        "ba21bb84eb8a8fd6bb2e9f1bac035fa0a09fb1145d4f78f5c85f64405ec59624"
+      ]
     },
     {
       "path": "dist/src/doctor.js",

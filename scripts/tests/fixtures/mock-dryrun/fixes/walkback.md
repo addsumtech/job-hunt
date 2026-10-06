@@ -20,4 +20,4 @@
 - quote: on about 200 patient scans
 - defect: UNSOURCED-FACT
 - softened: "benchmarked on a held-out set; the exact count is not recorded"
-- status: proposed
+- status: withdrawn

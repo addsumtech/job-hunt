@@ -29,6 +29,44 @@ def test_render_docx_letter(tmp_path):
     assert "Acme" in text
 
 
+@pytest.mark.parametrize("market,width,height", [
+    ("cn", 210, 297), ("nl", 210, 297), ("us", 215.9, 279.4)])
+def test_word_letter_uses_the_same_market_paper_as_its_cv(tmp_path, market, width, height):
+    from docx import Document
+    out = tmp_path / "letter.docx"
+    render_letter.render_docx({"meta": {"target_market": market},
+                              "body": ["A short letter."]}, out)
+    section = Document(out).sections[0]
+    assert section.page_width.mm == pytest.approx(width, abs=0.02)
+    assert section.page_height.mm == pytest.approx(height, abs=0.02)
+
+
+@pytest.mark.parametrize("language,font", [
+    ("zh", "SimSun"), ("ja", "Yu Mincho"), ("ko", "Malgun Gothic")])
+def test_word_letter_embeds_its_language_font_choice_without_theme_override(tmp_path, language, font):
+    from docx import Document
+    from docx.oxml.ns import qn
+    out = tmp_path / "letter.docx"
+    render_letter.render_docx({"meta": {"language": language}, "body": ["求职信"]}, out)
+    style = Document(out).styles["Normal"]
+    assert style.font.name == "Times New Roman"
+    assert style.font.size.pt == 11
+    assert style.element.rPr.rFonts.get(qn("w:eastAsia")) == font
+    assert not any(k.endswith("Theme") for k in style.element.rPr.rFonts.attrib)
+
+
+def test_word_letter_preserves_explicit_font_and_paper_choices(tmp_path):
+    from docx import Document
+    from docx.oxml.ns import qn
+    out = tmp_path / "letter.docx"
+    render_letter.render_docx({"meta": {"language": "zh", "target_market": "us",
+        "paper": "a4", "main_font": "Arial", "cjk_font": "PingFang SC"}}, out)
+    doc = Document(out)
+    assert doc.sections[0].page_width.mm == pytest.approx(210, abs=0.02)
+    assert doc.styles["Normal"].font.name == "Arial"
+    assert doc.styles["Normal"].element.rPr.rFonts.get(qn("w:eastAsia")) == "PingFang SC"
+
+
 def test_letter_latex_preamble_matches_the_engine():
     """Same fix, same reason as test_render_cv's engine-aware preamble test.
 

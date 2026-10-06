@@ -89,6 +89,28 @@ def test_tool_wrapper_preserves_paths_arguments_and_needs_no_global_cli(tmp_path
     assert '/private/node_modules/.bin' in kw['env']['PATH']
 
 
+def test_a_previous_shipped_patch_upgrades_without_accepting_custom_changes(tmp_path, monkeypatch):
+    assets, package = tmp_path / 'assets', tmp_path / 'package'
+    assets.mkdir()
+    package.mkdir()
+    (package / 'package.json').write_text('{"version":"test"}')
+    (package / 'cdp.js').write_text('previous shipped patch')
+    (assets / 'cdp.js').write_text('current patch')
+    old_hash = setup.digest(package / 'cdp.js')
+    entry = dict(path='cdp.js', original='upstream-hash',
+                 previous_patched=[old_hash], patched=setup.digest(assets / 'cdp.js'))
+    (assets / 'manifest.json').write_text(json.dumps(dict(version='test', files=[entry])))
+    monkeypatch.setattr(setup, 'PATCHES', assets)
+    setup.patch_opencli(package)
+    setup.patch_opencli(package)
+    assert (package / 'cdp.js').read_text() == 'current patch'
+    assert (package / 'cdp.js.job-hunt-original').read_text() == 'previous shipped patch'
+    (package / 'cdp.js').write_text('custom local changes')
+    with pytest.raises(RuntimeError, match='Unrecognized'):
+        setup.patch_opencli(package)
+    assert (package / 'cdp.js').read_text() == 'custom local changes'
+
+
 def test_bundled_clients_run_without_installed_skills():
     node = shutil.which('node')
     if not node:
@@ -96,5 +118,5 @@ def test_bundled_clients_run_without_installed_skills():
     result = subprocess.run([node, str(setup.SKILL/'third_party/anysearch/anysearch_cli.js'), 'doc'], capture_output=True,text=True)
     assert result.returncode == 0, result.stderr
     assert 'batch_search' in result.stdout
-    result = subprocess.run([node, '--test', str(Path(__file__).with_name('browser-cdp.test.mjs')), str(Path(__file__).with_name('browser-session.test.mjs'))], capture_output=True,text=True)
+    result = subprocess.run([node, '--test', str(Path(__file__).with_name('browser-cdp.test.mjs')), str(Path(__file__).with_name('browser-session.test.mjs')), str(Path(__file__).with_name('opencli-handoff.test.mjs'))], capture_output=True,text=True)
     assert result.returncode == 0, result.stdout + result.stderr

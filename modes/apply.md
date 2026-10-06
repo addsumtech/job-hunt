@@ -54,7 +54,7 @@ Read `references/job-posting-extraction.md` and follow it.
 - **Sanity-check the fetched content before extracting.** Many portals (LinkedIn / Workday / Greenhouse / Indeed) return a `200 OK` that is actually a login wall, cookie banner, or error page — not the posting. If the fetched text lacks recognizable posting structure (no responsibilities, no requirements, looks like a sign-in/search page), treat the fetch as **failed** — do not extract requirements from a login wall (you'd fabricate must-haves). Ask the user to paste the full posting text instead.
 - If the fetch is blocked or thin, ask the user to paste the full posting text. **Terminal behavior:** if no posting can be obtained at all (URL dead, user can't paste), stop gracefully and say so — never invent a posting or proceed on guessed requirements.
 - Extract the structured object — **all twelve names, in this order**, the same list
-  as `SKILL.md`'s extraction field table and `modes/assess.md` §3:
+  as `references/job-posting-extraction.md`'s extraction field table and `modes/assess.md` §3:
   `role_title`, `company`, `seniority`, `location`, `must_haves`, `nice_to_haves`,
   `responsibilities`, `keywords`, `company_values_tone`, `red_flags`, `salary_range`,
   `application_type`.
@@ -72,7 +72,7 @@ Read `references/gap-analysis.md` and follow it.
 
 - Build the **strong / partial / missing** table comparing the profile to the requirements, each row backed by evidence from the CV.
 - **Run the responsibility-evidence pass** (`gap-analysis.md §1`): for each of the posting's `responsibilities[]`, classify the candidate's strongest real evidence `demonstrated / adjacent / none`. This aligns the CV to the *day-job*, not just the requirements checklist — a `demonstrated` responsibility buried in the CV becomes a LEAD-WITH instruction; a `none` on a core responsibility is a real fit gap to surface.
-- **Show the before-tailoring FIT SNAPSHOT** (`gap-analysis.md`, keyword-coverage section): must-have coverage ("X of N strongly evidenced" + per-must-have table), responsibility match ("M of K core responsibilities demonstrated"), and the seniority/domain read in one line each, ending with an honest **apply verdict** (strong apply / worth applying / stretch / likely screen-out). Include the required disclaimer (a count of evidence, not a forecast of the outcome). This is the baseline the user compares against after tailoring.
+- **Record the before-tailoring FIT SNAPSHOT in internal `fit-snapshot.md`** (`gap-analysis.md`, keyword-coverage section): must-have coverage ("X of N strongly evidenced" + per-must-have table), responsibility match ("M of K core responsibilities demonstrated"), and the seniority/domain read in one line each, ending with an honest **apply verdict** (strong apply / worth applying / stretch / likely screen-out / blocked). Include the required disclaimer (a count of evidence, not a forecast of the outcome). Use it to explain the meaningful before/after changes in the client report, without copying the internal count block.
 - Present the **tailoring plan** as the four lists: **AMPLIFY / REFRAME / KEYWORD-INSERT / HONEST-GAPS**.
 - **Non-standard candidate?** If the profile shows an employment gap >6 months, a domain/function switch vs. the posting, a seniority mismatch (over- or under-leveled), an extended absence/re-entry, very thin experience (student/new-grad), a **senior-leadership/executive** profile, a **military-to-civilian** transition, or an **internationally-trained/relocating** candidate, read `references/candidate-situations.md` and apply the matching honest-positioning playbook **before** building the tailoring plan. These are the candidates the skill helps most.
 - **Non-technical or regulated role?** If the target is not a software/research/engineering job (e.g. clinical, sales, trades, legal, finance, public-sector, creative, teaching, hospitality), read `references/role-families.md` and apply that family's conventions — what to surface first and how competence is evidenced — when shaping the tailoring plan and section order. The metric-in-every-bullet default doesn't fit these; the qualitative-evidence rule in `gap-analysis.md §2` does.
@@ -134,7 +134,7 @@ A worked file, including a retracted row, is in `assets/claims.example.yaml`.
 - **Links:** keep links in `contact.links` keyed by service (`scholar`, `github`, `linkedin`, …) so the renderer shows a clean label ("Google Scholar", "GitHub") hyperlinked to the URL — never the raw URL as visible text. Use the `{label, url}` form for anything unusual. See `cv-craft.md §8`.
 - **Bullet-quality pass:** After tailoring, run a quick pass over every bullet — each should open with a strong action verb, carry a real metric/scope/outcome where truthful, and be **concise (one line ideally, two at most; front-load the point; cut filler words)** so a skimming recruiter reads it. Strip clichés ("results-driven", "proven track record", "synergy", "leveraged"). For bullets lacking a number, apply the quantification fallback ladder from `references/gap-analysis.md §2`. Honest-only still applies — do not invent metrics. See `cv-craft.md §3` for the conciseness rule.
 - **AI-uniformity pass:** Run the full-CV coherence check from `references/gap-analysis.md` (post-tailoring AI-uniformity check): verb variety, sentence-structure variety, voice and specificity, prose quality. Make targeted repairs before delivering. The goal is a CV that reads as one human's real work history, not a keyword-filled template. `lint_cv`, `check_letter` and `check_word_limits` report the mechanical half (`AI_VOCABULARY`, `EM_DASH_DENSITY`, `NOT_JUST_PIVOT`, `TRICOLON_DENSITY`) — treat a clean run as the floor, not as the pass: no gate can see that three roles were written to the same template.
-- **Show the after-tailoring FIT SNAPSHOT** (same format as Step 3 — coverage, responsibility match, apply verdict) so the user sees the delta. Include the same disclaimer.
+- **Update the internal after-tailoring FIT SNAPSHOT** (same format as Step 3 — coverage, responsibility match, apply verdict) to record the delta. Keep the same disclaimer in the internal record.
 - **File-format note:** For ATS/portal submission, `.docx` is the safer default (see `references/cv-craft.md §4`). PDF is for the human-facing copy or when explicitly requested by the posting. If the portal gives a choice and the posting doesn't specify, submit `.docx`.
 - Render Markdown and DOCX from the tailored profile, adapting the DOCX to the
   selected reference first. Export the **final DOCX** with Word/LibreOffice into
@@ -247,7 +247,7 @@ Tell the user **all three verdicts and the ATS coverage %** (report it verbatim 
 ## Step 7 — Finalize
 
 - Link the actual client delivery folder and each requested document after `deliver.py` succeeds. Keep the workspace, `.tex` sources and review records private unless the user explicitly asks for them. Do not present an internal source as a finished client document.
-- Show the **final FIT SNAPSHOT delta**: baseline (before tailoring) vs. final (after tailoring) — coverage, responsibility match, and the apply verdict.
+- Record the **final FIT SNAPSHOT delta** internally, then explain the decision and changes in plain client language: baseline (before tailoring) vs. final (after tailoring) — coverage, responsibility match, and the apply verdict.
 - Summarize what changed during tailoring and why.
 - Note any **remaining honest gaps** the user should be aware of going into the application and interview.
 - **Consistency reminder:** the tailored CV now states specific things about the candidate's roles, scope, and dates. Remind them to make sure their **LinkedIn and any portal profile don't contradict it** — recruiters cross-check, and a mismatch reads as dishonesty. (A reminder only — do not scrape or fetch their profile.)
@@ -261,7 +261,7 @@ Produce the brief in `references/interview-prep.md` (write it to `<workspace>/in
 
 Apply ends here, and the user is now at the point the other three modes exist
 for. **Ask which they want, in one `AskUserQuestion` with selectable options —
-and run none of them unasked** (`SKILL.md`, "Hand-off"):
+and run none of them unasked** (`SKILL.md`, "The load-bearing rule"):
 
 - **`interview`** — rehearse this package and debrief it. The natural next step:
   the CV now makes specific claims, and the mock round is where the candidate
@@ -433,12 +433,12 @@ python3 scripts/deliver.py --workspace <ws>
 
 Delivery uses two child folders, whose names `deliver.py` writes in Chinese for every client: `简历/` (application documents) for `简历.docx`, `简历.pdf` and other requested application documents; `报告/` (report) for `求职建议报告.pdf` (the advice report) and its editable text. Filenames never include the employer, role or internal workspace slug.
 
-Author `report.md` for **every consultation**, answering the client's actual
+Author `report.md` for **every full consultation**, respecting explicit chat-only/no-file requests and answering the client's actual
 question in their language: conclusion, supporting evidence, relevant career
 constraints or facts still to confirm, and practical next steps. Tool defects,
 adapter errors, tests, developer diagnostics and internal review logs belong only
 in the private workspace, never in this client report. Do not copy an internal
-`completion.md` into it. A general question still receives a PDF reply report.
+`completion.md` into it. A narrow text edit remains in chat; it does not initiate report delivery.
 
 Before drafting, read `references/report-writing.md`; revise the report for clear
 recommendations, specific reasons and actionable advice, then inspect the rendered
@@ -476,3 +476,13 @@ font/template wins; otherwise the portable renderer may use its embedded fonts.
 Verify embedded PDF fonts, not only DOCX settings. Preserve template font sizes
 and aim for a well-filled page; any added gap before a section heading is at
 most one blank line. Never invent content or shrink fonts just to fill a page.
+
+## Judge lanes
+
+1. `must_have_fit >= 3` (the candidate plausibly belongs in the pile — a real human would not bin this on sight). You are the *broad* filter: a deliberate, honestly-positioned stretch applicant (career-changer, re-entry, someone genuinely a notch junior) should clear *your* gate at a 3; it is the **Hiring Manager** who owns the strict `>= 4` deep cut. Reserve a `must_have_fit` of 1–2 for a CV that is genuinely off-target or missing the core of the role, not for one that is a legitimate stretch. Rejecting every stretch here would defeat the skill's whole purpose — those are the candidates it most exists to help.
+
+- **Catch over-tailoring tells.** A Skills section that mirrors the posting's keyword list near-verbatim with no supporting evidence in any bullet is coverage-gaming, not strength — treat unsupported keyword density as an `evidence`/`credibility` concern and name the specific skills that appear with zero supporting context. The ATS screener (Judge 1) rewards literal keyword presence and structurally cannot catch stuffing; you are the only backstop.
+
+## Fast path
+
+**Fast path (reduce friction for the common case).** When the user already hands you a parseable CV *and* a clear posting (URL or pasted text) and is not building from scratch, do not gate every step with its own round-trip. Do the work, then present the parsed profile, the extracted requirements, and the tailoring plan **together in one message**, and proceed unless the user objects or corrects something. Still run every step and the non-negotiable three-judge review loop — this only collapses the *confirmation* round-trips, never the analysis or the judges. Reserve the full step-by-step interview for when information is genuinely missing (building a CV from scratch, an unreachable posting, or ambiguous requirements).

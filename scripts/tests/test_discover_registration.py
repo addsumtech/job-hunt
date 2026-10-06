@@ -4,6 +4,7 @@ Plan 1's test_skill_structure.py already asserts the self-check names every
 file. This module pins the two things it cannot: that the discover entries say
 what they are for, and that the 'not yet built' sentence retracted itself.
 """
+from skill_docs import read_guidance, skill_context
 import pathlib
 import re
 
@@ -16,7 +17,7 @@ MODES_WITH_FILES = ("discover",)
 def normalised():
     """Backticks stripped and whitespace collapsed, so that a sentence broken
     across lines or wrapped in code formatting cannot hide from the search."""
-    return re.sub(r"\s+", " ", SKILL.read_text(encoding="utf-8").replace("`", ""))
+    return re.sub(r"\s+", " ", read_guidance("references/workflow-checklist.md").replace("`", ""))
 
 
 def test_the_not_yet_built_sentence_retracted_itself():
@@ -30,7 +31,7 @@ def test_the_not_yet_built_sentence_retracted_itself():
 
 
 def test_the_self_check_names_this_plans_files_with_a_reason_to_open_them():
-    text = SKILL.read_text(encoding="utf-8")
+    text = read_guidance("references/workflow-checklist.md")
     for path in ("modes/discover.md", "references/discovery-sources.md",
                  "references/source-policy.md",
                  "references/risk-control-signals.yaml",
@@ -41,7 +42,7 @@ def test_the_self_check_names_this_plans_files_with_a_reason_to_open_them():
 
 
 def test_the_gate_table_lists_discover_gates():
-    text = SKILL.read_text(encoding="utf-8")
+    text = read_guidance("references/workflow-checklist.md")
     for gate in ("scripts/check_no_write.py", "scripts/check_candidate_match.py",
                  "scripts/check_shortlist.py"):
         row = next((line for line in text.splitlines()
@@ -54,7 +55,7 @@ def test_the_wrapper_is_not_described_as_a_gate():
     # check_opencli_result.py is the one named exception to the gate contract:
     # exit 0/2 only, and an adapter_call record instead of a receipt. Listing
     # it as a gate would send someone looking for a receipt that never exists.
-    text = SKILL.read_text(encoding="utf-8")
+    text = read_guidance("references/workflow-checklist.md")
     row = next((line for line in text.splitlines()
                 if line.startswith("|") and "check_opencli_result.py" in line), None)
     assert row is not None

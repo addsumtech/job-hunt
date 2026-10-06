@@ -1,4 +1,5 @@
 """The source policy must be ONE standard, and one the skill actually obeys."""
+from skill_docs import read_guidance, skill_context
 import pathlib
 import re
 
@@ -71,7 +72,7 @@ def test_skill_md_carries_this_files_trigger_and_names_its_backstop():
     # read it, plus something that reports skipping it. This file had neither
     # until now: its only pointer lived inside modes/discover.md's self-check,
     # which you only reach once you have already opened the mode file.
-    text = (REPO / "SKILL.md").read_text(encoding="utf-8")
+    text = skill_context()
     assert "references/source-policy.md" in text
     assert "before the first live retrieval of any run" in text
     assert "CAP_ABOVE_CEILING" in text

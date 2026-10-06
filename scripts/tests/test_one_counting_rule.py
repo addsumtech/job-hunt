@@ -20,6 +20,7 @@ file was read.
 
 These pin the rule to one shape in all three places.
 """
+from skill_docs import read_guidance
 import pathlib
 import re
 import sys
@@ -30,7 +31,7 @@ REPO = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "scripts"))
 import count_coverage  # noqa: E402
 
-SKILL = (REPO / "SKILL.md").read_text(encoding="utf-8")
+SKILL = read_guidance("references/gap-analysis.md")
 CRAFT = (REPO / "references" / "gap-analysis.md").read_text(encoding="utf-8")
 
 
@@ -82,7 +83,8 @@ def test_the_gate_table_does_not_overclaim_a_single_path():
     Checked by what FOLLOWS the claim, not by a keyword in the row: the row is
     long, and almost any qualifier word appears somewhere in it regardless.
     """
-    row = [l for l in SKILL.splitlines() if "count_coverage.py" in l and l.startswith("|")]
+    row = [l for l in read_guidance("references/workflow-checklist.md").splitlines()
+           if "count_coverage.py" in l and l.startswith("|")]
     assert row, "the gate table no longer lists count_coverage"
     text = row[0]
     m = re.search(r"only count-producing path", text)

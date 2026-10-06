@@ -166,6 +166,21 @@ Plain Markdown tables must repeat the company name. These are actual content
 and visual comparisons, not claims that the hash/geometry gate detects them.
 Fonts and colors alone cannot satisfy this comparison. Preserve applicable
 blocks even when shortening the report, using only the current case's real rows.
+Render the current `report.md` before writing a review. For the default layout:
+
+```bash
+python3 scripts/render_report.py --workspace <workspace>
+```
+
+This creates `report.pdf` and an internal `report-render.json` containing the
+source/PDF hashes captured by the rendering operation. With a custom renderer,
+wrap its actual render call in `scripts/render_report.py`'s
+`render_with(md, pdf, renderer)`; the callback receives a fresh PDF destination
+and returns `(ok, reason)`. It must render to that destination, not copy an old
+PDF. Keep the user-selected layout. Never manufacture or refresh the render
+record separately to bless an existing PDF. A missing/stale record blocks review.
+This is accidental-staleness protection, not proof against an actor forging files.
+
 Write `report-layout-review.yaml` using the same structure: bind
 `report-layout-requirements.yaml` via `requirements_sha256`, add `source_sha256`
 for `report.md`, use `artifacts: {report.pdf: ...}` with all pages, and omit
@@ -175,10 +190,13 @@ report PDF; it preserves its bytes rather than rebuilding it with default styles
 The gate also reads the PDF's text (`REPORT_PDF_TEXT_MISMATCH`): every
 paragraph, heading and list item of the current `report.md` must occupy whole
 PDF lines, in order (page numbers, running headers and a footnote at the page
-foot are stepped over). A table cell only has to be present somewhere, because
-wrapped and CJK columns interleave in extracted text. After any Markdown edit
-re-render the PDF; refreshing the review hashes is not enough. It cannot see a
-deleted paragraph, nor a value swapped between rows of one table.
+foot are stepped over). Tables bind complete cells to their own rows, preserving
+column order while permitting wrapped continuations, repeated page headers and
+leading merged cells. A short prefix/suffix or a value copied from another row
+does not establish a match. Unsupported/ambiguous extraction requires a render
+or extraction repair; it cannot silently pass. After any Markdown edit re-render
+the PDF; refreshing review hashes is not enough. The render record also catches
+deleted whole blocks and link-only changes that visible text cannot detect.
 Missing/stale requirements or a failed check block that delivery. The default
 Markdown renderer remains available for initial report generation; create the
 workspace PDF and complete this review before the final handoff.

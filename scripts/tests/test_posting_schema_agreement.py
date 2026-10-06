@@ -22,6 +22,7 @@ extraction field table". It was not, and that sentence was worse than the drift
 it described: it told the next maintainer the copies were in sync, so they would
 not diff them. This file is the diff.
 """
+from skill_docs import read_guidance
 import pathlib
 import re
 import sys
@@ -57,12 +58,12 @@ def _table_fields(path, heading):
 
 
 def skill_md_table():
-    return _table_fields("SKILL.md", "## Extraction field table")
+    return _table_fields("references/job-posting-extraction.md", "Extract exactly these fields")
 
 
 def skill_md_canonical_list():
     """The fenced block SKILL.md calls "exactly these twelve names in this order"."""
-    text = (REPO / "SKILL.md").read_text(encoding="utf-8")
+    text = read_guidance("references/job-posting-extraction.md")
     marker = "**The `posting.yaml` field list, and it is exactly these twelve names in this order:**"
     block = text.split(marker, 1)[1].split("```")[1]
     return [n.strip() for n in block.replace("\n", " ").split(",") if n.strip()]
@@ -150,7 +151,7 @@ def test_location_is_a_scalar_string_everywhere_it_is_typed():
     measured downstream: given an object, render_letter's PDF address block
     printed `{'city': 'Leeds', ...}` and its .docx printed `citycountryarrangement`.
     """
-    for path in ("SKILL.md", "references/job-posting-extraction.md"):
+    for path in ("references/job-posting-extraction.md",):
         text = (REPO / path).read_text(encoding="utf-8")
         row = next(line for line in text.splitlines()
                    if line.startswith("| `location` |"))

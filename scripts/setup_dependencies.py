@@ -141,9 +141,10 @@ def patch_opencli(package):
         if digest(replacement) != entry["patched"]:
             raise RuntimeError(f"Bundled patch checksum mismatch: {target.name}")
         current = digest(target)
-        if current not in (entry["original"], entry["patched"]):
+        known = (entry["original"], entry["patched"], *entry.get("previous_patched", []))
+        if current not in known:
             raise RuntimeError(f"Unrecognized OpenCLI edits, left unchanged: {entry['path']}")
-        if current == entry["original"]:
+        if current != entry["patched"]:
             pending.append((target, replacement))
     for target, replacement in pending:
         backup = target.with_name(target.name + ".job-hunt-original")

@@ -1,4 +1,5 @@
 """The reference catalogue must stay in sync with the code that depends on it."""
+from skill_docs import read_guidance, skill_context
 import pathlib
 import re
 
@@ -124,11 +125,11 @@ def test_the_degraded_fallback_field_list_is_present():
 
 
 def test_skill_md_carries_the_discovery_trigger():
-    text = SKILL.read_text(encoding="utf-8")
+    text = skill_context()
     assert "<!-- BEGIN discover-inserts (plan 3) -->" in text
     assert "<!-- END discover-inserts (plan 3) -->" in text
     assert "references/discovery-sources.md" in text
-    assert "about to call an adapter other than the four" in text
+    assert "before calling a discovery adapter" in text
     for site in INLINED:
         assert site in text
 
@@ -138,13 +139,13 @@ def test_the_trigger_sentence_survives_line_wrapping_in_both_files():
     # newline dropped into the middle of it deletes the assertion above
     # without deleting the paragraph a reader sees, which is the worst
     # possible failure shape for a layer-2 trigger.
-    phrase = "about to call an adapter other than the four"
-    assert phrase in SKILL.read_text(encoding="utf-8")
+    phrase = "before calling a discovery adapter"
+    assert phrase in skill_context()
     assert phrase in SOURCES.read_text(encoding="utf-8")
 
 
 def test_skill_md_states_the_exit_code_rule_the_write_ban_and_the_stop_rule():
-    text = SKILL.read_text(encoding="utf-8")
+    text = skill_context()
     assert "branch on the exit code before you read stdout" in text
     assert "access:` is `write" in text
     # spec §6 lists the platform-limit stop rule as layer-1 content: the
@@ -164,7 +165,7 @@ def test_discovery_backend_selection_is_opencli_first_and_one_way():
     mode = (REPO / "modes" / "discover.md").read_text(encoding="utf-8")
     fallback = (REPO / "references" / "browser-fallback.md").read_text(
         encoding="utf-8")
-    skill = SKILL.read_text(encoding="utf-8")
+    skill = skill_context()
 
     assert "OpenCLI first; one-way built-in CDP fallback" in mode
     assert "run `python3 scripts/doctor.py`" in mode

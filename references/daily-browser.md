@@ -22,7 +22,9 @@ OpenCLI capability diagnosis first, following
    tabs, history, credentials or cookies to establish access.
 2. Use the bundled `scripts/browser_cdp.mjs` for diagnosed fallback reads.
    It discovers only the selected Chrome or Edge's `DevToolsActivePort`, creates
-   a task-owned tab through browser-level CDP, reads the URL, and closes that tab.
+   a task-owned tab through browser-level CDP and reads the URL. It closes the
+   completed task tab, but hands a login or verification page to the user and
+   leaves that page open and visible.
    Select `--browser chrome` or `--browser edge` from the customer's preference;
    it never falls back to another browser. `--endpoint` is only for an explicitly
    selected browser-level WebSocket endpoint. The bundled session service is started by the prepared runtime; no extra
@@ -41,7 +43,9 @@ OpenCLI capability diagnosis first, following
    `browser-session stop` at the end. Idle sessions expire after 30 minutes;
    browser restarts or disconnections require a new explicit start and consent.
    The service listens only on loopback, uses a random private endpoint, and
-   closes only client-owned tabs. It never reconnects automatically. Edge must expose its selected
+   closes only client-owned tabs; a page handed to the user is released from
+   automatic cleanup and survives idle expiry or session shutdown. It never
+   reconnects automatically. Edge must expose its selected
    daily profile through a valid debugging endpoint too; do not promise this
    mechanism on every browser or managed machine.
 4. OpenCLI is the first extraction route to diagnose. Inspect the installed
@@ -59,7 +63,9 @@ Chrome's consent is distinct from macOS automation permission. This is minimal
 manual setup, not guaranteed zero configuration. Modern Chrome does not honor
 legacy remote-debugging flags on the default data directory; do not relaunch the
 user's browser with those flags, copy a profile, or export cookies as a shortcut.
-Close only tabs created for this task when finished. Site refusal and login
+Never close the daily browser or the user's original tabs. Close only completed
+tabs created for this task; retain any page awaiting user login or verification,
+even after disconnecting the tool. Site refusal and login
 recovery rules still apply across all tools and survive a connection change.
 
 For pages that fail to load, use [bounded network recovery](network-recovery.md)

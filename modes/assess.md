@@ -76,13 +76,11 @@ conventions.**
 
 ## 3. Extract `posting.yaml` — the complete field list
 
-Twelve names, in this order — the same names in the same order as `SKILL.md`'s
-extraction field table, `references/job-posting-extraction.md`, and `modes/apply.md`
-Step 2. Two copies is one thing; two copies that disagree is a downstream gate failing
-on a file the upstream mode was told to write. This used to claim the copies were
-*byte-identical*, which was never true and was worse than the drift it described: it
-told the next maintainer the copies were in sync, so they would not diff them.
-`scripts/tests/test_posting_schema_agreement.py` now diffs all four.
+Twelve names, in this order — matching the canonical extraction table in
+`references/job-posting-extraction.md` and the declaration in `modes/apply.md`
+Step 2. The entry skill routes here instead of repeating the schema.
+`scripts/tests/test_posting_schema_agreement.py` checks the declarations so a
+mode cannot omit a field that a downstream gate requires.
 
 ```yaml
 role_title: "..."          # exactly as written in the posting
@@ -450,6 +448,16 @@ guess.
 looks exactly like a clean one. `check_assessment.py` writes the receipt that lets you
 say this passed.
 
+## Write the client report from the checked findings
+
+Keep `fit-assessment.*` internal: its complete evidence rows, exact counts and
+required disclaimer still pass the existing gates. Write `report.md` separately
+for the job seeker using `references/report-writing.md`. Lead with the decision,
+explain relevant experience and real gaps, and order the next actions. Do not copy
+the internal record, raw coverage block, repeated IDs or engineering disclaimer.
+A zero count of fully demonstrated responsibilities must not erase useful partial
+experience from the explanation. Preserve the assessment's facts and uncertainty.
+
 ## Hand the artifacts over — `deliver.py`, not a sentence in the final message
 
 A workspace under `~/.claude/job-profiles/` is where the skill works, and it is
@@ -463,12 +471,12 @@ python3 scripts/deliver.py --workspace <ws>
 
 Delivery uses two child folders, whose names `deliver.py` writes in Chinese for every client: `简历/` (application documents) for `简历.docx`, `简历.pdf` and other requested application documents; `报告/` (report) for `求职建议报告.pdf` (the advice report) and its editable text. Filenames never include the employer, role or internal workspace slug.
 
-Author `report.md` for **every consultation**, answering the client's actual
+Author `report.md` for **every full consultation**, respecting explicit chat-only/no-file requests and answering the client's actual
 question in their language: conclusion, supporting evidence, relevant career
 constraints or facts still to confirm, and practical next steps. Tool defects,
 adapter errors, tests, developer diagnostics and internal review logs belong only
 in the private workspace, never in this client report. Do not copy an internal
-`completion.md` into it. A general question still receives a PDF reply report.
+`completion.md` into it. A narrow text edit remains in chat; it does not initiate report delivery.
 
 Before drafting, read `references/report-writing.md`; revise the report for clear
 recommendations, specific reasons and actionable advice, then inspect the rendered
@@ -522,4 +530,4 @@ Do not automatically start a mock interview or another mode.
       always recomputes.
 - [ ] `check_assessment.py` exited 0 and its receipt is in `journal.jsonl`.
 
-**Voice.** The assessment is the longest thing this skill hands a person to read. `SKILL.md`, "How this skill writes to the user", governs its prose — address them as "you", carry the evidence reference on every row, and lead each paragraph with the uncomfortable half.
+**Voice.** Follow `references/report-writing.md` for the client report: address the job seeker directly, lead with the decision, explain the real strengths and gaps, and give concrete next actions. Keep row-level evidence references and coverage disclosures in `fit-assessment.*`.

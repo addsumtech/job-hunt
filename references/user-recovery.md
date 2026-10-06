@@ -15,6 +15,13 @@ connected browser and reply “已完成，继续”. Merely announcing that the
 was stopped and continuing elsewhere is not this hand-off. Keep the request
 pending until the user responds; never simulate their confirmation in a test.
 
+Keep that page open and bring it forward in the user's daily browser, reusing
+the selected profile and its login state. Do not close it when the read fails,
+the tool exits or the browser session stops. The bundled readers release such
+tabs from their automatic cleanup. Never close the browser or any original user
+tab. If a tool already closed the page, reopen the captured original URL for the
+user's manual action without performing another automated read.
+
 | Observed state | Hand-off |
 |---|---|
 | A confirmed missing login | Ask the user to sign in on that site in the connected browser. Offer `opencli <site> login` only if that adapter actually has it; the user runs it. |

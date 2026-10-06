@@ -263,28 +263,32 @@ This is honest-only: prioritization reorders and trims *real* content — it nev
 
 ### FIT SNAPSHOT — show before tailoring (baseline) and after (delta)
 
-A lone keyword % misleads: a CV can read 80% covered while the candidate is under-leveled or off-domain (both kill the application), or 65% covered with a perfect responsibility + seniority match (a strong apply). So show the user a small **fit snapshot** — still no fake precision, every line evidence-backed:
+A lone coverage count misleads: a CV can cover most must-haves while the candidate is under-leveled or off-domain (both kill the application), or miss several and still be a strong apply on a perfect responsibility + seniority match. Keep a small internal **fit snapshot** — still no fake precision, every line evidence-backed:
 
 ```
 FIT SNAPSHOT — [Role Title] at [Company]
 
-Must-have coverage:  X of N strongly evidenced (Y partial, Z missing) — keyword proxy
+Must-have coverage:  X of N strongly evidenced (Y partial, Z missing)
 
-| Must-have requirement | In CV? | JD mentions ≈N× |
+| Must-have requirement | In CV? | Evidence |
 |---|---|---|
-| [Requirement 1] | Yes / Partial / No | N× |
+| [Requirement 1] | Yes / Partial / No | CV-nnn |
 | … | … | … |
 
 Responsibility match: M of K core responsibilities demonstrated (from the §1 responsibility-evidence pass)
-Seniority fit:        under / on / over-leveled — [one line]
+Seniority fit:        step_up / lateral / step_down / unclear — [one line]
 Domain fit:           same-domain / adjacent / cross-over — [one line]
 
-APPLY VERDICT: strong apply / worth applying / stretch / likely screen-out — [one honest sentence why]
+APPLY VERDICT: strong_apply / worth_applying / stretch / likely_screen_out / blocked — [one honest sentence why]
 ```
 
-Run it before tailoring (baseline) and after (so the user sees the delta). The apply verdict is the north-star question — it tells the user whether this is worth their time, not just whether they keyword-matched.
+Record it before tailoring (baseline) and after in `fit-snapshot.md`; explain the meaningful changes in the client report. The apply verdict is the north-star question — it tells the user whether this is worth their time, not just whether the words matched.
 
-**REQUIRED disclaimer to include every time:**
+**This snapshot and the advice block below are the same judgement in two places, so they must not disagree.** The snapshot is apply mode's before/after view; the advice block is the shape used in internal `fit-assessment.md`. Both carry the same five verdicts from `scripts/vocab.py` — `blocked` included, because a legal barrier is not a weak `likely_screen_out` — and `insufficient_evidence` replaces the whole thing rather than appearing as a sixth level. Both carry the required disclaimer verbatim.
+
+**Computation & labels (avoid two conflicting numbers):** the **"strongly evidenced" count** = must-haves where CV evidence is `strong` (count `partial` and `missing` separately; do not merge them into one "covered" number). **Evidence that is only `dated` counts as `partial`, never `strong`** — stale experience satisfies the keyword and reads as rusty to a human (`gap-analysis.md`, "Recency matters"). That clause is not decoration: `count_coverage.py` applies the same downgrade mechanically, and a snapshot that counts a stale-but-strong must-have as evidenced disagrees with it on the same rows. **When a `fit-assessment.yaml` exists, run `count_coverage.py` and use its numbers rather than counting again by hand** — two paths are tolerable only while they give one answer. This is *not* the same as the ATS screener's coverage formula (which gives partials half-weight: `(present + 0.5·partial)/total`) — label them distinctly ("evidenced must-haves" here vs. "ATS coverage %" from Judge 1) so the user never sees two unreconciled percentages. Be honest about `partial`: a keyword in the Skills list with no supporting bullet is partial, not strong.
+
+**Required disclaimer in the internal snapshot:**
 
 > ⚠️ This is a count of evidence, not a forecast of the outcome. Every must-have is
 > printed with the evidence reference behind it, so the denominator can be audited row
@@ -295,8 +299,6 @@ Run it before tailoring (baseline) and after (so the user sees the delta). The a
 > (adding terms not backed by real experience) backfires at interview and with
 > sophisticated ATS, and no count here estimates an interview or hiring outcome.
 > Whether to apply is your call.
-
-**Computation & labels (avoid two conflicting numbers):** the **"strongly evidenced" count** = must-haves where CV evidence is `strong` (count `partial` and `missing` separately; do not merge them into one "covered" number). This is *not* the same as the ATS screener's coverage formula (which gives partials half-weight: `(present + 0.5·partial)/total`) — label them distinctly ("evidenced must-haves" here vs. "ATS coverage %" from Judge 1) so the user never sees two unreconciled percentages. Be honest about `partial`: a keyword in the Skills list with no supporting bullet is partial, not strong.
 
 ### Mitigation options for HONEST-GAPS
 
@@ -375,3 +377,115 @@ Cross-reference: `motivation-letter.md §6` (AI-Authenticity) for the same princ
 **Motivation letter / cover letter** — the same honest-reframing rule that governs the CV governs the cover letter. HONEST-GAPS mitigations that involve the cover letter must still be factually accurate. The cover letter may frame, contextualise, and project forward — it may not invent.
 
 **Interaction between gap analysis and the final CV** — the tailoring plan is the bridge. Once approved, each item in AMPLIFY, REFRAME, and KEYWORD-INSERT translates to a specific edit in the CV. HONEST-GAPS drive the cover-letter strategy. Do not edit the CV before the tailoring plan is confirmed by the user.
+
+## Claim-provenance checkpoint (mandatory)
+
+1. **Edit first (targeted):** Merge the `TOP_FEEDBACK` from all three judges (plus the ATS `MISSING_OR_WEAK` / `FORMAT_ISSUES` and the Recruiter's logistics/readability flags) and apply edits that address **only the flagged points** — do not re-tailor sections the judges didn't fault. Apply to `<workspace>/tailored-profile.yaml` (and `<workspace>/letter.yaml` if present). Ask the user any `SUPPLEMENTARY_QUESTIONS_FOR_CANDIDATE` from the Recruiter or Hiring Manager — honestly, never inviting fabrication. **A keyword the ATS screener flags as missing goes into the CV ONLY if the candidate genuinely has it** (the claim-provenance checkpoint still applies); otherwise it stays in HONEST-GAPS. **Re-run the claim-provenance checkpoint on every edit made this round before re-rendering** — any term added to satisfy an ATS REJECT must cite its source (a profile line or a user answer this session). The correct response to an ATS gap you cannot honestly close is to let the loop fail at round 3 and report it — *never* to insert an ungrounded keyword. A coverage gate failing because the candidate genuinely lacks must-haves is a true result, not a problem to engineer around.
+
+## Hard disqualifiers are a wall
+
+Some must-haves are **non-negotiable barriers** the candidate cannot close by tailoring or learning: **work authorization / visa** for the country, a **legally required license or security clearance**, a **hard on-site/location** requirement, **language fluency**, or a **regulated experience floor**. Tag these `[disqualifier]` (distinct from an ordinary must-have like "Kubernetes", which is recoverable).
+
+Surface `[disqualifier]` items **first** in the §4 confirmation and ask the user directly: *"These look non-negotiable — do you meet them? If not, this may not be worth a full application."* This protects the user's time on day one (the recruiter judge would otherwise only catch a logistics wall after a whole package is built), and it keeps a genuine legal barrier from being mis-handled downstream as a soft "framing" gap (see `gap-analysis.md §3`).
+
+## The advice block, and the disclaimer that is not optional
+
+In the internal `fit-assessment.md`, state the assessment in exactly this
+shape — counted facts, then one word, then the disclaimer. Client `report.md` is
+written separately using `references/report-writing.md`; it does not copy this block. **The block follows the
+user's language, not the market's**, so both shapes are here; `scripts/count_coverage.py`
+emits them with `--lang zh` and `--lang en` and is the only path that produces the counts.
+
+    必备条件有充分证据：   X 项，共 N 项   （部分符合 P，存在缺口 G，无证据 U）
+    核心职责已证实：     M 项，共 K 项
+    职级匹配：           <上跳 | 平级 | 下沉 | 不明>
+    可补缺口所需投入：   <当天 | 一晚 | 数日 | 补不上>
+    投递建议：           <强烈建议投 | 值得投 | 可以冲刺 | 大概率被筛掉 | 硬性阻断>
+
+    must-haves strongly evidenced:   X of N   (partial P, gap G, no evidence U)
+    core responsibilities demonstrated: M of K
+    level match:                     <step_up | lateral | step_down | unclear>
+    effort to close the gaps:        <quick | evening | multi_day | not_closable>
+    apply verdict:                   <strong_apply | worth_applying | stretch |
+                                      likely_screen_out | blocked>
+
+**Immediately under the internal block, keep the matching disclaimer unchanged.** Counts and
+required report text support zh, en, ja, ko and es. Read
+[report-localization.md](report-localization.md) for Japanese, Korean or
+Spanish headings, disclaimers, notices and discover disclosure templates. The gate
+checks the language's explicit anchor; a free paraphrase may still fail as `NO_DISCLAIMER`.
+
+> ⚠️ 以上是对证据的清点，不是对结果的预判。每一项都连同它的证据引用一起印出，分母可以逐条审计；
+> 本 skill 不给出面试或录用的可能性估计，也不给 0–100 分。要不要投，由你决定。
+
+> ⚠️ This is a count of evidence, not a forecast of the outcome. Every item is printed
+> with its evidence reference so the denominator can be audited row by row. This skill
+> states no interview or hiring outcome estimate and no 0–100 score. Whether to apply
+> is your call.
+
+Every item inside N and K is printed with its evidence reference, so the denominator
+is auditable. The strongly evidenced count takes only `strong`; `partial` and `gap` are never folded into
+a "covered" number; evidence that is only `dated` counts as `partial`, never `strong`.
+When the input cannot support a conclusion at all, the whole block is replaced by
+the refusal, `insufficient_evidence` (zh `证据不足—不出结论`), and the reason. That is
+a refusal, not a sixth level, and it is never softened into `stretch`.
+
+## Words this skill does not put in its output
+
+No percentages of fit. No self-invented scales (`7/10`, `B+`, "score: 82"). No
+probability language at all: `概率`, `chance`, `odds`, `likely to be hired`,
+`likely to be interviewed`, `strong candidate`, `would pass`. There is no data
+behind any of them — "interview probability 45–65%" is a number someone made up,
+and a weighted total is the same fabrication with arithmetic on top. The advice is
+one word from the five, and the counts beside it are counts of evidence.
+
+**The one exception, and its shape.** When the employer has published its own rubric
+— a UK Civil Service Success Profiles level named in the advert, an NHS values
+framework, a university person specification — this skill may walk the candidate
+through **that** scale, in the employer's own wording, with the source named, framed
+as "what the panel is asked to look at". Quoting the employer's scale is reporting.
+Using it as a conclusion is fabrication. Never assert a score on it.
+
+## The grounding contract
+
+```
+  Original source             Referenced claim              Check
+  posting-source.txt --> JD-001…JD-080 --> requirement row --> check_evidence_refs.py
+  cv.md / profile    --> CV-001…CV-080 --> requirement row --> resolves or is dropped
+
+  profile.yaml field       --|
+  answer in this session   --|--> claims.yaml --> each REFRAME / KEYWORD-INSERT
+  candidate artifact read  --|                                |
+                                                             v
+                                                      check_claims.py
+
+  Human-authored commit --> market-conventions/<key>.yaml
+                                       |
+                            allowlisted IDs; verbatim text
+                            no model paraphrase
+                                       v
+                               check_conventions.py
+```
+
+1. **Evidence blocks tie the analysis to the source text.** The model may only cite
+   blocks that exist; a reference that will not resolve is **dropped, not fatal**. An
+   empty evidence list is not an error — rejecting it would punish the honest shape,
+   and a *fabricated* reference lands in that same empty array and passes anyway.
+   Carry the honest boundary into the skill's own output:
+   **this is a floor on credibility, not a proof — it guarantees a claim points at
+   something that really exists, not that the claim follows from it.**
+2. **Claim provenance ties the output to source facts.** Three permitted sources,
+   and there is no fourth. `claims.yaml` is the first thing that makes it a diffable
+   artifact instead of a habit.
+3. **Market tables tie down the one class of claim with no citable source.** In this
+   whole skill exactly one kind of statement cannot be traced to text the user gave
+   us: what this market screens for that the posting does not say. So it is written
+   by a person, dated, with its source kind, whitelisted by id, and **rendered
+   verbatim** — the model may not strengthen "usually" into "must", may not attach a
+   number to it, and may not invent a row.
+
+**Restate the fence next to the field that tempts the violation.** A rule at the top
+of fifty instructions is not where the model is standing when it writes the dangerous
+field. The no-fabrication rule is restated in exactly three places: the KEYWORD-INSERT
+step, mock-interview question generation (a question premise the CV does not support is
+a fabrication the candidate then repeats back), and the shortlist's `why_matched` field.

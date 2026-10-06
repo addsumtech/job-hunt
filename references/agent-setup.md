@@ -138,3 +138,46 @@ and installation scratch files.
 A fresh prefix/virtualenv on an existing OS is not a clean-machine test. Report
 separately whether missing-Node download, Python bootstrap, OS prompts, native
 Windows/Linux behavior and actual site access were tested.
+
+## Before the first mode on a new machine
+
+```bash
+python3 scripts/doctor.py            # what works, what does not, what each costs
+python3 scripts/doctor.py --install  # installs the missing PYTHON packages only
+```
+
+Before running it, read [references/agent-setup.md](agent-setup.md) and
+prepare a usable Python environment if needed. The agent runs it once for a new
+user and resolves required missing capabilities. It reports capabilities rather than binary names —
+the PDF check renders a PDF, because looking for `xelatex` alone once called this
+machine broken while `tectonic` was installed and every PDF rendered fine.
+
+**The cheap half of it runs on its own, every mode entry.** `enter_mode.py` calls
+`doctor.fast_capabilities()` — imports and `which`, no rendering, milliseconds —
+records the result in the `mode_entry` line and prints
+`NOTICE_MISSING_CAPABILITIES` on stderr when something is absent. That exists
+because this script spent its first week named here and in none of the four mode
+files, so no run ever invoked it: a new user learned their machine could not
+render a PDF when a PDF failed to appear. A capability that does not enter the
+scaffolding is a capability nobody uses.
+
+The fast check is sound about what is MISSING and silent about what works — no
+pandoc on PATH means no template-based CV PDF; bundled report PDFs still work.
+Pandoc plus an engine can both be
+present and still fail. Confirming a capability stays with `doctor.py`, which
+renders one. A warning may only fire when it is sure, or it becomes the line
+everyone filters out.
+
+Nothing here blocks a run: a machine with no LaTeX engine still produces Markdown
+and .docx, and one with no `opencli` can still do assess, apply and interview from
+a pasted posting. What the report buys is saying WHICH capability is missing
+before the user hits it, instead of discovering it when a PDF does not appear.
+
+**The agent owns first-run setup.** Follow [references/agent-setup.md](agent-setup.md)
+when a required capability is missing: install the necessary dependencies,
+run `scripts/setup_dependencies.py` (add `--discovery` for Node/OpenCLI),
+use the bundled AnySearch client and CDP reader, and verify daily-browser
+CDP access. Never use browser extensions. Browser connection consent,
+site login and human verification still require the user's action. Reuse working tools and continue the
+original task after setup. `doctor.py --install` covers Python packages only;
+use `scripts/run_tool.py` to invoke the prepared runtime. No additional skill is required.

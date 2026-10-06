@@ -58,15 +58,17 @@ function fixture({status=200, navigationError=false, pageReadyState='complete', 
   return {Socket,commands,target,session};
 }
 
-test('capture retains refusal status and closes only its own tab',async()=>{
+test('capture retains the exact refusal page for the user instead of closing it',async()=>{
   const {Socket,commands,target,session}=fixture({status:403});
   const result=await capture({endpoint:'ws://127.0.0.1:9222/devtools/browser/test',url:'https://example.com/',settleMs:0,WebSocketImpl:Socket});
   assert.equal(result.http_status,403);
   assert.equal(result.capture.backend,'builtin-cdp');
-  assert.deepEqual(commands.filter(c=>c.method==='Target.closeTarget').map(c=>c.params.targetId),[target]);
+  assert.deepEqual(commands.filter(c=>c.method==='Target.closeTarget'),[]);
+  assert.deepEqual(commands.filter(c=>c.method==='JobHunt.handoffTarget').map(c=>c.params.targetId),[target]);
+  assert.equal(result.handoff.kept_open,true);
   assert.equal(commands.some(c=>c.method==='Target.getTargets'),false);
   assert.ok(commands.filter(c=>/^(Page|Runtime|Network)\./.test(c.method)).every(c=>c.sessionId===session));
-  assert.equal(result.capture.trace.at(-1).method,'Target.closeTarget');
+  assert.equal(result.capture.trace.at(-1).method,'JobHunt.handoffTarget');
 });
 
 test('a navigation failure still closes the created tab',async()=>{
@@ -272,7 +274,8 @@ test('a document-level refusal prevents catalog navigation',async()=>{
   const result=await capture({endpoint:'ws://127.0.0.1:9222/devtools/browser/test',url:'https://example.com/',clickText:'岗位详情',settleMs:0,WebSocketImpl:Socket});
   assert.equal(result.blocked,true);
   assert.equal(commands.some(c=>c.params.expression?.includes('node.click()')),false);
-  assert.equal(commands.at(-1).method,'Target.closeTarget');
+  assert.equal(commands.at(-1).method,'JobHunt.handoffTarget');
+  assert.equal(commands.some(c=>c.method==='Target.closeTarget'),false);
 });
 
 test('inert javascript:void(0) detail links invoke their observed click handler',async()=>{
@@ -291,7 +294,8 @@ test('a complete SPA login wall stops immediately when detail text is missing',a
   assert.equal(result.load_timed_out,false);
   assert.deepEqual(result.render_wait_budgets_ms,[50]);
   assert.equal(commands.filter(c=>c.params.expression==='document.readyState').length,1);
-  assert.equal(commands.at(-1).method,'Target.closeTarget');
+  assert.equal(commands.at(-1).method,'JobHunt.handoffTarget');
+  assert.equal(commands.some(c=>c.method==='Target.closeTarget'),false);
 });
 
 test('rendered text excludes scripts, hidden text and an unrendered body',async()=>{
@@ -324,14 +328,15 @@ test('two navigation steps use one owned tab and preserve intermediate snapshots
   assert.equal(commands.filter(c=>c.params.expression?.includes('node.click()')).length,2);
 });
 
-test('a refusal after step one prevents step two and still closes its owned tab',async()=>{
+test('a refusal after step one prevents step two and keeps the page for the user',async()=>{
   const {Socket,commands}=fixture({refuseAfterClick:true,pageTextReady:[true,false]});
   // The first control is ready; after its click the requested next label is absent.
   const result=await capture({endpoint:'ws://localhost/devtools/browser/test',url:'https://example.com/',
     steps:[{text:'Location'},{text:'Mainland China'}],waitStagesMs:[1],settleMs:0,WebSocketImpl:Socket});
   assert.equal(result.blocked,true);
   assert.equal(commands.filter(c=>c.params.expression?.includes('node.click()')).length,1);
-  assert.equal(commands.at(-1).method,'Target.closeTarget');
+  assert.equal(commands.at(-1).method,'JobHunt.handoffTarget');
+  assert.equal(commands.some(c=>c.method==='Target.closeTarget'),false);
 });
 
 test('navigation sequence rejects unbounded or malformed plans before connecting',async()=>{
@@ -597,5 +602,6 @@ test('a wait stage checks at least once, even when its budget is already spent',
   const result=await capture({endpoint:'ws://localhost/devtools/browser/test',url:'https://example.com/',
     steps:[{text:'Location'},{text:'Mainland China'}],waitStagesMs:[0],settleMs:0,WebSocketImpl:Socket});
   assert.equal(result.blocked,true);
-  assert.equal(commands.at(-1).method,'Target.closeTarget');
+  assert.equal(commands.at(-1).method,'JobHunt.handoffTarget');
+  assert.equal(commands.some(c=>c.method==='Target.closeTarget'),false);
 });

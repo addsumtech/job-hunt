@@ -5,6 +5,7 @@ string, every disclosure label and every script name must be findable here,
 because a mode file that drifts from the gates fails silently — the run just
 produces a shortlist the gate then rejects for a reason the mode never mentioned.
 """
+from skill_docs import read_guidance, skill_context
 import pathlib
 
 import check_opencli_result as coc
@@ -445,8 +446,7 @@ def test_skill_md_and_the_region_table_agree_about_indeed():
     region table had opened the country-site route, so whichever file a round
     happened to read decided whether Europe had one source or two.
     """
-    skill = (pathlib.Path(__file__).resolve().parents[2] / "SKILL.md").read_text(
-        encoding="utf-8")
+    skill = skill_context()
     assert "prefer `linkedin` and record that `indeed`" not in skill
     assert "nl.indeed.com" in skill
     # and the adapter restriction is still stated in both places. Compare on

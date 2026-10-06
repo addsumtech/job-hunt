@@ -65,7 +65,9 @@ def report_audience_findings(source: str) -> list[str]:
     """
     markers = ("固定虚构履历", "固定的虚构履历", "固定虚构简历", "固定的虚构简历",
                "测试用的虚构履历", "测试用虚构履历", "测试用的虚构简历", "测试用虚构简历",
-               "fixed fictional", "synthetic candidate profile")
+               "fixed fictional", "synthetic candidate profile",
+               "分母可以逐条审计", "本 skill 不给出",
+               "denominator can be audited row by row", "this skill states no interview")
     # A Markdown line break must not split a marker.
     folded = re.sub(r"\s+", " ", source.casefold())
     folded = re.sub(r"(?<=[^\x00-\x7f]) (?=[^\x00-\x7f])", "", folded)
@@ -267,8 +269,9 @@ def flat_name(slug: str, rel: pathlib.Path) -> str:
 def client_path(rel: pathlib.Path) -> pathlib.Path:
     """Client names never expose the company/role workspace slug."""
     names = {"report": "求职建议报告", "cv": "简历", "letter": "求职信",
-             "rirekisho": "履历书", "supporting-statement": "申请陈述"}
-    folder = "报告" if rel.stem == "report" else "简历"
+             "rirekisho": "履历书", "supporting-statement": "申请陈述",
+             "interview-brief": "面试准备"}
+    folder = {"report": "报告", "interview-brief": "面试准备"}.get(rel.stem, "简历")
     return pathlib.Path(folder) / (names[rel.stem] + rel.suffix)
 
 
@@ -278,7 +281,7 @@ def is_deliverable(path: pathlib.Path, workspace: pathlib.Path,
     # Explicit client artifacts only. completion.md can contain tool diagnostics.
     return ((include_applications or rel.stem == "report")
             and len(rel.parts) == 1 and rel.stem in {
-        "report", "cv", "letter", "rirekisho", "supporting-statement"
+        "report", "cv", "letter", "rirekisho", "supporting-statement", "interview-brief"
     } and rel.suffix in {".md", ".pdf", ".docx"})
 
 
@@ -499,6 +502,50 @@ def _is_table_rule(cells: list[str]) -> bool:
     return bool(cells) and all(re.fullmatch(r":?-{3,}:?", cell) for cell in cells)
 
 
+def _wrap_report_text(value, size, width, text_width, literal=False):
+    """Fit text without stranding CJK punctuation or splitting a short token."""
+    closing = set("，。；：！？、）】》〉”’」』〕］｝％…,.!?;:)]}")
+    opening = set("（【《〈“‘「『〔［｛([{")
+    word = re.compile(r"[A-Za-zÀ-ɏ0-9_+/.@:#?&=%~가-힯-]")
+    result = []
+    for source_line in value.splitlines() or [""]:
+        rest = source_line if literal else source_line.strip()
+        while rest:
+            if text_width(rest, size) <= width:
+                result.append(rest)
+                break
+            low, high = 1, len(rest)
+            while low < high:
+                middle = (low + high + 1) // 2
+                if text_width(rest[:middle], size) <= width:
+                    low = middle
+                else:
+                    high = middle - 1
+            end = low
+            if not literal:
+                while True:
+                    previous = end
+                    if end < len(rest) and word.fullmatch(rest[end - 1]) and word.fullmatch(rest[end]):
+                        start, stop = end - 1, end + 1
+                        while start > 0 and word.fullmatch(rest[start - 1]):
+                            start -= 1
+                        while stop < len(rest) and word.fullmatch(rest[stop]):
+                            stop += 1
+                        # Long URLs/words still flow. A token that fits on a
+                        # fresh line moves there intact, even beside CJK.
+                        if start > 0 and text_width(rest[start:stop], size) <= width:
+                            end = start
+                    while end > 1 and (rest[end] in closing or rest[end - 1] in opening):
+                        end -= 1
+                    if end == previous:
+                        break
+            result.append(rest[:end] if literal else rest[:end].rstrip())
+            rest = rest[end:] if literal else rest[end:].lstrip()
+        if not source_line.strip():
+            result.append("")
+    return result or [""]
+
+
 def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
                             style: dict[str, str]) -> tuple[bool, str]:
     """Render a supported LTR report with a bundled, extractable PDF font.
@@ -529,40 +576,7 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
         return font.text_length(value, fontsize=size)
 
     def wrap(value: str, size: float, width: float, literal: bool = False) -> list[str]:
-        """Wrap CJK and Latin text without spacing individual Latin glyphs."""
-        result: list[str] = []
-        for source_line in value.splitlines() or [""]:
-            rest = source_line if literal else source_line.strip()
-            while rest:
-                if text_width(rest, size) <= width:
-                    result.append(rest)
-                    break
-                low, high = 1, len(rest)
-                while low < high:
-                    middle = (low + high + 1) // 2
-                    if text_width(rest[:middle], size) <= width:
-                        low = middle
-                    else:
-                        high = middle - 1
-                end = low
-                # Chinese can wrap between characters. Rewinding to a distant
-                # ASCII space is useful only when this cut splits a word in a
-                # space-delimited script (Latin or Korean).
-                splits_word = (end < len(rest)
-                               and re.match(r"[A-Za-zÀ-ɏ0-9_+/가-힯-]", rest[end - 1])
-                               and re.match(r"[A-Za-zÀ-ɏ0-9_+/가-힯-]", rest[end]))
-                split_at = rest.rfind(" ", 1, end + 1) if splits_word else -1
-                if split_at > 0:
-                    result.append(rest[:split_at].rstrip())
-                    rest = rest[split_at + 1:]
-                    if not literal:
-                        rest = rest.lstrip()
-                else:
-                    result.append(rest[:end])
-                    rest = rest[end:]
-            if not source_line.strip():
-                result.append("")
-        return result or [""]
+        return _wrap_report_text(value, size, width, text_width, literal)
 
     def write_lines(lines: list[str], x: float, size: float,
                     color: tuple[float, float, float], leading: float,
@@ -693,7 +707,7 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
         if len(rows) < 3 or not _is_table_rule(rows[1]):
             return all(add_block(" | ".join(row), 12, body_color, 6) for row in rows)
         header, rows = rows[0], rows[2:]
-        if len(header) > 3:
+        if len(header) > 4:
             for row in rows:
                 if len(row) != len(header):
                     continue
@@ -749,19 +763,24 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
 
         header_cells = cell_data(header)
         header_height = row_height(header_cells)
+        rows = [row for row in rows if len(row) == len(header)]
+        prepared = [cell_data(row) for row in rows]
+        heights = [row_height(cells) for cells in prepared]
+        complete_height = header_height + sum(heights)
+        if len(rows) <= 2 and complete_height <= (bottom - top) / 2 and cursor + complete_height > bottom:
+            new_page()
         needs_header = True
-        for row in rows:
-            if len(row) != len(header):
-                continue
-            cells = cell_data(row)
-            height = row_height(cells)
+        for row_index, (row, cells, height) in enumerate(zip(rows, prepared, heights)):
             if height + header_height > bottom - top:
                 # Keep all evidence from an unusually tall row; fields can span pages.
                 if not add_entry(row[0], list(zip(header[1:], row[1:]))):
                     return False
                 needs_header = True
                 continue
-            if cursor + height + (header_height if needs_header else 0) > bottom:
+            tail_height = height
+            if row_index == len(rows) - 2 and height + heights[-1] + header_height <= bottom - top:
+                tail_height += heights[-1]
+            if cursor + tail_height + (header_height if needs_header else 0) > bottom:
                 new_page()
                 needs_header = True
             if needs_header:
@@ -976,6 +995,20 @@ def _verify_pdf(pdf: pathlib.Path, source: str, needs_cjk: bool,
 
 def render_pdf(md: pathlib.Path, pdf: pathlib.Path,
                font: str | dict | None) -> tuple[bool, str]:
+    """Render and bind these exact source/PDF bytes before any visual review."""
+    from render_report import render_with
+    result = render_with(md, pdf, lambda source, target: _render_pdf(source, target, font))
+    if not result[0]:
+        # A refused export must not leave last round's PDF in the client folder.
+        # render_with's fresh destination protects the private render operation;
+        # this public entry point retains the existing stale-output refusal.
+        pdf.unlink(missing_ok=True)
+        pdf.with_suffix(".tex").unlink(missing_ok=True)
+    return result
+
+
+def _render_pdf(md: pathlib.Path, pdf: pathlib.Path,
+                font: str | dict | None) -> tuple[bool, str]:
     """Render, then READ IT BACK. A PDF that dropped characters is not a PDF."""
     source = visible_markdown(md)
     # The plain-text view deliberately removes destinations. Link verification

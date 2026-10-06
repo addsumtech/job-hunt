@@ -377,3 +377,17 @@ A common self-inflicted weakness is a CV where the Experience section is full of
 - Never list the same body of work in both sections. If a "project" happened inside a job, fold it into that job's bullets and remove the duplicate.
 - A Projects section earns its place only if it adds signal the Experience section doesn't — relevant, independent work the target role cares about. If it merely restates the day job or lists stale coursework, cut it; a tight CV with no Projects section beats a padded one.
 - For early-career/student profiles with little work history, Projects can legitimately carry real weight (see §1) — there the section is load-bearing, not padding. Judge by what the target role needs.
+
+## Post-tailoring AI-uniformity check
+
+After completing all REFRAME and KEYWORD-INSERT edits, review the **full CV** for mechanical uniformity before presenting it to the user:
+
+1. **Verb variety:** Are the same stock verbs ("spearheaded", "leveraged", "drove", "utilized") repeated across multiple bullets or roles? Replace repetitive openers with alternatives from the action-verb bank in `cv-craft.md §3`.
+2. **Sentence structure variety:** Do bullets follow an identical grammatical template (verb → noun phrase → result → percentage)? Vary the structure — some bullets can lead with the outcome, some with the scope, some with the action.
+3. **Voice and specificity:** Does the CV read as one person's work history, or as a generic template filled in with different nouns? Each role should have at least one detail that is unmistakably that candidate's experience.
+4. **Prose quality:** Flawless-but-voiceless prose signals AI generation to experienced recruiters. Preserve natural sentence rhythms even when the grammar is corrected.
+5. **The 2026 vocabulary:** `spearheaded`, `pivotal`, `intricate`, `showcasing`, `delve`, `realm`, `robust`, `cutting-edge`, `seamless`, "a valuable asset". `lint_cv.py` reports these as `AI_VOCABULARY` over the whole document, and `check_letter.py` adds the structural tells on a letter (`EM_DASH_DENSITY`, `NOT_JUST_PIVOT`, `TRICOLON_DENSITY`).
+
+If the uniformity check fails on any dimension, make targeted repairs before delivering the final CV.
+
+The lint is the floor, not the check. It sees the word `pivotal`; it cannot see that three roles were written to the same template. A clean `lint_cv` run is not evidence the CV reads as a person's — dimensions 1–4 above are the part no gate measures, and `references/gap-analysis.md` carries them in full.

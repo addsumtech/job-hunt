@@ -94,9 +94,11 @@ node scripts/browser_cdp.mjs --browser chrome --url '<original-page-url>' \
   --output '<ws>/raw/<site>-browser-1.json'
 ```
 
-The helper creates and closes its own background tab, captures the rendered DOM,
+The helper creates its own background tab, captures the rendered DOM,
 and records a main-document HTTP status when CDP reports it. It never selects an
-existing tab. Read/classify and import this file before the next read of the same
+existing tab. Completed task tabs are closed; login or verification pages are
+kept open and brought forward for the user, including after session shutdown.
+Read/classify and import this file before the next read of the same
 site. Navigation failures return an error, not an empty success. The reader
 supports known HTTP(S) URLs and explicit read-only navigation to an observed
 job title, detail control or pagination label. It never submits forms or clicks

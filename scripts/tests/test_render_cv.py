@@ -1,3 +1,4 @@
+from skill_docs import read_guidance, skill_context
 import copy
 import pathlib
 import sys
@@ -1278,8 +1279,7 @@ def test_every_interlock_field_has_a_label(language, field):
 def test_the_interlock_field_list_matches_what_skill_md_names():
     """If SKILL.md ever adds a sixth protected field, this list must follow —
     otherwise the test above quietly stops covering it."""
-    text = (pathlib.Path(__file__).resolve().parents[2] / "SKILL.md").read_text(
-        encoding="utf-8")
+    text = read_guidance("references/cv-craft.md")
     for phrase in ("date of birth", "age", "marital status", "nationality"):
         assert phrase in text.lower(), phrase
 

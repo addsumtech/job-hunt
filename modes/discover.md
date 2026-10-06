@@ -282,7 +282,7 @@ This table is about ONE thing: which adapters return **job listings**, i.e. rows
 that can become `shortlist.yaml` entries. Everything else about any adapter —
 flags, pagination, measured login state, identity field — lives in
 `references/discovery-sources.md`, which is the source of truth and must be read
-before calling anything outside SKILL.md's four.
+before calling a discovery adapter.
 
 | region | job listings, no login | job listings, needs a login | do not use for listings |
 |---|---|---|---|
@@ -539,8 +539,8 @@ and verified openings; follow the existing read budgets and site-stop rules.
 
 Prefer sources that need no login. `51job` is the only adapter measured to return
 every documented column populated. `indeed` also works without login but returns
-empty titles (Step 4). For the four inlined adapters, use the command pairs in
-SKILL.md. For anything else, read `references/discovery-sources.md` first.
+empty titles (Step 4). Use the command pairs and adapter metadata in
+`references/discovery-sources.md`; read the relevant source entry first.
 
 **`indeed` serves the US site only, and its `--location` is inert outside the US.**
 It does not fail on a non-US place — it resolves the name against a US gazetteer
@@ -905,8 +905,8 @@ and quote. The quotation in `job_evidence` must come from a successful, journale
 detail capture for that exact row. `candidate-match.yaml` never changes the source
 row's original `raw_text` or direct URL.
 
-`identity_field` and `detail_command` for any adapter outside the four inlined in
-SKILL.md come from `references/discovery-sources.md`. There is no other source for
+`identity_field` and `detail_command` for every adapter come from
+`references/discovery-sources.md`. There is no other source for
 them, which is why `SOURCE_REPORT_MISSING` is that file's backstop.
 
 `raw_files` entries are **workspace-relative and keep the `raw/` prefix** —
@@ -1053,12 +1053,12 @@ python3 scripts/deliver.py --workspace <ws>
 
 Delivery uses two child folders, whose names `deliver.py` writes in Chinese for every client: `简历/` (application documents) for `简历.docx`, `简历.pdf` and other requested application documents; `报告/` (report) for `求职建议报告.pdf` (the advice report) and its editable text. Filenames never include the employer, role or internal workspace slug.
 
-Author `report.md` for **every consultation**, answering the client's actual
+Author `report.md` for **every full consultation**, respecting explicit chat-only/no-file requests and answering the client's actual
 question in their language: conclusion, supporting evidence, relevant career
 constraints or facts still to confirm, and practical next steps. Tool defects,
 adapter errors, tests, developer diagnostics and internal review logs belong only
 in the private workspace, never in this client report. Do not copy an internal
-`completion.md` into it. A general question still receives a PDF reply report.
+`completion.md` into it. A narrow text edit remains in chat; it does not initiate report delivery.
 
 Before drafting, read `references/report-writing.md`; revise the report for clear
 recommendations, specific reasons and actionable advice, then inspect the rendered
@@ -1122,8 +1122,7 @@ Do not automatically start a mock interview or another mode.
       quotes, frozen-profile pointers, and its exact localized summary beside the link.
 - [ ] `references/source-policy.md` re-read if any action felt like it might be
       yellow or red; `references/risk-control-signals.yaml` consulted on any failure.
-- [ ] `references/discovery-sources.md` read before calling any adapter outside the
-      four inlined in SKILL.md.
+- [ ] `references/discovery-sources.md` read before calling a discovery adapter.
 - [ ] `scripts/check_no_write.py`, `scripts/check_candidate_match.py`,
       `scripts/lint_no_prediction.py`, and `scripts/check_shortlist.py` all exited 0,
       and the completion message cites their `journal.jsonl` receipts.
@@ -1132,4 +1131,111 @@ Do not automatically start a mock interview or another mode.
       Preliminary delivery is based on an explicit user request, not a reached cap.
 - [ ] No chaining into `apply`. The shortlist is handed back for a person to choose.
 
-**Voice.** The shortlist is a document the user reads, not a dump. `SKILL.md`, "How this skill writes to the user", governs its prose — every row's provenance visible, what was not searched said out loud, no closing offer to help further.
+**Voice.** Follow `references/report-writing.md` for the client report: make each role's source visible, explain what was not searched, and end with concrete actions. Keep raw evidence IDs and tool diagnostics in the internal shortlist records.
+
+## Discovery: the read-only surface
+
+### OpenCLI-first fallback for discovery
+
+Apply the fixed source-to-tool routes in [supplementary-sources.md](../references/supplementary-sources.md):
+WeChat (Sogou WeChat), Xiaohongshu, Douyin and Toutiao use OpenCLI. Do not
+reconsider that tool choice. AnySearch search uses its HTTP API.
+
+Begin every discovery round with OpenCLI's offline CDP routing and read-adapter
+capability checks in `scripts/doctor.py`. Use OpenCLI only after its actual
+website adapter is verified to use CDP. Never use browser extensions, even when
+already installed or reported connected. A generic OpenCLI health result is not
+proof of CDP routing. Only when the checks diagnose a missing CLI, disconnected
+CDP connection, or unsupported CDP extraction, follow [the one-way browser
+fallback](../references/browser-fallback.md) with an available built-in CDP route.
+If that fallback is unavailable too, disclose the gap; do not switch back to
+OpenCLI for the same round. Keep browser evidence and gate receipts; a site
+refusal is not a fallback reason and stops reads across both tools. Neither
+backend submits applications.
+Both OpenCLI and its fallback use the customer's daily browser unless they
+explicitly request a separate one; follow [daily-browser routing](../references/daily-browser.md).
+Use [network recovery](../references/network-recovery.md) for a generic
+transport failure that has not yet established a fallback reason.
+
+### opencli: the four command pairs this skill actually uses
+
+| site | search | detail | login state (2026-08-09) | identity field |
+|---|---|---|---|---|
+| `51job` | `opencli 51job search "<kw>" --area <city> --page 1 --limit 20 --window background -f json` | `opencli 51job detail <jobId>` | no auth adapter | `title` |
+| `indeed` | `opencli indeed search "<kw>" --location "<loc>" --fromage 7 --start 0 --limit 15 --window background -f json` | `opencli indeed job <id>` | no auth adapter | `title` — **measured EMPTY**, recover via detail. **US site only**, see below |
+| `linkedin` | `opencli linkedin search "<kw>" --location "<loc>" --date-posted week --start 0 --limit 10 --window background -f json` | `opencli linkedin job-detail <job-url>` | logged in (cookie session) | `title` |
+| `boss` | `opencli boss search "<kw>" --city <city> --page 1 --limit 15 --window background -f json` | `opencli boss detail <security_id>` | logged in (cookie session) | `name`, **not** `title` |
+
+**`indeed` serves the US site, and `--location` is resolved against a US
+gazetteer.** A non-US place name does not fail — it silently returns US rows:
+`--location "London"` came back with every row in Columbus, Ohio (London, OH is
+25 miles away), exit 0, `classification: ok`, and `--location "Manchester, United
+Kingdom"` returned California and New York (measured 2026-08-16; the adapter's own
+`opencli indeed --help` describes it as "rendered DOM via browser session, US
+site"). So for a `uk`/`nl`/`de` market this ADAPTER is the wrong tool — but that
+is not a reason to stop at `linkedin` alone, which needs a login. Indeed's own
+country site (`nl.indeed.com`, `de.indeed.com`, `uk.indeed.com`) is read through
+the diagnosed browser route; the region table in `modes/discover.md` carries it,
+along with the bot-block to expect there. If you use the adapter anyway, read
+every returned `location` before it becomes a row. This is a third shape of risk-register row 2: not
+found-nothing and not all-adapters-failed, but **adapter-succeeded-and-searched-
+the-wrong-country**, where every receipt is green and the honest conclusion
+("there are no London backend roles") is the wrong one. `check_shortlist.py`
+answers only the row half of this, as the warning `WARN_ROW_OUTSIDE_BRIEF_MARKET`;
+nothing can report the empty half, which is why it is written here instead.
+
+Always `-f json`. Always `--window background`.
+And **always branch on the exit code before you read stdout**:
+a login wall gives exit 1, EMPTY stdout and a YAML error body on stderr even under
+`-f json`, so `JSON.parse(stdout || '[]')` turns a 403 into a zero-result success.
+Never run a command whose published `access:` is `write` —
+`check_no_write.py` reads that field out of the tool itself.
+
+### When a platform says stop, stop
+
+A platform limit is any refusal the platform itself put up: a risk-control or
+captcha body, a rate-limit, or a refusal on a site `opencli auth status` says you
+are logged into. When one appears, stop automatic reads and offer the user a
+recovery hand-off before ending the search. Follow
+[the pause-and-resume workflow](../references/user-recovery.md): explain the actual
+login, verification or rate-limit obstacle and wait for explicit confirmation.
+“Done, continue” after that prompt requests one new bounded round with the same
+source/backend and a link to the old workspace; never erase the stopped journal.
+While paused, preserve already retrieved rows and offer partial results. The
+following rules govern the stopped round; use its degraded output when recovery
+is declined/unavailable, not as a silent substitute for waiting:
+
+1. **Stop that site for that round.**
+2. Do not retry.
+3. Do not change parameters and retry — a smaller `--limit`, a different city or a
+   fresh `--window` is still a retry.
+4. Do not route around it — no other adapter, no public mirror, no logged-in
+   session standing in for a logged-out one.
+5. Pause for user recovery and continue independent sources. Use the
+   **direction-level degraded output** only if the user chooses it or recovery
+   is unavailable: 3-5 target directions, no `rows:`, so it cannot claim a posting exists.
+6. Fill in the disclosure table, whose answers ship pre-filled as localized "no" precisely
+   so that concealing a retry has to be an active overwrite rather than an
+   omission. Six lines, one language — `modes/discover.md` gives the block in both.
+
+The per-platform trigger strings are data and live in
+`references/risk-control-signals.yaml`; **this rule is not data and does not live
+in a reference file**, because the moment it needs to be applied is the moment
+nobody is going to go and look it up.
+
+**READ `references/source-policy.md` before the first live retrieval of any run**
+— before the first `opencli` adapter call — and again before agreeing to page
+further, to fetch more detail pages, or to work while the user is away. It is the
+ONE source standard: what is green, what is yellow-with-caps, and what is never
+done whatever the user asks. Its two round caps are enforced rather than
+suggested: `brief.yaml` must carry `max_rows_per_round` and `max_pages_per_site`,
+and `check_shortlist.py` fails the run with `CAP_MISSING` or `CAP_ABOVE_CEILING`.
+
+**READ `references/discovery-sources.md` before calling a discovery adapter.**
+This includes 51job, indeed, linkedin, boss, upwork, nowcoder, maimai and any site
+added later. It carries that
+adapter's flags, its measured login state, its identity field and its detail
+command — and `shortlist.yaml`'s `sources:` entry cannot be filled in without
+them, so `check_shortlist.py` fails the run with `SOURCE_REPORT_MISSING` if you
+skipped it.
+<!-- END discover-inserts (plan 3) -->

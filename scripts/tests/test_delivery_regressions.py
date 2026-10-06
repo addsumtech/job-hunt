@@ -163,8 +163,15 @@ def test_selected_report_font_is_not_replaced_by_bundled_font(tmp_path, monkeypa
     md, pdf = tmp_path / 'report.md', tmp_path / 'report.pdf'
     md.write_text('中文报告', encoding='utf-8')
     seen = []
-    monkeypatch.setattr(deliver, '_pandoc',
-                        lambda m, p, f: (seen.append(f), p.write_bytes(b'PDF'), True)[-1])
+    def selected_font_renderer(source, target, font):
+        import pymupdf
+        seen.append(font)
+        with pymupdf.open() as doc:
+            doc.new_page().insert_text((72, 72), 'Font selection probe')
+            doc.save(target)
+        return True
+
+    monkeypatch.setattr(deliver, '_pandoc', selected_font_renderer)
     monkeypatch.setattr(deliver, '_verify_pdf', lambda *args: (True, ''))
     monkeypatch.setattr(deliver, '_render_portable_report',
                         lambda *args: pytest.fail('selected font was replaced'))

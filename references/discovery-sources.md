@@ -1,8 +1,8 @@
 # Discovery sources — the opencli adapter catalogue
 
-**Read this when you are in discover mode and
-about to call an adapter other than the four in the table above** — the four
-inlined in SKILL.md, which are 51job, indeed, linkedin and boss. You cannot fill in
+**Read this in discover mode before calling a discovery adapter.** The region table in
+`modes/discover.md` routes among 51job, indeed, linkedin and boss; this catalogue
+holds their metadata and the other available adapters. You cannot fill in
 `shortlist.yaml`'s `sources:` entry for such an adapter without the
 `identity_field` and `detail_command` below, and `check_shortlist.py` fails the run
 with `SOURCE_REPORT_MISSING` when that entry is absent.

@@ -15,6 +15,33 @@ Turn any useful result into concrete preparation advice without inventing actual
 user interview performance. The delivery marker check is a backstop; reading the
 whole report for its intended audience remains mandatory.
 
+## Client advice and internal evidence are separate artifacts
+
+`fit-assessment.yaml`, `fit-assessment.md`, `coverage.json` and any before/after
+`fit-snapshot.md` are internal analysis records. Keep their complete evidence rows,
+stable IDs, computed counts and exact required disclaimers for the checks. Do not
+copy those records into `report.md` or use them as the client PDF source.
+
+Write `report.md` independently from the checked findings. Start with whether the
+role is worth applying to, then explain the evidence that supports it, the gaps
+that change the decision, and the next actions in order. Cite useful source facts
+near the claim (for example, the specific CV experience or an original posting
+link); the client does not need `JD-001` / `CV-001` in every cell. Use the same
+facts and verdict as the internal record, but ordinary language and a structure
+that answers this client's question. Do not print raw coverage blocks, the
+denominator-audit explanation, or wording about what “this skill” can output.
+
+For example, partial responsibility evidence calls for explaining the relevant
+work and the missing ownership. A bare “0 of 4 demonstrated” can obscure real
+experience; keep that mechanical count internal and say what the client has
+actually done. Never convert a partial into a demonstrated result to improve the
+headline. Do not invent an outcome probability. When the user explicitly asks
+to see the evidence counts, explain their scope once and link the detailed record.
+
+Full consultations normally include a PDF and editable text. Explicit chat-only,
+no-file or format requests take precedence. A supplied bullet rewrite stays in
+chat and does not create a report, workspace or independent review workflow.
+
 ## Readability before brevity
 
 Remove words that do no work, not words that make the explanation understandable.
@@ -389,3 +416,158 @@ workspace `report.pdf`, inspect every page beside the reference, and run
 requires correction, re-render and re-review before delivery. A readable PDF or
 good writing alone does not meet the format requirement. `deliver.py` preserves
 the reviewed PDF; do not replace it at handoff.
+
+## Client consultation delivery
+
+**Formatting is an acceptance requirement for both the CV and the report.**
+Read `references/layout-review.md` before rendering. Use the latest user-selected
+reference for each document separately: matching wording, headings or page count
+does not establish a style match. First record its actual fonts, sizes, margins,
+rules, spacing, alignment and hierarchy in `layout-requirements.yaml` (CV) and
+`report-layout-requirements.yaml` (report). Preserve the reference's visual system;
+do not substitute a default renderer, shrink text or pad content to mimic its
+page count. Author `report.pdf` in the workspace before delivery. Inspect every
+final page beside its reference and run `check_layout.py` for the CV and
+`check_layout.py --report` for the report. Any unapproved difference requires
+repair, re-export and a fresh review until all requirements pass. If blocked,
+state the actual unmet requirement; never label that output format-compliant.
+Deliver the reviewed Word export as the CV PDF and preserve the reviewed report
+PDF byte-for-byte. A later edit or export invalidates the review. The eight visual
+checks and measured format checks are separate from content judges.
+
+**Word must contain formatted content, not Markdown or LaTeX source.** Keep
+profile/letter prose fields plain; use Word styles, runs, lists and hyperlinks
+for formatting. Before rendering, rewrite simple inline notation faithfully:
+`$8 \times \text{H200}$` becomes `8 × H200`, preserving the hardware, counts and
+claims. Read `references/word-resume-layout.md` for the repair procedure. On
+`DOCX_MARKUP`, repair the tailored copy, render again and inspect the final Word
+and its PDF export; never waive the finding or deliver an older export. Check
+all Word deliverables, including letters, statements, tables and page furniture.
+
+A report reference also controls how information is organized. Preserve its
+tables, numbered sections, comparable job fields, preparation lists and linked
+directory; matching only fonts and colors is insufficient. Record these blocks
+and their columns/labels under the layout requirements' `content_order`, then
+check that they appear in both Markdown and the rendered PDF. Do not flatten
+the reference's lists and tables into continuous prose during a rewrite.
+
+For a one-page CV, use the page fully: do not accept a largely empty lower third.
+Expand existing, supported content into clear groups and adjust paragraph spacing
+while preserving the selected font sizes and a natural reading rhythm. If the
+user asks to fill the page, record a `minimum_content_bottom_pt` requirement and
+verify it alongside one-page pagination; a large blank bottom requires rework.
+Do not add invented experience, repeated claims or empty paragraphs to fill space.
+
+Delivery uses two child folders, whose names `deliver.py` writes in Chinese for every client: `简历/` (application documents) for `简历.docx`, `简历.pdf` and other requested application documents; `报告/` (report) for `求职建议报告.pdf` (the advice report) and its editable text. Filenames never include the employer, role or internal workspace slug.
+
+In `discover`, `assess` and `interview`, an existing CV is source material, so
+delivery copies only the report by default. Use `--include-applications` only
+when the user explicitly asks to receive the existing application documents too.
+Do not regenerate or deliver a source CV merely because it is in the workspace.
+
+Author `report.md` for **every full consultation**, respecting explicit chat-only/no-file requests and answering the client's actual
+question in their language: conclusion, supporting evidence, relevant career
+constraints or facts still to confirm, and practical next steps. Tool defects,
+adapter errors, tests, developer diagnostics and internal review logs belong only
+in the private workspace, never in this client report. Do not copy an internal
+`completion.md` into it. A narrow text edit remains in chat; it does not initiate report delivery.
+
+Before drafting, read `references/report-writing.md`. After drafting, perform its
+reader-focused revision and rendered-report review: concrete recommendations,
+plain explanations, usable next steps and preserved evidence. This applies to
+all four modes; a clean vocabulary lint alone does not establish readability.
+
+Client reports must not narrate the test harness or fixture provenance. Even
+when testing the skill with a fictional profile, keep statements such as
+“ran 11 questions on the fixed fictional profile” and which test stages ran in
+the private test record. Write the client report directly as role choices, evidence gaps,
+resume advice and next actions. Do not describe generated fixture answers as a
+real user's interview performance. `deliver.py` rejects fixture-profile markers
+only (in Chinese reports, markers such as “固定虚构履历”); practice scope for a
+real client (“this round covered only the technical interview”, “a mock is not a
+real interview”) is normal advice. Still read the whole report for other
+process narration.
+
+The job directory and its original posting links already serve as the report's
+source list. Do not append a separate “Sources and scope” section or reproduce the
+internal source audit, ownership chain, annual-report citations or explanations
+of unstated restrictions. Keep that evidence private. Put only facts that change
+the client's decision or next action beside the relevant job, stated once.
+Group the directory's rows by company, with separate company, position, location
+and original-link columns. Prefer an unnumbered company-grouped directory; use
+company, full job title and original link to identify each role. Keep distinct
+roles and posting links within each group.
+Report review must reconcile priority order, key-job selection and job
+identities across sections; keep any displayed job numbers stable, and verify
+that each role remains visibly attached to
+its company. Use clear merged company cells in PDF or repeat names; repeat names
+in Markdown tables. Follow the concrete checks in `references/report-writing.md`
+and record them in the report layout review before delivery. Read adjacent
+sections as one client workflow: distinguish application tasks from interview
+practice, state the target role/version, and remove duplicated preparation.
+Name the CV or specific experience directly instead of narrating an internal
+assessment of vague “materials”; give the next action while preserving real gaps.
+
+**Full-report reader review is a separate required step before delivery.**
+After drafting, stop editing individual sections and read the entire report in
+order as the client would, including every table, summary and directory. Assess
+reasonableness, logical flow and readability using `references/report-writing.md`.
+Fix the findings, then reread the whole revised report. After rendering, read the
+final PDF from first page to last alongside its visual checks; a later content or
+ordering change reopens this review. Record the reviewed revision, concrete
+findings/corrections and remaining issues privately. Do not deliver while a
+known issue makes a recommendation unsupported, the sequence contradictory or
+an action unclear. Spot checks, a clean lint and layout hashes cannot substitute
+for this full read or justify claiming it happened.
+
+After authoring `report.md`, run `lint_no_prediction.py --workspace <ws>`.
+Delivery also refuses prediction language in the report.
+
+Run `deliver.py` as the last step. It requires `report.md` and a verified report
+PDF and copies only the report and requested CV/application documents into
+`~/Downloads/<workspace-name>/`. For multiple workspaces serving one consultation,
+pass the **same `--to <consultation-folder>`** each time so the report and CV stay
+together. Quote that folder and its client files in the reply. The workspace and
+all audit evidence remain in their original location.
+
+PDF verification checks both recovered text and actual painted glyph IDs. A
+missing or refused PDF means incomplete delivery (exit 2); repair the cause and
+rerun before declaring completion. `--no-pdf` is only for an explicit user format
+exception. A cover letter is provided on demand; it is not the domestic default.
+Do not automatically start a mock interview or another mode.
+
+## How this skill writes to the user
+
+The CV and the letter have a gate for machine-sounding prose (`AI_VOCABULARY`,
+`EM_DASH_DENSITY`, `NOT_JUST_PIVOT`, `TRICOLON_DENSITY` — `scripts/prose_tells.py`).
+The documents this skill writes to the *reader* — `report.md`, `shortlist.md`,
+`fit-assessment.md`, the completion message — have no mechanical style gate:
+measured across all eight of them from the iteration-2 runs, the vocabulary check found
+nothing and every structural finding was a false positive on a table or a list.
+So the rules below are rules, not a check, and the artifact is the only place to
+verify them.
+
+Use `references/report-writing.md` for the concrete revision method, examples
+and final reader review. It covers report structure and readability as well as
+formulaic phrasing; it is not a blacklist or an AI-authorship detector.
+
+- **Address the reader as "you", and say who said what.** "You told me you are on
+  a search-year permit with eleven months left" is auditable; "the candidate has
+  limited runway" is a summary of them written for someone else.
+- **Every claim carries its evidence reference or its source line.** A row without
+  one is an opinion, and the reader cannot object to one line of it.
+- **Say the uncomfortable thing in the first sentence of its paragraph**, not
+  after two of setup. "The advert says nothing either way about sponsorship" —
+  then the consequence.
+- **Name what was not done.** "No page was fetched live and no site was logged
+  into for this assessment" costs one line and is the difference between a report
+  and a claim.
+- **No throat-clearing and no summary of the summary.** Do not open with "Great
+  question", do not close by restating the table above it in prose, and do not
+  offer to help further — the hand-off section already asks one specific question.
+- **Plain words for hard things.** `recognised sponsor`, `kennismigrant` and
+  `knockout` are terms the reader will meet in the real process, so use them and
+  gloss them once. Everything else gets the ordinary word.
+- **A tell you would flag in the candidate's letter is a tell in yours.** The
+  vocabulary list in `prose_tells.py` applies to this skill's own prose too; it
+  simply has no gate behind it here.

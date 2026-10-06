@@ -6,6 +6,7 @@ Nothing errors, nothing is logged, and the user finds out the next time they nee
 the file that is no longer there.
 """
 import os
+from skill_docs import read_guidance
 import pathlib
 import subprocess
 import sys
@@ -164,8 +165,8 @@ def test_it_runs_as_a_script(tmp_path):
 # ---- the skill has to tell the run to use it ------------------------------
 
 def test_both_layers_tell_the_run_to_save_through_the_script():
-    for f in ("SKILL.md", "modes/apply.md"):
-        t = (REPO / f).read_text(encoding="utf-8")
+    for f in ("references/portability.md", "modes/apply.md"):
+        t = read_guidance(f)
         assert "save_profile.py" in t, f
         assert "one CV per language" in t, f
 
@@ -173,8 +174,8 @@ def test_both_layers_tell_the_run_to_save_through_the_script():
 def test_the_read_side_rule_is_stated_too():
     """Saving safely is half of it. A Chinese CV built from the English master
     throws away the file the user wrote for that purpose."""
-    for f in ("SKILL.md", "modes/apply.md"):
-        t = (REPO / f).read_text(encoding="utf-8")
+    for f in ("references/portability.md", "modes/apply.md"):
+        t = read_guidance(f)
         assert "tailor from the master whose language matches" in " ".join(t.split()), f
 
 

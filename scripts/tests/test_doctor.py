@@ -6,6 +6,7 @@ was at risk — while `tectonic` was installed and every apply run produced its
 PDF. `evals/run.md` records the correction as "check for the CAPABILITY rather
 than for one binary's name", and these tests hold the script to it.
 """
+from skill_docs import read_guidance, skill_context
 import pathlib
 import subprocess
 import sys
@@ -181,7 +182,7 @@ def test_it_runs_as_a_script():
 
 
 def test_the_skill_tells_a_new_user_to_run_it():
-    t = (REPO / "SKILL.md").read_text(encoding="utf-8")
+    t = read_guidance("references/agent-setup.md")
     assert "scripts/doctor.py" in t
     assert "--install" in t
     assert "references/agent-setup.md" in t
@@ -260,7 +261,7 @@ def test_a_complete_machine_leaves_an_empty_list_not_a_missing_field(tmp_path, m
 def test_the_skill_says_the_check_runs_automatically():
     """Documenting a hook that does not exist is how NEXT_MODES happened. This
     one does exist, and the claim is pinned to the code that implements it."""
-    t = " ".join((REPO / "SKILL.md").read_text(encoding="utf-8").split())
+    t = " ".join(read_guidance("references/agent-setup.md").split())
     assert "runs on its own, every mode entry" in t
     assert "NOTICE_MISSING_CAPABILITIES" in t
     src = (REPO / "scripts" / "enter_mode.py").read_text(encoding="utf-8")

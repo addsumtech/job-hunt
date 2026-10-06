@@ -46,6 +46,18 @@ def test_a_clean_run_writes_exactly_one_pass_receipt(tmp_path, monkeypatch):
     assert record["verdict"] == "pass"
     assert "mock/assessment-2.md" in record["input_hashes"]
     assert "mock/transcript-2.md" in record["input_hashes"]
+    assert record["input_hashes"]["mock/answer-guide.md"] == journal.sha256_file(
+        ws / "mock/answer-guide.md")
+
+
+def test_receipt_binds_optional_assessment_used_by_answer_guidance(tmp_path, monkeypatch):
+    ws = F.build(tmp_path)
+    source = ws / "fit-assessment.yaml"
+    source.write_text("requirements: []\n", encoding="utf-8")
+    monkeypatch.setattr(check_mock, "_default_scanner", lambda: F.no_vocab)
+    check_mock.main(argv(ws))
+    record = journal.read_receipts(ws, "check_mock")[-1]
+    assert record["input_hashes"]["fit-assessment.yaml"] == journal.sha256_file(source)
 
 
 def test_the_receipt_is_stamped_with_the_mode_that_was_entered(tmp_path, monkeypatch):

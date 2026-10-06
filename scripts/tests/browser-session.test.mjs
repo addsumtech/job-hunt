@@ -43,11 +43,55 @@ test('successive clients share one connection and cannot access each others tabs
     assert.ok(commands.some(c=>c.method==='Target.closeTarget'&&c.params.targetId===ta));
     assert.ok(!commands.some(c=>c.method==='Target.closeTarget'&&c.params.targetId===tb));
     b.close();await tick();
-    const c=client();await call(c,1,'Target.createTarget',{url:'about:blank'});c.close();await tick();
+    const c=client();
+    const tc=(await call(c,1,'Target.createTarget',{url:'https://example.test/verify'})).result.targetId;
+    const sc=(await call(c,2,'Target.attachToTarget',{targetId:tc,flatten:true})).result.sessionId;
+    assert.ok((await call(c,3,'JobHunt.handoffTarget',{targetId:'existing-user-tab'})).error);
+    assert.ok(!(await call(c,4,'JobHunt.handoffTarget',{targetId:tc})).error);
+    assert.ok(commands.some(x=>x.method==='Target.activateTarget'&&x.params.targetId===tc));
+    assert.ok(commands.some(x=>x.method==='Target.detachFromTarget'&&x.params.sessionId===sc));
+    assert.ok((await call(c,5,'Runtime.evaluate',{expression:'1'},sc)).error);
+    assert.ok((await call(c,6,'Target.closeTarget',{targetId:tc})).error);
+    c.close();await tick();
     assert.equal(connections,1);
     assert.equal(session.status().owned_tabs,0);
+    await session.close();
+    assert.ok(!commands.some(x=>x.method==='Target.closeTarget'&&x.params.targetId===tc));
+    assert.ok(!commands.some(x=>x.method==='Target.closeTarget'&&x.params.targetId==='existing-user-tab'));
     upstream.close();await tick();
     assert.equal(connections,1);
+  } finally {await session.close();}
+});
+
+test('a late attach response cannot regain access after user handoff', async()=>{
+  let upstream, downstream, attach;
+  const commands=[];
+  class Socket extends EventEmitter {
+    constructor(){super();upstream=this;this.readyState=1;queueMicrotask(()=>this.emit('open'));}
+    send(raw){const c=JSON.parse(raw);commands.push(c);
+      if(c.method==='Target.attachToTarget'){attach=c;return;}
+      queueMicrotask(()=>this.emit('message',JSON.stringify({id:c.id,result:
+        c.method==='Target.createTarget'?{targetId:'owned'}:{success:true}})));
+    }
+    close(){this.readyState=3;this.emit('close');}
+  }
+  class Server extends EventEmitter {constructor(){super();downstream=this;}close(){}}
+  const session=await createSession({endpoint:'ws://fixture',WebSocket:Socket,WebSocketServer:Server});
+  const client=new EventEmitter();client.readyState=1;client.received=[];
+  client.send=raw=>client.received.push(JSON.parse(raw));
+  client.close=()=>{client.readyState=3;client.emit('close');};
+  downstream.emit('connection',client);
+  const call=(id,method,params={},sessionId)=>client.emit('message',JSON.stringify({id,method,params,sessionId}));
+  try {
+    call(1,'Target.createTarget',{url:'about:blank'});await tick();
+    call(2,'Target.attachToTarget',{targetId:'owned',flatten:true});
+    call(3,'JobHunt.handoffTarget',{targetId:'owned'});await tick();
+    upstream.emit('message',JSON.stringify({id:attach.id,result:{sessionId:'late-session'}}));await tick();
+    call(4,'Runtime.evaluate',{expression:'document.body.innerText'},'late-session');await tick();
+    assert.ok(client.received.find(r=>r.id===4).error);
+    assert.ok(commands.some(c=>c.method==='Target.detachFromTarget'&&c.params.sessionId==='late-session'));
+    client.close();await session.close();
+    assert.ok(!commands.some(c=>c.method==='Target.closeTarget'));
   } finally {await session.close();}
 });
 

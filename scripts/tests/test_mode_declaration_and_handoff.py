@@ -22,6 +22,7 @@ RAISED BY THE USER after watching a real apply run, 2026-09-02.
    a mode with no idea the other three exist. Offering is not chaining: the
    distinction is whether a person chose.
 """
+from skill_docs import read_guidance, skill_context
 import json
 import pathlib
 import subprocess
@@ -132,7 +133,7 @@ def test_apply_mode_ends_by_offering_the_next_modes(tmp_path):
 def test_the_handoff_rule_is_written_down_where_the_model_reads_it():
     """A behaviour only a gate mentions is a behaviour the model learns after
     it has already finished."""
-    skill = (REPO / "SKILL.md").read_text(encoding="utf-8")
+    skill = read_guidance("references/workflow-checklist.md")
     assert "## Hand-off" in skill, "SKILL.md needs the hand-off rule"
     block = skill.split("## Hand-off")[1].split("\n## ")[0].lower()
     assert "offer" in block and "never" in block

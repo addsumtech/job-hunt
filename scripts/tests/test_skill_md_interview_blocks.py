@@ -1,3 +1,4 @@
+from skill_docs import read_guidance, skill_context
 import pathlib
 import re
 
@@ -42,7 +43,7 @@ REQUIRED = [
 
 
 def _normalised() -> str:
-    return " ".join(SKILL.read_text(encoding="utf-8").split())
+    return " ".join(read_guidance("modes/interview.md").split())
 
 
 def _section() -> str:
@@ -53,7 +54,7 @@ def _section() -> str:
     would make the no-score assertion below fail for a reason that has nothing to do
     with this section.
     """
-    text = SKILL.read_text(encoding="utf-8")
+    text = read_guidance("modes/interview.md")
     assert HEADING in text, "SKILL.md has no anti-coaching section"
     body = text.split(HEADING, 1)[1]
     following = re.search(r"^## ", body, re.M)
@@ -61,7 +62,7 @@ def _section() -> str:
 
 
 def test_the_section_exists_exactly_once():
-    text = SKILL.read_text(encoding="utf-8")
+    text = read_guidance("modes/interview.md")
     assert text.count(HEADING) == 1
 
 

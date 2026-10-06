@@ -62,10 +62,24 @@ def test_default_destination_is_a_consultation_folder(tmp_path, monkeypatch):
     assert (tmp_path / "Downloads" / ws.name / "报告" / "求职建议报告.md").is_file()
 
 
+def test_apply_delivers_its_readiness_brief_without_private_review_records(tmp_path):
+    ws = build(tmp_path)
+    deliver.journal.append(ws, {"action": "mode_entry", "mode": "apply"})
+    brief = "# 面试准备\n\n说明你本人负责的需求整理和验收工作。\n"
+    (ws / "interview-brief.md").write_text(brief, encoding="utf-8")
+    (ws / "claims.yaml").write_text("private provenance records")
+    dest = tmp_path / "consultation"
+    assert run(ws, dest, "--no-pdf") == 0
+    assert (dest / "面试准备/面试准备.md").read_text(encoding="utf-8") == brief
+    assert not list(dest.rglob("claims*"))
+    assert not list(dest.rglob("assessment*"))
+
+
 @pytest.mark.parametrize("mode", ["assess", "interview"])
 def test_read_only_consultations_do_not_redeliver_or_render_the_source_cv(tmp_path, mode):
     ws = build(tmp_path, "# Career report\n\nDiscuss the documented experience.\n")
     (ws / "cv.md").write_text("# Source CV\n\nAn existing source document.", encoding="utf-8")
+    (ws / "interview-brief.md").write_text("An internal preparation source", encoding="utf-8")
     deliver.journal.append(ws, {"action": "mode_entry", "mode": mode})
     dest = tmp_path / "consultation"
     assert run(ws, dest) == 0

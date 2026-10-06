@@ -142,3 +142,30 @@ host where it fails has a Python or dependency problem, not a skill problem.
 ### Optional audit of this machine
 
 The test suite checks supported copy and symlink installations in temporary directories. To audit the actual installed skill against the current checkout, run `JOBHUNT_CHECK_INSTALL=1 python -m pytest scripts/tests/test_install.py -q`. Only a machine that migrated from `job-application` should additionally set `JOBHUNT_CHECK_MIGRATION_ARCHIVE=1`; a fresh installation has no legacy archive to preserve. These checks never create or change the user's runtime skill directories.
+
+## Immutability + workspace
+
+Resolve the store with `scripts/paths.py` first. Paths below illustrate the default;
+when `JOBHUNT_PROFILES_ROOT` is set, use `paths.PROFILES_ROOT` for profile and
+resume lookups and report the actual saved paths. A missing store is normal on
+first use; `save_profile.py` creates it when a profile is saved.
+
+**Resume an in-progress application first.** Before anything else, check `~/.claude/job-profiles/*/applications/` for a workspace that matches this target (by company/role) and already contains a `posting.yaml` and/or `tailored-profile.yaml`. If one exists, a prior run was interrupted — show the user what's already there and offer to **resume from where it stopped** (e.g. posting already extracted → jump to gap analysis or tailoring) rather than rebuilding from Step 0. Only start fresh if they prefer it or no matching workspace exists.
+
+**Check for existing profiles next.** Before building or parsing, check `~/.claude/job-profiles/` for any saved master profiles. If one or more exist, offer to reuse one (retargeting it for this new application) instead of rebuilding from scratch. A returning user can confirm a name and you jump straight to Step 2. New users with no saved profiles proceed to build/parse below.
+
+**Reusing a master carries their experience forward, never their target.** `meta.target_market`, `meta.language` and any `contact.personal` in that file describe the application it was last built for. Re-ask the region and language (Step 0, question 2) before tailoring, and re-confirm any personal field the new market's cluster would treat differently — the master is the source of truth about the candidate, not about where they are applying.
+
+**Offer to save the master** to `~/.claude/job-profiles/<name>/profile.yaml` so it's reusable across applications. This master profile is the source of truth and is **NEVER mutated by tailoring** — tailoring always works on a copy (Step 4).
+
+**One candidate has one CV per language, and saving a new one never overwrites another language's.** A Chinese CV is a different document from an English one — different conventions, length rules and personal-data expectations — not a translation of it, so a user who supplies both has two masters: `profile.yaml` and `profile.<lang>.yaml` beside it. **Save through `python3 scripts/save_profile.py --name <name> --profile <file>`, never by writing the path yourself.** It resolves the slot by reading each existing master's own `meta.language` rather than trusting a filename, so a second English CV goes back into the legacy `profile.yaml` instead of becoming a duplicate; it backs up what it replaces; and it refuses a profile with no `meta.language`, because the unsuffixed slot is where a legacy English master usually lives and dropping an untagged CV there is the overwrite this is here to prevent. On the read side the same rule runs backwards: tailor from the master whose language matches the CV language chosen in Step 0, and say which file you took as the base. Reaching for the English master to build a Chinese CV throws away the one the user wrote for exactly that purpose.
+
+**Application workspace.** All per-application files live under:
+
+```
+~/.claude/job-profiles/<name>/applications/<company>-<role>-<YYYY-MM-DD>/
+```
+
+This workspace contains: `tailored-profile.yaml`, `letter.yaml` (if any), `posting.yaml`, and the rendered outputs (`cv.md`, `cv.docx`, `cv.pdf`, `letter.*`). The master profile at `~/.claude/job-profiles/<name>/profile.yaml` is **NEVER** mutated.
+
+- Write the tailored copy to `<workspace>/tailored-profile.yaml`. **Never edit the master.**

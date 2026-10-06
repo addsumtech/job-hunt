@@ -5,6 +5,7 @@ is checked here the only way that means anything: by running it with no agent in
 the loop at all. The rest of the file holds the prose to naming a portable form
 wherever it names a Claude Code tool.
 """
+from skill_docs import read_guidance, skill_context
 import ast
 import os
 import pathlib
@@ -128,7 +129,7 @@ def test_both_layers_say_the_judge_dispatcher_is_replaceable():
     on a host with no subagents would otherwise hit "dispatch subagents" with no
     stated alternative."""
     for f in ("SKILL.md", "modes/apply.md"):
-        t = " ".join((ROOT / f).read_text(encoding="utf-8").split())
+        t = " ".join((skill_context() if f == "SKILL.md" else read_guidance(f)).split())
         assert "The mechanism is replaceable; the isolation is not" in t, f
         assert "codex exec" in t, f
 
@@ -137,14 +138,14 @@ def test_the_honest_degraded_case_is_stated_rather_than_hidden():
     """A judge sharing the author's context is not a second opinion, and no gate
     can see that it did. Reporting three PASSes as an arm's-length review would
     be the failure the whole loop exists to prevent."""
-    t = " ".join((ROOT / "SKILL.md").read_text(encoding="utf-8").split())
+    t = " ".join(skill_context().split())
     assert "independent review is incomplete" in t
     assert "cannot produce judge verdicts" in t
     assert "run the loop anyway" not in t
 
 
 def test_the_read_when_list_points_at_it():
-    t = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+    t = skill_context()
     assert "references/portability.md" in t
     assert "not Claude Code" in t
 

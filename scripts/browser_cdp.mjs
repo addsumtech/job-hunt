@@ -254,7 +254,7 @@ export async function capture({endpoint, url, settleMs = 1500, timeoutMs = 15000
   if (!['ws:', 'wss:'].includes(socketUrl.protocol) || !socketUrl.pathname.startsWith('/devtools/browser')) throw Error('Use a browser-level CDP WebSocket endpoint');
   if (!WebSocketImpl) throw Error('Node 22+ is required for the built-in CDP reader');
   const ws = new WebSocketImpl(endpoint);
-  let seq = 0, sessionId, targetId, frameId;
+  let seq = 0, sessionId, targetId, frameId, handedOff = false;
   const pending = new Map(), responses = [], trace = [];
   function send(method, params = {}, session = sessionId, deadline = timeoutMs) {
     return new Promise((ok, fail) => {
@@ -442,10 +442,24 @@ export async function capture({endpoint, url, settleMs = 1500, timeoutMs = 15000
     const response = responses.filter(x => x.frameId === frameId && x.response.url === snapshot.url).at(-1);
     snapshot.http_status = response?.response.status ?? null;
     snapshot.capture = {backend:'builtin-cdp', targetId, trace};
+    if (refused || [401,403,429].includes(snapshot.http_status)) {
+      // Keep the exact page and its login/challenge state, not a reopened URL.
+      // The session broker releases ownership before activating the tab.
+      handedOff = true;
+      try {
+        await send('JobHunt.handoffTarget', {targetId}, null);
+      } catch (error) {
+        if (!/(?:wasn't found|method not found|unknown method|-32601)/i.test(error.message)) throw error;
+        // Direct browser-level CDP has no cleanup broker; detach is enough.
+        await send('Target.activateTarget', {targetId}, null);
+        await send('Target.detachFromTarget', {sessionId}, null);
+      }
+      snapshot.handoff = {required:true,targetId,kept_open:true,reason:'user_action_required'};
+    }
     return snapshot;
   } finally {
     try {
-      if (targetId && ws.readyState === 1) {
+      if (targetId && !handedOff && ws.readyState === 1) {
         const result = await send('Target.closeTarget', {targetId}, null, 3000);
         if (!result.success) throw Error('CDP did not confirm closing the task-owned tab');
       }

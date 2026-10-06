@@ -50,7 +50,31 @@ def render_markdown(d):
 
 def render_docx(d, out_path):
     from docx import Document
+    from docx.shared import Mm, Pt, RGBColor
+    from docx.oxml.ns import qn
     doc = Document()
+    meta = d.get("meta", {}) or {}
+    section = doc.sections[0]
+    section.page_width, section.page_height = (
+        (Mm(215.9), Mm(279.4)) if render_cv.paper_for(meta) == "letterpaper"
+        else (Mm(210), Mm(297)))
+    section.top_margin = section.bottom_margin = Mm(25)
+    section.left_margin = section.right_margin = Mm(25)
+    style = doc.styles["Normal"]
+    style.font.name = meta.get("main_font") or "Times New Roman"
+    style.font.size = Pt(11)
+    style.font.color.rgb = RGBColor(0, 0, 0)
+    fonts = style.element.get_or_add_rPr().rFonts
+    for attr in ("asciiTheme", "hAnsiTheme", "eastAsiaTheme", "cstheme"):
+        fonts.attrib.pop(qn("w:" + attr), None)
+    east_asia = meta.get("cjk_font") or {
+        "zh": "SimSun", "ja": "Yu Mincho", "ko": "Malgun Gothic"
+    }.get(meta.get("language", "en"))
+    if east_asia:
+        fonts.set(qn("w:eastAsia"), east_asia)
+    style.paragraph_format.space_before = Pt(0)
+    style.paragraph_format.space_after = Pt(8)
+    style.paragraph_format.line_spacing = 1.15
     s = d.get("sender", {}) or {}
     r = d.get("recipient", {}) or {}
     for line in [s.get("name"), s.get("email"), s.get("location")]:

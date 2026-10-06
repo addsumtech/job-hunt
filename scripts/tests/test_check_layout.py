@@ -12,6 +12,35 @@ import check_apply
 import check_layout
 import journal
 import deliver
+import render_report
+import layout_requirements
+
+
+@pytest.mark.parametrize("text,needle,expected", [
+    ("参与访谈6 位一线客服。", "访谈6位一线客服", (2, 11)),
+    ("使用 SQL 汇总", "SQL汇总", (3, 9)),
+    ("访谈60位一线客服", "访谈6位一线客服", None),
+    ("not approved", "notapproved", None),
+    ("6位客服不负责验收", "6位客服负责验收", None),
+])
+def test_font_samples_allow_cjk_export_spacing_without_changing_words(text, needle, expected):
+    assert layout_requirements._sample_range(text, needle) == expected
+
+
+def test_cjk_spaced_sample_still_measures_the_final_font_span(tmp_path):
+    doc = pymupdf.open()
+    page = doc.new_page()
+    page.insert_text((72, 72), "访谈6 位一线客服", fontname="china-s", fontsize=11)
+    spans = page.get_text("dict")["blocks"][0]["lines"][0]["spans"]
+    fonts = list({span["font"] for span in spans})
+    doc.save(tmp_path / "cv.pdf")
+    doc.close()
+    req = {"page_size_pt": [595, 842], "text_bounds_pt": [60, 40, 535, 790],
+           "text_samples": [{"role": role, "text": "访谈6位一线客服", "size_pt": 11,
+                             "fonts": fonts} for role in ("name", "heading", "body")]}
+    assert layout_requirements.measure(tmp_path, req) == []
+    req["text_samples"][-1]["fonts"] = ["Courier"]
+    assert any("font" in item for item in layout_requirements.measure(tmp_path, req))
 
 
 def reviewed_workspace(tmp_path):
@@ -188,11 +217,23 @@ def reviewed_report(tmp_path):
     (ws / "report-layout-requirements.yaml").write_text(yaml.safe_dump(requirements))
     (ws / "report.md").write_text("# Test Candidate\n")
     (ws / "report.pdf").write_bytes((ws / "cv.pdf").read_bytes())
+    bind_test_render(ws)
     review["requirements_sha256"] = journal.sha256_file(ws / "report-layout-requirements.yaml")
     review["source_sha256"] = journal.sha256_file(ws / "report.md")
     review["artifacts"] = {"report.pdf": review["artifacts"]["cv.pdf"]}
     (ws / "report-layout-review.yaml").write_text(yaml.safe_dump(review))
     return ws
+
+
+def bind_test_render(ws):
+    """Run a fixture renderer through the production source/PDF binding."""
+    contents = (ws / "report.pdf").read_bytes()
+
+    def renderer(source, target):
+        target.write_bytes(contents)
+        return True, ""
+
+    assert render_report.render_with(ws / "report.md", ws / "report.pdf", renderer) == (True, "")
 
 
 def test_full_page_requirement_rejects_large_blank_bottom(tmp_path):
@@ -327,6 +368,7 @@ def reviewed_report_with(tmp_path, markdown, lines):
     doc.save(ws / "new.pdf")
     doc.close()
     (ws / "new.pdf").replace(ws / "report.pdf")
+    bind_test_render(ws)
     review = yaml.safe_load((ws / "report-layout-review.yaml").read_text())
     review["source_sha256"] = journal.sha256_file(ws / "report.md")
     review["artifacts"]["report.pdf"]["sha256"] = journal.sha256_file(ws / "report.pdf")
@@ -418,7 +460,6 @@ def test_an_honest_table_binds():
     ("| 1 | 投行分析师 |", "| 1 | 债券分析师 |"),  # priorities swapped...
     ("| 3 | 并购分析师 | 25-40K |", "| 3 | 并购分析师 | 30-50K |"),  # value copied from another row
 ])
-@pytest.mark.xfail(strict=True, reason="table cells are checked for presence, not placement")
 def test_a_table_edit_using_values_from_other_rows_is_caught(edit):
     changed = TABLE.replace(*edit)
     if edit[1] == "| 1 | 债券分析师 |":
@@ -461,10 +502,7 @@ CELLS_PDF = "公司 签证 结论\nANWB 否 暂不投递\n联影 是 建议投�
 CELLS_ROWS = [[["公司", "签证", "结论"], ["ANWB", "否", "暂不投递"], ["联影", "是", "建议投递"]]]
 
 
-# Known gap, pinned so that strengthening the check has to update it: a table
-# cell is only required to be present somewhere, because wrapped and CJK
-# columns leave no reliable reading of where a cell stands.
-@pytest.mark.xfail(strict=True, reason="table cells are checked for presence, not placement")
+# Whole cells must match their own row, including short verdicts.
 def test_a_verdict_cell_rewritten_inside_the_old_text_is_caught():
     assert binding(CELLS.replace("| ANWB | 否 | 暂不投递 |", "| ANWB | 否 | 投递 |"), CELLS_PDF, tables=CELLS_ROWS)
 
@@ -507,4 +545,3 @@ def test_a_sentence_deleted_next_to_a_page_break_is_caught():
     page1 = "求职建议报告\n荷兰岗位的月薪区间需要自行核对。按荷兰法定最低假期工资比例折算，月基本工资约 3086 至 3858 欧元。\n第 1 页\n"
     page2 = "求职建议报告\n请在面试前确认合同细节。\n第 2 页\n"
     assert binding(markdown, page1, page2)
-

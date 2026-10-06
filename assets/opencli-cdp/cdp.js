@@ -14,12 +14,28 @@ import { join } from 'node:path';
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { buildEvaluateExpression } from './utils.js';
-import { generateStealthJs } from './stealth.js';
 import { waitForDomStableJs } from './dom-helpers.js';
 import { isRecord, saveBase64ToFile } from '../utils.js';
 import { getAllElectronApps } from '../electron-apps.js';
 import { CDPBasePage } from './base-page.js';
 const CDP_SEND_TIMEOUT = 30_000;
+// Inspect only rendered text in this client's own tab. A normal navigation
+// link saying "Login" is not a login wall and must not retain every page.
+export const USER_ACTION_EXPRESSION = `(() => {
+    if (!document.body) return false;
+    const parts = [], walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let node; (node = walker.nextNode());) {
+        const p = node.parentElement;
+        if (!p || p.closest('script,style,template,noscript,[hidden],[inert]')) continue;
+        const style = getComputedStyle(p), range = document.createRange();
+        if (style.visibility === 'hidden' || style.visibility === 'collapse' || style.display === 'none') continue;
+        range.selectNodeContents(node);
+        if (range.getClientRects().length) parts.push(node.textContent);
+    }
+    const text = parts.join(' ').replace(/\\s+/g, ' ');
+    return /(?:enter|complete|solve) (?:the |this |a )?captcha|(?:verify|verifying|confirm) (?:that )?you are (?:a )?human|access denied|too many requests|please (?:sign|log) in|(?:sign|log) in (?:required|to continue|to view)|(?:请输入|请完成|请填写).{0,12}验证码|验证您是人类|访问受限|访问过于频繁|请先登[录入]|为了更好的访问体验.{0,4}请进行验证|(?:正在|请|需要).{0,8}(?:真人验证|人机验证)|验证成功.{0,4}正在等待|verification successful.{0,4}waiting for|checking your browser|認証が必要|ログインが必要|로그인이 필요|접근이 제한|人机验证|真人验证|请按住滑块|unusual traffic|需要进行其他验证|(?:您|你)所在的(?:用户组|用戶組).{0,12}(?:游客|遊客).{0,12}(?:无法|無法|不能)(?:进行|進行)此操作/i.test(text)
+        || (/(^|\\.)zhipin\\.com$/.test(location.hostname) && location.pathname === '/web/passport/zp/security.html');
+})()`;
 // Memory guard for in-process capture. The 4k cap we used to apply everywhere
 // silently truncated JSON so `JSON.parse` failed or gave partial objects — the
 // primary agent-facing bug. Now we keep the full body up to a large cap and
@@ -84,7 +100,8 @@ export class CDPBridge {
                         this._sessionId = attached.sessionId;
                     }
                     await this.send('Page.enable');
-                    await this.send('Page.addScriptToEvaluateOnNewDocument', { source: generateStealthJs() });
+                    // Use the daily browser as it is. Job-hunt does not alter
+                    // browser fingerprints or inject anti-detection scripts.
                 }
                 catch (err) {
                     await this.close();
@@ -130,8 +147,27 @@ export class CDPBridge {
     }
     async close() {
         if (this._targetId && this._ws?.readyState === WebSocket.OPEN) {
-            try { await this.send('Target.closeTarget', { targetId: this._targetId }, 3000, null); }
-            catch (err) { console.error('[cdp] Could not close task tab:', err.message); }
+            let handedOff = false;
+            try {
+                if (this._sessionId) {
+                    const state = await this.send('Runtime.evaluate', { expression: USER_ACTION_EXPRESSION, returnByValue: true }, 3000);
+                    if (state.result?.value === true) {
+                        handedOff = true;
+                        try {
+                            await this.send('JobHunt.handoffTarget', { targetId: this._targetId }, 3000, null);
+                        } catch (err) {
+                            if (!/(?:wasn't found|method not found|unknown method|-32601)/i.test(err.message)) throw err;
+                            await this.send('Target.activateTarget', { targetId: this._targetId }, 3000, null);
+                            await this.send('Target.detachFromTarget', { sessionId: this._sessionId }, 3000, null);
+                        }
+                        console.error('[cdp] USER_ACTION_REQUIRED: login or verification tab kept open in the daily browser:', this._targetId);
+                    }
+                }
+            } catch (err) { console.error('[cdp] Could not inspect or hand off task tab:', err.message); }
+            if (!handedOff) {
+                try { await this.send('Target.closeTarget', { targetId: this._targetId }, 3000, null); }
+                catch (err) { console.error('[cdp] Could not close task tab:', err.message); }
+            }
         }
         this._targetId = null;
         this._sessionId = null;

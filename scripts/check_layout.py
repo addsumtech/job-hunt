@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import json
 import pathlib
 import sys
 
@@ -95,6 +96,19 @@ def inspect(ws: pathlib.Path, report=False):
     artifacts = journal.as_mapping(review.get("artifacts"))
     if report:
         bind("report.md", review.get("source_sha256"), "report source")
+        rendering = ws / "report-render.json"
+        if not rendering.is_file():
+            findings.append("NO_REPORT_RENDER: render the current source with render_report.py before review")
+        else:
+            hashes[rendering.name] = journal.sha256_file(rendering)
+            try:
+                pair = json.loads(rendering.read_text(encoding="utf-8"))
+                if not isinstance(pair, dict) or any(
+                        not (ws / name).is_file() or pair.get(key) != journal.sha256_file(ws / name)
+                        for name, key in (("report.md", "source_sha256"), ("report.pdf", "pdf_sha256"))):
+                    findings.append("STALE_REPORT_RENDER: report.md/report.pdf changed since rendering; render and review again")
+            except (OSError, UnicodeError, ValueError):
+                findings.append("BAD_REPORT_RENDER: unreadable render record; render and review again")
         if (ws / "report.md").is_file() and (ws / "report.pdf").is_file():
             try:
                 import pymupdf
