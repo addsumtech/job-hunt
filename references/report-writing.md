@@ -117,6 +117,42 @@ include them in the report if the client specifically requests historical roles.
 Client usefulness decides what earns space: explain limitations that affect the
 next decision, without turning internal query bookkeeping into report content.
 
+## Keep narrative categories aligned with their table
+
+For a summary and the table it introduces, choose the grouping once. Draft the
+summary from the table's final categories and rows; after changing a category,
+update both. Use the **same category names, level of detail and relative order**.
+A summary may discuss selected categories, but name them as the table does and
+make that selection clear. Do not make the reader infer the mapping from later
+job details or a separate explanation.
+
+If both broad groups and specific directions are useful, show their relationship
+in the same table (for example, separate group and direction columns), and use
+those same labels in the prose. Do not list “金融软件、知识图谱、APS” in the
+paragraph while showing only “软件与技术产品” in the table.
+
+In a role-comparison table, identify the company **and specific job title** for
+each role. A column called “岗位” must contain positions, not only company names.
+Keep different specializations at one company on separate rows; a shared company
+name cannot stand in for several jobs. Retain the existing grouping rules for
+exact company-and-full-title matches across locations.
+
+For example, a summary discussing “金融软件、知识图谱、APS” in that order can
+map directly to this illustrative table; actual reports use the source titles:
+
+| 方向 | 公司 | 职位 |
+|---|---|---|
+| 金融软件 | 甲公司 | 金融软件产品经理 |
+| 知识图谱 | 乙公司 | 知识图谱工具产品经理 |
+| APS | 乙公司 | APS 工具产品经理 |
+
+Check each summary/table pair before rendering and again in the final PDF:
+trace every named direction to the same visible category and its company/title
+rows. Reject missing mappings, unexplained changes of level or order, and
+company-only lists that hide distinct roles. This is a semantic reader review;
+text-presence and layout checks cannot certify it. The separate source directory
+may still group entries by company as described below.
+
 ## Make a detailed report easy to navigate
 
 Use the job directory and its original posting links as the report's source
@@ -368,6 +404,9 @@ intended reader, checking:
 9. Are the target role, CV version, existing work and suggested next steps clear?
    Replace vague “material/evidence” references with the actual object, then check
    that the rewrite preserved what is known, missing or still to be confirmed.
+10. Does each summary use the same category names, level and relative order as
+    its table? Trace each named direction to visible company-and-title rows;
+    correct any mapping the reader would have to infer from another section.
 
 For a long report, compare pages as well as individual sentences. Look for the
 same paragraph opening, rhetorical reversal, overused bolding or repeated

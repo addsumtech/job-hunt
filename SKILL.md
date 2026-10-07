@@ -164,6 +164,8 @@ If a required output or check cannot be completed, state what remains unverified
 - Is each new claim supported, with responsibility and hard gaps stated honestly?
 - For a full mode, are the actual receipts current and its required reviews complete?
 - Are internal assessment records separate from the readable client report?
+- Do narrative categories match their comparison table, with each direction
+  traceable to a company and specific role? See `references/report-writing.md`.
 - Are all requested outputs present, visually reviewed where required, and linked?
 - Apply only the relevant checks in `references/workflow-checklist.md`; never claim
   a gate or visual review ran when it did not.

@@ -81,6 +81,9 @@ holds both halves: that apply mode ends by offering the next modes, and that
       assess reasonableness, logic and readability, fix and reread the entire
       revision, then read the final PDF. Record concrete findings privately;
       preserve every posting's city/link and inspect navigation and typography.
+      For each summary/table pair, reconcile category names, level and order,
+      and map each direction to visible company-and-title rows; do not pass an
+      unexplained mismatch merely because the text and layout checks pass.
 - [ ] Domestic job discovery? Reconcile the WeChat source plan with captured
       queries, original articles and recruitment conditions; identify unread or
       inaccessible leads. A successful search command is not completed research.

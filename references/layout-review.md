@@ -153,6 +153,10 @@ and PDF against it in `checks.content_order` and `checks.headings_and_rules`.
 Under `checks.content_order`, record the actual job identities/numbers in the
 priority list, key-job section, remaining-job section and directory; an unnumbered
 directory is matched by company, full title and original link. Also record
+each summary's category-to-table mapping: shared labels, level and order, and
+the company/title rows belonging to each named direction. Apply the category
+alignment review in `report-writing.md`; an implied mapping or a company-only
+list hiding distinct jobs requires correction before this review can pass. Record
 what each preparation section helps the client do, which role/version it targets,
 and where any repeated case adds a different action. Read the sections in order;
 separate headings and correct page layout do not prove a coherent workflow. Reject
