@@ -22,9 +22,11 @@ Allowed by default, no disclosure needed:
 - Search-engine results that point at public career pages.
 - `opencli <site> --help -f yaml`, `opencli list`, `opencli doctor`,
   `opencli auth status` — introspection that touches no site.
-- opencli read commands on adapters that have **no login concept at all**
+- opencli read commands on adapters that have **no auth or login command**
   (`51job`, `indeed`: absent from `opencli auth status` entirely, and exposing no
-  `login` command), within the caps below.
+  `login` command), within the caps below. This describes the adapter, not the
+  website's access requirements; an actual login or verification wall still
+  requires user recovery.
 
 ## Yellow
 
@@ -70,9 +72,9 @@ Never performed and never designed, whatever the user asks:
 - Batch apply, batch greeting, auto-chat, auto-reply, or any automated contact with
   a recruiter or hiring manager.
 - Running any opencli command whose published `access:` is `write` — including
-  `login`. A login command is handed to the user to run; it is never run here, and
-  there is no confirm-then-send path, because a confirmation flow is just a write
-  path with a speed bump.
+  `login`. It is never run here. Ask the user to click Login/登录 on the page kept
+  open in their daily browser; do not ask them to run a terminal command. Follow
+  [user recovery](user-recovery.md) and wait for their explicit completion reply.
 - Claiming a job is open without a fresh source signal.
 - Presenting a fabricated, inferred or padded listing as retrieved. If the count
   falls short of the target, write the reason; never pad.

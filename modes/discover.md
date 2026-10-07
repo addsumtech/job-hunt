@@ -336,14 +336,14 @@ Get this wrong in the other direction and the cost is real: told that nowcoder
 ### 3. Hand the login to the user, then wait
 
 `opencli <site> login` is a **write** command. `references/source-policy.md` puts
-it on the Red list: it is handed to the user to run and never run here, and there
-is no confirm-then-send path because a confirmation flow is a write path with a
-speed bump.
+it on the Red list: it is never run here. Ask the user to click Login/登录 on the
+page kept open in their daily browser, not to run a terminal command. Follow
+[user recovery](../references/user-recovery.md) and wait for their explicit reply.
 
 So say it plainly and wait:
 
-> `boss` needs a browser session. Run `opencli boss login` yourself, finish the
-> login in the browser, and tell me when it's done — then I can search there.
+> `boss` needs a browser session. Click Login/登录 on the page already open in
+> your daily browser, finish login, and tell me when it's done — then I can search there.
 > It is a logged-in adapter, which `source-policy.md` puts in the yellow tier:
 > the search runs inside your own session, and account risk is not zero.
 
@@ -518,8 +518,9 @@ opencli auth status -f json > raw/auth-status.json
 - **Site absent from the list entirely** — `no_auth_adapter`. `indeed` and `51job`
   are simply not there (65 rows returned, neither matched) and neither exposes a
   `login` or `whoami` command. This is not an error and not a missing adapter: it
-  means the site has no login concept. Never run `opencli 51job login`; it does not
-  exist.
+  means the adapter has no auth command. The website can still require login or
+  verification; classify the actual page. Never run `opencli 51job login`; it does
+  not exist.
 
 Also save each adapter's own contract before calling it — `check_no_write.py` reads
 it from here:
@@ -664,8 +665,8 @@ The wrapper returns one of five classifications, each with an action:
 | classification | what happened | what to do |
 |---|---|---|
 | `ok` | exit 0, JSON array parsed | continue to Step 5 |
-| `not_logged_in` | login wall, and auth says the session is absent or unknown | cross-check auth; hand `opencli <site> login` **to the user** — it is a write command. Pause for [user recovery](../references/user-recovery.md); no read retry while logged out. **Do not treat `strategy: public` as evidence that no login is needed**; classify the actual response. |
-| `no_auth_adapter` | login wall on a site with no login concept | no CLI login command is available. Pause and ask the user to inspect the browser page; do not invent a login command or infer a missing session. |
+| `not_logged_in` | login wall, and auth says the session is absent or unknown | cross-check auth; ask the user to click Login/登录 on the page kept open in their daily browser. Pause for [user recovery](../references/user-recovery.md); no read retry while logged out. **Do not treat `strategy: public` as evidence that no login is needed**; classify the actual response. |
+| `no_auth_adapter` | login wall from an adapter without an auth command | no CLI login command is available. Pause and ask the user to inspect the browser page and complete login if it asks for it; do not invent a login command or infer a missing session from absent adapter metadata. |
 | `platform_limit` | a stop-signal from `references/risk-control-signals.yaml`, or a refusal while auth says logged in | **Stop immediately: no retry, parameter changes or bypass.** Pause this source, not the whole task. Explain whether it is verification, rate limiting or an unknown refusal; follow [user recovery](../references/user-recovery.md) before offering degraded output. |
 | `transport` | unrecognised failure, or exit 0 with unparsable stdout | Check the actual selected CDP connection and offline routing diagnostic, then follow [bounded network recovery](../references/network-recovery.md). Distinguish a disconnected browser from a site loading or route failure; a timeout alone is not evidence that a VPN caused it. |
 
