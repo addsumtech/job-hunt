@@ -14,6 +14,8 @@ def test_login_refusal_tells_user_to_finish_and_continue():
         auth_rows=[{'site': 'boss', 'status': 'not_logged_in'}])
     assert result['classification'] == 'not_logged_in'
     assert 'finish login' in result['remedy']
+    assert 'click Login/登录' in result['remedy']
+    assert 'do not ask them to run a terminal command' in result['remedy']
     assert 'explicit user confirmation' in result['remedy']
     assert 'new bounded round' in result['remedy']
 

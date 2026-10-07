@@ -624,3 +624,65 @@ def test_exam_exemption_requires_hash_bound_candidate_source(tmp_path):
     assert lint.main(['--workspace', str(tmp_path)]) == 0
     cv.write_text('大学英语六级588分；雅思7.0。')
     assert lint.main(['--workspace', str(tmp_path)]) == 1
+
+
+@pytest.mark.parametrize('text', [
+    '你的广告投放系统后端经历、Go 核心服务重构和性能改善，与这份岗位的核心工作直接相关。原简历中的峰值 8 万 QPS 和延迟下降 40%，是最应优先展示的事实。',
+    '| 精通 Go 或 Java | 字节跳动 Go 重构带来延迟下降 40%；美团订单系统使用 Java/Spring。准备解释实现方式与个人贡献。 |',
+    '- Go 重构：原瓶颈是什么，改动涉及哪些服务，你具体完成了哪些工作？延迟下降 40% 使用什么统计口径、基线与流量条件？现有简历没有说明 P95、P99 或平均延迟，不要混用。',
+])
+def test_captured_latency_result_survives_report_rephrasing(text):
+    corpus = lint._normalise('用 Go 重构核心服务，延迟下降 40%。')
+    assert lint.scan_text(text, 'report.md', corpus) == []
+    assert lint.scan_text(text, 'report.md')
+
+
+@pytest.mark.parametrize('text', [
+    '原简历中的延迟下降 50%，是可展示的事实。',
+    '原简历中的收入增长 40%，是可展示的事实。',
+    '延迟下降 40%，因此你的录用概率为 40%。',
+])
+def test_latency_capture_does_not_authorize_other_metrics_or_forecasts(text):
+    corpus = lint._normalise('用 Go 重构核心服务，延迟下降 40%。')
+    assert any(row.startswith('PERCENT:') for row in lint.scan_text(text, 'report.md', corpus))
+
+
+def test_latency_exemption_requires_current_hash_bound_source(tmp_path):
+    import hashlib
+    cv = _write(tmp_path, 'cv-source.txt', '用 Go 重构核心服务，延迟下降 40%。')
+    _write(tmp_path, 'report.md', '延迟下降 40% 是现有业绩，请核对测量口径。')
+    assert lint.main(['--workspace', str(tmp_path)]) == 1
+    _write(tmp_path, 'evidence-blocks.json', json.dumps({'sources': {'cv': {
+        'path': str(cv), 'sha256': hashlib.sha256(cv.read_bytes()).hexdigest()}}}))
+    assert lint.main(['--workspace', str(tmp_path)]) == 0
+    cv.write_text('用 Go 重构核心服务，延迟下降 50%。')
+    assert lint.main(['--workspace', str(tmp_path)]) == 1
+
+
+@pytest.mark.parametrize('text', [
+    '当前不提供匹配分或录用概率，因为岗位要求与候选人经历都缺失。',
+    '本次不估计面试概率、录用概率。',
+    '目前未提供任何录用概率估计。',
+    '这是一份基于已提供事实的申请建议，不是录用概率预测。',
+    '当前没有依据给出匹配百分比、ATS 分数、面试概率或录用概率。',
+    '没有依据估计面试概率。',
+])
+def test_explicit_refusal_to_predict_is_not_a_prediction(text):
+    assert lint.scan_text(text, 'report.md') == []
+
+
+@pytest.mark.parametrize('text', [
+    '当前不提供匹配分或录用概率，但录用概率很高。',
+    '不提供匹配分，但录用概率为70%。',
+    '不能不提供录用概率。',
+    '并非不提供录用概率。',
+    '不提供录用概率85%的估计。',
+    '不是录用概率预测，但录用概率很高。',
+    '没有依据给出录用概率，但录用概率很高。',
+    '并非没有依据给出录用概率。',
+    '不是没有依据给出录用概率。',
+    '没有依据给出匹配百分比、ATS 分数、面试概率或录用概率80%。',
+    '没有依据给出面试概率大于录用概率。',
+])
+def test_refusal_wording_does_not_hide_an_actual_prediction(text):
+    assert lint.scan_text(text, 'report.md')

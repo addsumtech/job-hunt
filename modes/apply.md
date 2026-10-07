@@ -250,12 +250,15 @@ Tell the user **all three verdicts and the ATS coverage %** (report it verbatim 
 - Record the **final FIT SNAPSHOT delta** internally, then explain the decision and changes in plain client language: baseline (before tailoring) vs. final (after tailoring) — coverage, responsibility match, and the apply verdict.
 - Summarize what changed during tailoring and why.
 - Note any **remaining honest gaps** the user should be aware of going into the application and interview.
+- If `check_apply.py` emits `NO_ASSESSMENT`, say plainly in the final reply that no separate fit assessment was made. The apply-mode FIT SNAPSHOT and CV judge verdicts do not constitute that assessment.
 - **Consistency reminder:** the tailored CV now states specific things about the candidate's roles, scope, and dates. Remind them to make sure their **LinkedIn and any portal profile don't contradict it** — recruiters cross-check, and a mismatch reads as dishonesty. (A reminder only — do not scrape or fetch their profile.)
 - If a reusable **master profile** was saved, mention its actual path and that it can be reused for the next application. Never claim a default path was created without verifying it.
 
 ### Step 7.5 — Interview-readiness brief
 
 Produce the brief in `references/interview-prep.md` (write it to `<workspace>/interview-brief.md`). Use the claim-provenance map, the judges' `SUPPLEMENTARY_QUESTIONS_FOR_CANDIDATE`, and the HONEST-GAPS. For each REFRAMED/AMPLIFIED claim, give the source fact and a "be ready to explain…" prompt; for each honest gap, the truthful framing if asked; and carry over the recruiter/manager questions. If a claim cannot be truthfully defended, walk it back on the CV and re-run the affected checks.
+
+Keep the rendered brief to **one page or less**. If delivery reports `INTERVIEW_BRIEF_TOO_LONG`, condense repeated wording while retaining the claim sources, honest gaps and reviewer questions, then render and inspect it again. Do not shrink the text to force it onto one page.
 
 ### Step 7.6 — Offer what comes next
 

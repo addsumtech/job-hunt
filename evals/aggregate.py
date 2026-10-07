@@ -57,6 +57,10 @@ def _fmt(stat, unit=""):
             f"({stat['min']:g}–{stat['max']:g}{unit}, n={stat['n']})")
 
 
+def _signed(value, spec, unit=""):
+    return "—" if value is None else f"{value:{spec}}{unit}"
+
+
 def summarise(iteration_dir, doc):
     by_id = {e["id"]: e for e in doc["evals"]}
     role_of = {a["id"]: a["role"] for e in doc["evals"] for a in e["assertions"]}
@@ -74,12 +78,14 @@ def summarise(iteration_dir, doc):
         timing_path = run.dir / "timing.json"
         if timing_path.is_file():
             timing = json.loads(timing_path.read_text(encoding="utf-8"))
-            per_arm[arm]["seconds"].append(timing.get("total_duration_seconds", 0))
-            per_arm[arm]["tokens"].append(timing.get("total_tokens", 0))
-            per_eval[str(eval_id)][arm]["seconds"].append(
-                timing.get("total_duration_seconds", 0))
-            per_eval[str(eval_id)][arm]["tokens"].append(
-                timing.get("total_tokens", 0))
+            seconds = timing.get("total_duration_seconds")
+            if seconds is None and timing.get("duration_ms") is not None:
+                seconds = timing["duration_ms"] / 1000
+            for key, value in (("seconds", seconds),
+                               ("tokens", timing.get("total_tokens"))):
+                if value is not None:
+                    per_arm[arm][key].append(value)
+                    per_eval[str(eval_id)][arm][key].append(value)
         for row in grading.get("expectations", []):
             if row.get("passed") is None:
                 rows.setdefault(row.get("assertion_id"), {}).setdefault(
@@ -113,10 +119,11 @@ def summarise(iteration_dir, doc):
             b = (per_arm["baseline"]["pass"] /
                  per_arm["baseline"]["total"]) if per_arm["baseline"]["total"] else 0
         else:
-            a = statistics.fmean(per_arm["with_skill"][key]) if \
-                per_arm["with_skill"][key] else 0
-            b = statistics.fmean(per_arm["baseline"][key]) if \
-                per_arm["baseline"][key] else 0
+            if not per_arm["with_skill"][key] or not per_arm["baseline"][key]:
+                delta[metric] = None
+                continue
+            a = statistics.fmean(per_arm["with_skill"][key])
+            b = statistics.fmean(per_arm["baseline"][key])
         delta[metric] = round(a - b, 4)
 
     return {
@@ -196,8 +203,8 @@ def render_markdown(summary):
                    f"tokens {_fmt(a['tokens'])}")
     d = summary["delta_with_minus_baseline"]
     out += ["", f"**delta (with_skill − baseline)**: pass rate "
-                f"{d['pass_rate']:+.4f}, time {d['seconds']:+.1f}s, "
-                f"tokens {d['tokens']:+.0f}", ""]
+                f"{d['pass_rate']:+.4f}, time {_signed(d['seconds'], '+.1f', 's')}, "
+                f"tokens {_signed(d['tokens'], '+.0f')}", ""]
     if summary["non_discriminating"]:
         out += ["## Not evidence", "",
                 "These are marked `role: discriminating` and the baseline "
@@ -228,7 +235,7 @@ def patch_benchmark(benchmark, summary):
         f"delta as printed above is baseline − with_skill (configs[0] − "
         f"configs[1]) and reads inverted. Signed the other way: "
         f"with_skill − baseline = pass rate {d['pass_rate']:+.4f}, time "
-        f"{d['seconds']:+.1f}s, tokens {d['tokens']:+.0f}.")
+        f"{_signed(d['seconds'], '+.1f', 's')}, tokens {_signed(d['tokens'], '+.0f')}.")
     notes.append("runs_per_configuration is counted from disk here, not the "
                  "hardcoded 3 the aggregation script writes.")
     for aid in summary["non_discriminating"]:

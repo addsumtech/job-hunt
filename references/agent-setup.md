@@ -122,7 +122,7 @@ LibreOffice releases can abort when started directly with `--headless`.
 
 ## Finish and resume
 
-Before the first Indeed or 51job read, follow [opencli-compat.md](opencli-compat.md)
+Before the first Indeed, 51job, LinkedIn or Nowcoder read, follow [opencli-compat.md](opencli-compat.md)
 to check and apply recognized adapter patches through the prepared Python/PATH.
 The separate CDP patch sources and Apache-2.0 license are in `assets/opencli-cdp/`;
 AnySearch's source provenance, license and notices are in `third_party/anysearch/`.

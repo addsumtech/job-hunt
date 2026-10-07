@@ -130,6 +130,19 @@ def test_a_refusal_that_still_prints_a_verdict_fires(tmp_path):
     assert "值得投" in evidence
 
 
+@pytest.mark.parametrize('suffix, expected', [
+    ('，因为岗位要求与候选人经历都缺失。', True),
+    ('，但录用概率很高。', False),
+])
+def test_prediction_checker_distinguishes_refusal_from_later_prediction(tmp_path, suffix, expected):
+    run = build(tmp_path)
+    delivery = run.outputs / 'delivery'
+    delivery.mkdir()
+    (delivery / 'application-decision.md').write_text(
+        '当前不提供匹配分或录用概率' + suffix, encoding='utf-8')
+    assert ck.CHECKERS['nothing_predicts'](run)[0] is expected
+
+
 def test_producing_a_confident_verdict_on_thin_input_fires(tmp_path):
     run = build(tmp_path, assessment={"verdict": "worth_applying"},
                 assessment_md=COVERAGE_MD)

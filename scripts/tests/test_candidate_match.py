@@ -60,6 +60,40 @@ def test_a_summary_in_the_wrong_report_language_is_refused(tmp_path, capsys):
     assert "MD_MATCH_SUMMARY_WRONG_LANGUAGE" in captured.out
 
 
+@pytest.mark.parametrize("orphaned_match", (False, True))
+def test_empty_shortlist_needs_no_match_language_stamp_but_rejects_orphaned_matches(
+        tmp_path, capsys, orphaned_match):
+    workspace = fx.build_workspace(tmp_path)
+    shortlist = fx.load_shortlist(workspace)
+    shortlist["rows"] = []
+    fx.save_shortlist(workspace, shortlist)
+    if not orphaned_match:
+        document = load_match(workspace)
+        document["rows"] = []
+        save_match(workspace, document)
+    (workspace / "shortlist.md").write_text(
+        "## §0 来源\n未取得岗位。\n## §1 检索方向\n先整理工业视觉检索词。\n",
+        encoding="utf-8")
+    code, captured = run(workspace, capsys)
+    if orphaned_match:
+        assert code == 1
+        assert "MATCH_ROW_ORPHANED" in captured.out
+    else:
+        assert code == 0, captured.out
+
+
+def test_nonempty_shortlist_still_requires_a_native_match_language_stamp(tmp_path, capsys):
+    workspace = fx.build_workspace(tmp_path)
+    path = workspace / "shortlist.md"
+    text = path.read_text(encoding="utf-8")
+    stamp = gate.locales.GATE_TEXT["zh"]["detail_provisional"]
+    assert stamp in text
+    path.write_text(text.replace(stamp, ""), encoding="utf-8")
+    code, captured = run(workspace, capsys)
+    assert code == 1
+    assert "MD_MATCH_LANGUAGE_UNCLEAR" in captured.out
+
+
 def test_card_cannot_be_promoted_to_a_default_recommendation(tmp_path, capsys):
     workspace = fx.build_workspace(tmp_path / "cv-pointer")
     document = load_match(workspace)

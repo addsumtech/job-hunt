@@ -83,6 +83,31 @@ def test_all_text_concatenates_the_reader_facing_surfaces(run_dir):
     assert "方向级 shortlist" in text and "取得真实岗位" in text
 
 
+def test_final_reports_are_read_without_grading_inputs_or_internal_notes(run_dir):
+    out = run_dir / "outputs"
+    (out / "workspace/report.md").write_text("Final report: supply the complete posting.")
+    delivery = out / "delivery"
+    delivery.mkdir()
+    (delivery / "decision.md").write_text("Client delivery: 先补齐职位正文。")
+    (delivery / "same-report.md").write_text((out / "workspace/report.md").read_text())
+    (delivery / "RUN_NOTES.md").write_text("internal diagnostic only")
+    (out / "scenario.md").write_text("unprocessed candidate question")
+    text = runlib.Run(run_dir).all_text()
+    assert "先补齐职位正文" in text
+    assert text.count("Final report: supply the complete posting.") == 1
+    assert "internal diagnostic only" not in text
+    assert "unprocessed candidate question" not in text
+
+
+def test_a_delivered_link_cannot_make_the_reader_open_another_run(run_dir, tmp_path):
+    other = tmp_path / "outside.md"
+    other.write_text("another run's answer")
+    delivery = run_dir / "outputs/delivery"
+    delivery.mkdir()
+    (delivery / "report.md").symlink_to(other)
+    assert "another run's answer" not in runlib.Run(run_dir).all_text()
+
+
 def test_first_line_containing_returns_the_line_verbatim(run_dir):
     run = runlib.Run(run_dir)
     assert run.first_line_containing("方向级") == "输出为方向级 shortlist。"

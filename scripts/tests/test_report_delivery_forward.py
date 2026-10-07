@@ -58,6 +58,38 @@ def test_accented_employer_name_does_not_make_an_english_report_spanish(tmp_path
         assert doc[0].get_text().splitlines()[0] == 'Career consultation report'
 
 
+@pytest.mark.parametrize('body', [
+    'Licht de beweringen op je cv toe. Het productteam nam 8 van de behoeften over. '
+    'Bereid een echt voorbeeld van je werk voor.',
+    'Expliquez les affirmations de votre CV. La nouvelle phrase réunit les faits. '
+    'Préparez un exemple de votre travail avec un utilisateur.',
+    'Spiega le affermazioni del CV. Prepara un esempio reale con un utente. '
+    'Il team di prodotto ha adottato 8 dei requisiti documentati.',
+    'Prepare for the interview with Jean de la Fontaine. Explain the work you '
+    'did and the result you can substantiate.',
+])
+def test_shared_latin_words_do_not_select_spanish_page_labels(tmp_path, body):
+    md, pdf = tmp_path / 'interview-brief.md', tmp_path / 'interview-brief.pdf'
+    md.write_text(body, encoding='utf-8')
+    assert deliver.render_pdf(md, pdf, None) == (True, '')
+    with pymupdf.open(pdf) as doc:
+        text = '\n'.join(page.get_text() for page in doc)
+        assert text.splitlines()[0] == 'Career consultation report'
+        assert 'Page 1' in text and 'Página' not in text
+        assert ''.join(body.split()) in ''.join(text.split())
+
+
+def test_short_spanish_advice_keeps_spanish_page_labels(tmp_path):
+    md, pdf = tmp_path / 'report.md', tmp_path / 'report.pdf'
+    md.write_text('# Consejos para preparar la próxima entrevista\n\n'
+                  'Confirma los requisitos antes de enviar el currículum.', encoding='utf-8')
+    assert deliver.render_pdf(md, pdf, None) == (True, '')
+    with pymupdf.open(pdf) as doc:
+        text = doc[0].get_text()
+        assert text.splitlines()[0] == 'Informe de orientación profesional'
+        assert 'Página 1' in text
+
+
 @pytest.mark.parametrize('actual', [
     'https://careers.example.test/job?id=456#requirements',
     'https://careers.example.test/job?id=123#different-role',

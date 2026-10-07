@@ -2,7 +2,8 @@
 
 OpenCLI remains the default reader. The optional patches here address defects
 reproduced with `@jackwener/opencli` 1.8.7; they are maintained by this skill,
-not an OpenCLI upstream release. Before the first Indeed or 51job read, the agent
+not an OpenCLI upstream release. Before the first Indeed, 51job, LinkedIn or
+Nowcoder read, the agent
 runs the read-only check below. If all affected bytes match the known original or
 patched version, apply automatically; users need not copy commands or approve
 this reversible local compatibility repair. Unknown versions or custom edits
@@ -20,17 +21,23 @@ use the normal reader, or the browser fallback when incompatibility is diagnosed
 | Indeed search cards have ids but empty titles | Read the identified title link, including its existing title-attribute variant | Real search and DOM variants |
 | Indeed header's `Remote` has no old location test id | Read the observed company-header sibling when the explicit location markers are absent | Real detail and old/new header DOM variants |
 | Indeed's current detail page uses `vj-job-title` and a description heading instead of `h1` and `#jobDescriptionText` | Read the observed title, adjacent description and header metadata; wait for description text rather than a title alone | Current/old DOM variants, missing and delayed descriptions; live result recorded separately |
+| LinkedIn rejects a country-qualified location such as `Shanghai, China` with HTTP 400 | Encode each Rest.li value without turning location commas into query separators; use the observed job-card decoration version | Live Shanghai, China search on 2026-10-07 |
+| LinkedIn's inline job data contains a complete description, but the adapter emits an empty string | Join the matching job ID across inline payloads, preserve its description, wait for delayed content and reject empty descriptions | Live complete detail on 2026-10-07 and bounded-wait regressions |
+| Nowcoder long articles are returned with a UUID that its detail endpoint cannot resolve; descriptions are cut at 500 characters | Carry the numeric long-article ID, retain moment UUIDs, read the complete available content and `createTime`, and preserve access errors | Live recommendation; free-article and ID/error regressions |
+| Nowcoder returns a paid preview with HTTP 200 | Carry `content_complete` and `content_access` from its access flags; the result classifier refuses to count a preview as full detail | Recorded paid-preview and free-article responses; no restricted content retrieved |
 
 ## Check, apply, revert
 
-`python scripts/opencli_compat.py --site indeed` is read-only; substitute `51job`
-for that adapter. It checks the installed package version and exact source hashes.
+`python scripts/opencli_compat.py --site indeed` is read-only; substitute `51job`,
+`linkedin` or `nowcoder` for those adapters. It checks the installed package version and exact source hashes.
 Unknown versions, official-source drift, or local edits are refused, not guessed
 at. Exact hashes of earlier patches shipped by this skill are recognized as
 `previous_patch` and can be upgraded or reverted; user edits remain untouched.
 `--package-dir` supports installations where the executable wrapper does not
-resolve to the npm package. `--config-dir` supports a different OpenCLI config
-root (the default respects `OPENCLI_CONFIG_DIR`).
+resolve to the npm package. Stock OpenCLI 1.8.7 loads adapter overrides from
+`~/.opencli/clis` even when `OPENCLI_CONFIG_DIR` changes the trace/profile root.
+The helper therefore defaults to `~/.opencli`; `--config-dir` is only for test
+fixtures or a custom loader that actually reads that directory.
 
 For recognized source, the agent runs:
 
@@ -44,6 +51,8 @@ exists. It never ejects over an existing override, and only edits recognized
 bytes in the listed files, preserving other adapter files. It never edits the installed npm package, contacts
 a site, changes browser settings, installs dependencies, or retries a stopped
 source. A second apply is a no-op. All files are checked before any is written.
+Bundled `auth.js` stays in the installed package: copying it into a site-only
+override would break its relative import of `../_shared/site-auth.js`.
 
 Revert only this skill's recognized edits:
 

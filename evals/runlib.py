@@ -58,7 +58,8 @@ OUTPUT_CONTRACT = ("final-message.md", "RUN_NOTES.md", "workspace/", "stderr.log
 # what it writes there writes less there, and the diagnostic surface the whole
 # runbook depends on quietly empties out.
 READER_FACING = ("final-message.md", "workspace/shortlist.md",
-                 "workspace/fit-assessment.md", "workspace/interview-brief.md")
+                 "workspace/fit-assessment.md", "workspace/interview-brief.md",
+                 "workspace/report.md")
 
 _RUN_DIR = re.compile(r"^run-(\d+)$")
 _EVAL_DIR = re.compile(r"^eval-(\d+)$")
@@ -187,13 +188,25 @@ class Run:
         out = [r for r in self.journal() if r.get("action") == "gate"]
         return [r for r in out if gate is None or r.get("gate") == gate]
 
+    def reader_surfaces(self):
+        """Named reports plus delivered Markdown; never another run or the diary."""
+        surfaces = list(READER_FACING)
+        delivery = self.outputs / "delivery"
+        if delivery.is_dir():
+            for path in sorted(delivery.rglob("*.md")):
+                if (path.is_file() and path.name != "RUN_NOTES.md"
+                        and path.resolve().is_relative_to(self.outputs.resolve())):
+                    surfaces.append(path.relative_to(self.outputs).as_posix())
+        return surfaces
+
     def all_text(self):
         # read_any for the workspace surfaces: a run that nested shortlist.md
         # under job-profiles/<person>/ still SAID what it said, and a claim the
         # harness cannot see is scored as a claim never made.
         parts = [self.read_any(rel) if rel.startswith("workspace/") else self.read(rel)
-                 for rel in READER_FACING]
-        return "\n".join(p for p in parts if p)
+                 for rel in self.reader_surfaces()]
+        # The delivered report is normally a byte-identical workspace copy.
+        return "\n".join(dict.fromkeys(p for p in parts if p))
 
     def first_line_containing(self, needle, rel=None):
         """The first line holding ``needle``, stripped, or None.

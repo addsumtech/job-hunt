@@ -4,6 +4,7 @@ TARGET MARKET: Netherlands (Amsterdam). CV LANGUAGE: English. FORMATS: docx, pdf
 
 === CANDIDATE CV (master facts — do not invent beyond this) ===
 Donata Rey. 5 years C++ image-reconstruction engineering in medical imaging.
+Email: donata.rey@example.test. Languages: English — fluent.
 Reconstruction Engineer, Medisca BV (2021–present): offline reconstruction
 pipeline in C++17; CUDA gridding.
   - 2023: moved the nightly regression suite onto the department's Slurm cluster

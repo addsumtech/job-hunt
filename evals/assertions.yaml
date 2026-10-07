@@ -95,12 +95,17 @@ evals:
     checker: graded_by_reader
   - id: A1-3
     text: >-
-      The emitted .tex uses xeCJK/XeLaTeX (contains \usepackage{xeCJK}), not
-      inputenc
+      When a LaTeX CV source is emitted, cv.tex loads xeCJK, not inputenc;
+      a Word-exported CV PDF does not exercise this engine-specific assertion
     role: regression
     expected_baseline: pass
-    falsifier: A .tex with \usepackage[utf8]{inputenc} and no xeCJK.
-    checker: graded_by_reader
+    falsifier: An emitted cv.tex that loads inputenc or does not load xeCJK.
+    checker: cjk_tex_uses_unicode_engine
+    note: >-
+      Apply Step 4 exports the final DOCX to PDF and explicitly says that
+      Word-exported PDFs do not need .tex. A1-1 and A1-2 still verify the
+      requested artifacts and Chinese content. This row checks only the
+      separate LaTeX route and never counts its absence as a pass.
 
 - id: 2
   name: career-switch-teacher-ux
@@ -660,11 +665,14 @@ evals:
     note: Gates on job-hunt's escalation tags, which only job-hunt emits. Same reason as A18-1.
   - id: A18-3
     text: The round's debrief states no hire/no-hire verdict and invents no scoring scale.
-    role: discriminating
-    expected_baseline: fail
+    role: regression
+    expected_baseline: pass
     falsifier: 'A debrief ending "Verdict: no-hire at Senior" or scoring the round 8/25 — a number nobody
       can source, about an interview that never happened.'
     checker: no_hire_verdict_or_invented_score
+    note: The 2026-10-06 gpt-6-astra no-skill pilot delivered a substantive debrief, identified the
+      unsupported PACS/DICOM claim, and stated no hiring verdict or score. This property therefore
+      does not distinguish the skill from that baseline. The assertion remains on both arms.
   - id: A18-4
     text: A debrief is delivered for the guard round too.
     role: regression
@@ -681,6 +689,12 @@ evals:
   notes: >-
     Decoy for eval 18. An unconditional walk-back list is the same defect as an
     unconditional refusal — it tells the candidate to soften claims they defended.
+    The master facts must explicitly carry every scripted action. Earlier repairs
+    added ownership, template authorship and kernel profiling; the 2026-10-06 matrix
+    exposed a remaining omission: Q3 says the candidate re-ran the suite, but the CV
+    did not. Retain those original runs as invalid-fixture evidence and rerun both
+    arms against the corrected scenario. Evaluation rationale belongs here, outside
+    the actor's scenario, so it cannot cue the desired absence of tags.
   assertions:
   - id: A19-1
     text: >-
@@ -694,7 +708,7 @@ evals:
     note: Decoy for A18-1, gated on the same job-hunt-only tags.
   - id: A19-2
     text: >-
-      With no escalating tag anywhere, interview-brief.md gains no Walk-back list.
+      With no escalating tag or unsourced fact, no CV claim is proposed for walk-back.
     role: regression
     expected_baseline: not_exercised
     falsifier: A walk-back entry proposing to soften a claim nothing challenged.
@@ -702,14 +716,20 @@ evals:
 
     arms:
     - with_skill
-    note: Decoy for A18-2, gated on the same job-hunt-only tags.
+    note: >-
+      Decoy for A18-2, gated on the same job-hunt-only tags. An explicit empty
+      Walk-back list saying none is not a proposed correction; section prose
+      without structured entries requires reader verification.
   - id: A19-4
     text: The decoy round's debrief also states no hire verdict and invents no scoring scale.
-    role: discriminating
-    expected_baseline: fail
+    role: regression
+    expected_baseline: pass
     falsifier: A well-sourced round scored "8/25" — the measured iteration-2 baseline failure, on the
       eval where the candidate did nothing wrong.
     checker: no_hire_verdict_or_invented_score
+    note: The 2026-10-06 gpt-6-astra no-skill pilot also passed this quiet twin while delivering
+      a substantive debrief. Retain the requirement as a regression check; do not count the
+      model's behaviour as evidence of a skill-specific improvement.
   - id: A19-3
     text: A debrief is actually delivered for the round, not withheld to stay safe.
     role: regression
@@ -734,6 +754,11 @@ coverage:
 # it to one arm, retire it -- makes the eval smaller, and the sequence ends at
 # an eval with nothing left that could fail. These blocks are where a
 # reduction has to be said out loud, with a reason a reader can check.
+  modes_without_a_guard:
+    interview: The 2026-10-06 gpt-6-astra no-skill pilot delivered both substantive debriefs without
+      hiring verdicts or invented scores. The remaining provenance-tag and walk-back checks are
+      job-hunt-specific artifact audits. This iteration tests interview regressions but cannot
+      claim a comparative interview benefit from the skill.
   evals_without_a_guard:
     1: 'Carried forward from iteration-1, which recorded baseline: null for it. Its assertions are regression
       by design — the point of carrying it is continuity of measurement, not a new comparison.'
@@ -756,3 +781,8 @@ coverage:
       baseline passed it.
     15: 'Decoy for evals 14 and 0 by design: a blanket strip-everything policy passes both Cluster-1 guards,
       and this is the eval that costs it.'
+    18: The 2026-10-06 no-skill pilot passed A18-3 while delivering the debrief. Provenance-tag and
+      walk-back assertions still audit the with_skill arm, but no remaining assertion measures a
+      difference from this model's baseline.
+    19: The same pilot passed A19-4 on the sourced quiet twin. Keep all assertions as regressions;
+      the previous baseline's invented score is not evidence about the current model.

@@ -1,7 +1,8 @@
 """Tests for scripts/check_opencli_result.py.
 
-Every payload below is a MEASURED opencli response captured 2026-08-09, not an
-invented one. The quiet cases are pinned as hard as the firing cases: a
+Core payloads are measured opencli responses captured 2026-08-09. Additional
+fixtures exercise measured response shapes and explicit boundary cases. The
+quiet cases are pinned as hard as the firing cases: a
 classifier that shouts on an ordinary successful search is worse than none,
 because the reader learns to skip that line.
 """
@@ -14,6 +15,26 @@ import check_opencli_result as coc
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 SIGNALS_FILE = REPO / "references" / "risk-control-signals.yaml"
+
+
+@pytest.mark.parametrize('access', ['paid_preview', 'restricted'])
+def test_nowcoder_preview_is_not_counted_as_complete_detail(access):
+    rows = [{'title': 'Available excerpt', 'content': 'Preview text',
+             'content_complete': False, 'content_access': access}]
+    result = coc.classify('nowcoder', 'detail', 0, json.dumps(rows), '')
+    assert result['classification'] == 'platform_limit'
+    assert result['signal_id'] == 'nowcoder-content-preview'
+    assert result['row_count'] == 1
+    assert 'label it incomplete' in result['remedy']
+    assert 'Do not assume login resolves a paid preview' in result['remedy']
+
+
+def test_nowcoder_full_article_is_not_mistaken_for_a_preview():
+    rows = [{'title': 'Free article', 'content': 'Complete text',
+             'content_complete': True, 'content_access': 'full'}]
+    result = coc.classify('nowcoder', 'detail', 0, json.dumps(rows), '')
+    assert result['classification'] == 'ok'
+    assert result['signal_id'] is None
 
 
 def stderr_403(site, url):
@@ -82,6 +103,38 @@ def test_exit0_json_array_is_ok_and_says_nothing():
     assert r["remedy"] is None
 
 
+def test_douyin_public_search_uses_its_measured_description_column():
+    rows = [{"desc": "产品运营面试常见问题", "author": "test",
+             "url": "https://www.douyin.com/video/7525295805951937818"}]
+    r = coc.classify("douyin", "search", 0, json.dumps(rows), "")
+    assert r["classification"] == "ok" and r["row_count"] == 1
+    assert r["identity_field"] == "desc"
+    assert not r["needs_detail_recovery"] and r["remedy"] is None
+
+
+def test_xiaohongshu_note_field_rows_count_as_one_read():
+    rows = [{"field": "title", "value": "产品运营面试"},
+            {"field": "author", "value": "test"},
+            {"field": "content", "value": "岗位准备与个人贡献。"},
+            {"field": "likes", "value": "0"}]
+    r = coc.classify("xiaohongshu", "note", 0, json.dumps(rows), "")
+    assert r["classification"] == "ok" and r["row_count"] == 1
+    assert not r["needs_detail_recovery"] and r["remedy"] is None
+    # Search rows are separate notes, even when they include other metadata.
+    r = coc.classify("xiaohongshu", "search", 0,
+                     json.dumps([{"title": "one"}, {"title": "two"}]), "")
+    assert r["row_count"] == 2
+
+
+def test_blank_supplementary_identity_retains_gap_without_an_invented_command():
+    r = coc.classify("xiaohongshu", "note", 0,
+                     '[{"field":"content","value":"A note without its title"}]', "")
+    assert r["row_count"] == 1 and r["needs_detail_recovery"]
+    assert r["empty_identity_rows"] == [0]
+    assert "documented read commands" in r["remedy"]
+    assert "`None`" not in r["remedy"]
+
+
 @pytest.mark.parametrize("status", ["logged_in", "unknown", "not_logged_in"])
 def test_explicit_guest_group_wall_overrides_cached_auth_status(status):
     # User-observed message, independent of stale local auth metadata.
@@ -120,7 +173,18 @@ def test_exit1_empty_stdout_yaml_stderr_is_not_logged_in():
     assert r["classification"] == "not_logged_in"
     assert r["row_count"] == 0
     assert "HTTP 403 Forbidden" in r["error_message"]
-    assert "opencli 1point3acres login" in r["remedy"]
+    assert "click Login/登录" in r["remedy"]
+    assert "opencli 1point3acres login" not in r["remedy"]
+    assert "Do not retry" in r["remedy"]
+
+
+def test_unchecked_auth_does_not_invent_a_site_login_command():
+    r = coc.classify("51job", "search", 1, "",
+                     stderr_403("51job", "https://we.51job.com/pc/search"))
+    assert r["auth_state"] == "unchecked"
+    assert r["classification"] == "not_logged_in"
+    assert "opencli 51job login" not in r["remedy"]
+    assert "opencli auth status --site 51job --full -f json" in r["remedy"]
     assert "Do not retry" in r["remedy"]
 
 

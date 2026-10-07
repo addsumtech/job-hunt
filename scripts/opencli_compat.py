@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 from pathlib import Path
 import shutil
 import tempfile
@@ -102,11 +101,12 @@ def execute(changes):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--site', required=True, choices=['indeed', '51job'])
+    parser.add_argument('--site', required=True, choices=['indeed', '51job', 'linkedin', 'nowcoder'])
     parser.add_argument('--action', choices=['check', 'apply', 'revert'], default='check')
     parser.add_argument('--package-dir', type=Path)
     parser.add_argument('--config-dir', type=Path,
-                        default=Path(os.environ.get('OPENCLI_CONFIG_DIR', str(Path.home() / '.opencli'))))
+                        default=Path.home() / '.opencli',
+                        help='Override output root for fixtures or custom loaders; stock 1.8.7 loads ~/.opencli/clis')
     args = parser.parse_args(argv)
     try:
         package = args.package_dir or installed_package()
@@ -116,8 +116,11 @@ def main(argv=None):
             # Check version and every affected official file BEFORE creating an
             # override. copytree refuses an existing destination; never eject
             # over user files. Copy sibling utilities needed by these adapters.
+            # Keep bundled auth commands in their package: a copied auth.js
+            # imports ../_shared/site-auth.js, absent from a site-only override.
             prepare(package, args.config_dir, args.site, 'check', manifest)
-            shutil.copytree(package / 'clis' / args.site, override)
+            shutil.copytree(package / 'clis' / args.site, override,
+                            ignore=shutil.ignore_patterns('auth.js'))
         changes, states = prepare(package, args.config_dir, args.site, args.action, manifest)
         execute(changes)
         print(json.dumps({'site': args.site, 'action': args.action,

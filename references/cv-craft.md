@@ -151,6 +151,15 @@ Conventions vary substantially **by country** here — honor the local norm rath
 - **South Korea:** photo and personal details commonly expected on domestic CVs; an English résumé is accepted at global firms.
 - **Thailand:** photo commonly included; English or Thai depending on the employer.
 
+**Japanese DOCX in LibreOffice on macOS.** A local export check found that
+LibreOffice substituted the default `Yu Mincho` with an ExtraBold face even
+though the same DOCX opened with regular body text in Microsoft Word. If that
+happens, and the font is installed, set `meta.cjk_font: "Hiragino Mincho ProN"`
+(the family name, without `W3`). Native Word and LibreOffice exports both kept
+regular body text and bold headings with that setting. Reopen and review the
+result in the recipient's app; do not assume this local fallback exists on
+another system or change an explicitly selected template font.
+
 ### Default — unknown / unlisted market
 
 Reverse-chronological, single column, **no photo, no personal data**, English, 1–2 pages. Match the posting's language. This conservative US/UK style is safely received almost anywhere.
@@ -161,7 +170,7 @@ The conventions above are not symmetric in *risk*. Adding a photo/DOB in the EU 
 
 So, when `meta.target_market` is a **Cluster-1** country (US, CA, UK, IE, AU, NZ) **or** the conservative default: **strip photo, date of birth, age, marital status, and nationality from the tailored profile even if they are present in the master**, and tell the user you did and why ("US employers can't consider these — including them only hurts you"). Never *add* them for a Cluster-1 target. The one deliberate exception is a Japanese *rirekisho* (`references/rirekisho.md`), which is a different document type with its own form — its photo/DOB belong only on that form and must **never** be reused for any non-Japan target. When in genuine doubt about a market, follow the conservative default and omit them.
 
-**Where personal data and a photo live (for markets that expect them).** When the target market *does* expect them — much of continental Europe (DE, FR, traditional NL/IT/ES sectors) and East Asia (China, Korea, Japan-Western-CV) — put them in `contact.personal` (a dict, e.g. `{date_of_birth: "1992-05-01", nationality: "...", hometown: "...", marital_status: "..."}`) and set `meta.photo` to an image path. The renderer shows the personal block in the header and a passport-style photo above the name (LaTeX/PDF and .docx; Markdown embeds the path). **The renderer enforces the interlock as defense-in-depth**: for a Cluster-1 `meta.target_market` it ignores `contact.personal` and `meta.photo` entirely, so a mis-tailored profile physically cannot leak protected data onto a US/UK CV. Collect these fields honestly from the user — never invent a DOB, nationality, or photo.
+**Where personal data and a photo live (for markets that expect them).** When the target market *does* expect them — much of continental Europe (DE, FR, traditional NL/IT/ES sectors) and East Asia (China, Korea, Japan-Western-CV) — put them in `contact.personal` (a dict, e.g. `{date_of_birth: "1992-05-01", nationality: "...", hometown: "...", marital_status: "..."}`) and set `meta.photo` to an image path. The renderer shows the personal block in the header and a passport-style photo in the header area: above the name in LaTeX/PDF, after the contact details in .docx. Markdown embeds the path. **The renderer enforces the interlock as defense-in-depth**: for a Cluster-1 `meta.target_market` it ignores `contact.personal` and `meta.photo` entirely, so a mis-tailored profile physically cannot leak protected data onto a US/UK CV. Collect these fields honestly from the user — never invent a DOB, nationality, or photo.
 
 ### File format (all clusters)
 

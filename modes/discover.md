@@ -445,7 +445,7 @@ page or row caps, and it is not a target count.
 
 ## Retrieval backend — OpenCLI first; one-way built-in CDP fallback
 
-Before using OpenCLI for the first Indeed or 51job read, follow `references/opencli-compat.md`:
+Before using OpenCLI for the first Indeed, 51job, LinkedIn or Nowcoder read, follow `references/opencli-compat.md`:
 check and automatically apply only the known version/hash-matched local repairs
 with `scripts/opencli_compat.py`. Do not overwrite custom edits or force a patch
 onto another version. This local preparation performs no site reads and cannot
@@ -944,7 +944,9 @@ Emit a **direction-level shortlist** (3-5 directions), each with: 目标方向 �
 检索词 · 建议筛选条件 · 为何比原 JD 更稳 · 要避开的标题与信号 · 手动收集优先序 —
 in English: direction · search terms · suggested filters · why it is steadier than
 the original JD · titles and signals to avoid · manual-collection priority.
-It has no `rows:`, so it cannot claim a posting exists.
+It contains no posting entries. Keep `rows: []` in `shortlist.yaml` and
+`candidate-match.yaml` so both schemas remain valid; write the directions only
+in `shortlist.md`. An empty list never claims that a posting exists.
 
 Then the disclosure block, verbatim, in `shortlist.md` — one language, all six
 lines, in whichever language the rest of the document is in:
@@ -1073,6 +1075,15 @@ PDF and copies only the report and requested CV/application documents into
 pass the **same `--to <consultation-folder>`** each time so the report and CV stay
 together. Quote that folder and its client files in the reply. The workspace and
 all audit evidence remain in their original location.
+
+If `deliver.py` refuses incomplete evidence, keep the draft in the workspace and
+state what is still missing. Do not manually copy or rename it into a client
+delivery to bypass the refusal; a preliminary report still requires the user's
+explicit request recorded in `brief.preliminary_request`.
+
+In the final reply, link only the delivery folder and its client files unless the
+user asks for the internal records. Copy absolute paths from the actual delivery
+output and verify each target exists; do not reconstruct long paths by hand.
 
 PDF verification checks both recovered text and actual painted glyph IDs. A
 missing or refused PDF means incomplete delivery (exit 2); repair the cause and
@@ -1213,7 +1224,8 @@ is declined/unavailable, not as a silent substitute for waiting:
    session standing in for a logged-out one.
 5. Pause for user recovery and continue independent sources. Use the
    **direction-level degraded output** only if the user chooses it or recovery
-   is unavailable: 3-5 target directions, no `rows:`, so it cannot claim a posting exists.
+   is unavailable: 3-5 target directions, with `rows: []` in the internal YAML
+   files and no posting entries, so it cannot claim a posting exists.
 6. Fill in the disclosure table, whose answers ship pre-filled as localized "no" precisely
    so that concealing a retry has to be an active overwrite rather than an
    omission. Six lines, one language — `modes/discover.md` gives the block in both.

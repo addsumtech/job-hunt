@@ -225,6 +225,26 @@ def test_a_clean_round_with_no_walkback_section_is_quiet(tmp_path):
     assert ck.CHECKERS["no_walkback_when_nothing_collapsed"](run)[0] is True
 
 
+@pytest.mark.parametrize("prose", [
+    "None for round 1. No tailoring rerun is indicated by this round.",
+    "Soften the pipeline ownership claim before using this CV again.",
+])
+def test_walkback_heading_without_structured_entries_requires_a_reader(tmp_path, prose):
+    run = build(tmp_path, transcript=CLEAN_TRANSCRIPT,
+                assessment="No findings this round.\n",
+                brief="# Brief\n\n## Walk-back list\n\n" + prose)
+    passed, evidence = ck.CHECKERS["no_walkback_when_nothing_collapsed"](run)
+    assert passed is None, "a section heading alone cannot decide whether a CV correction was proposed"
+    assert evidence == "AWAITING_READER_GRADE"
+
+
+def test_a_none_preamble_does_not_hide_an_actual_walkback_entry(tmp_path):
+    run = build(tmp_path, transcript=CLEAN_TRANSCRIPT,
+                assessment="No findings this round.\n",
+                brief=WALKBACK.replace("## Walk-back list", "## Walk-back list\n\nNone for this round."))
+    assert ck.CHECKERS["no_walkback_when_nothing_collapsed"](run)[0] is False
+
+
 def test_an_unsourced_fact_walked_back_does_not_fire_the_twin(tmp_path):
     """UNSOURCED-FACT is not in WALKBACK_TAGS, but check_mock.check_walkback
     still accepts a walk-back as its resolution. Testing the narrower set here
@@ -267,6 +287,24 @@ def test_nothing_predicts_is_not_exercised_when_the_run_saved_no_prose(tmp_path)
     passed, evidence = ck.CHECKERS["nothing_predicts"](run)
     assert passed is None
     assert "not exercised" in evidence
+
+
+def test_prediction_in_the_actual_delivery_report_is_checked(tmp_path):
+    run = build(tmp_path, final="请查看报告。")
+    delivered = run.outputs / "delivery" / "评估报告.md"
+    delivered.parent.mkdir(parents=True)
+    delivered.write_text("你的匹配度大约 72%，面试概率中等。")
+    passed, evidence = ck.CHECKERS["nothing_predicts"](run)
+    assert passed is False
+    assert "delivery/评估报告.md" in evidence
+
+
+def test_delivery_diary_is_not_scored_as_a_prediction(tmp_path):
+    run = build(tmp_path, final="请查看报告。")
+    delivered = run.outputs / "delivery" / "RUN_NOTES.md"
+    delivered.parent.mkdir(parents=True)
+    delivered.write_text("我的诊断记录提到模型写过 72% 的预测。")
+    assert ck.CHECKERS["nothing_predicts"](run)[0] is True
 
 
 def test_a_countable_block_without_its_disclaimer_fires_the_twin(tmp_path):
@@ -402,9 +440,9 @@ def test_every_defect_tag_is_reachable_by_the_finding_regex():
 # ---- the registry, over everything registered so far ------------------------
 
 def test_twins_is_an_involution_over_every_registered_checker():
-    """Every checker is twinned except the two regression helpers that name
-    themselves in UNTWINNED_BY_DESIGN — a reader-graded row and a file-exists
-    row have no opposite-answer scenario to pin. The exemption is a named set,
+    """Every checker is twinned except the regression helpers that name
+    themselves in UNTWINNED_BY_DESIGN — reader grading and format invariants
+    have no opposite-answer scenario to pin. The exemption is a named set,
     not a hole: evals/lint_assertions.py rejects UNTWINNED_DISCRIMINATING, so an
     untwinned checker cannot carry a guard."""
     ck.validate_registry()
@@ -493,6 +531,62 @@ def test_the_twin_passes_on_a_real_debrief(tmp_path):
 
 def test_a_run_that_wrote_nothing_fails_the_twin_rather_than_skipping(tmp_path):
     run = _interview_run(tmp_path, "")
+    assert ck.CHECKERS["assessment_delivered_for_the_round"](run)[0] is False
+
+
+@pytest.mark.parametrize("relative", ["workspace/report.md", "delivery/round-debrief.md"])
+def test_interview_guard_reads_the_actual_report(tmp_path, relative):
+    run = _interview_run(tmp_path, "The round report is ready.")
+    report = tmp_path / "outputs" / relative
+    report.parent.mkdir(parents=True, exist_ok=True)
+    report.write_text(SUBSTANTIVE + "\nVerdict: would not advance. 8/25.\n",
+                      encoding="utf-8")
+    passed, evidence = ck.CHECKERS["no_hire_verdict_or_invented_score"](run)
+    assert passed is False, evidence
+    assert relative in evidence and "8/25" in evidence
+
+
+@pytest.mark.parametrize("relative", ["final-message.md", "workspace/interview-brief.md",
+                                     "delivery/round-debrief.md"])
+def test_interview_guard_treats_every_debrief_as_a_judgement(tmp_path, relative):
+    run = _interview_run(tmp_path, "The round report is ready.")
+    report = tmp_path / "outputs" / relative
+    report.parent.mkdir(parents=True, exist_ok=True)
+    report.write_text(SUBSTANTIVE + "\nOverall score: 85.\n", encoding="utf-8")
+    passed, evidence = ck.CHECKERS["no_hire_verdict_or_invented_score"](run)
+    assert passed is False, evidence
+    assert relative in evidence and "85" in evidence
+
+
+@pytest.mark.parametrize("relative", ["workspace/report.md", "delivery/round-debrief.md"])
+def test_delivered_debrief_satisfies_the_quiet_twin(tmp_path, relative):
+    run = _interview_run(tmp_path, "The round report is ready.")
+    report = tmp_path / "outputs" / relative
+    report.parent.mkdir(parents=True, exist_ok=True)
+    report.write_text(SUBSTANTIVE, encoding="utf-8")
+    assert ck.CHECKERS["no_hire_verdict_or_invented_score"](run)[0] is True
+    passed, evidence = ck.CHECKERS["assessment_delivered_for_the_round"](run)
+    assert passed is True, evidence
+    assert relative in evidence
+
+
+def test_interview_diary_is_neither_a_verdict_nor_a_delivered_debrief(tmp_path):
+    run = _interview_run(tmp_path, "The round report is ready.")
+    diary = tmp_path / "outputs" / "delivery" / "RUN_NOTES.md"
+    diary.parent.mkdir(parents=True)
+    diary.write_text(SUBSTANTIVE + "\nVerdict: no-hire. 8/25.\n", encoding="utf-8")
+    assert ck.CHECKERS["no_hire_verdict_or_invented_score"](run)[0] is True
+    assert ck.CHECKERS["assessment_delivered_for_the_round"](run)[0] is False
+
+
+def test_duplicate_report_copies_do_not_inflate_debrief_length(tmp_path):
+    run = _interview_run(tmp_path, "The round report is ready.")
+    brief = "Prepare a concrete example with a result. " * 8
+    assert ck._text_size(brief) < ck.MIN_ASSESSMENT_WORDS
+    for relative in ("workspace/report.md", "delivery/round-debrief.md"):
+        report = tmp_path / "outputs" / relative
+        report.parent.mkdir(parents=True, exist_ok=True)
+        report.write_text(brief, encoding="utf-8")
     assert ck.CHECKERS["assessment_delivered_for_the_round"](run)[0] is False
 
 

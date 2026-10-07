@@ -161,9 +161,14 @@ def _portable_report_style(text: str) -> dict[str, str] | None:
     elif cjk > latin and han:
         style = {"font": "china-s", "footer": "职业咨询报告",
                  "page": "第 {number} 页", "link": "链接：", "separator": "："}
-    elif len(re.findall(r"\b(?:de|la|el|los|las|para|con|una|un|y|que|tu|tus|"
-                        r"candidaturas?|experiencia|puestos?|salario|evidencia|"
-                        r"vacante|recomendaci[oó]n|ubicaci[oó]n)\b", text, re.I)) >= 2:
+    # Articles and prepositions such as de/la/un also occur in Dutch, French,
+    # Italian and people's names. Require distinct Spanish vocabulary before
+    # replacing the documented English fallback for other Latin languages.
+    elif len(set(re.findall(r"\b(?:tus|candidaturas?|experiencia|puestos?|evidencia|"
+                            r"vacantes?|recomendaci[oó]n|ubicaci[oó]n|consejos?|"
+                            r"entrevistas?|necesidades|usuarios?|requisitos|"
+                            r"curr[ií]culum|trabajo|responsabilidades|confirma|"
+                            r"solicitud|puedes)\b", text.casefold()))) >= 2:
         style = {"font": "helv", "footer": "Informe de orientación profesional",
                  "page": "Página {number}", "link": "Enlace: ", "separator": ": "}
     else:
@@ -209,8 +214,9 @@ def clickable_urls(source: str) -> set[str]:
 
 
 def _report_lines(source: str):
-    """Yield visible lines, distinguishing fenced code from Markdown prose."""
+    """Yield visible Markdown lines, keeping comments inside code literal."""
     fence = None
+    comment = False
     for line in source.splitlines():
         if fence is not None:
             if re.fullmatch(r" {0,3}" + re.escape(fence[0]) +
@@ -220,10 +226,31 @@ def _report_lines(source: str):
                 yield line, True
             continue
         opening = re.match(r"^ {0,3}(`{3,}|~{3,})(.*)$", line)
-        if opening and not (opening[1][0] == "`" and "`" in opening[2]):
+        if not comment and opening and not (opening[1][0] == "`" and "`" in opening[2]):
             fence = opening[1]
             continue
-        yield line, False
+        visible, position = [], 0
+        while position < len(line):
+            if comment:
+                end = line.find("-->", position)
+                if end < 0:
+                    break
+                comment, position = False, end + 3
+                continue
+            # A complete inline-code span protects any comment syntax inside
+            # it. Unmatched backticks remain ordinary Markdown text.
+            token = re.search(r"(?<!`)(`+)(?!`)(.*?)\1(?!`)|<!--", line[position:])
+            if token is None:
+                visible.append(line[position:])
+                break
+            visible.append(line[position:position + token.start()])
+            position += token.end()
+            if token.group() == "<!--":
+                comment = True
+            else:
+                visible.append(token.group())
+        if visible or not comment:
+            yield "".join(visible), False
 
 
 def _pdf_link_problem(pdf: pathlib.Path, source: str) -> str:
@@ -580,11 +607,11 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
 
     def write_lines(lines: list[str], x: float, size: float,
                     color: tuple[float, float, float], leading: float,
-                    link: str | None = None) -> bool:
+                    link: str | None = None, allow_split: bool = False) -> bool:
         """Paint text through TextWriter, whose CJK metrics stay compact."""
         nonlocal cursor
         height = len(lines) * leading
-        if height <= bottom - top and cursor + height > bottom:
+        if not allow_split and height <= bottom - top and cursor + height > bottom:
             new_page()
         remaining = lines[:]
         while remaining:
@@ -657,13 +684,14 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
         stripped = value.strip().rstrip("。．.,，、;；:：!！?？ \t")
         return bool(_MD_LINK.fullmatch(stripped) or _RAW_ANGLE_URL.fullmatch(stripped))
 
-    def add_block(value: str, size: float, color: tuple[float, float, float], gap: float) -> bool:
+    def add_block(value: str, size: float, color: tuple[float, float, float], gap: float,
+                  allow_split: bool = False) -> bool:
         nonlocal cursor
         display, links = text_and_links(value)
         standalone_link = only_a_link(value)
         if not standalone_link:
             if not write_lines(wrap(display, size, right - left), left, size, color,
-                               size * 1.35):
+                               size * 1.35, allow_split=allow_split):
                 return False
             cursor += gap
         for label, url in links:
@@ -796,14 +824,16 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
         pdf.unlink(missing_ok=True)
         new_page()
         lines, index = list(_report_lines(md.read_text(encoding="utf-8"))), 0
+        after_heading = False
         while index < len(lines):
             raw_line, literal = lines[index]
             line = raw_line.strip()
             index += 1
             if literal:
                 if not write_lines(wrap(raw_line, 12, right - left, literal=True),
-                                   left, 12, body_color, 16.2):
+                                   left, 12, body_color, 16.2, allow_split=after_heading):
                     return False, "report code block does not fit on a page"
+                after_heading = False
                 continue
             if not line:
                 cursor += 4
@@ -816,6 +846,7 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
                     index += 1
                 if not add_table(table):
                     return False, "report block does not fit on a page"
+                after_heading = False
                 continue
             if line.startswith("# "):
                 value, size, color, gap = line[2:], 18, heading_color, 8
@@ -832,7 +863,24 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
             if line.startswith("#"):
                 heading_text, _ = text_and_links(value)
                 heading_height = len(wrap(heading_text, size, right - left)) * size * 1.35
-                if cursor + heading_height + gap + 32 > bottom:
+                # The writer normally keeps a paragraph together. Reserve its
+                # actual height before painting the heading, or it can move to
+                # the next page alone despite the old two-line reservation.
+                following_height, blank_height = 32.4, 0
+                for next_line, next_literal in lines[index:]:
+                    next_line = next_line.strip()
+                    if not next_line:
+                        blank_height += 4
+                        continue
+                    if not next_literal and not next_line.startswith(("#", "|")):
+                        if next_line.startswith(("- ", "* ", "> ")):
+                            next_line = next_line[2:]
+                        next_text, _ = text_and_links(next_line)
+                        following_height = len(wrap(next_text, 12, right - left)) * 16.2
+                    break
+                if heading_height + gap + blank_height + following_height > bottom - top:
+                    following_height = 32.4  # A long first paragraph must flow.
+                if cursor + heading_height + gap + blank_height + following_height > bottom:
                     new_page()
                 slug = re.sub(r"[^\w -]", "", heading_text.lower()).replace(" ", "-")
                 duplicate = anchor_counts.get(slug, 0)
@@ -841,8 +889,10 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
                 anchors[anchor] = (page.number, cursor)
                 if line.startswith("## "):
                     outline.append([1, heading_text, page.number + 1])
-            if not add_block(value, size, color, gap):
+            if not add_block(value, size, color, gap,
+                             allow_split=after_heading and not line.startswith("#")):
                 return False, "report block does not fit on a page"
+            after_heading = line.startswith("#")
         for number, current_page in enumerate(document, start=1):
             footer = pymupdf.TextWriter(current_page.rect)
             label = style["page"].format(number=number)
@@ -994,8 +1044,8 @@ def _verify_pdf(pdf: pathlib.Path, source: str, needs_cjk: bool,
 
 
 def render_pdf(md: pathlib.Path, pdf: pathlib.Path,
-               font: str | dict | None) -> tuple[bool, str]:
-    """Render and bind these exact source/PDF bytes before any visual review."""
+               font: str | dict | None = None) -> tuple[bool, str]:
+    """Use portable fonts by default; bind source/PDF bytes before visual review."""
     from render_report import render_with
     result = render_with(md, pdf, lambda source, target: _render_pdf(source, target, font))
     if not result[0]:
@@ -1070,6 +1120,21 @@ def _render_pdf(md: pathlib.Path, pdf: pathlib.Path,
     return _verify_pdf(pdf, source, needs_cjk, link_source)
 
 
+def _brief_page_problem(pdf: pathlib.Path) -> str:
+    """Measure the actual readiness brief, including an existing PDF copy."""
+    try:
+        import pymupdf
+        with pymupdf.open(pdf) as document:
+            pages = document.page_count
+    except Exception as exc:
+        return f"INTERVIEW_BRIEF_PAGES_UNVERIFIED: {exc}"
+    if pages > 1:
+        return (f"INTERVIEW_BRIEF_TOO_LONG: rendered {pages} pages; condense repeated "
+                "wording to one page while retaining claim sources, honest gaps and "
+                "reviewer questions. Do not shrink the text.")
+    return ""
+
+
 def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
             make_pdf: bool = True, include_applications: bool | None = None
             ) -> tuple[list[pathlib.Path], list[str]]:
@@ -1139,6 +1204,8 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
         claimed[target] = src.relative_to(workspace)
         if src.suffix == ".pdf":
             problems = glyph_findings(src)
+            if src.stem == "interview-brief" and (problem := _brief_page_problem(src)):
+                problems.append(problem)
             if problems:
                 target.unlink(missing_ok=True)
                 notes.extend(problems)
@@ -1177,6 +1244,9 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
                 elif glyphs and not _portable_report_style(source) and glyphs not in fonts:
                     fonts[glyphs] = pick_cjk_font(source)
                 ok, why = render_pdf(src, pdf, fonts.get(glyphs))
+                if ok and src.stem == "interview-brief" and (why := _brief_page_problem(pdf)):
+                    pdf.unlink(missing_ok=True)
+                    ok = False
             except OSError as exc:
                 ok, why = False, str(exc)
             if ok:
@@ -1192,7 +1262,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--to", type=pathlib.Path, default=None,
                     help=f"destination directory (default: {DEFAULT_ROOT})")
     ap.add_argument("--no-pdf", action="store_true",
-                    help="copy the Markdown only; do not render PDFs")
+                    help="do not render new PDFs; existing deliverable files are still copied")
     ap.add_argument("--include-applications", action="store_true",
                     help="also copy application documents during a non-apply consultation, only when explicitly requested")
     args = ap.parse_args(argv)

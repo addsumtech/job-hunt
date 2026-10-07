@@ -141,6 +141,96 @@
         "5231e4000783ba717b0e1b98317792532acddd0ec5710b3b000fb8894f2873c5",
         "70d7a1e82d0fe82bc24f977168eddf55ff1988eda2a0f7684bfc9df64cbe98f9"
       ]
+    },
+    {
+      "path": "linkedin/search.js",
+      "base_sha256": "d06229e85d586203a42cd1552d41bf8f1c70302ab37e9bc7882545de2eb5cd1f",
+      "patched_sha256": "d1375c4826bc5aac2adfb13d170c01324bbb8c613f3ae6e58d56d7af84b95bc3",
+      "replacements": [
+        {
+          "old": "function buildVoyagerSearchQuery(input) {\n    const hasFilters = input.companyIds.length ||\n        input.experienceLevels.length ||\n        input.jobTypes.length ||\n        input.datePostedValues.length ||\n        input.remoteTypes.length;\n    const parts = [\n        'origin:' + (hasFilters ? 'JOB_SEARCH_PAGE_JOB_FILTER' : 'JOB_SEARCH_PAGE_OTHER_ENTRY'),\n        'keywords:' + input.keywords,\n    ];\n    if (input.location) {\n        parts.push('locationUnion:(seoLocation:(location:' + input.location + '))');\n    }\n    const filters = [];\n    if (input.companyIds.length)\n        filters.push('company:List(' + input.companyIds.join(',') + ')');\n    if (input.experienceLevels.length)\n        filters.push('experience:List(' + input.experienceLevels.join(',') + ')');\n    if (input.jobTypes.length)\n        filters.push('jobType:List(' + input.jobTypes.join(',') + ')');\n    if (input.datePostedValues.length)\n        filters.push('timePostedRange:List(' + input.datePostedValues.join(',') + ')');\n    if (input.remoteTypes.length)\n        filters.push('workplaceType:List(' + input.remoteTypes.join(',') + ')');\n    if (filters.length)\n        parts.push('selectedFilters:(' + filters.join(',') + ')');\n    parts.push('spellCorrectionEnabled:true');\n    return '(' + parts.join(',') + ')';\n}\nfunction buildVoyagerUrl(input, offset, count) {\n    const params = new URLSearchParams({\n        decorationId: 'com.linkedin.voyager.dash.deco.jobs.search.JobSearchCardsCollection-220',\n        count: String(count),\n        q: 'jobSearch',\n    });\n    const query = encodeURIComponent(buildVoyagerSearchQuery(input))\n        .replace(/%3A/gi, ':')\n        .replace(/%2C/gi, ',')\n        .replace(/%28/gi, '(')\n        .replace(/%29/gi, ')');\n    return '/voyager/api/voyagerJobsDashJobCards?' + params.toString() + '&query=' + query + '&start=' + offset;\n}\n",
+          "new": "// Encode leaf values before adding Rest.li's structural punctuation. Encoding\n// the completed query and then restoring every comma corrupts e.g. Shanghai, China.\nfunction encodeRestliValue(value) {\n    return encodeURIComponent(String(value)).replace(/[!'()*]/g,\n        char => '%' + char.charCodeAt(0).toString(16).toUpperCase());\n}\nfunction buildVoyagerSearchQuery(input) {\n    const hasFilters = input.companyIds.length ||\n        input.experienceLevels.length ||\n        input.jobTypes.length ||\n        input.datePostedValues.length ||\n        input.remoteTypes.length;\n    const parts = [\n        'origin:' + (hasFilters ? 'JOB_SEARCH_PAGE_JOB_FILTER' : 'JOB_SEARCH_PAGE_OTHER_ENTRY'),\n        'keywords:' + encodeRestliValue(input.keywords),\n    ];\n    if (input.location) {\n        parts.push('locationUnion:(seoLocation:(location:' + encodeRestliValue(input.location) + '))');\n    }\n    const filters = [];\n    if (input.companyIds.length)\n        filters.push('company:List(' + input.companyIds.join(',') + ')');\n    if (input.experienceLevels.length)\n        filters.push('experience:List(' + input.experienceLevels.join(',') + ')');\n    if (input.jobTypes.length)\n        filters.push('jobType:List(' + input.jobTypes.join(',') + ')');\n    if (input.datePostedValues.length)\n        filters.push('timePostedRange:List(' + input.datePostedValues.join(',') + ')');\n    if (input.remoteTypes.length)\n        filters.push('workplaceType:List(' + input.remoteTypes.join(',') + ')');\n    if (filters.length)\n        parts.push('selectedFilters:(' + filters.join(',') + ')');\n    parts.push('spellCorrectionEnabled:true');\n    return '(' + parts.join(',') + ')';\n}\nfunction buildVoyagerUrl(input, offset, count) {\n    const params = new URLSearchParams({\n        decorationId: 'com.linkedin.voyager.dash.deco.jobs.search.JobSearchCardsCollection-221',\n        count: String(count),\n        q: 'jobSearch',\n    });\n    const query = buildVoyagerSearchQuery(input);\n    return '/voyager/api/voyagerJobsDashJobCards?' + params.toString() + '&query=' + query + '&start=' + offset;\n}\n"
+        }
+      ]
+    },
+    {
+      "path": "nowcoder/detail.js",
+      "base_sha256": "7837e8e1363bc3d1326d18e2b4810e19b6feef11881ed0cf0e625a9e86d51b21",
+      "patched_sha256": "e69ded4f90e445d883fd2004de0661174193595afb607a836cada2149980cd97",
+      "replacements": [
+        {
+          "old": "import { cli } from '@jackwener/opencli/registry';\n\ncli({\n    site: 'nowcoder',\n    name: 'detail',\n    access: 'read',\n    description: 'Post detail view (supports ID / UUID / URL)',\n    domain: 'www.nowcoder.com',\n    args: [\n        { name: 'id', positional: true, required: true, help: 'Post ID, UUID, or URL' },\n    ],\n    columns: ['title', 'author', 'school', 'content', 'likes', 'comments', 'views', 'time', 'location'],\n    pipeline: [\n        { navigate: 'https://www.nowcoder.com' },\n        { evaluate: `(async () => {\n  const raw = \\${{ args.id | json }};\n  const base = 'https://gw-c.nowcoder.com';\n  const strip = (html) => (html || '').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').trim();\n\n  let id = raw;\n  const urlMatch = raw.match(/discuss\\\\/(\\\\d+)/);\n  if (urlMatch) id = urlMatch[1];\n\n  let data = null;\n\n  if (/[a-f]/.test(id) && id.length > 20) {\n    const r = await fetch(base + '/api/sparta/detail/moment-data/detail/' + id, {credentials: 'include'});\n    const d = await r.json();\n    if (d.success && d.data) data = d.data;\n  }\n\n  if (!data && /^\\\\d+$/.test(id)) {\n    const r = await fetch(base + '/api/sparta/detail/content-data/detail/' + id, {credentials: 'include'});\n    const d = await r.json();\n    if (d.success && d.data) data = d.data;\n  }\n\n  if (!data && /^\\\\d+$/.test(id)) {\n    const r = await fetch(base + '/api/sparta/detail/moment-data/detail/' + id, {credentials: 'include'});\n    const d = await r.json();\n    if (d.success && d.data) data = d.data;\n  }\n\n  if (!data) throw new Error('Post not found: ' + id);\n\n  const user = data.userBrief || {};\n  const freq = data.frequencyData || {};\n  return [{\n    title: data.title || '(untitled)',\n    author: user.nickname || '',\n    school: user.educationInfo || '',\n    content: strip(data.content || '').substring(0, 500),\n    likes: freq.likeCnt || 0,\n    comments: freq.commentCnt || freq.totalCommentCnt || 0,\n    views: freq.viewCnt || 0,\n    time: data.createdAt ? new Date(data.createdAt).toISOString().slice(0, 19) : '',\n    location: data.ip4Location || '',\n  }];\n})()\n` },\n    ],\n});\n",
+          "new": "import { cli } from '@jackwener/opencli/registry';\n\ncli({\n    site: 'nowcoder',\n    name: 'detail',\n    access: 'read',\n    description: 'Post detail view (supports ID / UUID / URL)',\n    domain: 'www.nowcoder.com',\n    args: [\n        { name: 'id', positional: true, required: true, help: 'Post ID, UUID, or URL' },\n    ],\n    columns: ['title', 'author', 'school', 'content', 'likes', 'comments', 'views', 'time', 'location', 'url', 'content_complete', 'content_access'],\n    pipeline: [\n        { navigate: 'https://www.nowcoder.com' },\n        { evaluate: `(async () => {\n  const raw = \\${{ args.id | json }};\n  const input = String(raw).trim();\n  const base = 'https://gw-c.nowcoder.com';\n  const strip = (html) => String(html || '')\n    .replace(/<br\\\\s*\\\\/?\\\\s*>|<\\\\/(?:p|div|li|h[1-6])\\\\s*>/gi, '\\\\n')\n    .replace(/<[^>]+>/g, '')\n    .replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>')\n    .replace(/&amp;/g, '&').replace(/\\\\n[ \\\\t]*\\\\n+/g, '\\\\n\\\\n').trim();\n\n  let id = input;\n  if (/^https?:\\\\/\\\\//i.test(input)) {\n    const url = new URL(input);\n    if (!/^(?:www\\\\.)?nowcoder\\\\.com$/i.test(url.hostname) || url.username || url.password)\n      throw new Error('Expected a nowcoder.com post URL');\n    const match = url.pathname.match(/^\\\\/(?:discuss\\\\/(\\\\d+)|feed\\\\/main\\\\/detail\\\\/([a-f0-9]{32}))\\\\/?$/i);\n    if (!match) throw new Error('Unsupported Nowcoder post URL');\n    id = match[1] || match[2];\n  }\n  if (!/^\\\\d+$/.test(id) && !/^[a-f0-9]{32}$/i.test(id))\n    throw new Error('Expected a numeric Nowcoder post ID, a 32-character UUID, or a post URL');\n\n  async function readDetail(kind) {\n    const response = await fetch(base + '/api/sparta/detail/' + kind + '/detail/' + id,\n      {credentials: 'include'});\n    let result;\n    try { result = await response.json(); }\n    catch { throw new Error('Nowcoder detail HTTP ' + response.status + ': response is not valid JSON'); }\n    if (!response.ok)\n      throw new Error('Nowcoder detail HTTP ' + response.status + ': ' + (result.msg || response.statusText));\n    if (result.success && result.data) return result.data;\n    // A missing post is the only response that permits the other numeric post type.\n    // Preserve login, verification and other API errors instead of hiding them.\n    if (/内容不存在|帖子不存在|post not found/i.test(String(result.msg || ''))) return null;\n    throw new Error(result.msg || 'Nowcoder detail returned an incomplete response');\n  }\n\n  let data;\n  if (/^[a-f0-9]{32}$/i.test(id)) {\n    data = await readDetail('moment-data');\n  } else {\n    data = await readDetail('content-data');\n    if (!data) data = await readDetail('moment-data');\n  }\n  if (!data) throw new Error('Post not found: ' + id);\n\n  const user = data.userBrief || {};\n  const freq = data.frequencyData || {};\n  const timestamp = data.createdAt ?? data.createTime;\n  const restricted = data.hasLook === false || data.showMessage?.showContent === false;\n  return [{\n    title: data.title || '(untitled)',\n    author: user.nickname || '',\n    school: user.educationInfo || '',\n    content: strip(data.content || ''),\n    content_complete: !restricted,\n    content_access: restricted ? (data.blogZhuanlan ? 'paid_preview' : 'restricted') : 'full',\n    likes: freq.likeCnt || 0,\n    comments: freq.commentCnt || freq.totalCommentCnt || 0,\n    views: freq.viewCnt || 0,\n    time: timestamp != null ? new Date(timestamp).toISOString().slice(0, 19) : '',\n    location: data.ip4Location || '',\n    url: /^https?:\\\\/\\\\//i.test(input) ? input :\n      'https://www.nowcoder.com/' + (/^\\\\d+$/.test(id) ? 'discuss/' : 'feed/main/detail/') + id,\n  }];\n})()\n` },\n    ],\n});\n"
+        }
+      ]
+    },
+    {
+      "path": "nowcoder/recommend.js",
+      "base_sha256": "a059de7e7ba1555d9450bf82552e0deb5cd08f147983d448ed84da784d6c8dc9",
+      "patched_sha256": "dcf635abbf39513df5d3a404ee2cb43d0246d7152e2bb1758e9345f531dce9c0",
+      "replacements": [
+        {
+          "old": "item.momentData?.uuid || item.longContentData?.uuid || item.contentData?.uuid || item.contentId || ''",
+          "new": "item.momentData?.uuid || item.longContentData?.id || item.contentData?.id || item.contentId || ''"
+        }
+      ]
+    },
+    {
+      "path": "nowcoder/experience.js",
+      "base_sha256": "48e9750a6f809d938c68a57f53999f7235c5d54ab2ffbc608f5015a04a8690ae",
+      "patched_sha256": "eb6f5dac4fb4a9227664211e6a4e6322b54b7a27dcf7ed7dd1494414ceebd973",
+      "replacements": [
+        {
+          "old": "item.contentData?.uuid || item.contentData?.id || item.contentId || ''",
+          "new": "item.contentData?.id || item.contentId || ''"
+        }
+      ]
+    },
+    {
+      "path": "nowcoder/search.js",
+      "base_sha256": "a28538255b0c8693e746a25f2ab24b04d79d58f898ff0bd8f2eeb644b36969c1",
+      "patched_sha256": "dee09defd05110bdd2b2877e916aea6820d7890c112654427be7a1454b226c15",
+      "replacements": [
+        {
+          "old": "const uuid = moment.uuid || contentData.uuid || '';\n    const id = data.contentId || '';",
+          "new": "const uuid = moment.uuid || '';\n    const id = contentData.id || data.contentId || '';"
+        }
+      ]
+    },
+    {
+      "path": "linkedin/job-detail.js",
+      "base_sha256": "8f0cdc3619aeb8b4d74806cf226fb2a5f77c5fd4e1594f3d894f0dd1171dc2b9",
+      "patched_sha256": "1d883b2f86b43ac8cad4463aad62561a18bdc413e360f0e96ee490d8c6fbda29",
+      "replacements": [
+        {
+          "old": "      const codes = Array.from(document.querySelectorAll('code[id^=\"bpr-guid-\"]'));\n      for (const code of codes) {\n        let payload;\n        try { payload = JSON.parse(code.textContent || '{}'); } catch { continue; }\n        const included = Array.isArray(payload.included) ? payload.included : [];\n        const topCard = included.find((item) => item && (item.jobPostingTitle || item.primaryDescription || item.tertiaryDescription));\n        if (!topCard) continue;\n        const apply = included.find((item) => item && item.companyApplyUrl);\n        const workplace = included.find((item) => item && (item.workplaceTypeEnum || item.localizedName));\n        const company = included.find((item) => item && item.name && /company/i.test(String(item.entityUrn || item.$type || '')));",
+          "new": "      const jobId = new URL(location.href).searchParams.get('currentJobId')\n        || location.pathname.match(/^\\/jobs\\/view\\/(\\d+)/)?.[1];\n      const jobUrn = 'urn:li:fsd_jobPosting:' + jobId;\n      const included = Array.from(document.querySelectorAll('code[id^=\"bpr-guid-\"]')).flatMap((code) => {\n        try {\n          const payload = JSON.parse(code.textContent || '{}');\n          return Array.isArray(payload.included) ? payload.included : [];\n        } catch { return []; }\n      });\n      const postings = included.filter((item) => item?.entityUrn === jobUrn);\n      const posting = postings.find((item) => item.description?.text);\n      const topCard = included.find((item) => item?.jobPostingTitle && item['*jobPosting'] === jobUrn);\n      if (topCard) {\n        const apply = included.find((item) => item?.companyApplyUrl\n          && (item.entityUrn === jobUrn || item.entityUrn === 'urn:li:fsd_jobSeekerApplicationDetail:' + jobId));\n        const workplaceUrns = postings.flatMap((item) => item['*jobWorkplaceTypes'] || item['*workplaceTypesResolutionResults'] || []);\n        const workplace = included.find((item) => workplaceUrns.includes(item?.entityUrn));\n        const companyUrn = postings.map((item) => item.companyDetails?.jobCompany?.['*company']).find(Boolean);\n        const company = included.find((item) => item?.entityUrn === companyUrn);"
+        },
+        {
+          "old": "          description: '',",
+          "new": "          description: String(posting?.description?.text || ''),"
+        },
+        {
+          "old": "if (inline && inline.title) return { ...inline, description: clean(inline.description || renderedDescription) };",
+          "new": "if (inline && inline.title) return { ...inline, description: inline.description || renderedDescription };"
+        },
+        {
+          "old": "  if (!title) throw new CommandExecutionError('LinkedIn job detail could not find a job title');",
+          "new": "  if (!title) throw new CommandExecutionError('LinkedIn job detail could not find a job title');\n  const description = String(row.description || '').replace(/[\\u00a0\\u202f]+/g, ' ').trim();\n  if (!description) throw new CommandExecutionError('LinkedIn job description is empty or still loading; no complete detail extracted');"
+        },
+        {
+          "old": "    description: normalizeWhitespace(row.description),",
+          "new": "    description,"
+        },
+        {
+          "old": "    await assertLinkedInAuthenticated(page, 'LinkedIn job-detail');\n    const row = unwrapEvaluateResult(await page.evaluate(buildExtractionScript()));\n    return [normalizeDetail(row)];",
+          "new": "    let row;\n    for (let attempt = 0; attempt < 6; attempt++) {\n      await assertLinkedInAuthenticated(page, 'LinkedIn job-detail');\n      row = unwrapEvaluateResult(await page.evaluate(buildExtractionScript()));\n      if (normalizeWhitespace(row?.title) && normalizeWhitespace(row?.description)) break;\n      if (attempt < 5) await page.wait(2);\n    }\n    return [normalizeDetail(row)];"
+        },
+        {
+          "old": "export const __test__ = {\n",
+          "new": "export const __test__ = {\n  buildExtractionScript,\n"
+        }
+      ]
     }
   ]
 }

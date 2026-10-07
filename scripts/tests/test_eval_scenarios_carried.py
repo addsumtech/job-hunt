@@ -95,8 +95,9 @@ def test_a_digest_is_recorded_for_every_carried_scenario():
 # A no_skill baseline cannot catch this, because it emits no tags at all and
 # passes the twin by never doing the thing the twin is about.
 
-SCOPE_WORDS = ("own", "ported", "profiled", "scatter-add", "wrote", "maintain",
-               "Slurm", "job templates", "C++17", "CUDA")
+# "profil" accepts both "profiled" and "profiling" in the source sentence.
+SCOPE_WORDS = ("own", "ported", "profil", "scatter-add", "wrote", "maintain",
+               "Slurm", "job templates", "C++17", "CUDA", "re-ran")
 
 
 def _section(text, header, stop):
@@ -106,10 +107,28 @@ def _section(text, header, stop):
 def test_the_well_sourced_scenario_cv_carries_every_scope_word_its_answers_use():
     text = (REPO / "evals" / "scenarios" /
             "interview-well-sourced.md").read_text(encoding="utf-8")
-    cv = _section(text, "CANDIDATE CV", "=== JOB POSTING").lower()
+    cv_section = _section(text, "CANDIDATE CV", "=== JOB POSTING")
+    # Only actual source facts count. Historical explanations below the CV once
+    # repeated the answer's words and concealed gaps in the candidate material.
+    cv = cv_section.split("===", 1)[1].strip().split("\n\n", 1)[0].lower()
     answers = text.split("THE CANDIDATE'S ANSWERS", 1)[1].lower()
     missing = [w for w in SCOPE_WORDS
                if w.lower() in answers and w.lower() not in cv]
     assert not missing, (
         "the scripted answers use scope this scenario's CV does not carry, so a "
         f"run that flags it is right and the quiet twin cannot pass: {missing}")
+
+
+def test_buried_slurm_is_the_only_missing_application_signal_in_its_twin():
+    """The positive case must not force a legitimate stop over an unrelated
+    required language or missing contact channel. Keep Slurm buried in the
+    experience bullet so the task still has to surface it into skills."""
+    text = (NEW / "apply-ats-reject-buried-evidence.md").read_text(encoding="utf-8")
+    cv = _section(text, "CANDIDATE CV", "=== JOB POSTING")
+    assert "English — fluent" in cv
+    assert "donata.rey@example.test" in cv
+    assert "department's Slurm cluster" in cv
+    assert "wrote the job templates the team still uses" in cv
+    skills = cv.split("Skills section as written today:", 1)[1]
+    assert "Slurm" not in skills
+    assert "fluent English" in text.split("=== JOB POSTING", 1)[1]

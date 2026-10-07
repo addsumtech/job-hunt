@@ -158,6 +158,28 @@ _US_STATE = re.compile(
 EMPTINESS_PHRASES = tuple(phrase for lang in locales.LANGUAGES
                           for phrase in locales.GATE_TEXT[lang]["empty"])
 
+_ABSENCE_NEGATION = re.compile(
+    r"(?:不(?:代表|意味着|说明|等于)|并非|不是|"
+    r"(?:不能|无法|尚不能|尚无法)(?:据此)?(?:判断|认定|断言|确认|证明|说明))[^。\n]{0,40}$"
+    r"|(?:does\s+not\s+mean|doesn['’]t\s+mean|not\s+evidence\s+(?:that|of)|"
+    r"(?:cannot|can['’]t)\s+(?:conclude|infer|say|determine))[^.\n]{0,70}$",
+    re.I)
+
+
+def absence_claims(text):
+    """Return asserted empty-result phrases and their lines, not denials of them."""
+    found = []
+    for phrase in EMPTINESS_PHRASES:
+        for match in re.finditer(re.escape(phrase), text, re.I):
+            prefix = re.split(r"[。！？.!?；;\n，,]|不过|但是|然而|但|\b(?:but|however|yet)\b",
+                              text[:match.start()], flags=re.I)[-1]
+            if _ABSENCE_NEGATION.search(prefix):
+                continue
+            start = text.rfind("\n", 0, match.start()) + 1
+            end = text.find("\n", match.end())
+            found.append((match.start(), phrase, text[start:end if end >= 0 else None].strip()))
+    return [(phrase, line) for _, phrase, line in sorted(found)]
+
 # Required reader-facing text follows the user's report language, not the
 # market. Shared translations let native reports pass without foreign labels.
 #
@@ -1245,9 +1267,8 @@ def check_run(workspace, shortlist, brief, md_text, calls):
             "not be rendered without it.")
 
     if not rows:
-        lowered = md_text.lower()
-        hit = next((p for p in EMPTINESS_PHRASES
-                    if p in md_text or p in lowered), None)
+        claims = absence_claims(md_text)
+        hit = claims[0][0] if claims else None
         if hit and not ok_calls:
             findings.append(
                 f"EMPTY_RESULT_UNSUPPORTED: shortlist.md says {hit!r} but "

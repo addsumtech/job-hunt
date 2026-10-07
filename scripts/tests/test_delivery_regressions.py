@@ -11,6 +11,53 @@ import deliver
 import render_cv
 
 
+@pytest.mark.parametrize('existing_pdf,no_pdf', [(False, False), (True, False), (True, True)])
+def test_readiness_brief_refuses_overlength_then_delivers_a_readable_one_page(
+        tmp_path, capsys, existing_pdf, no_pdf):
+    import pymupdf
+    ws, dest = tmp_path / 'workspace', tmp_path / 'delivery'
+    ws.mkdir()
+    (ws / 'report.md').write_text('# Advice\n\nPrepare your documented examples.\n')
+    md, pdf = ws / 'interview-brief.md', ws / 'interview-brief.pdf'
+    long_brief = '# Interview readiness\n\n' + '\n\n'.join(
+        f'- Claim {i}: maintained an offline reconstruction module. '
+        'Source: the documented engineering role. Be ready to explain your own '
+        'code changes, validation and limitations.' for i in range(22))
+    short_brief = ('# Interview readiness\n\n## Be ready to explain\n\n'
+                   '- Claim: maintained an offline reconstruction module. '
+                   'Source: the documented engineering role. Explain your code and validation.\n\n'
+                   '## Honest gaps\n\nNo clinical registration; do not present engineering as clinical practice.\n\n'
+                   '## Reviewer questions\n\nWhat was your personal scope? Confirm availability.\n')
+    args = ['--workspace', str(ws), '--to', str(dest)] + (['--no-pdf'] if no_pdf else [])
+    target = dest / '面试准备/面试准备.pdf'
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b'old delivery must not survive a refusal')
+    for source, expected in ((long_brief, 2), (short_brief, 0)):
+        md.write_text(source, encoding='utf-8')
+        if existing_pdf:
+            assert deliver.render_pdf(md, pdf) == (True, '')
+        assert deliver.main(args) == expected
+        output = capsys.readouterr()
+        assert md.read_text(encoding='utf-8') == source
+        assert (target.with_suffix('.md')).read_text(encoding='utf-8') == source
+        if expected:
+            assert 'INTERVIEW_BRIEF_TOO_LONG' in output.err
+            assert not target.exists()
+            if existing_pdf:
+                with pymupdf.open(pdf) as document:
+                    assert document.page_count > 1, 'source draft must remain available for revision'
+        else:
+            assert 'INTERVIEW_BRIEF_TOO_LONG' not in output.err
+            with pymupdf.open(target) as document:
+                assert document.page_count == 1
+                text = document[0].get_text()
+                assert all(value in text for value in ('Source:', 'No clinical registration', 'personal scope'))
+                spans = [span for block in document[0].get_text('dict')['blocks']
+                         for line in block.get('lines', []) for span in line['spans']]
+                body = [span for span in spans if 'No clinical registration' in span['text']]
+                assert body and all(span['size'] == pytest.approx(12) for span in body)
+
+
 @pytest.mark.parametrize('body', [
     '正文说明保留真实经历与岗位要求。',
     'Describe the actual project and the role requirements.',
@@ -60,6 +107,37 @@ def test_standalone_official_link_is_not_printed_twice(tmp_path):
         assert document[0].get_links()[0]['uri'] == 'https://example.com/beijing'
 
 
+def test_report_hides_comments_but_preserves_visible_prose_and_literal_code(tmp_path):
+    import pymupdf
+    source = '''# Supporting statement
+
+<!-- word-limits: none stated in the posting -->
+Visible before. <!-- internal note
+[Private link](https://example.com/private)
+```not-a-fence
+--> Visible after.
+
+Inline `<!-- literal-inline -->` example.
+
+```html
+<!-- literal-fenced -->
+```
+
+[Official posting](https://example.com/job)
+'''
+    md, pdf = tmp_path / 'report.md', tmp_path / 'report.pdf'
+    md.write_text(source, encoding='utf-8')
+    assert deliver._render_portable_report(
+        md, pdf, deliver._portable_report_style(source)) == (True, '')
+    with pymupdf.open(pdf) as document:
+        text = '\n'.join(page.get_text() for page in document)
+        assert all(value in text for value in (
+            'Visible before.', 'Visible after.', 'literal-inline', 'literal-fenced'))
+        assert all(value not in text for value in (
+            'word-limits', 'internal note', 'Private link', 'not-a-fence'))
+    assert deliver.clickable_urls(source) == {'https://example.com/job'}
+
+
 @pytest.mark.parametrize('title,anchor', [('Role analysis', 'role-analysis'),
                                          ('岗位分析', '岗位分析')])
 def test_contents_resolves_forward_heading_links_after_pagination(tmp_path, title, anchor):
@@ -85,6 +163,24 @@ def test_unresolved_contents_link_is_not_delivered_as_a_broken_link(tmp_path):
     ok, reason = deliver._render_portable_report(md, pdf, style)
     assert not ok and 'unresolved report section link' in reason
     assert not pdf.exists()
+
+
+@pytest.mark.parametrize('paragraph_words', [180, 800])
+def test_heading_stays_with_the_start_of_its_first_paragraph(tmp_path, paragraph_words):
+    import pymupdf
+    md, pdf = tmp_path / 'report.md', tmp_path / 'report.pdf'
+    source = '# Report\n\n' + '\n\n'.join(f'Prior block {i}.' for i in range(22))
+    source += '\n\n## Evidence explained\n\nFirstparagraph ' + 'evidence ' * paragraph_words
+    md.write_text(source, encoding='utf-8')
+    assert deliver._render_portable_report(
+        md, pdf, deliver._portable_report_style(source)) == (True, '')
+    with pymupdf.open(pdf) as document:
+        headings = [page.number for page in document if page.search_for('Evidence explained')]
+        starts = [page.number for page in document if page.search_for('Firstparagraph')]
+        assert headings == starts and len(headings) == 1
+        assert sum(page.get_text().count('evidence') for page in document) == paragraph_words
+        assert all(page.rect.contains(block[:4])
+                   for page in document for block in page.get_text('blocks'))
 
 
 def test_compact_comparison_table_keeps_columns_headers_and_links_across_pages(tmp_path):
@@ -157,6 +253,28 @@ def test_grouped_posting_links_each_occupy_their_own_line(tmp_path, layout):
             page_a, rect_a = positions[first][0]
             page_b, rect_b = positions[second][0]
             assert page_b > page_a or (page_b == page_a and rect_b.y0 >= rect_a.y1)
+
+
+@pytest.mark.parametrize('body', [
+    'Explain the actual project and distinguish verified results from open questions.',
+    '请说明真实职责，核对事实来源，再补充面试实例。',
+])
+def test_omitted_font_renders_the_brief_and_binds_its_actual_bytes(tmp_path, monkeypatch, body):
+    import hashlib
+    import json
+    import pymupdf
+    md, pdf = tmp_path / 'interview-brief.md', tmp_path / 'interview-brief.pdf'
+    md.write_text(body, encoding='utf-8')
+    monkeypatch.setattr(deliver, '_pandoc',
+                        lambda *args: pytest.fail('default fonts should use the portable renderer'))
+
+    assert deliver.render_pdf(md, pdf) == (True, '')
+    with pymupdf.open(pdf) as document:
+        text = ''.join(page.get_text() for page in document)
+        assert ''.join(body.split()) in ''.join(text.split())
+    receipt = json.loads(md.with_name('interview-brief-render.json').read_text())
+    assert receipt['source_sha256'] == hashlib.sha256(md.read_bytes()).hexdigest()
+    assert receipt['pdf_sha256'] == hashlib.sha256(pdf.read_bytes()).hexdigest()
 
 
 def test_selected_report_font_is_not_replaced_by_bundled_font(tmp_path, monkeypatch):

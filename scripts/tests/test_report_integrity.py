@@ -101,6 +101,31 @@ def test_default_pdf_tables_and_cards_bind_with_clickable_links(tmp_path, column
         assert any(link.get("uri") == "https://example.test/job" for page in doc for link in page.get_links())
 
 
+@pytest.mark.parametrize("intro,label", [
+    ("Career advice for your application", "Work sample"),
+    ("求职建议与申请准备", "作品示例"),
+    ("応募書類と面接の準備", "仕事のサンプル"),
+    ("지원 서류와 면접 준비", "작업 예시"),
+    ("Consejos para preparar la próxima entrevista", "Ejemplo de trabajo"),
+])
+def test_standalone_links_bind_in_each_default_report_language(tmp_path, intro, label):
+    url = "https://example.invalid/work-sample?language=test&case=support#evidence"
+    source = f"# {intro}\n\n[{label}]({url})\n"
+    (tmp_path / "report.md").write_text(source, encoding="utf-8")
+    assert render_report.main(["--workspace", str(tmp_path)]) == 0
+    with pymupdf.open(tmp_path / "report.pdf") as doc:
+        pages = [page.get_text() for page in doc]
+        assert layout_requirements.report_text_problems(source, pages) == []
+        assert any(link.get("uri") == url for page in doc for link in page.get_links())
+
+
+def test_standalone_link_prefix_does_not_hide_changed_text():
+    source = "[Work sample](https://example.test/work)\n"
+    assert layout_requirements.report_text_problems(source, ["Not a link: Work sample\n"])
+    assert layout_requirements.report_text_problems(source, ["Link: Different sample\n"])
+    assert layout_requirements.report_text_problems("Work sample\n", ["Link: Work sample\n"])
+
+
 @pytest.mark.parametrize("text", [
     "已完成客户需求梳理，接下来核对实际交付。",
     "证据来自CV-001，核对JD-002后再补写。",

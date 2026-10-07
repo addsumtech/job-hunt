@@ -1,9 +1,20 @@
 """Compatibility edits must be explicit, reversible and preserve unknown files."""
 import json
 from pathlib import Path
+import shutil
+import subprocess
 
 import pytest
 import opencli_compat as compat
+
+
+def test_reader_patch_regressions_execute_actual_javascript():
+    node = shutil.which('node')
+    if not node:
+        pytest.skip('Node unavailable')
+    result = subprocess.run([node, '--test', str(Path(__file__).with_name('opencli-reader-repairs.test.cjs'))],
+                            capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def fixture(tmp_path):
@@ -136,6 +147,7 @@ def test_apply_creates_override_without_manual_eject(tmp_path, monkeypatch):
     import shutil
     package, config, manifest = fixture(tmp_path)
     (package / 'clis/indeed/utils.js').write_text('shared utility')
+    (package / 'clis/indeed/auth.js').write_text("import '../_shared/site-auth.js';")
     shutil.rmtree(config / 'clis/indeed')
     data = tmp_path / 'patches.json'
     data.write_text(json.dumps(manifest))
@@ -146,6 +158,7 @@ def test_apply_creates_override_without_manual_eject(tmp_path, monkeypatch):
     assert compat.main(args + ['--action', 'apply']) == 0
     assert (config / 'clis/indeed/job.js').read_text() == 'fixed();\n'
     assert (config / 'clis/indeed/utils.js').read_text() == 'shared utility'
+    assert not (config / 'clis/indeed/auth.js').exists()
     assert (package / 'clis/indeed/job.js').read_text() == 'old();\n'
     assert compat.main(args + ['--action', 'apply']) == 0
     assert compat.main(args + ['--action', 'revert']) == 0
@@ -162,3 +175,15 @@ def test_unsupported_version_creates_no_override(tmp_path, monkeypatch):
     monkeypatch.setattr(compat, 'MANIFEST', data)
     assert compat.main(['--site', 'indeed', '--action', 'apply', '--package-dir', str(package), '--config-dir', str(config)]) == 2
     assert not (config / 'clis/indeed').exists()
+
+
+def test_trace_config_environment_does_not_redirect_stock_adapter_overrides(tmp_path, monkeypatch):
+    package, config, manifest = fixture(tmp_path)
+    data = tmp_path / 'patches.json'
+    data.write_text(json.dumps(manifest))
+    monkeypatch.setattr(compat, 'MANIFEST', data)
+    monkeypatch.setattr(compat.Path, 'home', lambda: tmp_path / 'home')
+    monkeypatch.setenv('OPENCLI_CONFIG_DIR', str(config))
+    assert compat.main(['--site', 'indeed', '--action', 'apply', '--package-dir', str(package)]) == 0
+    assert (tmp_path / 'home/.opencli/clis/indeed/job.js').read_text() == 'fixed();\n'
+    assert (config / 'clis/indeed/job.js').read_text() == 'old();\n'

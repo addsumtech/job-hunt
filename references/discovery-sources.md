@@ -79,7 +79,7 @@ adapters:
     domain: www.linkedin.com
     login_state_2026_08_09: logged_in
     runtime_verified: true
-    runtime_verified_on: "2026-09-20"
+    runtime_verified_on: "2026-10-07"
     identity_field: title
     listing_commands: [search, job-detail]
     search_command: 'opencli linkedin search "<keyword>" --location "<loc>" --experience-level mid-senior --job-type full-time --date-posted week --start 0 --limit 10 --window background -f json'
@@ -88,6 +88,13 @@ adapters:
     caps: {rows_per_round: 25, pages_per_round: 2}
     other_read_commands: [jobs-preferences, people-search]
     notes: >-
+      RUN 2026-10-07 (OpenCLI 1.8.7 plus the versioned compatibility patches):
+      a Shanghai, China search returned two current jobs, and job-detail
+      returned the first job's complete description from matching inline job
+      data. Use country-qualified locations: bare Shanghai resolved to a US
+      location in the live browser. The patch preserves commas in location
+      values and refuses a title-only detail as incomplete. See
+      opencli-compat.md; this does not re-verify every filter below.
       Filters are comma-separated free text with no `choices` enum, so a
       malformed value will not be rejected by the CLI. `--details` inlines the
       description but the help marks it "(slower)"; prefer job-detail for the
@@ -162,6 +169,16 @@ adapters:
     caps: {rows_per_round: 10, pages_per_round: 1}
     other_read_commands: [experience, papers, companies, jobs, hot, trending]
     notes: >-
+      RUN 2026-10-07 (OpenCLI 1.8.7 plus the versioned compatibility patches):
+      recommend returned numeric long-article IDs and a free detail read
+      preserved the complete available body beyond 500 characters and its
+      createTime. A moment uses its UUID; a long article uses its numeric ID,
+      not the separate content UUID. Detail also accepts observed discuss and
+      feed/main/detail URLs. A paid-column preview is marked
+      content_complete=false and content_access=paid_preview; never count it
+      as a full article or retry restricted content. These live checks cover
+      recommend and detail only; search and experience ID handling have
+      offline regressions, not a newly verified full live flow.
       An interview-experience (面经) source, not a job source. search /
       experience / papers / detail are strategy=cookie and need a logged-in
       session. Only companies / jobs / hot / topics / trending / recommend /
@@ -193,9 +210,10 @@ adapters:
 
 `scripts/check_opencli_result.py` loads `references/risk-control-signals.yaml` and
 matches these patterns **only against the stderr of an invocation that exited
-non-zero**. A successful call has empty stderr, so none of them can fire on a job
-row — a posting whose title contains `安全验证` is a job about verification, not a
-verification wall.
+non-zero**. The explicit `[cdp] USER_ACTION_REQUIRED:` lifecycle marker also
+stops the source when an adapter exits zero after handing a verification page
+to the user. Neither check searches successful job prose — a posting whose
+title contains `安全验证` is a job about verification, not a verification wall.
 
 | id | pattern | verified |
 |---|---|---|
@@ -245,7 +263,10 @@ prove which jobs the live site would return for those locations. The older Londo
 reproduced by this check.
 
 **When one fires: stop that site for that round.** Do not retry. Do not change
-parameters and retry. Do not route around it. Emit the degraded output below.
+parameters and retry. Do not route around it. Hand the page to the user and
+follow [user-recovery.md](user-recovery.md). Resume in a new bounded round only
+after explicit confirmation; preserve the paused journal. If access remains
+unavailable, offer the partial results or degraded output below.
 
 ## Degraded fallback — the direction-level shortlist
 
@@ -260,6 +281,8 @@ defined in `modes/discover.md`:
 5. **要避开的标题与信号** — the titles and phrases that indicate a worse fit
 6. **手动收集优先序** — which source the user should open first, and why
 
-A direction-level shortlist has no `rows:`, so it never claims a posting exists.
+A direction-level shortlist has no posting entries. Use `rows: []` in both
+`shortlist.yaml` and `candidate-match.yaml`; the directions belong in the
+Markdown document. Empty lists satisfy the gates without claiming a posting exists.
 That is the whole point: the failure mode being defended against is a model filling
 an empty result with plausible-looking jobs.

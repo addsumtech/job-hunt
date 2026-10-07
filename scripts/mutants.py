@@ -220,6 +220,19 @@ def _pytest(cwd: pathlib.Path, targets: list) -> bool:
     return _run_pytest(cwd, targets).returncode == 0
 
 
+def _copy_repo(destination: pathlib.Path) -> None:
+    """Copy source without following links or including private output artifacts."""
+    generated = shutil.ignore_patterns(".git", "__pycache__", ".pytest_cache", "*.pyc")
+
+    def ignore(directory, names):
+        excluded = set(generated(directory, names))
+        if pathlib.Path(directory) == ROOT:
+            excluded.add("output")  # ignored client reports and old test workspaces
+        return excluded
+
+    shutil.copytree(ROOT, destination, symlinks=True, ignore=ignore)
+
+
 def _tail(proc: subprocess.CompletedProcess, lines: int = 30) -> str:
     """The end of a red run, for the two verdicts that stop the harness. The
     runs of 2026-08-31 and 2026-09-07 said only "not green before mutating",
@@ -315,9 +328,17 @@ def main(argv=None) -> int:
 
     work_root = pathlib.Path(tempfile.mkdtemp(prefix="job-hunt-mutants-"))
     work = work_root / "repo"
-    shutil.copytree(ROOT, work, ignore=shutil.ignore_patterns(
-        ".git", "__pycache__", ".pytest_cache", "*.pyc"))
     try:
+        try:
+            _copy_repo(work)
+        except (OSError, shutil.Error) as exc:
+            print(f"cannot run: could not copy the source tree: {exc}", file=sys.stderr)
+            return 2
+        for relative in args.targets:
+            if not (work / relative).resolve().is_relative_to(work.resolve()):
+                print(f"cannot run: mutation target escapes the isolated copy: {relative}",
+                      file=sys.stderr)
+                return 2
         pristine = _run_pytest(work, [])
         if pristine.returncode != 0:
             print("cannot run: the suite is not green before mutating — fix that "
@@ -326,11 +347,12 @@ def main(argv=None) -> int:
             print(_tail(pristine), file=sys.stderr)
             return 2
 
-        found, new, invalid = {}, [], 0
+        found, new, invalid, total = {}, [], 0, 0
         for relative in args.targets:
-            mutations = generate(ROOT / relative, relative)
+            mutations = generate(work / relative, relative)
             if args.limit:
                 mutations = mutations[:args.limit]
+            total += len(mutations)
             print(f"{relative}: {len(mutations)} mutants", file=sys.stderr)
             for n, mutation in enumerate(mutations, 1):
                 print(f"  [{n}/{len(mutations)}] {mutation.operator} "
@@ -349,9 +371,6 @@ def main(argv=None) -> int:
                         new.append(mutation)
             print(" " * 70, end="\r", file=sys.stderr)
 
-        total = sum(len(generate(ROOT / r, r)) for r in args.targets)
-        if args.limit:
-            total = min(total, args.limit * len(args.targets))
         tested = total - invalid
         print(f"mutants: {total}   tested: {tested}   invalid (would not compile): "
               f"{invalid}   survived: {len(found)}   new since the baseline: {len(new)}")

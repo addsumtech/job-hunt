@@ -77,6 +77,35 @@ def test_dispersion_is_omitted_for_a_single_run(iteration):
     assert "± 0" not in md
 
 
+def test_documented_millisecond_timings_are_real_elapsed_seconds(tmp_path):
+    for arm, milliseconds in (("baseline", 809184), ("with_skill", 905200)):
+        write_run(tmp_path, 5, arm, 1,
+                  rows=[row("A5-1", "no absence claim", "discriminating", True)])
+        (tmp_path / f"eval-5/{arm}/run-1/timing.json").write_text(json.dumps({
+            "duration_ms": milliseconds, "total_tokens": 1200}))
+    s = aggregate.summarise(tmp_path, {"evals": [DOC["evals"][0]]})
+    assert s["per_arm"]["baseline"]["seconds"] == {"value": 809.184, "n": 1}
+    assert s["per_eval_cost"]["5"]["with_skill"]["seconds"]["value"] == 905.2
+    assert s["delta_with_minus_baseline"]["seconds"] == pytest.approx(96.016)
+    assert "809.184s" in aggregate.render_markdown(s)
+
+
+@pytest.mark.parametrize('missing', [{}, {"duration_ms": None, "total_tokens": None}])
+def test_missing_timing_metrics_do_not_become_measured_zero(tmp_path, missing):
+    for arm in ("baseline", "with_skill"):
+        write_run(tmp_path, 5, arm, 1,
+                  rows=[row("A5-1", "no absence claim", "discriminating", True)])
+    (tmp_path / "eval-5/baseline/run-1/timing.json").write_text(json.dumps(missing))
+    s = aggregate.summarise(tmp_path, {"evals": [DOC["evals"][0]]})
+    assert s["per_arm"]["baseline"]["seconds"] is None
+    assert s["per_arm"]["baseline"]["tokens"] is None
+    assert s["delta_with_minus_baseline"]["seconds"] is None
+    assert s["delta_with_minus_baseline"]["tokens"] is None
+    assert "time —, tokens —" in aggregate.render_markdown(s)
+    assert any("time —, tokens —" in note
+               for note in aggregate.patch_benchmark({}, s)["notes"])
+
+
 def test_a_pass_rate_is_printed_with_its_denominator(iteration):
     md = aggregate.render_markdown(aggregate.summarise(iteration, DOC))
     assert "3/3" in md or "1/1" in md

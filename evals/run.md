@@ -44,8 +44,8 @@ recorded, because no assertion covers those.
 | 15 | `apply-de-photo-conventional` | apply | old_skill | — |
 | 16 | `apply-ats-reject-genuine-gap` | apply | old_skill | 1 |
 | 17 | `apply-ats-reject-buried-evidence` | apply | old_skill | 1 |
-| 18 | `interview-unsourced-drift` | interview | no_skill | 1 |
-| 19 | `interview-well-sourced` | interview | no_skill | 1 |
+| 18 | `interview-unsourced-drift` | interview | no_skill | — |
+| 19 | `interview-well-sourced` | interview | no_skill | — |
 "guards" counts assertions with `role: discriminating`, and the column is
 generated from `assertions.yaml`, not maintained by hand — `test_eval_runbook.py`
 fails if the two disagree. It used to be hand-written and drifted: it claimed 24
@@ -64,13 +64,16 @@ guard-carrying eval is left out of it.
 | arm dir | what it is | used by |
 |---|---|---|
 | `with_skill` | `job-hunt` at the current commit | every eval |
-| `baseline` (`baseline_kind: old_skill`) | the archived `job-application` at tag `job-application-baseline`, snapshotted with `git -C <repo> worktree add <snapshot> job-application-baseline` | the apply-mode evals |
+| `baseline` (`baseline_kind: old_skill`) | the archived `job-application` at commit `864ad7f`, snapshotted with `git -C <repo> worktree add <snapshot> 864ad7f` | the apply-mode evals |
 | `baseline` (`baseline_kind: no_skill`) | no skill at all: the same prompt and the same input files, nothing else | the discover, assess and interview evals |
 
 Two directory names only. The kind goes in `eval_metadata.json`, because the
 plugin aggregator discovers configurations by listing directories and deltas the
 first two in sorted order — a third name makes the headline compare the two
 baselines against each other.
+
+`job-application-baseline` is a local tag alias, not a prerequisite. Use the
+ancestor commit above when the tag is absent, and record the resolved SHA.
 
 ## Baseline isolation — do this before any baseline run
 
@@ -85,7 +88,7 @@ one voids the comparison this whole harness rests on — *a property both arms
 have is a property of the model, not of the skill* — so the isolation is a
 precondition, not a refinement.
 
-There is no per-agent skill-scoping setting, and subagents run in-process, so
+For the in-process subagent workflow below, there is no per-agent skill-scoping setting, so
 they cannot be given a different HOME. The only mechanism that works is making
 the skills undiscoverable in `~/.claude/skills` for the duration:
 
@@ -98,6 +101,12 @@ the skills undiscoverable in `~/.claude/skills` for the duration:
 **Verify with a probe agent after each change and before dispatching**, asking
 only what its own available-skills listing contains. The states above were each
 confirmed that way for iteration-2; do not assume a move took effect.
+
+Fresh CLI processes can instead use real per-run skill copies in that host's
+workspace skill directory. Probe each arm's available-skills listing before
+dispatch, verify that no conflicting global copy is visible, and keep the
+candidate task and model settings identical. This avoids changing global
+installations; it does not make an unprobed workspace isolated.
 
 Two things that cost time here, recorded so they do not cost it again:
 
@@ -181,7 +190,7 @@ name, and confirm it by rendering something rather than by `command -v`.
    `{"eval_id": N, "eval_name": "...", "baseline_kind": "...", "prompt": "<the scenario's TASK line, verbatim>", "assertions": []}`
 3. Dispatch **one baseline run** for each of these FIFTEEN evals, in one turn.
    They are every guard-carrying eval plus its quiet twins — a superset of the
-   ten that carry a discriminating assertion, not a list of them:
+   eight that carry a discriminating assertion, not a list of them:
 
    - eval-0 `us-rn-nurse`
    - eval-5 `discover-blocked-adapter`

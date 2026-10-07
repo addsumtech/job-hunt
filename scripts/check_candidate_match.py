@@ -340,6 +340,8 @@ def _report_language(markdown: str, rows: list[dict]) -> str | None:
 
 
 def _check_rendered(rows: list[dict], matches: dict[str, dict], markdown: str) -> list[str]:
+    if not rows:
+        return []  # No job summaries need a language stamp in a direction-only round.
     blocks = _entry_blocks(markdown)
     findings = []
     language = _report_language(markdown, rows)

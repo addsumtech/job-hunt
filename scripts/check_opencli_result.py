@@ -34,9 +34,9 @@ CLASSIFICATIONS = ("ok", "platform_limit", "not_logged_in", "no_auth_adapter",
                    "transport")
 
 # The column that makes a search row self-sufficient. Measured from
-# `opencli <site> --help -f yaml` columns on 2026-08-09: boss calls it `name`,
-# everyone else calls it `title`.
-IDENTITY_FIELD = {"boss": "name"}
+# `opencli <site> --help -f yaml` columns: boss calls it `name`; Douyin's
+# public video search calls it `desc` (measured 2026-10-06).
+IDENTITY_FIELD = {"boss": "name", "douyin": "desc"}
 IDENTITY_FIELD_DEFAULT = "title"
 
 # The documented command that recovers a row whose identity field came back
@@ -56,7 +56,7 @@ DETAIL_COMMAND = {
 # One Chinese phrase and three English ones meant `请先登录后查看`,
 # `ログインが必要です`, `로그인이 필요합니다` and `Bitte melden Sie sich an` all fell
 # through to `classification: transport`, whose remedy diagnoses the connection —
-# when the correct remedy is to hand the user `opencli <site> login`. A wrong
+# when the correct remedy is to ask the user to click Login in the browser. A wrong
 # remedy costs more than no remedy: it sends them to debug a working adapter.
 #
 # The CJK entries carry no `\b`: there is no word boundary between 登录 and the
@@ -172,7 +172,7 @@ def _error_code(stderr_text):
 def recovery_guidance(kind="platform"):
     """Operator guidance only: a user reply is required, never a retry token."""
     actions = {
-        "login": "Ask the user to finish login in the connected browser.",
+        "login": "Ask the user to click Login/登录 on the page kept open in their connected browser, using their daily profile, and finish login there; do not ask them to run a terminal command.",
         "verification": "Ask the user to open the site in the connected browser and complete the human verification themselves; do not describe it as a missing login.",
         "rate_limit": "Explain the rate limit and any displayed wait time; login is not a fix. Do not poll or automatically retry after a timer.",
         "platform": "Ask the user to inspect the site in the connected browser: complete login or human verification only if the page asks for it. A permission or account restriction may not be fixable by logging in.",
@@ -302,19 +302,22 @@ def classify(site, command, exit_code, stdout_text, stderr_text,
                     "--timeout 40 -f json, then classify again. "
                     + recovery_guidance("login")
                 )
+            elif state == "unchecked":
+                result["classification"] = "not_logged_in"
+                result["remedy"] = (
+                    "Auth state was not supplied; inspect `opencli auth status "
+                    f"--site {site} --full -f json` before choosing an "
+                    "authentication remedy. A site-specific login command has "
+                    "not been established. Do not retry this read in the "
+                    "stopped round. " + recovery_guidance()
+                )
             else:
                 result["classification"] = "not_logged_in"
                 result["remedy"] = (
-                    f"Hand `opencli {site} login` to the user to run — it is a "
-                    "write command and this skill never runs one. Do not retry "
+                    "Keep the site page open for the user. Do not retry "
                     "the read: the refusal is deterministic while logged out. "
                     + recovery_guidance("login")
                 )
-                if state == "unchecked":
-                    result["remedy"] += (
-                        " Auth state was not supplied; run `opencli auth status "
-                        f"--site {site} --full -f json` first."
-                    )
             return result
 
         result["classification"] = "transport"
@@ -344,6 +347,15 @@ def classify(site, command, exit_code, stdout_text, stderr_text,
         result["remedy"] = "exit 0 but stdout was not a JSON array"
         return result
 
+    # One Xiaohongshu note is returned as field/value rows, not seven notes.
+    # Normalize only this measured public-read command; search results and
+    # other adapters retain their ordinary row shape.
+    if site == "xiaohongshu" and command == "note" and rows and all(
+        isinstance(row, dict) and isinstance(row.get("field"), str)
+        and "value" in row for row in rows
+    ):
+        rows = [{row["field"]: row["value"] for row in rows}]
+
     # Measured 2026-09-09: Indeed's detail adapter returns exit 0 and the
     # sign-in heading as a job title, with an empty company and description.
     # Match the observed shape, not login words in legitimate job prose.
@@ -364,6 +376,25 @@ def classify(site, command, exit_code, stdout_text, stderr_text,
             + recovery_guidance("login"))
         return result
 
+    # HTTP 200 may contain only the free part of a paid Nowcoder column.
+    # The adapter carries the observed access flags through instead of treating
+    # successful parsing as evidence that it retrieved the complete article.
+    if site == "nowcoder" and command == "detail" and any(
+        isinstance(row, dict) and row.get("content_complete") is False
+        for row in rows
+    ):
+        result["classification"] = "platform_limit"
+        result["signal_id"] = "nowcoder-content-preview"
+        result["row_count"] = len(rows)
+        result["error_message"] = "Nowcoder returned a restricted or paid preview, not the complete article."
+        result["remedy"] = (
+            "Keep the available preview and label it incomplete. Stop this source "
+            "for this round; do not retry the restricted content or count it as a "
+            "full detail read. Do not assume login resolves a paid preview. "
+            "Offer other sources or the original text supplied by the user."
+        )
+        return result
+
     result["classification"] = "ok"
     result["row_count"] = len(rows)
     result["empty_result"] = not rows
@@ -375,10 +406,14 @@ def classify(site, command, exit_code, stdout_text, stderr_text,
     ]
     if result["empty_identity_rows"]:
         result["needs_detail_recovery"] = True
+        recovery = (
+            f"Recover each one with `{result['detail_command']}`"
+            if result["detail_command"] else
+            "Inspect the retained response and the adapter's documented read commands"
+        )
         result["remedy"] = (
             f"{len(result['empty_identity_rows'])} of {len(rows)} rows came back "
-            f"with an empty `{field}`. Recover each one with "
-            f"`{result['detail_command']}` and report the gap. The rows exist — "
+            f"with an empty `{field}`. {recovery} and report the gap. The rows exist — "
             "never read blank fields as 'this site has no such jobs'."
         )
     return result

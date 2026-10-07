@@ -75,7 +75,9 @@ def test_the_catalogue_states_which_adapters_were_never_run():
     # only "a command ran", so the date has to travel with it — the block
     # header dates everything else to 2026-08-09.
     assert table["linkedin"]["runtime_verified"] is True
-    assert table["linkedin"]["runtime_verified_on"] == "2026-09-20"
+    assert table["linkedin"]["runtime_verified_on"] == "2026-10-07"
+    assert 'Shanghai, China' in table['linkedin']['notes']
+    assert 'complete description' in table['linkedin']['notes']
 
 
 def test_a_verified_adapter_says_which_flags_were_never_exercised():

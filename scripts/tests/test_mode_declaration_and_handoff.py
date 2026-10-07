@@ -120,6 +120,24 @@ def test_a_clean_gate_run_still_says_nothing_on_stdout(tmp_path):
         "you what to do next is prompting, not checking")
 
 
+def test_completion_uses_an_assessment_written_after_mode_entry(tmp_path):
+    ws = workspace(tmp_path)
+    enter(ws)
+    assert "NO_ASSESSMENT" in _check_apply(ws).stderr
+    (ws / "fit-assessment.yaml").write_text("verdict: stretch\n", encoding="utf-8")
+    assert "NO_ASSESSMENT" not in _check_apply(ws).stderr
+    assert enter_mode.latest_mode_entry(ws, "apply")["assessment_present"] is False
+
+
+def test_completion_does_not_trust_a_removed_entry_time_assessment(tmp_path):
+    ws = workspace(tmp_path)
+    assessment = ws / "fit-assessment.yaml"
+    assessment.write_text("verdict: stretch\n", encoding="utf-8")
+    enter(ws)
+    assessment.unlink()
+    assert "NO_ASSESSMENT" in _check_apply(ws).stderr
+
+
 def test_apply_mode_ends_by_offering_the_next_modes(tmp_path):
     """Where the model actually reads it, at the end of the mode."""
     apply_md = (REPO / "modes" / "apply.md").read_text(encoding="utf-8")

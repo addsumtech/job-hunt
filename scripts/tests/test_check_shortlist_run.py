@@ -7,6 +7,8 @@ skip the line that matters.
 """
 import copy
 
+import pytest
+
 import check_shortlist as cs
 import discover_fixtures as fx
 
@@ -115,6 +117,36 @@ def test_a_degraded_run_with_a_complete_disclosure_block_is_quiet(tmp_path, caps
     code, captured = run(workspace, capsys)
     assert code == 0
     assert captured.out == ""
+
+
+@pytest.mark.parametrize("statement", [
+    "**不能据此判断上海没有匹配岗位**。",
+    "这不能说明上海没有匹配岗位。",
+    "这不代表上海没有匹配岗位。",
+    "这不是‘没有匹配岗位’的结论。",
+    "This does not mean no matching jobs exist.",
+    "We cannot conclude that the search found nothing.",
+])
+def test_negated_absence_is_not_an_empty_market_claim(tmp_path, capsys, statement):
+    workspace = make_empty(tmp_path, [DEAD_CALL], DISCLOSURE_OK + statement)
+    code, captured = run(workspace, capsys)
+    assert code == 0, captured.out
+
+
+@pytest.mark.parametrize("statement", [
+    "不能登录，因此上海没有匹配岗位。",
+    "不能据此判断市场规模但上海没有匹配岗位。",
+    "这不能说明上海没有匹配岗位，但本轮没有匹配岗位。",
+    "这不代表上海没有匹配岗位。不过本轮没有匹配岗位。",
+    "This does not mean no results. However, there are no matching jobs.",
+    "We cannot determine the market size but there are no matching jobs.",
+])
+def test_a_nearby_negation_does_not_hide_an_actual_absence_claim(
+        tmp_path, capsys, statement):
+    workspace = make_empty(tmp_path, [DEAD_CALL], DISCLOSURE_OK + statement)
+    code, captured = run(workspace, capsys)
+    assert code == 1
+    assert "EMPTY_RESULT_UNSUPPORTED" in codes(captured.out)
 
 
 def test_a_blank_disclosure_answer_fires(tmp_path, capsys):

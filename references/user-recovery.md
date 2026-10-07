@@ -24,16 +24,20 @@ user's manual action without performing another automated read.
 
 | Observed state | Hand-off |
 |---|---|
-| A confirmed missing login | Ask the user to sign in on that site in the connected browser. Offer `opencli <site> login` only if that adapter actually has it; the user runs it. |
+| A confirmed missing login | Tell the user to click Login/登录 on the page already open in their daily browser, finish login, then reply “已完成，继续”. Do not ask them to run a terminal command. |
 | A guest-group message such as `抱歉，您所在的用户组(游客)无法进行此操作` | Tell the user this site requires login. Do not call it an empty result or retry a working connection; the page's explicit guest state overrides a stale cached login flag. |
 | CAPTCHA, Cloudflare challenge or slider | Ask the user to open that site in the same connected browser and complete the displayed human verification. This does not establish that a login is missing. |
 | Human verification stays loading, including `验证成功。正在等待 … 响应` | Tell the user the page is still held at human verification and ask them to inspect/finish it. A tool timeout does not turn this into an ordinary loading retry. |
 | Rate limit / HTTP 429 | Explain the displayed wait period, if any. Logging in is not a fix. Wait for the user to return and request continuation; no timed or background retry. |
 | Permission/account denial or unexplained refusal | Quote the error and ask the user to inspect the page. Do not promise that login will fix it or label an unseen page as a CAPTCHA. |
 
-For example, with an observed Indeed challenge:
+For example, with a confirmed Nowcoder login requirement:
 
-> Indeed 返回了 Cloudflare 人机验证页，这一来源已暂停。请在当前连接的浏览器中打开 Indeed，手动完成页面上的验证；完成后回复“已完成，继续”，我会接着检查并检索。此前已取得的结果会保留。你也可以选择其他来源，或把岗位正文粘贴给我。
+> 牛客需要登录。请在已打开的牛客页面点击“登录”；完成后回复“已完成，继续”，我会接着读取。
+
+With an observed Indeed challenge:
+
+> Indeed 需要人机验证。请在已打开的 Indeed 页面完成验证；完成后回复“已完成，继续”，我会接着检索，已找到的结果会保留。
 
 If the browser tool is disconnected, explain and resolve that separately. A
 working bridge is not proof of a logged-in or verified website session.

@@ -527,13 +527,9 @@ def main(argv=None) -> int:
     # that permits it. The gate states the fact; the completion message carries
     # it. That is the most a gate can do about prose it cannot read.
     if entry is not None:
-        # A record written before this field existed cannot answer, so ask the
-        # workspace instead of defaulting. Defaulting to "present" made the
-        # notice silently absent on exactly the runs most likely to need it —
-        # the ones that started before the check did.
-        present = entry.get("assessment_present")
-        if present is None:
-            present = enter_mode._assessment_present(ws)
+        # The entry is a historical snapshot. An assessment can be made later
+        # in the same run, so describe the workspace at completion time.
+        present = enter_mode._assessment_present(ws)
         if not present:
             print("NO_ASSESSMENT: this workspace has no fit-assessment and no "
                   "check_assessment receipt, so the package was built without "

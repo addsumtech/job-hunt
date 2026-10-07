@@ -93,7 +93,8 @@
     "903168e944b62456": "2026-10-06: Removed the stale four-label snapshot verdict row. The current canonical row includes blocked and uses the same five tokens as scripts/vocab.py; insufficient_evidence still replaces the whole conclusion.",
     "7bd2123e0dfd27bf": "2026-10-06: Before/after comparison remains in references/gap-analysis.md, now saved internally in fit-snapshot.md and translated into useful client advice. It is not a mandatory raw-count block in every client report.",
     "6c99763975c21ba1": "2026-10-06: Scoped the unchanged required disclaimer to internal evidence snapshots and fit-assessment.md. This removes the conflict that made client reports copy implementation language; no internal assessment gate or disclaimer anchor was weakened.",
-    "abdc682ee27720d8": "2026-10-06: Kept the newer canonical computation paragraph, which additionally states dated evidence is partial and count_coverage owns existing assessments. Removed the stale duplicate lacking those clauses; the strong/partial split and distinction from ATS coverage remain."
+    "abdc682ee27720d8": "2026-10-06: Kept the newer canonical computation paragraph, which additionally states dated evidence is partial and count_coverage owns existing assessments. Removed the stale duplicate lacking those clauses; the strong/partial split and distinction from ATS coverage remain.",
+    "77d0f2201cf9441b": "2026-10-06 full market/language rendering audit: correct the photo-position description. The renderer puts the photo above the name in LaTeX/PDF but after the contact details in DOCX, confirmed by actual LibreOffice exports and native Microsoft Word export. All personal-data collection and market-interlock rules in the paragraph remain unchanged; only the inaccurate shared placement claim is replaced."
   },
   "deleted_files": {
     "assets/cv/template.tex": {

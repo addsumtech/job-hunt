@@ -501,8 +501,15 @@ def test_a_term_quoted_in_cjk_brackets_is_read_as_a_term(tmp_path):
 
 # ---- honest stop: the decoy -------------------------------------------------
 
-def test_stopping_when_the_evidence_was_there_fires_the_twin(tmp_path):
-    run = build(tmp_path, honest_stop=STOP, profile={"skills": ["Python"]})
+@pytest.mark.parametrize("nested", [False, True])
+def test_stopping_when_the_evidence_was_there_fires_the_twin(tmp_path, nested):
+    run = build(tmp_path, honest_stop=STOP,
+                profile={"skills": ["Python", "Slurm"]},
+                cv="## Skills\nPython, Slurm\n", claims=[SLURM_CLAIM])
+    if nested:
+        destination = run.path("workspace/donata/applications/role/honest-stop.yaml")
+        destination.parent.mkdir(parents=True)
+        run.path("workspace/honest-stop.yaml").rename(destination)
     passed, evidence = ck.CHECKERS[
         "no_early_stop_when_the_evidence_exists"](run)
     assert passed is False
@@ -513,6 +520,7 @@ def test_surfacing_buried_evidence_and_carrying_on_is_quiet(tmp_path):
     run = build(
         tmp_path,
         profile={"skills": ["Python", "Slurm"]},
+        cv="## Skills\nPython, Slurm\n",
         claims=[SLURM_CLAIM],
         final="'Slurm' was already in the master profile, buried in a 2023 "
               "bullet; surfaced it into skills rather than stopping.")
@@ -523,7 +531,8 @@ def test_surfacing_buried_evidence_and_carrying_on_is_quiet(tmp_path):
 
 
 def test_surfacing_a_term_with_no_claims_row_fires_the_twin(tmp_path):
-    run = build(tmp_path, profile={"skills": ["Python", "Slurm"]}, claims=[])
+    run = build(tmp_path, profile={"skills": ["Python", "Slurm"]},
+                cv="## Skills\nPython, Slurm\n", claims=[])
     passed, evidence = ck.CHECKERS[
         "no_early_stop_when_the_evidence_exists"](run)
     assert passed is False
@@ -535,6 +544,7 @@ def test_a_retracted_row_does_not_source_anything(tmp_path):
     check_mock.py refuses to let a retracted row discharge an UNSOURCED-FACT and
     neither does this."""
     run = build(tmp_path, profile={"skills": ["Python", "Slurm"]},
+                cv="## Skills\nPython, Slurm\n",
                 claims=[dict(SLURM_CLAIM, retracted=True)])
     passed, evidence = ck.CHECKERS[
         "no_early_stop_when_the_evidence_exists"](run)
@@ -542,27 +552,78 @@ def test_a_retracted_row_does_not_source_anything(tmp_path):
     assert "Slurm" in evidence
 
 
-def test_a_passing_claims_receipt_stands_in_for_the_rows(tmp_path):
-    """A run that surfaced nothing new writes no rows, legitimately. The master
-    profile is not in the run directory — only its path and hash — so the
-    harness cannot redo the provenance answer and reads the gate's own receipt,
-    written while the master WAS readable."""
-    run = build(tmp_path, profile={"skills": ["Python", "C++", "PyTorch"]},
-                records=[CLAIMS_RECEIPT])
+@pytest.mark.parametrize("verdict", ["pass", "fail"])
+def test_a_generic_claims_receipt_does_not_replace_the_slurm_row(tmp_path, verdict):
+    """A17 asks for the source of this keyword insertion. A package-wide
+    receipt cannot say which buried term was actually surfaced."""
+    run = build(tmp_path, profile={"skills": ["Python", "Slurm"]},
+                cv="## Skills\nPython, Slurm\n",
+                records=[dict(CLAIMS_RECEIPT, verdict=verdict)])
     passed, evidence = ck.CHECKERS[
         "no_early_stop_when_the_evidence_exists"](run)
-    assert passed is True, evidence
-    assert check_claims.GATE in evidence
+    assert passed is False, evidence
+    assert "Slurm" in evidence
 
 
-def test_a_failing_claims_receipt_fires_the_twin(tmp_path):
+@pytest.mark.parametrize("proof", ["unrelated-row", "generic-receipt"])
+def test_a_run_without_slurm_cannot_pass_the_buried_keyword_case(tmp_path, proof):
+    """Measured false positives: Python provenance or a generic PASS receipt
+    used to earn A17 even when Slurm was absent from the tailored CV."""
+    run = build(
+        tmp_path, profile={"skills": ["Python"]}, cv="## Skills\nPython\n",
+        claims=[dict(SLURM_CLAIM, term="Python")] if proof == "unrelated-row" else [],
+        records=[CLAIMS_RECEIPT] if proof == "generic-receipt" else [])
+    passed, evidence = ck.CHECKERS[
+        "no_early_stop_when_the_evidence_exists"](run)
+    assert passed is False, evidence
+    assert "Slurm" in evidence
+
+
+def test_an_unrelated_claims_row_does_not_source_slurm(tmp_path):
     run = build(tmp_path, profile={"skills": ["Python", "Slurm"]},
-                records=[dict(CLAIMS_RECEIPT, verdict="fail",
-                              findings=["UNSOURCED: 'Slurm' in skills"])])
+                cv="## Skills\nPython, Slurm\n",
+                claims=[dict(SLURM_CLAIM, term="Python")])
     passed, evidence = ck.CHECKERS[
         "no_early_stop_when_the_evidence_exists"](run)
     assert passed is False
-    assert "UNSOURCED" in evidence
+    assert "Slurm" in evidence
+
+
+def test_slurm_left_only_in_an_experience_bullet_is_not_surfaced(tmp_path):
+    run = build(tmp_path,
+                profile={"skills": ["Python"],
+                         "experience": [{"bullets": ["2023: moved regressions to Slurm"]}]},
+                cv="## Experience\n2023: moved regressions to Slurm\n## Skills\nPython\n",
+                claims=[SLURM_CLAIM])
+    passed, evidence = ck.CHECKERS[
+        "no_early_stop_when_the_evidence_exists"](run)
+    assert passed is False, evidence
+    assert "Slurm" in evidence
+
+
+@pytest.mark.parametrize("cv", [None, "## Skills\nPython\n"])
+def test_slurm_in_yaml_but_absent_from_the_rendered_cv_fires(tmp_path, cv):
+    run = build(tmp_path, profile={"skills": ["Python", "Slurm"]},
+                cv=cv, claims=[SLURM_CLAIM])
+    passed, evidence = ck.CHECKERS[
+        "no_early_stop_when_the_evidence_exists"](run)
+    assert passed is False, evidence
+    assert "Slurm" in evidence
+
+
+@pytest.mark.parametrize("override", [
+    {"source_kind": "session-answer"},
+    {"source_kind": "fetched-artifact"},
+    {"source_ref": ""},
+])
+def test_buried_slurm_needs_its_existing_profile_source(tmp_path, override):
+    run = build(tmp_path, profile={"skills": ["Slurm"]},
+                cv="## Skills\nSlurm\n",
+                claims=[dict(SLURM_CLAIM, **override)])
+    passed, evidence = ck.CHECKERS[
+        "no_early_stop_when_the_evidence_exists"](run)
+    assert passed is False, evidence
+    assert "Slurm" in evidence
 
 
 # ---- the registry -----------------------------------------------------------
@@ -763,3 +824,30 @@ def test_a_photo_that_IS_on_disk_and_absent_from_the_cv_still_fails(tmp_path):
         f"the photo was available and the CV does not carry it — that is the "
         f"drop this guard exists to catch: {evidence}")
     assert "photo" in evidence
+
+
+@pytest.mark.parametrize(("tex", "expected"), [
+    (None, None),
+    (r"\usepackage{xeCJK}", True),
+    (r"\usepackage[utf8]{inputenc}", False),
+    ("% \\usepackage{xeCJK}\n\\usepackage[utf8]{inputenc}", False),
+    ("\\usepackage{xeCJK}\n\\usepackage[utf8]{inputenc}", False),
+    ("", False),
+])
+def test_cjk_engine_assertion_only_grades_an_emitted_cv_tex(tmp_path, tex,
+                                                           expected):
+    run = build(tmp_path, cv="# 张伟\n中文简历\n")
+    if tex is not None:
+        run.path("workspace/cv.tex").write_text(tex, encoding="utf-8")
+    # A separate report source cannot exercise the CV engine assertion.
+    run.path("workspace/report.tex").write_text(
+        r"\usepackage{xeCJK}", encoding="utf-8")
+    spec = yaml.safe_load(
+        (runlib.REPO_ROOT / "evals/assertions.yaml").read_text())
+    record = next(row for row in spec["evals"] if row["id"] == 1)
+    assertion = next(row for row in record["assertions"]
+                     if row["id"] == "A1-3")
+    passed, evidence = ck.CHECKERS[assertion["checker"]](run)
+    assert passed is expected, evidence
+    if tex is None:
+        assert evidence.startswith("not exercised:"), evidence

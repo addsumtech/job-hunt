@@ -33,6 +33,7 @@ _BLOCK_END = re.compile(r"</(style|script)>", re.I)
 _MARKER = re.compile(r"^(?:\d{0,4}|[ivxlcdm]{1,6}|[a-z]|[一二三四五六七八九十百]{1,3})$")
 _GAP = r"\d{0,4}"     # a footnote number or superscript printed inside a line
 _PAGE_REACH = 300     # letters/digits of page furniture tolerated around a page break
+_LINK_PREFIXES = ("链接", "link", "リンク", "링크", "enlace")
 
 
 # Characters that occupy a line without printing: whitespace, format characters
@@ -320,7 +321,7 @@ def report_text_problems(markdown, pages):
             choices = [key]
             if links:
                 labels = [_ink_key(label) for label in links]
-                for prefix in ("链接", "link", "リンク", "링크", "enlace"):
+                for prefix in _LINK_PREFIXES:
                     decorated = "".join(prefix + label for label in labels)
                     choices.append(decorated if key == "".join(labels) else key + decorated)
             variants.append(choices)
@@ -385,8 +386,15 @@ def report_text_problems(markdown, pages):
         note = block["kind"] == "note"
         following = blocks[index + 1] if index + 1 < len(blocks) else None
         after = {"".join(following["fragments"])} if following and following.get("fragments") else set()
+        before = labels
+        standalone = block["text"].strip().rstrip("。．.,，、;；:：!！?？ \t")
+        if _LINK.fullmatch(standalone) or _AUTOLINK.fullmatch(standalone):
+            # The default renderer decorates a standalone link in the report
+            # language. Permit that known label only for a source link, never
+            # as arbitrary extra prose beside an ordinary paragraph.
+            before = labels | set(_LINK_PREFIXES)
         spot = beside(block["fragments"], 0 if note else cursor,
-                      whole_line(labels, after | {""}), glued=note)
+                      whole_line(before, after | {""}), glued=note)
         if spot is None:
             problems.append(block["text"].strip())
         elif not note:

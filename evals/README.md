@@ -34,7 +34,7 @@ skill produces them too.** That second half is the point:
 | term | meaning |
 |---|---|
 | **arm** | `baseline/` or `with_skill/`. Always those two directory names. |
-| **baseline kind** | `old_skill` (the archived `job-application` at tag `job-application-baseline`) or `no_skill` (a bare agent, same prompt, same inputs). Recorded in `eval_metadata.json`, never in the directory name — three config names would make the aggregator subtract one baseline kind from the other and print it as the headline. |
+| **baseline kind** | `old_skill` (the archived `job-application` at commit `864ad7f`, also known by the local tag `job-application-baseline`) or `no_skill` (a bare agent, same prompt, same inputs). Recorded in `eval_metadata.json`, never in the directory name — three config names would make the aggregator subtract one baseline kind from the other and print it as the headline. |
 | **role** | `discriminating` (the baseline is expected to fail it) or `regression` (both arms pass today; its job is to catch a drop). Scored in separate tables. |
 | **guard / decoy** | A guard scenario fires a defence. Its decoy is the scenario where the honest answer is the opposite one. |
 | **twin** | Every guard checker names the checker that decides its decoy. `TWINS` is an involution and the lint requires the twin to be used in the twin eval — *every guard checker is paired with the twin checker that pins its quiet case*. Without that, "always refuse" scores 100%. |

@@ -9,7 +9,7 @@ score needs a weight for a partial match, and any weight would be invented too. 
 conclusion is a word, the counts are printed with the evidence behind each row, and
 this lint keeps the made-up numbers out.
 
-Five things are masked before any scan, and every one of them was a live false
+Six things are masked before any scan, and every one of them was a live false
 positive on output this skill's own files mandate:
 
 * The verdict labels. 大概率被筛掉 -- the human-facing label for likely_screen_out --
@@ -38,6 +38,10 @@ positive on output this skill's own files mandate:
   This masking differs from the four above in kind: it is not a list somebody
   maintains, it is a lookup against what the adapters and the fetcher actually
   returned, so it cannot go stale and cannot be widened by editing this file.
+
+* Explicit refusals to provide a prediction. Naming a probability to say it is
+  not being estimated is not a forecast. Only a closed refusal clause is masked;
+  a later prediction and any number remain visible to the scan.
 
 The one allowlist: where an employer publishes its own rubric, the skill may walk the
 candidate through THAT scale, in the employer's wording, with the source named. Quoting
@@ -124,6 +128,18 @@ _SCORE = re.compile(
 # nothing else.
 _ZH_RATE = ("概率|通过率|命中率|录取率|录用率|成功率|入围率|中签率|面试率|"
             "机率|機率|錄取率|錄用率|成功機會|勝算")
+# The real report said 不提供匹配分或录用概率. Consume only named quantities,
+# conjunctions and a clause ending; no arbitrary text or numeric estimate can
+# hide inside this exception. Double negations are not refusals.
+_REFUSED_QUANTITY_ZH = (r"(?:匹配分|匹配度|匹配百分比|ATS\s*分数|(?:面试|录用|录取|入围)?(?:"
+                        + _ZH_RATE + r"))")
+_REFUSED_PREDICTION_ZH = re.compile(
+    r"(?<!不)(?<!不是)(?<!并非)(?<!不能)(?<!未必)(?<!不一定)"
+    r"(?:(?:不|未|没有(?:依据)?)(?:提供|给出|估算|估计|预测|计算)(?:任何)?"
+    r"|(?:不是|并非)(?:对)?)"
+    + _REFUSED_QUANTITY_ZH
+    + r"(?:[、或与和及]" + _REFUSED_QUANTITY_ZH + r")*"
+    r"(?:的)?(?:估计|预估|预测|数值|数字)?(?=[，。！？；,;.!?\s]|$)")
 # 七成 = 70%. The lookahead keeps 成功/成长/成员/成果/成本/成熟/成为 out; those are
 # the ordinary compounds a Chinese numeral can legitimately sit in front of.
 # Arabic digits too. `八成` fired and `8 成` did not — a pre-existing gap this
@@ -582,7 +598,7 @@ def mask_copied_numbers(line: str, corpus: str) -> str:
             out[start:end] = " " * (end - start)
     # Chinese prose has no whitespace tokens. Exempt only the numeric span
     # attached to an exact captured metric phrase; never erase prediction words.
-    metric = re.compile(r"(?:效率|成本|收入|营收|耗时|转化率|准确率|产量|销量|用户数)(?:提升|提高|增长|增加|降低|减少|下降)(?:了)?\s*([0-9]+(?:\.[0-9]+)?\s*[%％])")
+    metric = re.compile(r"(?:效率|成本|收入|营收|耗时|延迟|转化率|准确率|产量|销量|用户数)(?:提升|提高|增长|增加|降低|减少|下降)(?:了)?\s*([0-9]+(?:\.[0-9]+)?\s*[%％])")
     for match in metric.finditer(line):
         if _normalise(match.group(0)) in corpus:
             start, end = match.span(1)
@@ -591,10 +607,11 @@ def mask_copied_numbers(line: str, corpus: str) -> str:
 
 
 def mask_exempt_spans(line: str) -> str:
-    """Blank out URLs, verdict labels and the roadmap horizon, preserving length so
+    """Blank URLs, labels, the roadmap horizon and explicit refusals, preserving length so
     the reported span still lines up with the original text."""
     masked = _URL.sub(lambda m: " " * len(m.group(0)), line)
     masked = ROADMAP_HORIZON.sub(lambda m: " " * len(m.group(0)), masked)
+    masked = _REFUSED_PREDICTION_ZH.sub(lambda m: " " * len(m.group(0)), masked)
     for label in VERDICT_LABELS:
         if label in masked:
             masked = masked.replace(label, " " * len(label))
@@ -650,8 +667,13 @@ def blockquote_allowlist(lines: list[str]) -> set[int]:
     return exempt
 
 
-def scan_text(text: str, label: str, corpus: str = "") -> list[str]:
-    checks = CHECKS + (JUDGEMENT_CHECKS if _is_judgement_surface(label) else ())
+def scan_text(text: str, label: str, corpus: str = "", *,
+              judgement: bool | None = None) -> list[str]:
+    # A caller reading an actual debrief can know its role even when the model
+    # chose a noncanonical filename. Keep the original label in every finding.
+    if judgement is None:
+        judgement = _is_judgement_surface(label)
+    checks = CHECKS + (JUDGEMENT_CHECKS if judgement else ())
     lines = text.splitlines()
     exempt = blockquote_allowlist(lines)
     in_mock = mock_block_lines(lines)
