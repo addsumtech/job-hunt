@@ -162,7 +162,16 @@ _ABSENCE_NEGATION = re.compile(
     r"(?:不(?:代表|意味着|说明|等于)|并非|不是|"
     r"(?:不能|无法|尚不能|尚无法)(?:据此)?(?:判断|认定|断言|确认|证明|说明))[^。\n]{0,40}$"
     r"|(?:does\s+not\s+mean|doesn['’]t\s+mean|not\s+evidence\s+(?:that|of)|"
-    r"(?:cannot|can['’]t)\s+(?:conclude|infer|say|determine))[^.\n]{0,70}$",
+    r"(?:cannot|can['’]t)\s+(?:conclude|infer|say|determine)|"
+    # The plainest denial there is, and the one the English half was missing
+    # while the Chinese half had its twin in `不是`: quote the claim in order
+    # to reject it. Found 2026-10-08 by eval-5, whose run wrote `It is not
+    # "there are no matching jobs in Shanghai"` — the most careful sentence in
+    # the message — and was scored as having claimed an empty market. A gate
+    # enforced in one language only is the failure this repo has fixed before.
+    r"(?:is|are|was|were)\s+not\s+(?:a|an|the|that)?\s*"
+    r"(?:finding|claim|conclusion|statement|the\s+same\s+as)?\s*[\"“']?)"
+    r"[^.\n]{0,70}$",
     re.I)
 
 

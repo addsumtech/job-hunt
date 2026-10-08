@@ -541,3 +541,29 @@ def test_a_middle_dot_card_that_invents_a_field_still_fires(tmp_path, capsys):
     code, captured = run(workspace, capsys)
     assert code == 1
     assert "RAW_TEXT_NOT_IN_RAW" in codes(captured.out)
+
+
+@pytest.mark.parametrize("line", [
+    # The English half had does-not-mean / not-evidence / cannot-conclude, and
+    # the Chinese half had the direct 不是. So the plainest English denial —
+    # quoting the claim in order to reject it — read as the claim itself.
+    # Found 2026-10-08 by eval-5, whose run said exactly this and was scored as
+    # having claimed an empty market.
+    'That is a refusal by the site. It is not "there are no matching jobs in Shanghai".',
+    "This is not a finding that there are no results for this search.",
+    "A 403 is not the same as nothing found in that city.",
+    "这是站点拒绝，不是没有匹配。",
+])
+def test_denying_the_absence_claim_is_not_making_it(line):
+    assert cs.absence_claims(line) == [], line
+
+
+@pytest.mark.parametrize("line", [
+    # The control: widening the denial must not swallow the assertion itself.
+    "There are no matching jobs in Shanghai.",
+    "The search returned no results for this city.",
+    "上海没有匹配的岗位。",
+    'It is not a complete search, and there are no matching jobs in Shanghai.',
+])
+def test_an_asserted_empty_result_still_fires(line):
+    assert cs.absence_claims(line), line
