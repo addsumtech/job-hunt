@@ -466,6 +466,11 @@ _SCORE_BARE = re.compile(
 
 
 # Everywhere this lint runs.
+# Codes whose finding is about a NUMBER, so the captured-number exemption
+# is the relevant escape. PREDICTION_WORD is not here: no quotation makes
+# a forecast acceptable.
+_NUMBER_CODES = {"PERCENT", "SCORE_PATTERN", "SCORE_NOUN", "SCORE_DECIMAL"}
+
 CHECKS = (("PERCENT", _PERCENT), ("SCORE_PATTERN", _SCORE),
           ("PREDICTION_WORD", _WORDS),
           ("SCORE_NOUN", _FIT_NOUN))
@@ -773,6 +778,20 @@ def main(argv: list[str] | None = None) -> int:
 
     for finding in findings:
         print(finding)
+    # A number finding is the one this gate gets WRONGLY actioned on: the
+    # number is often the candidate's own measured result, which the
+    # quantification ladder requires, and the finding says only that a `%` is
+    # there. Measured 2026-10-08: an agent met exactly that on a true metric
+    # and deleted the number, guessing. The exemption it needed already
+    # exists — say so, once, on stderr, where it cannot dilute the per-line
+    # finding contract on stdout.
+    if any(f.split(":", 1)[0] in _NUMBER_CODES for f in findings):
+        print("NOTICE_CAPTURED_NUMBERS: a number this round captured is exempt, but "
+              "only when quoted WITH the words around it — the neighbours are what "
+              "make it a quotation rather than a reuse of the digits. The candidate's "
+              "own CV counts only while evidence-blocks.json binds it by hash. So: "
+              "quote the captured wording, bind the evidence, or drop the number. A "
+              "fit score or an outcome probability is never exempt.", file=sys.stderr)
     journal.receipt(workspace, GATE, hashes,
                     "fail" if findings else "pass", findings)
     return 1 if findings else 0

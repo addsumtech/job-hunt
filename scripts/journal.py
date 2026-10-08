@@ -189,6 +189,12 @@ def receipt(workspace, gate: str, input_hashes: dict, verdict: str,
             record[key] = value
     record["receipt_hash"] = _receipt_hash(record)
     append(workspace, record)
+    # Every gate writes its receipt through here, so this is the one place that
+    # can tell a reader a green light is not the finish line — and the one place
+    # a gate added later inherits it from, rather than 25 copies to keep in step.
+    if verdict == "pass":
+        import cli_io
+        cli_io.pass_notice(gate, record.get("mode"))
     return record
 
 

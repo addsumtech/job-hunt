@@ -414,3 +414,53 @@ def test_a_bare_mention_of_signing_in_is_not_a_login_wall(text):
 @pytest.mark.parametrize("text", _REAL_WALLS, ids=range(len(_REAL_WALLS)))
 def test_an_instruction_to_sign_in_still_is(text):
     assert any(p.search(text) for p in coc.LOGIN_WALL_PATTERNS), text
+
+
+@pytest.mark.parametrize("stdout_text,stderr_text,adapter_rc,expected", [
+    ("", "Pre-navigation failed: Navigation rejected.", 1, "transport"),
+    ("{\"not\": \"an array\"}", "", 0, "transport"),
+])
+def test_a_read_that_did_not_succeed_exits_non_zero(tmp_path, capsys,
+                                                    stdout_text, stderr_text,
+                                                    adapter_rc, expected):
+    """The wrapper classified the failure correctly and then exited 0.
+
+    Measured 2026-10-08: an agent walking discover from the docs alone read
+    `rc=0` and carried on as if the detail had been fetched, leaving the failed
+    record in the journal beside the good ones. This skill's own rule is "read
+    the exit code before interpreting empty output" — the wrapper that teaches
+    it cannot be the one place that reports a failed read as success. The
+    classification stays on stdout for the caller to parse; 1 is this repo's
+    code for "there are findings", which a failed read is.
+    """
+    (tmp_path / "raw").mkdir()
+    out = tmp_path / "raw" / "linkedin-1.json"
+    out.write_text(stdout_text, encoding="utf-8")
+    err = tmp_path / "raw" / "linkedin-1.err"
+    err.write_text(stderr_text, encoding="utf-8")
+    rc = coc.main([
+        "--workspace", str(tmp_path), "--site", "linkedin", "--command", "job-detail",
+        "--exit-code", str(adapter_rc), "--stdout-file", str(out),
+        "--stderr-file", str(err),
+        "--command-line", "opencli linkedin job-detail https://x/jobs/view/1 -f json",
+    ])
+    captured = capsys.readouterr()
+    assert json.loads(captured.out)["classification"] == expected
+    assert rc == 1, "a read that did not succeed must not exit 0"
+    assert expected in captured.err and "did not succeed" in captured.err, captured.err
+
+
+def test_a_successful_read_still_exits_zero_and_says_nothing_extra(tmp_path, capsys):
+    """The cry-wolf control: an ordinary good search must stay quiet."""
+    (tmp_path / "raw").mkdir()
+    out = tmp_path / "raw" / "51job-1.json"
+    out.write_text(STDOUT_51JOB_OK, encoding="utf-8")
+    rc = coc.main([
+        "--workspace", str(tmp_path), "--site", "51job", "--command", "search",
+        "--exit-code", "0", "--stdout-file", str(out),
+        "--command-line", "opencli 51job search x -f json",
+    ])
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert json.loads(captured.out)["classification"] == "ok"
+    assert captured.err == ""

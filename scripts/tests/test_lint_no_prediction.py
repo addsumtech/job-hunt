@@ -726,3 +726,34 @@ def test_a_real_forecast_still_fires(line):
 ])
 def test_a_refusal_does_not_cover_a_claim_sharing_its_sentence(line):
     assert lint.scan_text(line, "report.md"), line
+
+
+def test_a_number_finding_says_how_a_real_one_is_allowed_through(tmp_path, capsys):
+    """`PERCENT: report.md:1: '%' in '...12% alert reduction...'` says what was
+    found and nothing about what to do.
+
+    Measured 2026-10-08: an agent hit exactly this on a TRUE, candidate-owned
+    metric and reworded the sentence to drop the number, guessing. The
+    exemption it needed already exists — a captured number quoted WITH the
+    words around it passes — but nothing in the output says so, so the two
+    wrong moves (delete a true fact, or disable the check) are the easy ones.
+    """
+    (tmp_path / "report.md").write_text(
+        "# R\n\nPrepare to explain the 12% alert reduction.\n", encoding="utf-8")
+    rc = lint.main(["--workspace", str(tmp_path), "--files",
+                    str(tmp_path / "report.md")])
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert captured.out.startswith("PERCENT:"), captured.out
+    assert "quoted" in captured.err and "evidence-blocks.json" in captured.err, captured.err
+
+
+def test_a_clean_report_gets_no_number_hint(tmp_path, capsys):
+    """The hint is attached to a number finding, not printed every run."""
+    (tmp_path / "report.md").write_text(
+        "# R\n\nBring the measurement method to the interview.\n", encoding="utf-8")
+    rc = lint.main(["--workspace", str(tmp_path), "--files",
+                    str(tmp_path / "report.md")])
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "evidence-blocks.json" not in captured.err, captured.err

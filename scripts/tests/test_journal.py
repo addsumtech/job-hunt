@@ -399,3 +399,43 @@ def test_append_does_not_merge_onto_an_unterminated_line(tmp_path):
     assert journal.receipt_intact(mine[0])
     assert journal.corrupt_lines(tmp_path) == [1], (
         "the corrupt line must stay corrupt and stay reported")
+
+
+def test_a_passing_gate_says_so_on_stderr_and_stays_silent_on_stdout(tmp_path, capsys):
+    """Two agents walking discover and apply from the docs alone both stopped
+    at the first green light and reported the round finished, with report.md,
+    the coverage check, the render and the delivery still to do. Measured
+    2026-10-08: the four discover completion gates exit 0 with zero bytes of
+    stdout between them.
+
+    The line goes to STDERR on purpose. references/workflow-checklist.md fixes
+    stdout as one finding per line with a stable CODE prefix, because an
+    always-on line there trains the reader to skip the channel that reports
+    real findings — and twenty assertions pin that silence. stderr is where
+    this repo already puts NOTICE_*.
+    """
+    journal.receipt(tmp_path, "check_shortlist", {}, "pass")
+    captured = capsys.readouterr()
+    assert captured.out == "", "stdout stays findings-only"
+    assert captured.err.startswith("PASS: check_shortlist"), captured.err
+    assert "not the end" in captured.err.lower(), (
+        "the point is that a green light is not the end of the mode")
+
+
+def test_a_failing_or_recording_receipt_prints_nothing(tmp_path, capsys):
+    """Only a pass needs the reminder. A fail already printed its findings, and
+    a --record baseline is not a result."""
+    for verdict in ("fail", "could_not_run", "recorded", "baseline_recorded"):
+        journal.receipt(tmp_path, "check_claims", {}, verdict)
+        captured = capsys.readouterr()
+        assert captured.out == "" and captured.err == "", f"{verdict}: {captured.err!r}"
+
+
+def test_the_pass_line_names_the_mode_when_the_journal_knows_it(tmp_path, capsys):
+    import enter_mode
+    enter_mode.main(["--workspace", str(tmp_path), "--mode", "discover",
+                     "--because", "testing the pass notice"])
+    capsys.readouterr()
+    journal.receipt(tmp_path, "check_no_write", {}, "pass")
+    captured = capsys.readouterr()
+    assert "discover" in captured.err, captured.err

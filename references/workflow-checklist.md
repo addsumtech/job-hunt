@@ -37,6 +37,19 @@ The hand-off is the mode file's job, and `test_mode_declaration_and_handoff.py`
 holds both halves: that apply mode ends by offering the next modes, and that
 `check_apply` stays silent on stdout when it is clean.
 
+**A passing gate does say one thing, on stderr.** `journal.receipt()` prints
+`PASS: <gate> — no findings. This is not the end of the <mode> run; return to
+modes/<mode>.md …` whenever it writes a `pass` verdict. That is not the offer
+above and not a next command: it names no successor, because which step follows
+belongs to the mode file and a per-gate list here would go stale the first time
+a step moved. It exists because total silence was measured to be worse than the
+noise. On 2026-10-08 two agents walked discover and apply using only what the
+files and scripts print, and both stopped at the first green light and called
+the round finished — the four discover completion gates exit 0 with zero bytes
+of stdout between them, with `report.md`, the coverage check, the render and
+the delivery all still to do. stdout keeps its contract; stderr is where this
+repo already puts `NOTICE_*`.
+
 ## Gates
 
 | Gate | Script | Fires on |
@@ -61,7 +74,7 @@ holds both halves: that apply mode ends by offering the next modes, and that
 | Market tables | `scripts/check_conventions.py` | digits/percent in prose, source provenance, protected traits, duplicate ids, expired `review_by` (CI-hard) |
 | Assess | `scripts/check_assessment.py` | composes the six above and requires their receipts; disclaimer, disqualifier section, the “What to do instead” half, verbatim conventions, stale-review banner; a top-level `level_direction` or `effort` the card prints but nobody assessed, and a work-authorization token spelled outside its set |
 | Migration losslessness (CI only) | `scripts/check_skill_lossless.py` | a baseline line that exists nowhere in this tree |
-| Adapter classification | `scripts/check_opencli_result.py` | *(wrapper, not a gate)* a non-zero exit, a login wall, a platform stop-signal, or an empty identity field |
+| Adapter classification | `scripts/check_opencli_result.py` | *(wrapper, not a gate)* a non-zero exit, a login wall, a platform stop-signal, or an empty identity field. It exits **1 whenever the classification is not `ok`** and prints `ADAPTER_READ_NOT_OK` on stderr, so a caller that branches on `$?` cannot read a failed fetch as a success; the classification stays on stdout for a caller that parses it |
 | First-run environment | `scripts/doctor.py` | *(precondition, not a gate)* every capability the skill needs, checked by USING it — the PDF check renders a PDF, because an earlier `command -v xelatex` check called a working machine broken while tectonic was installed. `--install` installs the Python packages; the agent prepares required tools and daily-browser CDP via `references/agent-setup.md` |
 | Saving a master | `scripts/save_profile.py` | *(guarded write, not a gate)* one master per language; a new language never overwrites another, a repeat language is backed up first, and a profile with no `meta.language` is refused |
 | Delivery | `scripts/deliver.py` | *(hand-off, not a gate)* requires a client `report.md` and verified report PDF; puts requested client documents together in `~/Downloads/<workspace-name>/` (or shared `--to` folder) and prints the path. Exits 0 or 2, never 1. `DELIVER_DEST_UNWRITABLE` is macOS TCC refusing `~/Downloads` mid-session — say so and offer `--to`, never leave the artifacts undelivered |

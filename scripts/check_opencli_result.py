@@ -510,6 +510,18 @@ def main(argv=None):
     journal.append(args.workspace, record)
 
     print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+    if result.get("classification") != "ok":
+        # This skill's own Step 4 rule is "read the exit code before
+        # interpreting empty output", and until 2026-10-08 the wrapper that
+        # teaches it returned 0 for a login wall, a platform stop and a
+        # transport failure alike. An agent branching on `$?` — which is what a
+        # shell and a literal reader both do — carried on as if the read had
+        # succeeded. The classification is still on stdout for a caller that
+        # parses it; 1 is this repo's code for "there are findings".
+        print(f"ADAPTER_READ_NOT_OK: {args.site} {args.command} "
+              f"classified {result['classification']} — the read did not succeed. "
+              f"{result.get('remedy') or ''}".rstrip(), file=sys.stderr)
+        return 1
     return 0
 
 

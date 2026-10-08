@@ -649,11 +649,21 @@ opencli 51job search "算法工程师" --area 上海 --page 1 --limit 25 \
     --window background -f json > raw/51job-1.json 2> raw/51job-1.err
 RC=$?
 set -e
+set +e
 python3 scripts/check_opencli_result.py --workspace . --site 51job --command search \
     --exit-code "$RC" --stdout-file raw/51job-1.json --stderr-file raw/51job-1.err \
     --auth-status-file raw/auth-status.json \
     --command-line 'opencli 51job search "算法工程师" --area 上海 --page 1 --limit 25 --window background -f json'
+CLASSIFIED=$?
+set -e
 ```
+
+**The wrapper itself exits 1 when the read did not succeed**, and prints
+`ADAPTER_READ_NOT_OK: …` on stderr alongside the classification on stdout. That
+is why it is wrapped in `set +e` too: `$CLASSIFIED` is 0 only for `ok`. Reading
+the JSON and ignoring the exit code is the same mistake as reading stdout and
+ignoring the adapter's exit code, one layer up — and it is the mistake a shell
+makes by default.
 
 **Read the exit code before interpreting empty output.** A login wall gives exit 1, EMPTY stdout and a YAML
 error body on stderr *even under `-f json`*, so `JSON.parse(stdout || '[]')` silently
