@@ -204,7 +204,7 @@ value is realised by **auditing it after the round**, not by reading from it dur
 question bank cannot follow up on an answer it did not anticipate, and "held under probe"
 is the only band above `asserted` that means anything.
 
-While you interview, the anti-coaching rules in SKILL.md bind on every turn: never write an
+While you interview, the anti-coaching rules below ("Mock interview — the anti-coaching line") bind on every turn: never write an
 answer for the candidate, never ask a leading question, never build a question on a premise
 the CV does not support, and never rehearse a gap into a non-gap.
 
@@ -463,7 +463,7 @@ as a checklist of what the panel is told to look for:
 
 **Never as a prediction of the mark.** Quoting an employer's scale is reporting; applying it
 as a verdict is fabrication. Everywhere else, no score, no percentage, no probability, no
-"strong candidate", no invented scale — see the banned-vocabulary block in SKILL.md.
+"strong candidate", no invented scale — see the banned-vocabulary block in references/gap-analysis.md.
 
 ## Hand the artifacts over — `deliver.py`, not a sentence in the final message
 
@@ -521,7 +521,7 @@ Do not automatically start a mock interview or another mode.
 - [ ] every walk-back and every promoted claim from §6 is on disk
 - [ ] `scripts/check_mock.py` exited 0 and its receipt is in `journal.jsonl`
 
-**Voice.** The debrief tells someone what they got wrong. `SKILL.md`, "How this skill writes to the user", governs its prose — quote them rather than characterise them, and say the finding before the cushioning.
+**Voice.** The debrief tells someone what they got wrong. `references/report-writing.md`, "How this skill writes to the user", governs its prose — quote them rather than characterise them, and say the finding before the cushioning.
 
 ## Mock interview — the anti-coaching line
 

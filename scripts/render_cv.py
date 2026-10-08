@@ -1900,19 +1900,29 @@ def paper_for(meta) -> str:
             raise ValueError(
                 f"meta.paper must be one of {sorted(PAPERS)}, got {declared!r}")
         return PAPERS[declared]
-    market = meta.get("target_market")
+    return PAPERS["letter"] if north_america(meta.get("target_market")) else PAPERS["a4"]
+
+
+def north_america(market) -> bool:
+    """Whether `market` names the US or Canada.
+
+    Extracted from `paper_for` so the page-length gate can ask the same
+    question. cv-craft.md gives US/CA their own résumé length (1 page, 2 only
+    at 10+ years), which is stricter than the generic career-stage ladder, and
+    a second hand-rolled country list would drift from this one.
+    """
     text = unicodedata.normalize("NFKC", str(market or "")).lower()
     if any(name in text for name in _LETTER_CJK):
-        return PAPERS["letter"]
+        return True
     for seg in _market_segments(market):
         if seg in _LETTER_CODES or seg in _LETTER_NAMES:
-            return PAPERS["letter"]
+            return True
         words = seg.split()
         for n in range(len(words), 0, -1):
             for i in range(len(words) - n + 1):
                 if " ".join(words[i:i + n]) in _LETTER_NAMES:
-                    return PAPERS["letter"]
-    return PAPERS["a4"]
+                    return True
+    return False
 
 
 def latex_preamble(engine=None, cjk=False, meta=None, margin="2cm"):

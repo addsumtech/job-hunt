@@ -22,7 +22,7 @@ RAISED BY THE USER after watching a real apply run, 2026-09-02.
    a mode with no idea the other three exist. Offering is not chaining: the
    distinction is whether a person chose.
 """
-from skill_docs import read_guidance, skill_context
+from skill_docs import ROOT, read_guidance, skill_context
 import json
 import pathlib
 import subprocess
@@ -184,3 +184,34 @@ def test_a_mode_entry_written_before_the_field_existed_is_still_checked(tmp_path
     (ws / "fit-assessment.yaml").write_text("verdict: stretch\n", encoding="utf-8")
     assert "NO_ASSESSMENT" not in _check_apply(ws).stderr, (
         "and it must go quiet once an assessment really is there")
+
+
+def test_every_mode_can_reach_the_handoff_without_the_checklist():
+    """SKILL.md tells a run NOT to preload the checklist, so a rule that lives
+    only there is a rule three of the four modes never see.
+
+    Measured 2026-10-08 after the slimming: `modes/assess.md` and
+    `modes/interview.md` had zero mentions of offering a next mode, and
+    discover's only "hand-off" hits were the login and recovery ones. Only
+    apply carried it.
+
+    The pairing is checked INSIDE a hand-off section of SKILL.md. Searching the
+    whole file is not a test: two earlier drafts of this test passed on the
+    broken tree, because "discover"/"assess" co-occur in the description and
+    the mode table, and "apply"/"interview" co-occur in the frontmatter.
+    """
+    entry = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+    marker = "## Hand-off"
+    assert marker in entry, (
+        "SKILL.md carries no hand-off section, so a finished discover, assess "
+        "or interview run never learns which mode follows it")
+    block = entry.split(marker, 1)[1].split("\n## ", 1)[0]
+    for finished, offered in (("discover", "assess"), ("assess", "apply"),
+                              ("apply", "interview"), ("interview", "apply")):
+        assert any(finished in line and offered in line
+                   for line in block.splitlines()), (
+            f"the hand-off section does not pair finishing {finished} with "
+            f"offering {offered}")
+    assert "never run" in block or "unasked" in block, (
+        "offering must be distinguished from chaining, or a reader takes the "
+        "table as permission to run the next mode")

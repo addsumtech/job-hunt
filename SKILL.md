@@ -77,9 +77,26 @@ read [references/cv-craft.md](references/cv-craft.md) for the market-specific
 personal-data interlock and the user's template precedence.
 
 Discovery is read-only. Do not submit an application, send a message, or start a
-new mode without the user's instruction. At a mode's end, give its result and
-offer a relevant next mode only when useful and its inputs exist; never run it
-unasked. Honour an explicit request to stop at the current deliverable.
+new mode without the user's instruction. Honour an explicit request to stop at
+the current deliverable.
+
+## Hand-off — offer the next mode, never run it
+
+At a mode's end, give its result, then ask in one question with selectable
+options. Offering is not chaining: the difference is whether a person chose.
+Reading "never chains" as "never mentions" leaves the user with no idea the
+other three modes exist, which is the skill hiding itself.
+
+| finished | offer next | why |
+|---|---|---|
+| `discover` | `assess` a row that interests them | the full-posting read extends the discovery mapping |
+| `assess` | `apply` if the verdict is worth it | say the verdict first; `blocked` gets one honest ask, not a silent refusal |
+| `apply` | `interview` on the package just built | the CV now makes claims the candidate has to defend |
+| `interview` | `apply` again to fix what the round exposed | an undefendable claim is a CV bug, not a story to drill |
+
+Never run one unasked, and do not offer a mode whose inputs are not there.
+[references/workflow-checklist.md](references/workflow-checklist.md) holds the
+longer form.
 
 ## Enter a full mode
 
@@ -101,8 +118,10 @@ python3 scripts/enter_mode.py --workspace <ws> --mode <mode> \
 The entry records the mode file's content hash and fast capabilities in
 `journal.jsonl`; a missing or stale entry cannot satisfy a completion gate.
 Read `modes/<mode>.md` and follow its artifact schemas and gates.
-**Read references as you go.** Each step below points to a `references/*.md` file. Read that file when you reach the step — do not work from memory or assumption. The references hold the craft detail; this file is just the flow.
- The complete per-artifact gate/checklist
+**Read references as you go.** The mode file's steps each point to a
+`references/*.md` file. Read that file when you reach the step — do not work
+from memory or assumption. The references hold the craft detail; the mode file
+is the flow. The complete per-artifact gate/checklist
 index is [references/workflow-checklist.md](references/workflow-checklist.md).
 Use its relevant subsection; do not load every listed resource pre-emptively.
 

@@ -360,6 +360,14 @@ def max_pages(profile, today_year: int):
         # could not parse — a guaranteed false CV_TOO_LONG on every non-Gregorian
         # CV. `unreadable_start_dates` says so out loud alongside it.
         return 2
+    # cv-craft.md:130 gives US/Canada their own résumé length — 1 page, a
+    # second only at 10+ years — and it is stricter than the generic ladder
+    # below. The gate took no market at all, so a 5-year US resume rendered to
+    # two pages and passed, against the convention table the same skill wrote.
+    # `meta.max_pages` above remains the escape hatch for the senior exception.
+    from render_cv import north_america
+    if north_america((profile.get("meta") or {}).get("target_market")):
+        return 1 if years < 10 else 2
     return 1 if years < 3 else 2
 
 

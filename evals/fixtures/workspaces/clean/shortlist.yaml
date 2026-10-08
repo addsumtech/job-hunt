@@ -12,7 +12,7 @@ sources:
   rows_returned: 2
   identity_field: title
   identity_field_empty_rows: 0
-  detail_command: opencli 51job detail <jobId>
+  detail_command: opencli 51job detail <jobId> --url <captured-url>
   raw_files:
   - raw/51job-1.json
   - raw/51job-detail-173199597.json

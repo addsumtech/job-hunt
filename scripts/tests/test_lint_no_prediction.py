@@ -686,3 +686,29 @@ def test_explicit_refusal_to_predict_is_not_a_prediction(text):
 ])
 def test_refusal_wording_does_not_hide_an_actual_prediction(text):
     assert lint.scan_text(text, 'report.md')
+
+
+@pytest.mark.parametrize("line", [
+    # The mask was written around one sentence seen in one real report, so every
+    # other ordinary way of refusing blocked delivery on correct text.
+    "本报告不会提供录用概率。",
+    "我们无法给出录用概率的估计。",
+    "本报告不予提供匹配分。",
+    "This report does not give an interview probability.",
+    "No offer probability is provided in this report.",
+    "This is not a prediction of your chance of getting an offer.",
+])
+def test_an_ordinary_refusal_is_not_read_as_a_prediction(line):
+    assert lint.scan_text(line, "report.md") == [], line
+
+
+@pytest.mark.parametrize("line", [
+    # Widening the mask must not swallow the claim it exists to catch.
+    "你有80%的概率拿到面试。",
+    "录用概率约为七成。",
+    "不是不提供录用概率，录用概率是 80%。",
+    "Your interview probability is around 70%.",
+    "We estimate an offer probability of 60%.",
+])
+def test_a_real_forecast_still_fires(line):
+    assert lint.scan_text(line, "report.md"), line

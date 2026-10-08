@@ -200,23 +200,27 @@
     {
       "path": "linkedin/job-detail.js",
       "base_sha256": "8f0cdc3619aeb8b4d74806cf226fb2a5f77c5fd4e1594f3d894f0dd1171dc2b9",
-      "patched_sha256": "1d883b2f86b43ac8cad4463aad62561a18bdc413e360f0e96ee490d8c6fbda29",
+      "patched_sha256": "50376c8c15f74a70baa0c4126a3a95137577d2aebdfd47dbe0fd6eb36a76576a",
       "replacements": [
         {
+          "old": "function buildExtractionScript() {\n  return String.raw`(() => {",
+          "new": "function buildExtractionScript(requestedId) {\n  return String.raw`(() => {\n    const requestedId = ${JSON.stringify(String(requestedId || ''))};"
+        },
+        {
           "old": "      const codes = Array.from(document.querySelectorAll('code[id^=\"bpr-guid-\"]'));\n      for (const code of codes) {\n        let payload;\n        try { payload = JSON.parse(code.textContent || '{}'); } catch { continue; }\n        const included = Array.isArray(payload.included) ? payload.included : [];\n        const topCard = included.find((item) => item && (item.jobPostingTitle || item.primaryDescription || item.tertiaryDescription));\n        if (!topCard) continue;\n        const apply = included.find((item) => item && item.companyApplyUrl);\n        const workplace = included.find((item) => item && (item.workplaceTypeEnum || item.localizedName));\n        const company = included.find((item) => item && item.name && /company/i.test(String(item.entityUrn || item.$type || '')));",
-          "new": "      const jobId = new URL(location.href).searchParams.get('currentJobId')\n        || location.pathname.match(/^\\/jobs\\/view\\/(\\d+)/)?.[1];\n      const jobUrn = 'urn:li:fsd_jobPosting:' + jobId;\n      const included = Array.from(document.querySelectorAll('code[id^=\"bpr-guid-\"]')).flatMap((code) => {\n        try {\n          const payload = JSON.parse(code.textContent || '{}');\n          return Array.isArray(payload.included) ? payload.included : [];\n        } catch { return []; }\n      });\n      const postings = included.filter((item) => item?.entityUrn === jobUrn);\n      const posting = postings.find((item) => item.description?.text);\n      const topCard = included.find((item) => item?.jobPostingTitle && item['*jobPosting'] === jobUrn);\n      if (topCard) {\n        const apply = included.find((item) => item?.companyApplyUrl\n          && (item.entityUrn === jobUrn || item.entityUrn === 'urn:li:fsd_jobSeekerApplicationDetail:' + jobId));\n        const workplaceUrns = postings.flatMap((item) => item['*jobWorkplaceTypes'] || item['*workplaceTypesResolutionResults'] || []);\n        const workplace = included.find((item) => workplaceUrns.includes(item?.entityUrn));\n        const companyUrn = postings.map((item) => item.companyDetails?.jobCompany?.['*company']).find(Boolean);\n        const company = included.find((item) => item?.entityUrn === companyUrn);"
+          "new": "      const pageId = new URL(location.href).searchParams.get('currentJobId')\n        || location.pathname.match(/^\\/jobs\\/view\\/(\\d+)/)?.[1];\n      const jobId = requestedId || pageId;\n      const jobUrn = 'urn:li:fsd_jobPosting:' + jobId;\n      const included = Array.from(document.querySelectorAll('code[id^=\"bpr-guid-\"]')).flatMap((code) => {\n        try {\n          const payload = JSON.parse(code.textContent || '{}');\n          return Array.isArray(payload.included) ? payload.included : [];\n        } catch { return []; }\n      });\n      const postings = included.filter((item) => item?.entityUrn === jobUrn);\n      const posting = postings.find((item) => item.description?.text);\n      const topCard = included.find((item) => item?.jobPostingTitle && item['*jobPosting'] === jobUrn);\n      if (topCard) {\n        const apply = included.find((item) => item?.companyApplyUrl\n          && (item.entityUrn === jobUrn || item.entityUrn === 'urn:li:fsd_jobSeekerApplicationDetail:' + jobId));\n        const workplaceUrns = postings.flatMap((item) => item['*jobWorkplaceTypes'] || item['*workplaceTypesResolutionResults'] || []);\n        const workplace = included.find((item) => workplaceUrns.includes(item?.entityUrn));\n        const companyUrn = postings.map((item) => item.companyDetails?.jobCompany?.['*company']).find(Boolean);\n        const company = included.find((item) => item?.entityUrn === companyUrn);"
         },
         {
           "old": "          description: '',",
-          "new": "          description: String(posting?.description?.text || ''),"
+          "new": "          description: String(posting?.description?.text || ''),\n          has_posting_record: postings.length > 0,"
         },
         {
           "old": "if (inline && inline.title) return { ...inline, description: clean(inline.description || renderedDescription) };",
-          "new": "if (inline && inline.title) return { ...inline, description: inline.description || renderedDescription };"
+          "new": "const pageId = new URL(location.href).searchParams.get('currentJobId')\n      || location.pathname.match(/^\\/jobs\\/view\\/(\\d+)/)?.[1];\n    if (requestedId && pageId && String(pageId) !== String(requestedId)) {\n      return { landed_on: String(pageId), requested: String(requestedId) };\n    }\n    if (inline && inline.title) return { ...inline,\n      description: inline.description || (inline.has_posting_record ? '' : renderedDescription) };"
         },
         {
           "old": "  if (!title) throw new CommandExecutionError('LinkedIn job detail could not find a job title');",
-          "new": "  if (!title) throw new CommandExecutionError('LinkedIn job detail could not find a job title');\n  const description = String(row.description || '').replace(/[\\u00a0\\u202f]+/g, ' ').trim();\n  if (!description) throw new CommandExecutionError('LinkedIn job description is empty or still loading; no complete detail extracted');"
+          "new": "  if (row.landed_on) {\n    throw new CommandExecutionError('LinkedIn navigation landed on another job ('\n      + row.landed_on + ' instead of ' + row.requested + '); no detail was read');\n  }\n  if (!title) throw new CommandExecutionError('LinkedIn job detail could not find a job title');\n  const description = String(row.description || '').replace(/[\\u00a0\\u202f]+/g, ' ').trim();\n  if (!description) throw new CommandExecutionError('LinkedIn job description is empty or still loading; no complete detail extracted');"
         },
         {
           "old": "    description: normalizeWhitespace(row.description),",
@@ -224,7 +228,7 @@
         },
         {
           "old": "    await assertLinkedInAuthenticated(page, 'LinkedIn job-detail');\n    const row = unwrapEvaluateResult(await page.evaluate(buildExtractionScript()));\n    return [normalizeDetail(row)];",
-          "new": "    let row;\n    for (let attempt = 0; attempt < 6; attempt++) {\n      await assertLinkedInAuthenticated(page, 'LinkedIn job-detail');\n      row = unwrapEvaluateResult(await page.evaluate(buildExtractionScript()));\n      if (normalizeWhitespace(row?.title) && normalizeWhitespace(row?.description)) break;\n      if (attempt < 5) await page.wait(2);\n    }\n    return [normalizeDetail(row)];"
+          "new": "    const requestedId = String(jobUrl.match(/\\/jobs\\/view\\/(\\d+)/)?.[1]\n      || new URL(jobUrl).searchParams.get('currentJobId') || '');\n    let row;\n    for (let attempt = 0; attempt < 6; attempt++) {\n      await assertLinkedInAuthenticated(page, 'LinkedIn job-detail');\n      row = unwrapEvaluateResult(await page.evaluate(buildExtractionScript(requestedId)));\n      if (normalizeWhitespace(row?.title) && normalizeWhitespace(row?.description)) break;\n      if (attempt < 5) await page.wait(2);\n    }\n    return [normalizeDetail(row)];"
         },
         {
           "old": "export const __test__ = {\n",

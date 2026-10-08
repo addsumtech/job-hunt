@@ -338,3 +338,35 @@ def test_a_readable_start_date_does_not_fire_it(tmp_path):
     profile = {"meta": {"name": "x"}, "experience": [{"start": "2019-04"}]}
     found = check_pages.findings_for(str(pdf), profile, 2026)
     assert not any(f.startswith("START_DATE_UNREAD") for f in found), found
+
+
+@pytest.mark.parametrize("market", ["us", "USA", "United States", "Canada", "San Francisco, US"])
+def test_the_us_resume_budget_is_one_page_until_ten_years(market):
+    """cv-craft.md:130 — "US & Canada … 1 page (US strict; a 2nd page only at
+    10+ years / senior)". The gate took no market at all, so it applied the
+    generic ladder (3-7 years -> 1-2 pages) everywhere and passed a 2-page US
+    resume for a 5-year candidate that the same file calls wrong.
+    """
+    mid = {"meta": {"name": "Z", "target_market": market},
+           "experience": [{"org": "A", "start": "2021-01"}]}
+    assert check_pages.max_pages(mid, 2026) == 1, market
+    senior = {"meta": {"name": "Z", "target_market": market},
+              "experience": [{"org": "A", "start": "2014-01"}]}
+    assert check_pages.max_pages(senior, 2026) == 2, market
+
+
+@pytest.mark.parametrize("market", ["nl", "Germany", "United Kingdom", "Singapore", ""])
+def test_other_markets_keep_the_generic_ladder(market):
+    """The tightening is US/Canada only. UK/IE/AU/NZ are "up to 2 pages"
+    (cv-craft.md:131) and the EU is 2 (cv-craft.md:138)."""
+    mid = {"meta": {"name": "Z", "target_market": market},
+           "experience": [{"org": "A", "start": "2021-01"}]}
+    assert check_pages.max_pages(mid, 2026) == 2, market
+
+
+def test_an_explicit_override_still_wins_for_a_us_resume():
+    """meta.max_pages is the documented escape hatch, and a senior US resume
+    that genuinely needs the room must not be blocked by the market rule."""
+    profile = {"meta": {"name": "Z", "target_market": "us", "max_pages": 2},
+               "experience": [{"org": "A", "start": "2021-01"}]}
+    assert check_pages.max_pages(profile, 2026) == 2

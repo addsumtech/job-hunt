@@ -281,6 +281,12 @@ Do not scatter keywords across bullets only — the Skills section is the primar
 | 15+ years / senior / executive | 2 pages (3 only if roles are very distinct and all relevant) |
 | Academic / research CV | No page limit; list all publications, grants, talks |
 
+**US and Canada override this ladder: 1 page, a second only at 10+ years or
+senior** (§2). The ladder is the default for every other market, and the two
+disagreed for years 3–9 — a reader who found §5 first shipped a two-page US
+résumé that §2 calls wrong. `scripts/check_pages.py` enforces the US/CA rule
+from `meta.target_market`; `meta.max_pages` is the explicit exception.
+
 ### What to cut first (in this order)
 
 1. **Roles older than 10–15 years** that add no unique signal. If you held 5 early jobs all with the same scope, condense to one line: "2003–2008: Various junior roles in X sector."

@@ -186,3 +186,48 @@ test('recommendation, experience and search preserve the correct post identity',
     assert.equal(vm.runInNewContext(search + ';uuid || id', { moment: {}, contentData, data: {} }), numericId);
     assert.equal(vm.runInNewContext(search + ';uuid || id', { moment: { uuid }, contentData: {}, data: {} }), uuid);
 });
+
+// A page whose "About the job" pane holds OTHER text than the requested job's.
+// The search layout keeps one detail pane and swaps its contents, so a pane that
+// has not caught up still answers readRenderedDescription().
+function extractWithPane(payloads, { paneText = '', href = 'https://www.linkedin.com/jobs/search/?currentJobId=123',
+    requestedId = '123' } = {}) {
+    const codes = payloads.map(included => ({ textContent: JSON.stringify({ included }) }));
+    const heading = { innerText: 'About the job', closest: () => ({ innerText: 'About the job ' + paneText }) };
+    return vm.runInNewContext(linkedin().tests.buildExtractionScript(requestedId), {
+        URL, location: new URL(href),
+        document: {
+            body: { innerText: 'Search Jobs' }, querySelector: () => null,
+            querySelectorAll: selector => selector === 'code[id^="bpr-guid-"]' ? codes
+                : selector === 'h1,h2,h3,h4' ? (paneText ? [heading] : []) : [],
+        },
+    });
+}
+
+test('a stale detail pane cannot supply the requested job description', () => {
+    // The requested job's top card is present but its description has not loaded.
+    // The pane still shows the previously opened job. Measured 2026-10-08: the
+    // old code returned that pane text as this job's description, and every
+    // downstream provenance check passed it, because the quote really is in the
+    // capture and the command line really names the requested id.
+    const row = extractWithPane([
+        [{ jobPostingTitle: 'Requested role', '*jobPosting': 'urn:li:fsd_jobPosting:123' }],
+        [{ entityUrn: 'urn:li:fsd_jobPosting:123' }],
+    ], { paneText: 'DESCRIPTION OF A DIFFERENT JOB' });
+    assert.ok(!String(row?.description || '').includes('DIFFERENT JOB'),
+        'the pane belongs to no verified job; it must not become this job description');
+    assert.throws(() => linkedin().tests.normalizeDetail(row), /empty or still loading/);
+});
+
+test('a navigation that landed on another job is refused, not described', () => {
+    // goto(123) can end on 999 after a redirect. The id was read from
+    // location.href AFTER navigation, so every urn then matched 999 and the
+    // wrong posting came back as a complete, valid detail.
+    const row = extractWithPane([
+        [{ entityUrn: 'urn:li:fsd_jobPosting:999', description: { text: 'JD OF JOB 999' } },
+            { jobPostingTitle: 'Other role', '*jobPosting': 'urn:li:fsd_jobPosting:999' }],
+    ], { href: 'https://www.linkedin.com/jobs/search/?currentJobId=999', requestedId: '123' });
+    assert.ok(!String(row?.description || '').includes('JOB 999'),
+        'a detail for another posting must never be returned for the requested id');
+    assert.throws(() => linkedin().tests.normalizeDetail(row), /another job|empty or still loading/);
+});

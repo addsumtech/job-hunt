@@ -545,7 +545,7 @@ def _check_sources(workspace, shortlist, rows, calls):
                 f"SOURCE_REPORT_MISSING: rows cite source_site {site!r} but "
                 "shortlist.yaml `sources:` has no entry for it. That entry needs "
                 "the adapter's identity_field and detail_command — for any site "
-                "outside the four inlined in SKILL.md they come from "
+                "outside the four inlined in modes/discover.md they come from "
                 "references/discovery-sources.md.")
     for site, entry in sorted(reported.items()):
         command = entry.get("command")

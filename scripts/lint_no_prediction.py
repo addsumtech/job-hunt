@@ -135,11 +135,34 @@ _REFUSED_QUANTITY_ZH = (r"(?:匹配分|匹配度|匹配百分比|ATS\s*分数|(?
                         + _ZH_RATE + r"))")
 _REFUSED_PREDICTION_ZH = re.compile(
     r"(?<!不)(?<!不是)(?<!并非)(?<!不能)(?<!未必)(?<!不一定)"
-    r"(?:(?:不|未|没有(?:依据)?)(?:提供|给出|估算|估计|预测|计算)(?:任何)?"
+    # 会/能/予 between the negator and the verb is ordinary Chinese, and so is
+    # 无法. The mask was built around the single sentence one real report
+    # happened to use, so `不会提供录用概率` and `无法给出录用概率` — refusals
+    # this skill tells the author to write — blocked delivery as forecasts.
+    r"(?:(?:不|未|没有(?:依据)?|无法|未能|不便)(?:会|能|予)?"
+    r"(?:提供|给出|估算|估计|预测|计算|作出|做出)(?:任何)?"
     r"|(?:不是|并非)(?:对)?)"
     + _REFUSED_QUANTITY_ZH
     + r"(?:[、或与和及]" + _REFUSED_QUANTITY_ZH + r")*"
     r"(?:的)?(?:估计|预估|预测|数值|数字)?(?=[，。！？；,;.!?\s]|$)")
+# The English half of the same exemption. `probabilit(y|ies)`, `odds` and
+# `likelihood` are bare word matches in _WORDS, so every English sentence that
+# REFUSES to give one fired as if it had given one — and the refusal is what
+# this skill instructs the author to write. Each alternative is bounded to its
+# own clause (no comma, no sentence end), so a real claim sharing the sentence
+# still reaches the scanner.
+_EN_FORECAST_NOUN = (r"(?:(?:interview|offer|hiring|callback|success|match|fit)\s+)?"
+                     r"(?:probabilit(?:y|ies)|odds|likelihood|chances?|score)")
+_NEGATED_EN = (r"(?:\b(?:does|do|did|will|would|can|could|shall|is|are|am|was|were)\s+not\b"
+               r"|\bcannot\b|\b(?:can|won|don|doesn|didn|isn|aren|wouldn|couldn)['’]t\b)")
+_REFUSED_PREDICTION_EN = re.compile(
+    r"(?:" + _NEGATED_EN + r"\s+(?:give|provide|offer|predict|estimate|forecast|state|"
+    r"include|compute|calculate|report)(?:\s+(?:you|your|their|any|an?|the))*\s+"
+    + _EN_FORECAST_NOUN + r"[^.!?;,]*"
+    r"|\bno\s+" + _EN_FORECAST_NOUN + r"\s+(?:is|are|was|were)\s+"
+    r"(?:provided|given|offered|stated|included|reported)"
+    r"|\bnot\s+an?\s+(?:prediction|forecast|estimate|guarantee)\b[^.!?;,]*"
+    r")", re.IGNORECASE)
 # 七成 = 70%. The lookahead keeps 成功/成长/成员/成果/成本/成熟/成为 out; those are
 # the ordinary compounds a Chinese numeral can legitimately sit in front of.
 # Arabic digits too. `八成` fired and `8 成` did not — a pre-existing gap this
@@ -612,6 +635,7 @@ def mask_exempt_spans(line: str) -> str:
     masked = _URL.sub(lambda m: " " * len(m.group(0)), line)
     masked = ROADMAP_HORIZON.sub(lambda m: " " * len(m.group(0)), masked)
     masked = _REFUSED_PREDICTION_ZH.sub(lambda m: " " * len(m.group(0)), masked)
+    masked = _REFUSED_PREDICTION_EN.sub(lambda m: " " * len(m.group(0)), masked)
     for label in VERDICT_LABELS:
         if label in masked:
             masked = masked.replace(label, " " * len(label))

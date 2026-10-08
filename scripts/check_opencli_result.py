@@ -42,7 +42,7 @@ IDENTITY_FIELD_DEFAULT = "title"
 # The documented command that recovers a row whose identity field came back
 # empty. Measured from the same help output.
 DETAIL_COMMAND = {
-    "51job": "opencli 51job detail <jobId>",
+    "51job": "opencli 51job detail <jobId> --url <captured-url>",
     "indeed": "opencli indeed job <id>",
     "boss": "opencli boss detail <security_id>",
     "linkedin": "opencli linkedin job-detail <job-url>",
