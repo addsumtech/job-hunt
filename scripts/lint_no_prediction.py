@@ -155,13 +155,21 @@ _EN_FORECAST_NOUN = (r"(?:(?:interview|offer|hiring|callback|success|match|fit)\
                      r"(?:probabilit(?:y|ies)|odds|likelihood|chances?|score)")
 _NEGATED_EN = (r"(?:\b(?:does|do|did|will|would|can|could|shall|is|are|am|was|were)\s+not\b"
                r"|\bcannot\b|\b(?:can|won|don|doesn|didn|isn|aren|wouldn|couldn)['’]t\b)")
+# Every alternative ends ON the quantity it refuses. An open-ended tail is what
+# the first draft used, and it swallowed the rest of the clause: `does not give
+# an interview probability but your odds are 80%` went silent, so a cry-wolf fix
+# had opened a detection hole. Found by probing the fix with inputs it was not
+# written against, not by the tests written alongside it.
+_EN_OUTCOME_TAIL = (r"(?:\s+(?:of|at|for)\s+(?:getting|landing|receiving|an?|the)"
+                    r"(?:\s+(?:an?|the))?(?:\s+(?:interview|offer|job|role|position))?)?")
 _REFUSED_PREDICTION_EN = re.compile(
     r"(?:" + _NEGATED_EN + r"\s+(?:give|provide|offer|predict|estimate|forecast|state|"
     r"include|compute|calculate|report)(?:\s+(?:you|your|their|any|an?|the))*\s+"
-    + _EN_FORECAST_NOUN + r"[^.!?;,]*"
+    + _EN_FORECAST_NOUN + _EN_OUTCOME_TAIL +
     r"|\bno\s+" + _EN_FORECAST_NOUN + r"\s+(?:is|are|was|were)\s+"
     r"(?:provided|given|offered|stated|included|reported)"
-    r"|\bnot\s+an?\s+(?:prediction|forecast|estimate|guarantee)\b[^.!?;,]*"
+    r"|\bnot\s+an?\s+(?:prediction|forecast|estimate|guarantee)\s+of"
+    r"(?:\s+(?:your|their|the|an?))*\s+" + _EN_FORECAST_NOUN + _EN_OUTCOME_TAIL +
     r")", re.IGNORECASE)
 # 七成 = 70%. The lookahead keeps 成功/成长/成员/成果/成本/成熟/成为 out; those are
 # the ordinary compounds a Chinese numeral can legitimately sit in front of.

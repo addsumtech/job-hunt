@@ -712,3 +712,17 @@ def test_an_ordinary_refusal_is_not_read_as_a_prediction(line):
 ])
 def test_a_real_forecast_still_fires(line):
     assert lint.scan_text(line, "report.md"), line
+
+
+@pytest.mark.parametrize("line", [
+    # The first draft of the refusal mask ended in `[^.!?;,]*`, so it ate the
+    # rest of the clause and a real claim sharing the sentence went silent.
+    # A cry-wolf fix that opens a detection hole is worse than the cry-wolf.
+    "This does not give an interview probability but your odds are 80%.",
+    "We cannot predict your chances — your probability is 85%.",
+    "No offer probability is provided although you will get an interview.",
+    "This is not a prediction of your odds and you will land the job.",
+    "本报告不会提供录用概率 但你的录用概率是八成。",
+])
+def test_a_refusal_does_not_cover_a_claim_sharing_its_sentence(line):
+    assert lint.scan_text(line, "report.md"), line

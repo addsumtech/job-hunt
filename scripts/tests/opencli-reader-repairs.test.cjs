@@ -231,3 +231,14 @@ test('a navigation that landed on another job is refused, not described', () => 
         'a detail for another posting must never be returned for the requested id');
     assert.throws(() => linkedin().tests.normalizeDetail(row), /another job|empty or still loading/);
 });
+
+test('a page carrying no job id at all is refused, not described', () => {
+    // normalizeJobUrl always navigates to /jobs/search/?currentJobId=<id>, so a
+    // page with neither that parameter nor /jobs/view/<id> is not the posting
+    // we asked for — a list page or an interstitial. Without this, its h1 and
+    // pane text came back as a complete detail for the requested id.
+    const row = extractWithPane([], { href: 'https://www.linkedin.com/jobs/',
+        requestedId: '123', paneText: 'TEXT FROM SOME OTHER PAGE' });
+    assert.ok(!String(row?.description || '').includes('OTHER PAGE'));
+    assert.throws(() => linkedin().tests.normalizeDetail(row), /no job id|another job/);
+});

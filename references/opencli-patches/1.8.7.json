@@ -200,7 +200,7 @@
     {
       "path": "linkedin/job-detail.js",
       "base_sha256": "8f0cdc3619aeb8b4d74806cf226fb2a5f77c5fd4e1594f3d894f0dd1171dc2b9",
-      "patched_sha256": "50376c8c15f74a70baa0c4126a3a95137577d2aebdfd47dbe0fd6eb36a76576a",
+      "patched_sha256": "15a2f8db8209b212ff578c1c19b63a271b4349a798f7ace86896f37296c516a7",
       "replacements": [
         {
           "old": "function buildExtractionScript() {\n  return String.raw`(() => {",
@@ -216,11 +216,11 @@
         },
         {
           "old": "if (inline && inline.title) return { ...inline, description: clean(inline.description || renderedDescription) };",
-          "new": "const pageId = new URL(location.href).searchParams.get('currentJobId')\n      || location.pathname.match(/^\\/jobs\\/view\\/(\\d+)/)?.[1];\n    if (requestedId && pageId && String(pageId) !== String(requestedId)) {\n      return { landed_on: String(pageId), requested: String(requestedId) };\n    }\n    if (inline && inline.title) return { ...inline,\n      description: inline.description || (inline.has_posting_record ? '' : renderedDescription) };"
+          "new": "const pageId = new URL(location.href).searchParams.get('currentJobId')\n      || location.pathname.match(/^\\/jobs\\/view\\/(\\d+)/)?.[1];\n    if (requestedId && String(pageId || '') !== String(requestedId)) {\n      return { landed_on: String(pageId || ''), requested: String(requestedId) };\n    }\n    if (inline && inline.title) return { ...inline,\n      description: inline.description || (inline.has_posting_record ? '' : renderedDescription) };"
         },
         {
           "old": "  if (!title) throw new CommandExecutionError('LinkedIn job detail could not find a job title');",
-          "new": "  if (row.landed_on) {\n    throw new CommandExecutionError('LinkedIn navigation landed on another job ('\n      + row.landed_on + ' instead of ' + row.requested + '); no detail was read');\n  }\n  if (!title) throw new CommandExecutionError('LinkedIn job detail could not find a job title');\n  const description = String(row.description || '').replace(/[\\u00a0\\u202f]+/g, ' ').trim();\n  if (!description) throw new CommandExecutionError('LinkedIn job description is empty or still loading; no complete detail extracted');"
+          "new": "  if (row.requested) {\n    throw new CommandExecutionError('LinkedIn navigation landed on '\n      + (row.landed_on ? 'another job (' + row.landed_on + ')' : 'a page with no job id')\n      + ' instead of ' + row.requested + '; no detail was read');\n  }\n  if (!title) throw new CommandExecutionError('LinkedIn job detail could not find a job title');\n  const description = String(row.description || '').replace(/[\\u00a0\\u202f]+/g, ' ').trim();\n  if (!description) throw new CommandExecutionError('LinkedIn job description is empty or still loading; no complete detail extracted');"
         },
         {
           "old": "    description: normalizeWhitespace(row.description),",
