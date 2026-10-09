@@ -34,8 +34,24 @@ def pass_notice(gate: str, mode: str | None = None) -> None:
     deliberately does NOT name the next command. Which command follows depends
     on the mode and the step, the mode file owns that order, and a per-gate
     successor list here would go stale the first time a step moved.
+
+    It names `modes/<mode>.md` only when that file is really there. The caller
+    is `journal.receipt`, which passes `journal.current_mode`'s answer, and
+    that answer is the string "unknown" when nothing recorded a mode_entry —
+    the shape check_apply's NO_MODE_ENTRY finding exists to catch. Interpolated
+    blindly, the line sent the reader to `modes/unknown.md`, a file the skill
+    does not ship. The guard asks the filesystem rather than the one sentinel,
+    so the next sentinel, a typo or a renamed mode degrades to the generic
+    wording instead of printing a path to nothing.
     """
-    where = f"the {mode} run" if mode else "the run"
+    known = False
+    if mode:
+        try:
+            import paths
+            known = paths.mode_file(mode).exists()
+        except (ImportError, OSError):
+            known = False
+    where = f"the {mode} run" if known else "the run"
     print(f"PASS: {gate} — no findings. This is not the end of {where}; return to "
-          f"{'modes/' + mode + '.md' if mode else 'the mode file'} and continue "
+          f"{'modes/' + mode + '.md' if known else 'the mode file'} and continue "
           "from the step that ran it.", file=sys.stderr)

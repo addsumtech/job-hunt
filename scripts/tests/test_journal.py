@@ -439,3 +439,66 @@ def test_the_pass_line_names_the_mode_when_the_journal_knows_it(tmp_path, capsys
     journal.receipt(tmp_path, "check_no_write", {}, "pass")
     captured = capsys.readouterr()
     assert "discover" in captured.err, captured.err
+
+
+def _mode_files_named(text: str) -> list:
+    """Every `modes/<x>.md` the message points the reader at."""
+    return re.findall(r"modes/([A-Za-z0-9_.-]+)\.md", text)
+
+
+def test_the_pass_line_never_names_a_mode_file_that_does_not_exist(tmp_path, capsys):
+    """A gate can pass before anything recorded a mode_entry — that is exactly
+    the shape check_apply's NO_MODE_ENTRY exists to catch, and journal's
+    current_mode() answers "unknown" there on purpose.
+
+    Interpolating that answer into the pass line sent the reader to
+    `modes/unknown.md`, which the skill does not ship and never will. The
+    degraded path is where a weak agent most needs a pointer it can follow, so
+    the line must name a file that is really there or name none at all.
+    """
+    import paths
+    journal.receipt(tmp_path, "check_no_write", {}, "pass")
+    err = capsys.readouterr().err
+    assert err, "a passing receipt still prints its line"
+    for mode in _mode_files_named(err):
+        assert paths.mode_file(mode).exists(), (
+            f"the pass line sent the reader to modes/{mode}.md, which does not "
+            f"exist: {err!r}")
+
+
+def test_the_pass_line_still_points_somewhere_when_the_mode_is_unrecorded(tmp_path, capsys):
+    """Dropping the dead pointer must not cost the reader the instruction. The
+    fallback carries no mode name, so it has to say which file to go back to in
+    words rather than invent a path."""
+    journal.receipt(tmp_path, "check_no_write", {}, "pass")
+    err = capsys.readouterr().err
+    assert "unknown" not in err, f"'unknown' is journal's sentinel, not prose: {err!r}"
+    assert "mode file" in err, f"the reader is still told where to return: {err!r}"
+
+
+def test_pass_notice_rejects_any_mode_without_a_file_not_just_the_sentinel(capsys):
+    """Guarding the literal string "unknown" would leave the next sentinel, a
+    typo or a renamed mode printing a path to nothing. The question the line
+    answers is whether the reader can open the file, so ask the filesystem."""
+    import cli_io
+    import paths
+    for mode in ("unknown", "", "Discover", "discover.md", "../etc/passwd"):
+        cli_io.pass_notice("check_no_write", mode)
+        err = capsys.readouterr().err
+        for named in _mode_files_named(err):
+            assert paths.mode_file(named).exists(), (
+                f"mode={mode!r} produced modes/{named}.md, which does not exist")
+
+
+def test_pass_notice_names_the_real_mode_file_for_every_shipped_mode(capsys):
+    """The other half: the fix must not make the line generic for real modes,
+    where naming the file is the whole value."""
+    import cli_io
+    import enter_mode
+    import paths
+    for mode in enter_mode.MODES:
+        cli_io.pass_notice("check_no_write", mode)
+        err = capsys.readouterr().err
+        assert f"modes/{mode}.md" in err, err
+        assert f"the {mode} run" in err, err
+        assert paths.mode_file(mode).exists()
