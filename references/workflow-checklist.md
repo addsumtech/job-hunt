@@ -224,8 +224,9 @@ Ran, leaving nothing in the journal (they render; they do not judge):
 In CI, not in a workspace (no receipt exists for these, by design):
 - [ ] `scripts/check_skill_lossless.py` — only when this skill's own files changed.
 - [ ] `scripts/check_hidden_chars.py` — whenever any source or documentation file
-      changed. `make check` runs it; a literal invisible character is replaced by an
-      escape or removed, never waived.
+      changed. The source repository runs it in `make check` and in CI; wherever it is
+      run, a literal invisible character is replaced by an escape or removed, never
+      waived.
 
 Ran, with a receipt in `journal.jsonl` — the discover gates. `scripts/check_apply.py`
 does not require these; a discover run is not reportable without them:
