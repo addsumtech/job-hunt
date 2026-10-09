@@ -64,8 +64,8 @@ job-hunt/
 ├── SKILL.md                        # Orchestrator instructions — layer 1, always in context; routes to a mode first
 ├── README.md
 ├── requirements.txt
-├── Makefile                        # make check = tests + losslessness + conventions
-├── .github/workflows/checks.yml    # the same three checks in CI
+├── Makefile                        # make check = tests + losslessness + conventions + hidden chars
+├── .github/workflows/checks.yml    # the same four checks in CI
 ├── .claude-plugin/                 # the two install paths that are not a clone
 │   ├── plugin.json                  # the manifest /plugin install reads
 │   └── marketplace.json             # generated FROM plugin.json — never retype the version
@@ -123,6 +123,7 @@ job-hunt/
     ├── check_candidate_match.py      # discover gate: evidence-backed CV-to-detail recommendation mapping
     ├── check_claims.py              # claim provenance + master-profile immutability
     ├── check_conventions.py         # CI — market-convention table lint
+    ├── check_hidden_chars.py        # CI — invisible / BiDi control characters in source and docs
     ├── check_evidence_refs.py       # evidence refs resolve; no block ids in reader prose
     ├── check_letter.py              # letter body constraints
     ├── check_mock.py                # interview mode's gate: quotes, tags, promotions, question log
@@ -237,7 +238,7 @@ cd scripts && python -m pytest tests/ -v
 ```
 
 Everything must pass. `make check` additionally runs the migration losslessness
-check and the market-convention lint.
+check, the market-convention lint and the hidden-character scan.
 
 ## What the numbers prove, and what they do not
 
@@ -246,10 +247,13 @@ Reading one as the other is the mistake this section exists to prevent.
 
 ### `make check` — the code agrees with itself
 
-The full unit-test suite, the migration-losslessness check, and the market-table lint.
+The full unit-test suite, the migration-losslessness check, the market-table lint
+and the hidden-character scan.
 Use the current run output for the test count; it changes as coverage grows.
 Green means the scripts do what their tests say, no line of the pre-migration
-skill was lost, and every convention entry carries a source and a review date.
+skill was lost, every convention entry carries a source and a review date, and no
+invisible or BiDi control character is in the tree for a reader to see one thing
+where the interpreter reads another.
 
 It does **not** mean a mode was measured against anything. `check_skill_lossless.py`
 proves the bytes survived the layering, not that they arrive in context when they

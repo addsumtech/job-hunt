@@ -74,6 +74,7 @@ repo already puts `NOTICE_*`.
 | Market tables | `scripts/check_conventions.py` | digits/percent in prose, source provenance, protected traits, duplicate ids, expired `review_by` (CI-hard) |
 | Assess | `scripts/check_assessment.py` | composes the six above and requires their receipts; disclaimer, disqualifier section, the “What to do instead” half, verbatim conventions, stale-review banner; a top-level `level_direction` or `effort` the card prints but nobody assessed, and a work-authorization token spelled outside its set |
 | Migration losslessness (CI only) | `scripts/check_skill_lossless.py` | a baseline line that exists nowhere in this tree |
+| Hidden characters (CI only) | `scripts/check_hidden_chars.py` | a soft hyphen, zero-width character, BiDi embedding/override/isolate or tag character anywhere in source or docs — a line that reads one way to a person and another to the interpreter. No allowlist; the fix is an escape or removal. Exits 2 on an empty tree, because 0 findings over 0 files is not a clean scan |
 | Adapter classification | `scripts/check_opencli_result.py` | *(wrapper, not a gate)* a non-zero exit, a login wall, a platform stop-signal, or an empty identity field. It exits **1 whenever the classification is not `ok`** and prints `ADAPTER_READ_NOT_OK` on stderr, so a caller that branches on `$?` cannot read a failed fetch as a success; the classification stays on stdout for a caller that parses it |
 | First-run environment | `scripts/doctor.py` | *(precondition, not a gate)* every capability the skill needs, checked by USING it — the PDF check renders a PDF, because an earlier `command -v xelatex` check called a working machine broken while tectonic was installed. `--install` installs the Python packages; the agent prepares required tools and daily-browser CDP via `references/agent-setup.md` |
 | Saving a master | `scripts/save_profile.py` | *(guarded write, not a gate)* one master per language; a new language never overwrites another, a repeat language is backed up first, and a profile with no `meta.language` is refused |
@@ -222,6 +223,9 @@ Ran, leaving nothing in the journal (they render; they do not judge):
 
 In CI, not in a workspace (no receipt exists for these, by design):
 - [ ] `scripts/check_skill_lossless.py` — only when this skill's own files changed.
+- [ ] `scripts/check_hidden_chars.py` — whenever any source or documentation file
+      changed. `make check` runs it; a literal invisible character is replaced by an
+      escape or removed, never waived.
 
 Ran, with a receipt in `journal.jsonl` — the discover gates. `scripts/check_apply.py`
 does not require these; a discover run is not reportable without them:

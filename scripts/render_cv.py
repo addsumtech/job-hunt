@@ -2362,7 +2362,11 @@ def _engine_log(proc):
 # Right-to-left scripts. The preamble loads neither `bidi` nor `polyglossia` and
 # sets no script direction, so once a font covers Arabic the compile SUCCEEDS and
 # produces a page that is reversed and unshaped: `أحمد الفارسي` came back out of
-# pdftotext as `‫ﺍﻝﻑﺍﺭﺱﻱ ﺃﺡﻡﺩ‬` — isolated presentation forms, left to right.
+# pdftotext as `ﺍﻝﻑﺍﺭﺱﻱ ﺃﺡﻡﺩ` — isolated presentation forms, left to right.
+# (The forms above are listed in the order pdftotext emitted them, left to
+# right. No BiDi control character is used to display them: an invisible
+# reordering mark in a comment is the Trojan Source vector, and
+# scripts/check_hidden_chars.py refuses one tree-wide.)
 # Exit 0, "Wrote cv.pdf", and a document no reader of the language can use.
 #
 # Worse, the documented remedy led straight into it: without a font the renderer

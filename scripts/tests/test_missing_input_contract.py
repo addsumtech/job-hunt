@@ -101,6 +101,12 @@ EXEMPT = {
         "a wrapper, not a gate (check_opencli_result.py:2-8). It appends an "
         "adapter_call record and never a receipt, so exit 2 plus a stderr line is "
         "the whole of 'could not run' available to it.",
+    "check_hidden_chars.py":
+        "a repo-level check with no --workspace: it scans files that live in this "
+        "repo rather than artifacts in a user's run, imports no journal and writes "
+        "no receipt, and says so at check_hidden_chars.py:29-34. Same named "
+        "exception as check_skill_lossless.py. Measured on an empty tree: exit 2 "
+        "with NO_FILES, because 0 findings over 0 files is not a clean scan.",
     "check_conventions.py --ci":
         "--ci lints files that live in the REPO, not artifacts in a workspace, and "
         "is a named exception at check_conventions.py:299-303 and :319-325. The "

@@ -11,14 +11,49 @@ def test_both_entry_points_exist():
     assert MAKEFILE.is_file() and WORKFLOW.is_file()
 
 
-def test_the_makefile_and_the_workflow_run_the_same_three_checks():
+# Every check `make check` runs, which checks.yml must run too. Adding one here
+# is red until both entry points carry it, which is the point: a check wired
+# into only one of them is a check whose verdict depends on who ran it.
+GATE_COMMANDS = (
+    "pytest scripts/tests",
+    "check_skill_lossless.py",
+    "check_conventions.py",
+    "check_hidden_chars.py",
+)
+
+
+def test_the_makefile_and_the_workflow_run_the_same_checks():
     """Two entry points that run different things is worse than one: the local
     one passes, the remote one fails, and nobody knows which is authoritative."""
     mk, wf = MAKEFILE.read_text(encoding="utf-8"), WORKFLOW.read_text(encoding="utf-8")
-    for needle in ("pytest scripts/tests", "check_skill_lossless.py",
-                   "check_conventions.py"):
+    for needle in GATE_COMMANDS:
         assert needle in mk, f"Makefile does not run {needle}"
         assert needle in wf, f"checks.yml does not run {needle}"
+
+
+def test_every_gate_command_is_reached_by_the_check_target():
+    """A target defined in the Makefile but left out of `check` is one nobody
+    runs before committing, and the file still lists it so it looks wired."""
+    import re as _re
+
+    mk = MAKEFILE.read_text(encoding="utf-8")
+    bodies, current = {}, None
+    for line in mk.splitlines():
+        head = _re.match(r"([A-Za-z0-9_.\-]+):", line)
+        if head and not line[:1].isspace():
+            current = head.group(1)
+            bodies.setdefault(current, [])
+        elif current is not None and line.startswith("\t"):
+            bodies[current].append(line)
+        elif not line.strip():
+            current = None
+    assert bodies.get("test"), "Makefile parse failed; this is not a real finding"
+
+    check_line = next(l for l in mk.splitlines() if l.startswith("check:"))
+    reached = " ".join(body for target in check_line.split(":", 1)[1].split()
+                       for body in bodies.get(target, []))
+    for needle in GATE_COMMANDS:
+        assert needle in reached, f"`make check` does not reach {needle}"
 
 
 def test_ci_fetches_enough_history_for_the_lossless_baseline():

@@ -246,10 +246,14 @@ def extract_text(path) -> list:
 # is set with U+0027. NFKC on top, because "fi" is set as one ligature glyph and
 # "…" as three periods.
 #
+# The soft hyphen is written as the regex escape rather than the literal
+# character: an invisible codepoint inside a character class is unreviewable,
+# and scripts/check_hidden_chars.py refuses it tree-wide.
+#
 # Deleting these cannot turn a missing name into a found one: the needles are
 # whole names and employers, and "Zoë Nowak" does not fall out of noise because
 # the apostrophes were dropped from both sides.
-_IGNORED_IN_MATCH = re.compile(r"[\s­\-‐-―'\"‘’“”`´]+")
+_IGNORED_IN_MATCH = re.compile(r"[\s\xad\-‐-―'\"‘’“”`´]+")
 
 
 def _squash(text: str) -> str:

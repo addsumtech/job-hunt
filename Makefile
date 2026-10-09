@@ -2,7 +2,7 @@
 # the workflow file below it is the same three commands for whenever this repo
 # gains a remote. Two entry points that run different things would be worse than
 # one, so scripts/tests/test_ci.py asserts they stay in step.
-.PHONY: test lossless conventions check mutants mutants-record
+.PHONY: test lossless conventions hidden check mutants mutants-record
 PY ?= python3
 # The pre-migration tip of job-application, made an ancestor of HEAD by the migration
 # merge — so it resolves in any clone, with nothing to distribute. The tag
@@ -20,7 +20,14 @@ lossless:
 conventions:
 	$(PY) scripts/check_conventions.py --ci
 
-check: test lossless conventions
+# Invisible and BiDi control characters in source or docs. A static review
+# found U+00AD in a regex class and U+202B/U+202C in a comment; both were
+# legitimate in intent, which is why the rule is mechanical and has no
+# allowlist. Seconds to run, so it belongs in the gate everyone runs.
+hidden:
+	$(PY) scripts/check_hidden_chars.py
+
+check: test lossless conventions hidden
 
 # Mutation testing: break the code on purpose and see whether the suite notices.
 # DELIBERATELY NOT part of `check`. It copies the repo and re-runs the suite once
