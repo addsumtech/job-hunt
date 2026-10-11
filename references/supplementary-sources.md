@@ -92,8 +92,10 @@ search provider; it does not use the browser CDP route. Browser reads use CDP
 only, with OpenCLI diagnosed first and fallback governed by
 [browser-fallback.md](browser-fallback.md). Use the daily browser unless the user
 explicitly requests a separate one.
-Inspect current help before calling a tool. AnySearch `batch_search` can group
-independent queries; use its documented schema. If a provider is unavailable,
+Inspect current help before calling a tool. For discover rounds, use `run_tool.py --workspace /absolute/round anysearch search
+"query" --max_results 5` so native HTTP evidence is recorded. Use separate
+recorded calls for separate queries. Outside discover, AnySearch `batch_search`
+can group independent background queries; use its documented schema. If a provider is unavailable,
 use an available public source with the same access boundary and record the gap.
 
 Before retrieval, briefly record the selected sources and the question each one

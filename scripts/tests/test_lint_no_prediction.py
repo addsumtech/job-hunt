@@ -659,6 +659,38 @@ def test_latency_exemption_requires_current_hash_bound_source(tmp_path):
     assert lint.main(['--workspace', str(tmp_path)]) == 1
 
 
+@pytest.mark.parametrize('transition', ['从61%升至74%', '由61%提高到74%', '从61％提升至74％'])
+def test_a_sourced_rate_transition_survives_a_connector_paraphrase(transition):
+    source = '简化模板配置后，首次审批创建完成率从61%提升至74%，对比同批客户前后各4周。'
+    text = '分析260家付费客户漏斗，首次审批创建完成率' + transition + '。'
+    assert lint.scan_text(text, 'report.md', lint._normalise(source)) == []
+    assert lint.scan_text(text, 'report.md')
+
+
+@pytest.mark.parametrize('text', [
+    '首次审批创建完成率从61%升至75%。',
+    '首次审批创建完成率从74%降至61%。',
+    '面试通过率从61%升至74%。',
+    '首次审批创建完成率从61%升至74%，所以录用概率74%。',
+    '预计：首次审批创建完成率从61%升至74%。',
+    '目标是：首次审批创建完成率从61%升至74%。',
+])
+def test_rate_transition_exemption_cannot_reuse_values_for_new_claims(text):
+    source = '首次审批创建完成率从61%提升至74%。'
+    assert any(f.startswith('PERCENT:') for f in lint.scan_text(text, 'report.md', lint._normalise(source)))
+
+
+def test_rate_transition_requires_unchanged_source_evidence(tmp_path):
+    import hashlib
+    cv = _write(tmp_path, 'cv-source.txt', '首次审批创建完成率从61%提升至74%。')
+    _write(tmp_path, 'evidence-blocks.json', json.dumps({'sources': {'cv': {
+        'path': str(cv), 'sha256': hashlib.sha256(cv.read_bytes()).hexdigest()}}}))
+    _write(tmp_path, 'report.md', '分析客户漏斗，首次审批创建完成率从61%升至74%。')
+    assert lint.main(['--workspace', str(tmp_path)]) == 0
+    cv.write_text('首次审批创建完成率从61%提升至73%。')
+    assert lint.main(['--workspace', str(tmp_path)]) == 1
+
+
 @pytest.mark.parametrize('text', [
     '当前不提供匹配分或录用概率，因为岗位要求与候选人经历都缺失。',
     '本次不估计面试概率、录用概率。',

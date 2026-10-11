@@ -259,7 +259,7 @@ async function cmdSearch(opts) {
   if (opts.maxResults !== undefined) args.max_results = Math.max(1, Math.min(opts.maxResults, 10));
 
   const result = await callOrExit("POST", "/v1/search", opts.apiKey, args);
-  process.stdout.write(formatSearchResponse(result));
+  process.stdout.write(opts.format === 'json' ? JSON.stringify(result) + '\n' : formatSearchResponse(result));
 }
 
 async function cmdListDomains(opts) {
@@ -485,6 +485,7 @@ function parseArgs(argv) {
           case "--zone": opts.zone = shiftVal(); break;
           case "--language": opts.language = shiftVal(); break;
           case "--max_results": case "-m": opts.maxResults = parseInt(shiftVal(), 10); break;
+          case "--format": opts.format = shiftVal(); if (!['json', 'markdown'].includes(opts.format)) { console.error('Error: --format must be json or markdown'); process.exit(1); } break;
           case "--api_key": opts.apiKey = shiftVal(); break;
           default: console.error(`Unknown flag: ${flag}`); usage(); process.exit(1);
         }

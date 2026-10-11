@@ -23,6 +23,7 @@ from check_candidate_match import _quote_in_capture, _safe_path
 from check_opencli_result import IDENTITY_FIELD
 from check_shortlist import _contains_source_id
 from record_browser_capture import read_retrieval_calls, validate_record, STOP_CLASSES
+from search_capture import ACTION as SEARCH_ACTION, validate_record as validate_search
 
 FILE = "search-coverage.yaml"
 ACTION = "search_plan"
@@ -114,7 +115,7 @@ def _registrations(workspace, plan):
     if previous != plan:
         raise ValueError("search plan differs from its registration; only registered additions are allowed")
     first = records.index(entries[0])
-    if any(r.get("action") in {"browser_call", "adapter_call"} for r in records[:first]):
+    if any(r.get("action") in {"browser_call", "adapter_call", SEARCH_ACTION} for r in records[:first]):
         raise ValueError("search plan was registered after retrieval")
     return entries
 
@@ -255,6 +256,8 @@ def _inspect(workspace):
                     raise ValueError("collection round was read before its registration")
             if call.get("action") == "browser_call" and validate_record(call, root):
                 raise ValueError(f"invalid browser coverage evidence: {site}")
+            if call.get('action') == SEARCH_ACTION and validate_search(call, root):
+                raise ValueError(f'invalid native search coverage evidence: {site}')
             name = call.get("rows_file") or call.get("stdout_file")
             path = _capture_path(root, name)
             if path is None:
@@ -356,8 +359,12 @@ def _inspect(workspace):
         status = item.get("status")
         if status == "retained":
             matches = [r for values in retained.values() for r in values
-                       if r.get("id") == item.get("row_id") and r.get("source_site") == key[0]]
-            if not any(r.get("title") == title for r in matches for _, title, _ in observed[key]):
+                       if r.get("id") == item.get("row_id") and
+                       (r.get("source_site") == key[0] or key[0] == 'anysearch')]
+            matched = (any(r.get('url') == row.get('url') and r.get('source_site') != 'anysearch'
+                           for r in matches for _, _, row in observed[key]) if key[0] == 'anysearch' else
+                       any(r.get("title") == title for r in matches for _, title, _ in observed[key]))
+            if not matched:
                 raise ValueError("retained catalog lead does not match a delivered posting")
         elif status in {"excluded", "blocked"}:
             call, text = evidence(item.get("evidence"), key[0])

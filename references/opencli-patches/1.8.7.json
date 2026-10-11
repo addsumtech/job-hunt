@@ -5,12 +5,27 @@
     {
       "path": "51job/search.js",
       "base_sha256": "ec5266215682ca868b2c6545e45c24655f18d9e591ef684314b2ccfbc4c4f651",
-      "patched_sha256": "8a9b8ced500ff630c19e0f2060e9f31672de416ec4cbd2159564403e9c6d97bc",
+      "patched_sha256": "be528f484b7260d95495e1ef6856e885a3a968d4726330346b4bb90c8dcea622",
       "replacements": [
         {
           "old": "await navigateTo(page, `${WE_ORIGIN}/pc/search?keyword=${encodeURIComponent(keyword)}&searchType=2`, 2);",
           "new": "await navigateTo(page, `${WE_ORIGIN}/pc/search`, 2);"
+        },
+        {
+          "old": "\"5-7年\"",
+          "new": "\"5-10年\""
+        },
+        {
+          "old": "\"外资\" / \"国企\" / \"民营\"",
+          "new": "\"外资（欧美）\" / \"国企\" / \"民营\""
+        },
+        {
+          "old": "        const items = data?.resultbody?.job?.items ?? [];",
+          "new": "        const items = data?.resultbody?.job?.items ?? [];\n        if (companyType === '04' && items.some(it => String(it.companyTypeString || '').trim() !== '国企')) {\n            throw new CliError('FILTER_MISMATCH', '51job returned a non-state-owned or unlabeled employer for the 国企 filter; results were not accepted');\n        }"
         }
+      ],
+      "previous_patched_sha256": [
+        "8a9b8ced500ff630c19e0f2060e9f31672de416ec4cbd2159564403e9c6d97bc"
       ]
     },
     {
@@ -233,6 +248,37 @@
         {
           "old": "export const __test__ = {\n",
           "new": "export const __test__ = {\n  buildExtractionScript,\n"
+        }
+      ]
+    },
+    {
+      "path": "51job/utils.js",
+      "base_sha256": "0f13f102a9d218a96aa3616af87975b715c59f468ed0b2c458001f85822229d9",
+      "patched_sha256": "76afb4a63a94aa6024baa27311e8862d1ac705a20273e3551acf280439fd3dd0",
+      "replacements": [
+        {
+          "old": "export const SALARY_CODES = {\n    '不限': '',\n    '2千以下': '01', '2-3千': '02', '3-4.5千': '03',\n    '4.5-6千': '04', '6-8千': '05', '8k-1万': '06', '8-10k': '06',\n    '1-1.5万': '07', '10-15k': '07',\n    '1.5-2万': '08', '15-20k': '08',\n    '2-3万': '09', '20-30k': '09',\n    '3-5万': '10', '30-50k': '10',\n    '5万以上': '11', '50k以上': '11',\n};",
+          "new": "export const SALARY_CODES = {\n    '不限': '',\n    '8千以下': '201', '8k以下': '201',\n    '0.8-1万': '06', '8k-1万': '06', '8-10k': '06',\n    '1-1.5万': '07', '10-15k': '07',\n    '1.5-2万': '08', '15-20k': '08',\n    '2-3万': '09', '20-30k': '09',\n    '3-4万': '10', '30-40k': '10',\n    '4-5万': '11', '40-50k': '11',\n    '5万以上': '12', '50k以上': '12',\n};"
+        },
+        {
+          "old": "export const WORKYEAR_CODES = {\n    '不限': '',\n    '在校生': '01', '应届': '02', '1年以下': '03',\n    '1-3年': '04', '3-5年': '05', '5-7年': '06',\n    '7-10年': '07', '10年以上': '08',\n};",
+          "new": "export const WORKYEAR_CODES = {\n    '不限': '',\n    '在校生/应届生': '01', '在校生': '01', '应届生': '01', '应届': '01',\n    '1-3年': '02', '3-5年': '03', '5-10年': '04',\n    '10年以上': '05', '无需经验': '06',\n};"
+        },
+        {
+          "old": "export const COMPANY_TYPE_CODES = {\n    '不限': '',\n    '外资': '01', '欧美': '0101', '日韩': '0102',\n    '合资': '02', '国企': '03', '民营': '04',\n    '上市公司': '05', '创业公司': '06', '事业单位': '07',\n    '非营利': '08', '政府': '09',\n};",
+          "new": "export const COMPANY_TYPE_CODES = {\n    '不限': '',\n    '外资（欧美）': '01', '外资(欧美)': '01', '欧美': '01',\n    '外资（非欧美）': '02', '外资(非欧美)': '02', '非欧美': '02',\n    '合资': '03', '国企': '04', '民营': '05', '外企代表处': '06',\n    '政府机关': '07', '政府': '07', '事业单位': '08',\n    '非营利组织': '09', '非营利': '09', '已上市': '10', '上市公司': '10',\n    '创业公司': '11',\n};"
+        },
+        {
+          "old": "export const COMPANY_SIZE_CODES = {\n    '不限': '',\n    '少于50': '01', '50以下': '01',\n    '50-150': '02', '150-500': '03',\n    '500-1000': '04', '1000-5000': '05',\n    '5000-10000': '06', '10000以上': '07',\n};",
+          "new": "export const COMPANY_SIZE_CODES = {\n    '不限': '',\n    '少于50人': '01', '少于50': '01', '50以下': '01',\n    '50-150人': '02', '50-150': '02', '150-500人': '03', '150-500': '03',\n    '500-1000人': '04', '500-1000': '04', '1000-5000人': '05', '1000-5000': '05',\n    '5000-10000人': '06', '5000-10000': '06', '10000人以上': '07', '10000以上': '07',\n};"
+        },
+        {
+          "old": "'大专': '03', '本科': '04', '硕士': '05', '博士': '06',",
+          "new": "'大专': '03', '本科': '04', '硕士': '05', '博士': '06', '无学历要求': '07',"
+        },
+        {
+          "old": "    for (const [k, v] of Object.entries(table)) {\n        if (typeof k === 'string' && k.includes(s)) return v;\n    }\n    return fallback;",
+          "new": "    throw new CliError('INVALID_ARGUMENT', `Unknown or ambiguous filter \"${s}\"`,\n        'Use an exact supported label or code: ' + Object.keys(table).join(' / '));"
         }
       ]
     }

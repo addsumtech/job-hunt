@@ -44,6 +44,46 @@ const linkedin = extra => loadAdapter(linkedinSource, extra);
 const detailSource = patched('nowcoder/detail.js', entry('nowcoder/detail.js').replacements[0].old);
 const nowcoder = loadAdapter(detailSource).config;
 const numericId = '935872347918069760';
+const job51Utils = patched('51job/utils.js', fs.readFileSync(path.join(__dirname, 'fixtures/opencli-1.8.7-51job-utils.js.txt'), 'utf8'));
+const job51Search = patched('51job/search.js', fs.readFileSync(path.join(__dirname, 'fixtures/opencli-1.8.7-51job-search.js.txt'), 'utf8'));
+class CliError extends Error { constructor(code, message) { super(message); this.code = code; } }
+const job51 = vm.runInNewContext(job51Utils.replace(/^import.*;$/gm, '').replace(/^export /gm, '') +
+    ';({ SALARY_CODES, WORKYEAR_CODES, DEGREE_CODES, COMPANY_TYPE_CODES, COMPANY_SIZE_CODES, SORT_CODES, resolveCode, resolveCity, buildSearchUrl, mapJobItem, requirePage, WE_ORIGIN, SEARCH_COLUMNS })', {CliError, URL, URLSearchParams});
+
+test('51job filters match the dictionaries bound to the actual search UI', () => {
+    const captured = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures/51job-search-enums-20261011.json'), 'utf8'));
+    const tables = {d_search_cottype:'COMPANY_TYPE_CODES', d_search_companysize:'COMPANY_SIZE_CODES',
+        d_search_degreefrom:'DEGREE_CODES', d_search_workyear:'WORKYEAR_CODES', d_search_providesalary:'SALARY_CODES'};
+    for (const [name, table] of Object.entries(tables)) {
+        for (const {code, value} of captured.dictionaries[name]) {
+            assert.equal(job51.resolveCode(value, job51[table]), code, value);
+            assert.equal(job51.resolveCode(code, job51[table]), code, value);
+        }
+    }
+    assert.equal(job51.resolveCode('国企', job51.COMPANY_TYPE_CODES), '04');
+    assert.equal(job51.resolveCode('合资', job51.COMPANY_TYPE_CODES), '03');
+    for (const [value, table] of [['外资', 'COMPANY_TYPE_CODES'], ['1年以下', 'WORKYEAR_CODES'],
+        ['5-7年', 'WORKYEAR_CODES'], ['3-5万', 'SALARY_CODES'], ['2-3千', 'SALARY_CODES'], ['未知', 'DEGREE_CODES']]) {
+        assert.throws(() => job51.resolveCode(value, job51[table]), /Unknown or ambiguous/);
+    }
+    assert.equal(job51.resolveCode('', job51.COMPANY_TYPE_CODES), '');
+});
+
+test('51job sends corrected filter codes and rejects mislabeled state-owned results', async () => {
+    let requested;
+    const adapter = type => loadAdapter(job51Search, {...job51, CliError,
+        pageFetchJson: async (page, url) => { requested = new URL(url); return {status:1, resultbody:{job:{items:[
+            {jobId:'172537456', jobName:'行政文秘', companyTypeString:type}]}}}; }}).config;
+    const page = {evaluate: async () => 'https://we.51job.com/pc/search'};
+    const args = {keyword:'行政', area:'成都', companyType:'国企', experience:'3-5年', salary:'5万以上', limit:3};
+    const rows = await adapter('国企').func(page, args);
+    assert.equal(requested.searchParams.get('companyType'), '04');
+    assert.equal(requested.searchParams.get('workYear'), '03');
+    assert.equal(requested.searchParams.get('salary'), '12');
+    assert.equal(rows[0].companyType, '国企');
+    await assert.rejects(adapter('合资').func(page, args), /non-state-owned/);
+    await assert.rejects(adapter('').func(page, args), /unlabeled/);
+});
 const uuid = '2bee096697104f1abc77998822334455';
 const article = { title: 'A complete free article', content: '<p>' + 'Long paragraph. '.repeat(60) + '</p><p>THE END.</p>', createTime: 1791001355000, hasLook: true, showMessage: { showContent: true } };
 

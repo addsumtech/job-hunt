@@ -241,6 +241,14 @@ mechanism. Do not "helpfully" hand pass 1 the brief.
 Then assemble `mock/assessment-<n>.md`: **both output blocks copied in verbatim**, plus a
 short human-readable summary above them. Never hand-edit an assessor's block.
 
+Keep copies and SHA-256 hashes of the exact input packs dispatched to each
+assessor. The final brief may gain the prescribed walk-back list after review,
+but retain the assessed version separately. If a later edit changes a fact,
+provenance mapping or a question that affects the assessment, rerun the affected
+independent pass on that revision. For purely editorial changes, preserve the
+diff and describe the change honestly; do not claim all reviewed files stayed
+byte-identical.
+
 ### Recover an invalid assessor block
 
 If `scripts/check_mock.py` reports `PARSE_FAIL`, `MISSING_BLOCK`, or

@@ -83,6 +83,7 @@ def resolve_access(site, command, cache_dir, allow_fetch):
 
 
 def scan(records, cache_dir, allow_fetch, workspace=None):
+    from search_capture import ACTION as SEARCH_ACTION, validate_record as validate_search
     findings = check_stop_order(records)
     for record in records:
         lineno = record.get("_lineno")
@@ -90,6 +91,10 @@ def scan(records, cache_dir, allow_fetch, workspace=None):
             findings.append(
                 f"UNPARSABLE_JOURNAL_LINE: journal.jsonl line {lineno} is not "
                 "JSON, so a command hidden in it cannot be checked")
+            continue
+        if record.get('action') == SEARCH_ACTION:
+            findings.extend(validate_search(record, workspace) if workspace else
+                            ['INVALID_SEARCH_CAPTURE: workspace required'])
             continue
         if record.get("action") == ACTION:
             findings.extend(validate_record(record, workspace) if workspace else

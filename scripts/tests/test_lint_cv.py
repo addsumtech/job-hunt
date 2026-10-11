@@ -1,5 +1,6 @@
 import pathlib
 import sys
+import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 import journal
@@ -37,6 +38,29 @@ def test_leveraged_buyout_is_not_a_cliche(tmp_path):
     """A finance CV legitimately says 'leveraged buyout'. Firing on it would
     teach the reader to skip every CLICHE line."""
     assert lint_cv.findings_for("- Advised on a leveraged buyout of the division.") == []
+
+
+@pytest.mark.parametrize('text', [
+    'Analysed leverage and cash conversion across portfolio companies.',
+    'Modelled financial leverage, debt capacity and covenant headroom.',
+    'Compared operating leverage and net leverage ratios.',
+    'Advised on leveraged finance and leveraged loans.',
+    'Built a leveraged-buyout model with downside sensitivities.',
+])
+@pytest.mark.parametrize('prefix', ['', '- '])
+def test_financial_leverage_is_not_a_generic_action_verb(text, prefix):
+    assert lint_cv.findings_for(prefix + text) == []
+
+
+@pytest.mark.parametrize('text', [
+    'Leveraged data to drive results.',
+    'Leveraging technology to transform operations.',
+    'Leverage data to improve processes.',
+    'I leverage expertise to support clients.',
+    'Used financial leverage models and leveraged insights to drive results.',
+])
+def test_finance_vocabulary_does_not_disable_the_verb_cliche(text):
+    assert any(f.startswith('CLICHE:') for f in lint_cv.findings_for('- ' + text))
 
 
 def test_two_bullets_opening_with_the_same_verb_is_not_flagged(tmp_path):

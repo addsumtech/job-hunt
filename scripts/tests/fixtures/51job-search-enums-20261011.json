@@ -1,0 +1,176 @@
+{
+  "source_url": "https://we.51job.com/pc/search",
+  "retrieved_at": "2026-10-11T12:39:09.992Z",
+  "capture_sha256": "7d7a7fda78127d98cb20c1b9dc8939f7e60579bdb659e626e726b248369c4cc5",
+  "search_ui_source_url": "https://fccdn.51jobcdn.com/we/static/js/app-e2e93592-4d50a46c.js",
+  "search_ui_binding_excerpt": "Popover\",{attrs:{\"model-value\":e.newSeachParams.companyType,title:\"公司性质\",options:e.$store.state.dictStore.d_search_cottype},on:{\"update:modelValue\":function(t){return e.handleSelect(t,\"companyType\")}}}),t(\"SelectPopover\",{attrs:{\"model-value\":e.newSeachParams.companySize,title:\"公司规模\",options:e.$stor",
+  "dictionaries": {
+    "d_search_cottype": [
+      {
+        "code": "04",
+        "value": "国企"
+      },
+      {
+        "code": "01",
+        "value": "外资（欧美）"
+      },
+      {
+        "code": "02",
+        "value": "外资（非欧美）"
+      },
+      {
+        "code": "10",
+        "value": "已上市"
+      },
+      {
+        "code": "03",
+        "value": "合资"
+      },
+      {
+        "code": "05",
+        "value": "民营"
+      },
+      {
+        "code": "06",
+        "value": "外企代表处"
+      },
+      {
+        "code": "07",
+        "value": "政府机关"
+      },
+      {
+        "code": "08",
+        "value": "事业单位"
+      },
+      {
+        "code": "09",
+        "value": "非营利组织"
+      },
+      {
+        "code": "11",
+        "value": "创业公司"
+      }
+    ],
+    "d_search_companysize": [
+      {
+        "code": "01",
+        "value": "少于50人"
+      },
+      {
+        "code": "02",
+        "value": "50-150人"
+      },
+      {
+        "code": "03",
+        "value": "150-500人"
+      },
+      {
+        "code": "04",
+        "value": "500-1000人"
+      },
+      {
+        "code": "05",
+        "value": "1000-5000人"
+      },
+      {
+        "code": "06",
+        "value": "5000-10000人"
+      },
+      {
+        "code": "07",
+        "value": "10000人以上"
+      }
+    ],
+    "d_search_degreefrom": [
+      {
+        "code": "01",
+        "value": "初中及以下"
+      },
+      {
+        "code": "02",
+        "value": "高中/中技/中专"
+      },
+      {
+        "code": "03",
+        "value": "大专"
+      },
+      {
+        "code": "04",
+        "value": "本科"
+      },
+      {
+        "code": "05",
+        "value": "硕士"
+      },
+      {
+        "code": "06",
+        "value": "博士"
+      },
+      {
+        "code": "07",
+        "value": "无学历要求"
+      }
+    ],
+    "d_search_workyear": [
+      {
+        "code": "01",
+        "value": "在校生/应届生"
+      },
+      {
+        "code": "02",
+        "value": "1-3年"
+      },
+      {
+        "code": "03",
+        "value": "3-5年"
+      },
+      {
+        "code": "04",
+        "value": "5-10年"
+      },
+      {
+        "code": "05",
+        "value": "10年以上"
+      },
+      {
+        "code": "06",
+        "value": "无需经验"
+      }
+    ],
+    "d_search_providesalary": [
+      {
+        "code": "201",
+        "value": "8千以下"
+      },
+      {
+        "code": "06",
+        "value": "0.8-1万"
+      },
+      {
+        "code": "07",
+        "value": "1-1.5万"
+      },
+      {
+        "code": "08",
+        "value": "1.5-2万"
+      },
+      {
+        "code": "09",
+        "value": "2-3万"
+      },
+      {
+        "code": "10",
+        "value": "3-4万"
+      },
+      {
+        "code": "11",
+        "value": "4-5万"
+      },
+      {
+        "code": "12",
+        "value": "5万以上"
+      }
+    ]
+  },
+  "adapter_base_sha256": "0f13f102a9d218a96aa3616af87975b715c59f468ed0b2c458001f85822229d9"
+}

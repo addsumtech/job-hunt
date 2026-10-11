@@ -126,6 +126,8 @@ def test_the_self_check_names_every_script():
             "host_execution.py",
             # Imported by the browser launcher and evidence gates; no CLI.
             "browser_budget.py",
+            # Native HTTP capture and preflight are imported by run_tool/gates.
+            "search_capture.py",
             # Shared Word artifact validation; renderers and delivery invoke it.
             "docx_content.py",
             # Reads references/discovery-sources.md for check_shortlist; there is

@@ -24,14 +24,17 @@ import prose_tells
 
 GATE = "lint_cv"
 
-# Multi-word clichés are unambiguous. "leveraged" is not: a finance CV
-# legitimately says "leveraged buyout", so that one collocation is carved out
-# rather than teaching the reader to ignore the whole CLICHE class.
+# Bare "leverage" is also a financial noun. Match the generic action verb,
+# not debt metrics; financial adjectives remain local exceptions, not a waiver
+# for every occurrence elsewhere in the same sentence.
 CLICHES = [
     ("results-driven", re.compile(r"\bresults[- ]driven\b", re.I)),
     ("proven track record", re.compile(r"\bproven track record\b", re.I)),
     ("synergy", re.compile(r"\bsynerg(y|ies|istic)\b", re.I)),
-    ("leveraged", re.compile(r"\bleverag(e|ed|es|ing)\b(?!\s+buyout)", re.I)),
+    ("leveraged", re.compile(
+        r"\bleverag(?:ed|es|ing)\b(?![\s-]+(?:buyouts?|finance|loans?|lending)\b)"
+        r"|\b(?:to|we|I|can|could|will|would|should)\s+leverage\b"
+        r"|\bleverage\s+(?:data|technology|tools|synerg(?:y|ies)|expertise|skills|insights|resources)\b", re.I)),
     ("excellent communicator", re.compile(r"\bexcellent communicator\b", re.I)),
     ("team player", re.compile(r"\bteam player\b", re.I)),
     ("passionate about technology", re.compile(r"\bpassionate about technology\b", re.I)),

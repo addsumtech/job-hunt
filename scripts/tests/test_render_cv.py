@@ -1114,6 +1114,20 @@ def test_the_header_actually_uses_the_localized_label():
     assert not any(c.isascii() and c.isalpha() for label in labels for c in label)
 
 
+def test_chinese_political_status_reaches_markdown_and_word_headers(tmp_path):
+    from docx import Document
+    profile = {'meta': {'name': '测试候选人', 'language': 'zh', 'target_market': '中国'},
+               'contact': {'personal': {'political_status': '中共党员'}}}
+    markdown = render_cv.render_markdown(profile)
+    assert '政治面貌' in markdown and 'Political Status' not in markdown
+    output = tmp_path / 'cv.docx'
+    render_cv.render_docx(profile, output)
+    text = '\n'.join(p.text for p in Document(output).paragraphs)
+    assert '政治面貌' in text and '中共党员' in text and 'Political Status' not in text
+    profile['meta']['target_market'] = 'uk'
+    assert '中共党员' not in render_cv.render_markdown(profile)
+
+
 # ---------------------------------------------------------------------------
 # An override the renderer cannot read must fail the SAME WAY for every format.
 # Found re-reading my own change, 2026-09-05: `paper_for` runs only on the LaTeX

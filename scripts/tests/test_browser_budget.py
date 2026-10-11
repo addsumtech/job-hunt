@@ -167,6 +167,12 @@ def test_launcher_uses_prepared_python_for_budget_dependencies(tmp_path, monkeyp
 @pytest.mark.parametrize('failure', ['endpoint', 'capture'])
 def test_launcher_cleans_private_budget_and_preserves_arguments(tmp_path, monkeypatch, failure):
     ws, *_ = setup_capture(tmp_path)
+    save(ws, {'plan': {'sources':[dict(id='jobs', site='51job', label='Jobs', method='catalog')],
+                       'directions':[dict(id='ib', label='IB')]}})
+    coverage.record_plan(ws)
+    # This launcher test starts before any capture; setup_capture also provides
+    # an unimported example snapshot used by other tests.
+    (ws / 'raw/51job-browser-1.json').unlink()
     root = runtime(tmp_path)
     plan = ws / 'plan.json'; dump(plan, {'stages':[dict(page=1,max_rows=10,row_selector='.job')]})
     files = []

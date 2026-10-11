@@ -36,6 +36,24 @@ checks:
 leads: []
 ```
 
+For live discovery, use `scripts/run_tool.py --workspace /absolute/round`
+before the `opencli`, `anysearch` or direct `browser` tool name. The wrapper
+rejects an unregistered source before opening it and records OpenCLI/AnySearch
+results in that same round. Browser snapshots still require verbatim row
+extraction and `record_browser_capture.py`; an unimported snapshot blocks the
+next wrapped read. Budgeted browser navigation retains its documented
+`browser --workspace ... --site ... --budget-plan ...` syntax and applies the
+same source-plan preflight. Complete its import before scheduling another read.
+
+AnySearch is `site: anysearch`, `method: search`. The wrapper supports one
+quoted query per call, `--max_results` at most 10 and the remaining round row
+budget, and owns `--format json`. It preserves the original API envelope, exit
+code and stderr in signed `search_call` records. Do not describe these as
+browser or OpenCLI captures, and do not put their snippets directly in a
+shortlist. A search lead can use `status: retained` and `row_id` only when the
+selected original-posting row has the **same exact URL**, under its real source.
+Other leads need their normal exclusion or blocked disposition.
+
 `method: search` requires the direction's actual query in the recorded search.
 Use separate directions for required translations and synonyms. `method: catalog`
 is for a reviewed careers catalog: record the catalog as a search capture,
@@ -104,6 +122,8 @@ resolves to a different detail id, use `status: retained` and `row_id` of a sele
 shortlist row with the same site and title. Unprocessed or unknown leads fail.
 
 For collections, create the owner and register **before any round reads**.
+Each round also registers its own source plan before its first wrapped read;
+the collection registration does not replace that local preflight.
 Include `plan.rounds` listing every workspace path from `collection.yaml.rounds`.
 Keep previously registered rounds when adding another, and use an evidence
 `workspace` pointing to one of those rounds. Selecting `ids` in a collection
