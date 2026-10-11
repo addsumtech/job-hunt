@@ -22,6 +22,12 @@ controls to display correctly says so in words instead. There is deliberately no
 allowlist: a waiver file is how the next one gets in, and the gate's own fixtures
 are built from `chr(cp)` at runtime so it never needs one.
 
+In a Git checkout, scan tracked files and non-ignored untracked files. Ignored
+local archives are not shipped source; tracked files remain in scope even when
+an ignore rule matches them. Without Git metadata, scan the exported tree using
+the same directory and binary-file exclusions. A Git listing failure is an
+incomplete check, never permission to report a clean scan.
+
 Exit 0 = nothing found. 1 = findings on stdout, one per line. 2 = could not run,
 which includes finding no files to read at all — 0 findings over 0 files is how a
 gate goes green after a path change.
@@ -34,7 +40,9 @@ check_conventions.py --ci carry. The exit codes are the shared ones, so CI and a
 local run cannot disagree about a file.
 """
 import argparse
+import os
 import pathlib
+import subprocess
 import sys
 import unicodedata
 
@@ -110,7 +118,15 @@ def scan_text(text: str):
 
 
 def candidate_files(root: pathlib.Path):
-    for path in sorted(root.rglob("*")):
+    resolved = root.resolve()
+    if any((parent / ".git").exists() for parent in (resolved, *resolved.parents)):
+        listing = subprocess.check_output(
+            ["git", "-C", str(root), "ls-files", "-z", "--cached", "--others",
+             "--exclude-standard", "--"], stderr=subprocess.PIPE, timeout=30)
+        candidates = (root / os.fsdecode(name) for name in listing.split(b"\0") if name)
+    else:
+        candidates = root.rglob("*")
+    for path in sorted(set(candidates)):
         if path.is_symlink() or not path.is_file():
             continue
         if any(part in SKIP_DIRS for part in path.relative_to(root).parts):
@@ -136,7 +152,12 @@ def main(argv: list[str] | None = None) -> int:
     findings = 0
     scanned = 0
     unreadable = []
-    for path in candidate_files(root):
+    try:
+        files = list(candidate_files(root))
+    except (OSError, subprocess.SubprocessError) as exc:
+        print(f"SCAN_FAILED: could not select source files ({exc})", file=sys.stderr)
+        return 2
+    for path in files:
         try:
             text = path.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError) as exc:
