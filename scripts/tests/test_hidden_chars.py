@@ -17,7 +17,10 @@ this file would make the gate's own test suite its first exception, and an
 exception is how the next one gets in.
 """
 import pathlib
+import subprocess
 import sys
+
+import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 import check_hidden_chars as chc
@@ -128,3 +131,117 @@ def test_a_missing_root_exits_2(tmp_path, capsys):
     code, out, err = run(["--root", str(tmp_path / "nope")], capsys)
     assert code == 2
     assert "NO_INPUT" in err, err
+
+
+def git(root, *args):
+    return subprocess.run(["git", "-C", str(root), *args], check=True,
+                          capture_output=True)
+
+
+def test_git_ignored_history_is_not_part_of_the_source_scan(tmp_path, capsys):
+    git(tmp_path, "init", "-q")
+    (tmp_path / ".gitignore").write_text("output/\n", encoding="utf-8")
+    (tmp_path / "source.py").write_text("x = 1\n", encoding="utf-8")
+    git(tmp_path, "add", ".gitignore", "source.py")
+    archive = tmp_path / "output" / "original.txt"
+    archive.parent.mkdir()
+    original = "captured text" + RLO + POP
+    archive.write_text(original, encoding="utf-8")
+
+    code, out, err = run(["--root", str(tmp_path)], capsys)
+
+    assert code == 0, out
+    assert "2 files scanned" in err
+    assert archive.read_text(encoding="utf-8") == original
+
+
+def test_tracked_source_is_checked_even_when_an_ignore_rule_matches(tmp_path, capsys):
+    git(tmp_path, "init", "-q")
+    (tmp_path / "tracked.py").write_text("x = 1\n", encoding="utf-8")
+    git(tmp_path, "add", "tracked.py")
+    (tmp_path / ".gitignore").write_text("*.py\n", encoding="utf-8")
+    (tmp_path / "tracked.py").write_text("# " + RLO + POP, encoding="utf-8")
+
+    code, out, err = run(["--root", str(tmp_path)], capsys)
+
+    assert code == 1
+    assert "HIDDEN_CHAR: tracked.py:1:3 U+202E" in out
+
+
+@pytest.mark.parametrize("name", [
+    "new source.py", "新文件.py",
+    pytest.param("line\nbreak.py", marks=pytest.mark.skipif(
+        sys.platform == "win32", reason="Windows does not allow newline filenames")),
+])
+def test_untracked_source_is_checked_with_literal_filenames(tmp_path, capsys, name):
+    git(tmp_path, "init", "-q")
+    (tmp_path / name).write_text("# " + RLO + POP, encoding="utf-8")
+
+    code, out, err = run(["--root", str(tmp_path)], capsys)
+
+    assert code == 1
+    assert f"HIDDEN_CHAR: {name}:1:3 U+202E" in out
+
+
+def test_git_subdirectory_scan_stays_within_the_requested_root(tmp_path, capsys):
+    git(tmp_path, "init", "-q")
+    (tmp_path / "outside.py").write_text("# " + RLO + POP, encoding="utf-8")
+    source = tmp_path / "src"
+    source.mkdir()
+    (source / "inside.py").write_text("x = 1\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+
+    code, out, err = run(["--root", str(source)], capsys)
+
+    assert code == 0, out
+    assert "1 files scanned" in err
+
+
+def test_git_worktree_metadata_file_uses_git_ignore_rules(tmp_path, capsys):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git(repo, "init", "-q")
+    (repo / ".gitignore").write_text("output/\n", encoding="utf-8")
+    (repo / "source.py").write_text("x = 1\n", encoding="utf-8")
+    git(repo, "add", ".")
+    git(repo, "-c", "user.name=Test", "-c", "user.email=test@example.com",
+        "-c", "commit.gpgsign=false", "commit", "-qm", "fixture")
+    worktree = tmp_path / "worktree"
+    git(repo, "worktree", "add", "--detach", str(worktree), "HEAD")
+    assert (worktree / ".git").is_file()
+    (worktree / "output").mkdir()
+    (worktree / "output" / "raw.md").write_text(RLO + POP, encoding="utf-8")
+
+    code, out, err = run(["--root", str(worktree)], capsys)
+
+    assert code == 0, out
+    assert "2 files scanned" in err
+
+
+def test_export_without_git_metadata_still_scans_the_tree(tmp_path, capsys):
+    (tmp_path / ".gitignore").write_text("source.py\n", encoding="utf-8")
+    (tmp_path / "source.py").write_text("# " + RLO + POP, encoding="utf-8")
+
+    code, out, err = run(["--root", str(tmp_path)], capsys)
+
+    assert code == 1
+    assert "HIDDEN_CHAR: source.py:1:3 U+202E" in out
+
+
+@pytest.mark.parametrize("failure", [FileNotFoundError("git is unavailable"),
+                                    subprocess.CalledProcessError(128, ["git", "ls-files"]),
+                                    subprocess.TimeoutExpired(["git", "ls-files"], 30)])
+def test_git_listing_failure_cannot_report_a_clean_scan(tmp_path, capsys,
+                                                       monkeypatch, failure):
+    (tmp_path / ".git").mkdir()
+    (tmp_path / "source.py").write_text("x = 1\n", encoding="utf-8")
+
+    def fail(*args, **kwargs):
+        raise failure
+
+    monkeypatch.setattr(chc.subprocess, "check_output", fail)
+    code, out, err = run(["--root", str(tmp_path)], capsys)
+
+    assert code == 2
+    assert "SCAN_FAILED" in err
+    assert "NO_HIDDEN_CHARS" not in err
