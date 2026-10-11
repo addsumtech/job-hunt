@@ -100,6 +100,11 @@ retain their existing signature, metadata and raw-file validation. These records
 are tamper evidence, not independent proof of web origin. Catalog interpretation
 and exclusion reasoning still require honest review of the captured content.
 
+The built-in browser keeps `requested_url` alongside the final page `url`.
+This binds a redirected article's unavailable-content result to its original
+search lead. Preserve both addresses; never edit an old raw capture to add a
+missing request address or substitute an unrelated failed page.
+
 `blocked` requires an actual captured login/access refusal or transport failure,
 a reason, and that exact reason visible in `report.md`. It can close the affected
 source's directions without retrying a stopped site. Other sources still need

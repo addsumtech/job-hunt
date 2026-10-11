@@ -411,6 +411,7 @@ export async function capture({endpoint, url, settleMs = 1500, timeoutMs = 15000
     // Preserve the actual DOM and refusal status at the deadline for diagnosis.
     if (!budget && settleMs) await new Promise(r => setTimeout(r, settleMs));
     const snapshot = {...(currentSnapshot || await readSnapshot(0))};
+    snapshot.requested_url = url;
     if (inspectText) {
       const inspected = await send('Runtime.evaluate', {expression:`(() => {
         const label = ${JSON.stringify(inspectText)};

@@ -655,3 +655,32 @@ def test_not_selected_visibility_ignores_a_tracking_query(tmp_path):
     save(ws, data)
     (ws / "report.md").write_text("Other roles: https://www.philips.com/careers/job/mri-engineer\n")
     assert gate.inspect(ws) == []
+
+
+@pytest.mark.parametrize('same_lead', [True, False])
+def test_failed_redirected_detail_is_bound_to_its_requested_lead(tmp_path, same_lead):
+    import record_browser_capture as browser
+    ws, data = build(tmp_path)
+    requested = 'https://search.example/link?url=article123'
+    ref = capture(ws, [{'id': requested, 'title': 'IB Analyst openings', 'url': requested}])
+    close(ws, data, ref)
+    snapshot = ws / 'raw/employer-detail.json'
+    rows_file = ws / 'raw/employer-detail-rows.json'
+    reason = 'Publisher account removed; article unavailable.'
+    snapshot.write_text(json.dumps({
+        'requested_url': requested if same_lead else 'https://search.example/link?url=other',
+        'url': 'https://publisher.example/s?signature=actual-redirect',
+        'retrieved_at': '2099-01-01T00:00:00Z', 'text': reason,
+        'links': [], 'http_status': 200, 'load_timed_out': True,
+    }))
+    rows_file.write_text('[]')
+    assert browser.main(['--workspace', str(ws), '--site', 'employer',
+        '--snapshot-file', str(snapshot), '--rows-file', str(rows_file),
+        '--fallback-reason', 'unsupported_extraction', '--command', 'detail']) == 0
+    data['leads'] = [{'site': 'employer', 'source_id': requested, 'status': 'blocked',
+        'reason': reason, 'evidence': {'file': snapshot.relative_to(ws).as_posix(),
+            'sha256': journal.sha256_file(snapshot), 'quote': reason}}]
+    save(ws, data)
+    (ws / 'report.md').write_text(reason)
+    findings = gate.inspect(ws)
+    assert findings == [] if same_lead else 'does not identify this blocked lead' in ' '.join(findings)
