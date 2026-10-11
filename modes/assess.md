@@ -55,8 +55,9 @@ needs no fetch merely to satisfy a tool step.
 
 Save whatever you got, verbatim and unedited, as `posting-source.txt`. That file is the
 end of the source chain for every downstream claim — editing it makes provenance
-theatre. If the posting genuinely cannot be obtained, stop and say so. Never proceed on
-guessed requirements.
+theatre. If the posting genuinely cannot be obtained, follow the refusal floor in
+§8 before stopping: save the refusal record and explain the missing input. Do not
+skip that record merely because this is Step 1. Never proceed on guessed requirements.
 
 ## 2. Market — ask, do not infer
 
@@ -353,6 +354,14 @@ from the five-level list when any of these holds:
 - the CV could not be read,
 - an image source has regions you cannot make out,
 - the CV is a skills list with no supporting entries behind it.
+
+Even an early fetch failure must leave `fit-assessment.yaml` with
+`verdict: insufficient_evidence`, empty `requirements`, `stated_conditions`,
+`actions` and `conventions_rendered` lists, plus `fit-assessment.md` explaining
+the unreadable input and the concrete next input needed. Preserve any captured
+source. Do not invent employer, market, evidence blocks or missing requirements
+to complete the normal assessment schema; do not claim the full assessment gates
+passed when their inputs are absent.
 
 Say what you could not read and what you need. **When the input cannot support a
 conclusion, a confident positive conclusion is forbidden.** This is a floor, not a sixth

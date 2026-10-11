@@ -338,18 +338,20 @@ runs on that directory holds a REAL person's CVs, applications and search
 preferences. A run that follows the skill faithfully writes a fictional
 candidate's profile straight into it.
 
-There is no clean mechanism to prevent that. Subagents run in-process, so they
-cannot be given a different HOME (same constraint as the skill isolation above),
-and they do not inherit a per-call environment variable either — so an env-var
-override in `paths.py` would only be as strong as an instruction telling the run
-to export it, i.e. no stronger than just naming the directory. One was written
-and reverted for exactly that reason; do not add it back believing it isolates
-anything.
+`scripts/paths.py` supports `JOBHUNT_PROFILES_ROOT`. Set it explicitly on **every
+command** in a synthetic run, including mode entry and commands dispatched to
+subagents; a shell export in the coordinator does not automatically reach their
+fresh shells. Resolve the effective root before writing, and stop if it is not
+the absolute fixture root. This is a routing control, not a process sandbox.
+
+```bash
+JOBHUNT_PROFILES_ROOT=/absolute/results/profiles python3 scripts/run_tool.py python -c "import sys; sys.path.insert(0, 'scripts'); import paths; print(paths.PROFILES_ROOT)"
+```
 
 What actually works is two things together:
 
 1. **Say it in the dispatch prompt.** Give the run its workspace root explicitly
-   and say that everything the skill would put under `~/.claude/job-profiles/`
+   and require the same `JOBHUNT_PROFILES_ROOT` prefix on each command. Say that everything the skill would put under `~/.claude/job-profiles/`
    goes there instead, keeping whatever subdirectory shape the skill calls for —
    only the root moves. Add "do not write to `~/.claude/job-profiles/`, it holds
    a real person's data". `runlib` already finds artifacts wherever the run put

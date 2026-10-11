@@ -287,3 +287,16 @@ actual tool trace and never claim that a hash proves an unlogged action was safe
 HTTP 404/5xx captures with no extracted rows are recorded as `transport` with
 their status and original evidence. They are never successful empty searches;
 malformed captures and rows attributed to failed HTTP pages are rejected.
+
+
+### Capture ownership during discovery
+
+Register the original site's source before its first read, including a detail
+page reached from AnySearch. For a direct detail capture, use
+`run_tool.py --workspace /absolute/round browser --site employer --url URL
+--output /absolute/round/raw/employer-detail.json`. Keep the existing DOM,
+read-budget and fallback rules. Extract and import the actual rows into that
+same round immediately. Do not assign a shared capture to another candidate by
+copying its JSON or backdating a plan; a collection must declare its rounds
+before they read. A pending snapshot prevents the next wrapped retrieval until
+its real capture is imported.

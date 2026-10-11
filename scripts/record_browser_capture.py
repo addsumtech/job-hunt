@@ -217,7 +217,7 @@ def check_stop_order(records):
     # this guard and journal has no list-level one, so it is inline.
     for entry in (records if isinstance(records, (list, tuple)) else ()):
         record = journal.as_mapping(entry)
-        if record.get("action") not in ("adapter_call", ACTION):
+        if record.get("action") not in ("adapter_call", ACTION, "search_call"):
             continue
         name = str(record.get("site") or "").strip().lower()
         host = _host(record)
@@ -315,7 +315,7 @@ def validate_record(record, workspace):
 
 def read_retrieval_calls(workspace):
     return [r for r in read_journal(workspace)
-            if r.get("action") in ("adapter_call", ACTION)]
+            if r.get("action") in ("adapter_call", ACTION, "search_call")]
 
 
 def main(argv=None):

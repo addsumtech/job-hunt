@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """Invoke a prepared private tool without shell-profile changes."""
 import argparse
+import contextlib
+import io
 import json
 import os
 from pathlib import Path
+import shlex
 import subprocess
 import sys
 import tempfile
+import uuid
 
 from setup_dependencies import SKILL, default_root
 
@@ -15,6 +19,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--root", type=Path, default=default_root())
     ap.add_argument("--browser", choices=("chrome", "edge"))
+    ap.add_argument("--workspace", type=Path, help="owning discovery round; preregister its source plan")
     ap.add_argument("tool", choices=("python", "opencli", "anysearch", "browser", "browser-session"))
     ap.add_argument("args", nargs=argparse.REMAINDER)
     args = ap.parse_args(argv)
@@ -25,7 +30,7 @@ def main(argv=None):
     if "node" in runtime:
         paths += [str(Path(runtime["node"]).parent), str(Path(runtime["opencli"]).parents[4] / ".bin")]
     env["PATH"] = os.pathsep.join(paths + [env.get("PATH", "")])
-    if (args.tool == 'browser' and '--budget-plan' in args.args
+    if ((args.workspace or (args.tool == 'browser' and '--budget-plan' in args.args))
             and os.path.abspath(sys.executable) != os.path.abspath(runtime['python'])):
         # Budget validation uses the prepared Python dependencies, even when
         # this lightweight launcher was invoked with the system Python.
@@ -50,6 +55,23 @@ def main(argv=None):
         if args.tool == "opencli":
             # Help/version/offline factory checks need no browser consent.
             offline = not args.args or any(x in args.args for x in ("--help", "-h", "--version", "-V")) or args.args[0] in ("list", "validate")
+            if args.workspace and not offline:
+                from search_capture import preflight
+                from opencli_meta import access_for
+                if len(args.args) < 2:
+                    raise ValueError('Recorded OpenCLI reads require site and command')
+                preflight(args.workspace, args.args[0])
+                if not args.args[0].replace('_', '').isalnum():
+                    raise ValueError('Invalid OpenCLI source name')
+                cache = args.workspace.resolve() / 'raw' / 'opencli-help'
+                cache.mkdir(parents=True, exist_ok=True)
+                metadata = subprocess.run([node, runtime['opencli'], args.args[0], '--help', '-f', 'yaml'],
+                                          capture_output=True, env=env)
+                if metadata.returncode:
+                    raise ValueError('Cannot verify OpenCLI command access')
+                (cache / (args.args[0] + '.yaml')).write_bytes(metadata.stdout)
+                if access_for(args.args[0], args.args[1], cache, False) != 'read':
+                    raise ValueError('Recorded discovery commands must publish access: read')
             if not offline:
                 env["OPENCLI_CDP_ENDPOINT"] = session_endpoint()
             command = [node, runtime["opencli"]]
@@ -81,6 +103,8 @@ def main(argv=None):
                         del args.args[i:i + 2]
                     return value
                 workspace, site = Path(take('--workspace')).resolve(), take('--site')
+                from search_capture import preflight
+                preflight(workspace, site, take('--url', False))
                 plan = json.loads(Path(take('--budget-plan')).read_text())
                 output = Path(take('--output', False)).resolve()
                 if (output.parent != workspace / 'raw' or not output.name.startswith(site + '-')
@@ -91,6 +115,20 @@ def main(argv=None):
                 if check_stop_order(calls + [{'action':'browser_call', 'site':site, 'url':url}]):
                     raise ValueError('READ_AFTER_STOP: resolve the source refusal before resuming')
                 budget = prepare(workspace, site, plan, calls, validate_record)
+            elif args.workspace:
+                from search_capture import preflight
+                if any(x in args.args for x in ('--steps-file', '--click-text')):
+                    raise ValueError('Navigation requires --budget-plan; a workspace alone cannot account for intermediate catalogs')
+                if '--site' not in args.args or '--url' not in args.args or '--output' not in args.args:
+                    raise ValueError('Recorded browser reads require --site, --url and --output')
+                i = args.args.index('--site')
+                site = args.args[i + 1]
+                del args.args[i:i + 2]
+                workspace = args.workspace.resolve()
+                output = Path(args.args[args.args.index('--output') + 1]).resolve()
+                if output.parent != workspace / 'raw' or not output.name.startswith(site + '-') or output.exists():
+                    raise ValueError('Browser output must be a new raw/<site>-*.json in its owning round')
+                preflight(workspace, site, args.args[args.args.index('--url') + 1])
             elif any(x in args.args for x in ('--steps-file', '--click-text')):
                 raise ValueError('Navigation requires --workspace, --site and --budget-plan; intermediate catalogs cannot be omitted')
             command = [node, str(SKILL / "scripts/browser_cdp.mjs")]
@@ -99,6 +137,28 @@ def main(argv=None):
             if "--endpoint" not in args.args and "--help" not in args.args:
                 command += ["--endpoint", session_endpoint()]
     try:
+        if args.workspace and args.tool == 'anysearch':
+            from search_capture import run
+            return run(args.workspace, command, args.args, env)
+        if args.workspace and args.tool == 'opencli' and not offline:
+            from check_opencli_result import main as record_opencli
+            root = args.workspace.resolve()
+            (root / 'raw').mkdir(exist_ok=True)
+            prefix = args.args[0] + '-' + uuid.uuid4().hex
+            out, err = root / 'raw' / (prefix + '.json'), root / 'raw' / (prefix + '.stderr.txt')
+            result = subprocess.run(command + args.args, env=env, capture_output=True)
+            out.write_bytes(result.stdout)
+            err.write_bytes(result.stderr)
+            classification = io.StringIO()
+            with contextlib.redirect_stdout(classification):
+                status = record_opencli(['--workspace', str(root), '--site', args.args[0],
+                    '--command', args.args[1], '--exit-code', str(result.returncode),
+                    '--stdout-file', str(out), '--stderr-file', str(err),
+                    '--command-line', shlex.join(['opencli', *args.args])])
+            print(classification.getvalue(), end='', file=sys.stderr)
+            print(out.read_text(encoding='utf-8', errors='replace'), end='')
+            print(err.read_text(encoding='utf-8', errors='replace'), end='', file=sys.stderr)
+            return status
         if args.tool == 'browser' and 'budget' in locals():
             with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as f:
                 budget_file = Path(f.name)

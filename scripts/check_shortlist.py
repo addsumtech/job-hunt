@@ -1170,7 +1170,7 @@ def _declared_queries_never_run(brief, shortlist, calls):
     # changed no result.)
     declared = [q for q in (brief.get("target_titles") or [])
                 if _normalise_query(q)]
-    ran = " \u0000 ".join(_normalise_query(c.get("query") if c.get("action") == ACTION
+    ran = " \u0000 ".join(_normalise_query(c.get("query") if c.get("action") in (ACTION, 'search_call')
                                          else c.get("command_line")) for c in calls)
     excused = _normalise_query(shortlist.get("shortfall_reason"))
     missing = [q for q in declared
@@ -1226,17 +1226,22 @@ def _check_browser_rows(workspace, rows, calls, brief, exceptions=()):
 
 
 def check_run(workspace, shortlist, brief, md_text, calls):
+    from search_capture import ACTION as SEARCH_ACTION, validate_record as validate_search
     findings = check_stop_order(calls)
     for call in calls:
         if call.get("action") == ACTION:
             findings.extend(validate_record(call, workspace))
+        if call.get('action') == SEARCH_ACTION:
+            findings.extend(validate_search(call, workspace))
     rows = shortlist.get("rows") or []
+    if any(isinstance(row, dict) and row.get('source_site') == 'anysearch' for row in rows):
+        findings.append('SEARCH_LEAD_NOT_POSTING: AnySearch snippets require an original posting capture before shortlisting')
     ok_calls = [c for c in calls
                 if c.get("classification") == "ok" and c.get("exit_code") == 0]
 
     if not calls:
         findings.append(
-            "NO_ADAPTER_RECEIPTS: journal.jsonl records no adapter_call or browser_call at all, "
+            "NO_ADAPTER_RECEIPTS: journal.jsonl records no adapter_call, browser_call or search_call at all, "
             "so nothing in this workspace can be traced to a live retrieval. "
             "Every adapter invocation goes through "
             "scripts/check_opencli_result.py; browser snapshots go through "

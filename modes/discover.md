@@ -639,31 +639,33 @@ Every observed lead needs a retained, evidence-backed excluded, or genuinely
 blocked disposition, including rows omitted from a collection's selected ids.
 Record unstructured catalog leads in the browser capture's rows as well.
 
-One round per site, capped at `max_rows_per_round`, `-f json`, `--window background`.
-**No detail pages at this stage.** Capture stdout and stderr to separate files, then
-classify:
+Use the prepared wrapper with the **owning round's absolute workspace** for each
+OpenCLI discovery read. It verifies the registered source plan before network
+access, records the actual stdout/stderr inside that round, and classifies the
+result before returning. Keep `-f json` and the agreed per-source budgets. Do not
+store shared captures in a coordinator folder and later copy them into six
+unrelated rounds; use a declared collection or give each read one owning round.
 
 ```bash
-set +e
-opencli 51job search "算法工程师" --area 上海 --page 1 --limit 25 \
-    --window background -f json > raw/51job-1.json 2> raw/51job-1.err
-RC=$?
-set -e
-set +e
-python3 scripts/check_opencli_result.py --workspace . --site 51job --command search \
-    --exit-code "$RC" --stdout-file raw/51job-1.json --stderr-file raw/51job-1.err \
-    --auth-status-file raw/auth-status.json \
-    --command-line 'opencli 51job search "算法工程师" --area 上海 --page 1 --limit 25 --window background -f json'
-CLASSIFIED=$?
-set -e
+python3 scripts/run_tool.py --workspace /absolute/path/to/round opencli \
+    51job search "算法工程师" --area 上海 --page 1 --limit 5 \
+    --window background -f json
 ```
 
-**The wrapper itself exits 1 when the read did not succeed**, and prints
-`ADAPTER_READ_NOT_OK: …` on stderr alongside the classification on stdout. That
-is why it is wrapped in `set +e` too: `$CLASSIFIED` is 0 only for `ok`. Reading
-the JSON and ignoring the exit code is the same mistake as reading stdout and
-ignoring the adapter's exit code, one layer up — and it is the mistake a shell
-makes by default.
+The wrapper returns nonzero when the read fails. It saves classification in the
+journal and prints it on stderr; stdout retains the original adapter output.
+Do not run `check_opencli_result.py` again for this already-recorded read. That
+script remains the explicit import path for captures made by another supported
+runner; pass absolute raw paths and the actual exit code, never a reconstructed
+success. Import before the next dependent read.
+
+Public-web searches use `run_tool.py --workspace /absolute/path/to/round
+anysearch search "the exact query" --max_results 5`. Register `site: anysearch`
+in the source plan first. This route records native HTTP `search_call` evidence;
+its snippets are leads only. Read the original posting through its own planned
+source and capture before adding a shortlist row. See
+[search-coverage.md](../references/search-coverage.md) for lead dispositions.
+Do not use an unrecorded `batch_search` in a discovery round.
 
 **Read the exit code before interpreting empty output.** A login wall gives exit 1, EMPTY stdout and a YAML
 error body on stderr *even under `-f json`*, so `JSON.parse(stdout || '[]')` silently

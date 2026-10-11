@@ -601,6 +601,31 @@ def _exam_results(text: str):
         yield (exam, number), match.span("number")
 
 
+# Rate transitions may use a different connector in the report. Bind both
+# ordered values to the same named metric, never just to numbers in a corpus.
+_RATE_TRANSITION = re.compile(
+    r"(?P<metric>[\u3400-\u9fffA-Za-z][\u3400-\u9fffA-Za-z0-9_-]{1,48}率)"
+    r"\s*(?:从|由)\s*(?P<before>[0-9]+(?:\.[0-9]+)?\s*[%％])\s*"
+    r"(?:提升|提高|上升|升|增加|增|降低|下降|降|减少|减)?(?:到|至)\s*"
+    r"(?P<after>[0-9]+(?:\.[0-9]+)?\s*[%％])")
+_METRIC_FORECAST = re.compile(r"预计|预期|预测|目标|计划|有望|将|可能|假设|如果|若")
+
+
+def _rate_transitions(text: str):
+    for match in _RATE_TRANSITION.finditer(text):
+        # A future target is not historical evidence, even if its values happen
+        # to equal an old result. Keep the full sentence's forecast visible.
+        left = max(text.rfind(c, 0, match.start()) for c in '。；;\n\x00') + 1
+        ends = [text.find(c, match.end()) for c in '。；;\n\x00']
+        right = min((end for end in ends if end >= 0), default=len(text))
+        if _METRIC_FORECAST.search(text[left:right]):
+            continue
+        key = (match['metric'].casefold(),
+               re.sub(r'\s+', '', match['before']).replace('％', '%'),
+               re.sub(r'\s+', '', match['after']).replace('％', '%'))
+        yield key, match
+
+
 def mask_copied_numbers(line: str, corpus: str) -> str:
     """Blank numeric tokens this round captured verbatim, preserving length.
 
@@ -632,6 +657,12 @@ def mask_copied_numbers(line: str, corpus: str) -> str:
     for key, (start, end) in _exam_results(line):
         if key in known_exams:
             out[start:end] = " " * (end - start)
+    known_rates = {key for key, _ in _rate_transitions(corpus)}
+    for key, match in _rate_transitions(line):
+        if key in known_rates:
+            for field in ('before', 'after'):
+                start, end = match.span(field)
+                out[start:end] = ' ' * (end - start)
     # Chinese prose has no whitespace tokens. Exempt only the numeric span
     # attached to an exact captured metric phrase; never erase prediction words.
     metric = re.compile(r"(?:效率|成本|收入|营收|耗时|延迟|转化率|准确率|产量|销量|用户数)(?:提升|提高|增长|增加|降低|减少|下降)(?:了)?\s*([0-9]+(?:\.[0-9]+)?\s*[%％])")

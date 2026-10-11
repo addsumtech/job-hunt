@@ -93,3 +93,22 @@ The optional DOM integration tests exercise the actual patched browser scripts:
 with `jsdom` available to Node and `OPENCLI_TEST_ADAPTER_DIR` pointing to the local
 `clis` directory, run `node --test scripts/tests/opencli-dom.test.cjs`. No live
 site access is made by these tests.
+
+
+### 51job search filters (verified 2026-10-11)
+
+The search page's `dictStore.d_search_*` dictionaries differ from the resume
+editor's company-type dictionary. The 1.8.7 compatibility patch uses the search
+page's actual values: 国企 `04`, 合资 `03`, 民营 `05`, 3–5 年 `03`, and 5 万以上 `12`.
+It updates salary, experience, ownership and exact label aliases together;
+unknown, obsolete or ambiguous filter labels now fail instead of silently
+removing the condition. A 国企 query also rejects returned rows whose original
+company type is missing or not 国企. The response is not silently filtered into
+an apparently successful empty list.
+
+Primary evidence: [51job search page](https://we.51job.com/pc/search), its
+[loaded search application](https://fccdn.51jobcdn.com/we/static/js/app-e2e93592-4d50a46c.js),
+and the dated public-enum fixture in `scripts/tests/fixtures/`. A live control
+query with `companyType=04` returned three original `companyTypeString: 国企`
+rows. Recheck the search UI if these enums change; do not substitute a similar
+company-type table found elsewhere in a bundle.
