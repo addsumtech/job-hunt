@@ -60,6 +60,25 @@ is for a reviewed careers catalog: record the catalog as a search capture,
 extract its candidate titles/links into rows, and give a concrete review reason
 for each direction. A detail page alone cannot close a source search.
 
+When the same direction needs different search terms on different sources, keep
+the ordinary `query` as the default and preregister overrides by **source id**:
+
+```yaml
+directions:
+  - id: frontend_zh
+    label: Chinese frontend roles
+    query: 前端工程师
+    query_by_source:
+      weixin: 上海 React 前端工程师 招聘 2026
+```
+
+Here `weixin` must be the id of a registered `method: search` source. Its capture
+must match the override exactly; other search sources still match `query`.
+Unknown source ids, blank queries and catalog overrides are rejected. Register
+these terms before retrieval; an existing direction's query or overrides cannot
+be rewritten after registration. Targeted WeChat terms should come from the
+brief, not be reduced to generic job-board terms to satisfy a coverage check.
+
 Every source × direction pair requires one check. After reviewing a result:
 
 ```yaml

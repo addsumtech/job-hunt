@@ -627,6 +627,9 @@ is what stops the round from getting there.
 Before the first retrieval, follow [Search completion coverage](../references/search-coverage.md):
 write `search-coverage.yaml` with the planned sources and directions and run
 `python3 scripts/check_search_coverage.py --workspace . --record-plan`.
+Use a direction's `query_by_source` when a source needs more specific terms,
+such as employer, city and recruitment year for WeChat; keep the ordinary
+job-board query as its default. Preregister the actual terms before reading.
 For a multi-round consultation, register at the collection owner before any
 round reads; register every round path there before using it. Scope can grow,
 but cannot shrink after reading begins. Keep the owner and its journal across

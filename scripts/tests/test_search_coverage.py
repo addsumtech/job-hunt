@@ -1,6 +1,7 @@
 """Completion is coverage of planned work, never the number of selected rows."""
 import copy
 import json
+import shlex
 
 import pytest
 import yaml
@@ -48,13 +49,13 @@ def build(tmp_path):
     return ws, data
 
 
-def capture(ws, rows, site="employer", classification="ok", command="search"):
+def capture(ws, rows, site="employer", classification="ok", command="search", query="IB Analyst"):
     name = f"raw/{site}-{len(journal._records(ws))}.json"
     value = rows if classification == "ok" else {"error": "Access denied by employer"}
     (ws / name).write_text(json.dumps(value), encoding="utf-8")
     journal.append(ws, {"action": "adapter_call", "site": site, "command": command,
         "ts": "2099-01-01T00:00:00Z", "classification": classification,
-        "query": "IB Analyst", "exit_code": 0 if classification == "ok" else 1, "stdout_file": name})
+        "query": query, "exit_code": 0 if classification == "ok" else 1, "stdout_file": name})
     quote = "No matching jobs" if not rows else str(rows[0].get("title", "Analyst"))
     if not rows and classification == "ok":
         (ws / name).write_text(json.dumps({"message": "No matching jobs", "rows": []}))
@@ -77,6 +78,63 @@ def test_complete_empty_search_and_receipt_recheck(tmp_path):
     data["checks"][0]["status"] = "pending"
     save(ws, data)
     assert "pending" in gate.inspect(ws)[0]
+
+
+def source_query_plan():
+    return {"sources": [
+        {"id": "jobs", "site": "51job", "label": "Jobs", "method": "search"},
+        {"id": "articles", "site": "weixin", "label": "WeChat", "method": "search"}],
+        "directions": [{"id": "frontend", "label": "Frontend", "query": "前端工程师",
+                        "query_by_source": {"articles": "上海 React 前端工程师 招聘 2026"}}]}
+
+
+@pytest.mark.parametrize("article_query,expected", [
+    ("上海 React 前端工程师 招聘 2026", []),
+    ("前端工程师", ["SEARCH_COVERAGE: coverage search does not match planned direction query"]),
+    ("上海 React 前端工程师 招聘 2026 实习", ["SEARCH_COVERAGE: coverage search does not match planned direction query"]),
+])
+@pytest.mark.parametrize("query_in_command_line", [False, True])
+def test_source_specific_queries_keep_targeted_wechat_and_exact_matching(tmp_path, article_query, expected, query_in_command_line):
+    ws = tmp_path / "search"
+    (ws / "raw").mkdir(parents=True)
+    (ws / "brief.yaml").write_text("target_count: 1\n")
+    (ws / "shortlist.yaml").write_text("rows: []\n")
+    (ws / "report.md").write_text("Search report\n")
+    data = {"plan": source_query_plan(), "checks": [], "leads": []}
+    save(ws, data)
+    gate.record_plan(ws)
+    for source, site, query in [("jobs", "51job", "前端工程师"),
+                                ("articles", "weixin", article_query)]:
+        ref = capture(ws, [], site=site, query=query)
+        data["checks"].append({"source": source, "direction": "frontend", "status": "done",
+                               "reason": "Reviewed the actual returned results.", "evidence": ref})
+    if query_in_command_line:
+        records = journal._records(ws)
+        for record in records:
+            if record.get("action") == "adapter_call":
+                record["command_line"] = shlex.join(["opencli", record["site"], "search", record.pop("query")])
+        (ws / "journal.jsonl").write_text("\n".join(json.dumps(r) for r in records) + "\n")
+    save(ws, data)
+    assert gate.inspect(ws) == expected
+    data["plan"]["directions"][0]["query_by_source"]["articles"] = "改写已登记的查询"
+    save(ws, data)
+    with pytest.raises(ValueError, match="shrink or change"):
+        gate.record_plan(ws)
+
+
+@pytest.mark.parametrize("override", [None, [], {"articles": ""}, {"articles": 3}, {"unknown": "招聘"}])
+def test_source_specific_query_rejects_malformed_or_unknown_source(override):
+    plan = source_query_plan()
+    plan["directions"][0]["query_by_source"] = override
+    with pytest.raises(ValueError, match="query_by_source"):
+        gate._plan(plan)
+
+
+def test_source_specific_query_rejects_catalog_override():
+    plan = source_query_plan()
+    plan["sources"][1]["method"] = "catalog"
+    with pytest.raises(ValueError, match="query_by_source"):
+        gate._plan(plan)
 
 
 def test_multiline_source_identity_can_be_excluded_with_its_own_capture(tmp_path):
