@@ -29,7 +29,7 @@ def session(tmp_path, monkeypatch, capsys):
     enter_mode.main(["--workspace", str(workspace(tmp_path / "run")),
                      "--mode", "interview", "--skill-root", str(root)])
     capsys.readouterr()          # discard enter_mode's reminder
-    monkeypatch.setattr(check_mock, "_default_scanner", lambda: F.no_vocab)
+    monkeypatch.setattr(check_mock, "_default_scanner", lambda workspace: F.no_vocab)
     return tmp_path / "run"
 
 

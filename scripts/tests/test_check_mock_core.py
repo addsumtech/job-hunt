@@ -30,7 +30,7 @@ def test_a_clean_workspace_produces_no_findings(tmp_path):
 
 def test_a_clean_workspace_exits_zero_and_prints_nothing(tmp_path, capsys, monkeypatch):
     ws = F.build(tmp_path)
-    monkeypatch.setattr(check_mock, "_default_scanner", lambda: F.no_vocab)
+    monkeypatch.setattr(check_mock, "_default_scanner", lambda workspace: F.no_vocab)
     code = check_mock.main(argv(ws))
     assert code == 0
     assert capsys.readouterr().out == ""
@@ -38,7 +38,7 @@ def test_a_clean_workspace_exits_zero_and_prints_nothing(tmp_path, capsys, monke
 
 def test_a_clean_run_writes_exactly_one_pass_receipt(tmp_path, monkeypatch):
     ws = F.build(tmp_path)
-    monkeypatch.setattr(check_mock, "_default_scanner", lambda: F.no_vocab)
+    monkeypatch.setattr(check_mock, "_default_scanner", lambda workspace: F.no_vocab)
     check_mock.main(argv(ws))
     receipts = journal.read_receipts(ws, "check_mock")
     assert len(receipts) == 1
@@ -54,7 +54,7 @@ def test_receipt_binds_optional_assessment_used_by_answer_guidance(tmp_path, mon
     ws = F.build(tmp_path)
     source = ws / "fit-assessment.yaml"
     source.write_text("requirements: []\n", encoding="utf-8")
-    monkeypatch.setattr(check_mock, "_default_scanner", lambda: F.no_vocab)
+    monkeypatch.setattr(check_mock, "_default_scanner", lambda workspace: F.no_vocab)
     check_mock.main(argv(ws))
     record = journal.read_receipts(ws, "check_mock")[-1]
     assert record["input_hashes"]["fit-assessment.yaml"] == journal.sha256_file(source)
@@ -65,7 +65,7 @@ def test_the_receipt_is_stamped_with_the_mode_that_was_entered(tmp_path, monkeyp
     regresses, every interview receipt silently says 'apply' and the journal stops
     being able to answer 'which mode ran this?'."""
     ws = F.build(tmp_path)
-    monkeypatch.setattr(check_mock, "_default_scanner", lambda: F.no_vocab)
+    monkeypatch.setattr(check_mock, "_default_scanner", lambda workspace: F.no_vocab)
     check_mock.main(argv(ws))
     assert journal.read_receipts(ws, "check_mock")[0]["mode"] == "interview"
 
@@ -98,7 +98,7 @@ def test_an_unedited_entered_mode_is_quiet(tmp_path):
 def test_a_missing_assessment_is_exit_2_not_a_failure(tmp_path, capsys, monkeypatch):
     ws = F.build(tmp_path)
     (ws / "mock" / "assessment-2.md").unlink()
-    monkeypatch.setattr(check_mock, "_default_scanner", lambda: F.no_vocab)
+    monkeypatch.setattr(check_mock, "_default_scanner", lambda workspace: F.no_vocab)
     code = check_mock.main(argv(ws))
     assert code == 2
     assert "assessment-2.md" in capsys.readouterr().err
@@ -109,7 +109,7 @@ def test_a_missing_input_still_writes_exactly_one_could_not_run_receipt(
 ):
     ws = F.build(tmp_path)
     (ws / "mock" / "transcript-2.md").unlink()
-    monkeypatch.setattr(check_mock, "_default_scanner", lambda: F.no_vocab)
+    monkeypatch.setattr(check_mock, "_default_scanner", lambda workspace: F.no_vocab)
     check_mock.main(argv(ws))
     receipts = journal.read_receipts(ws, "check_mock")
     assert len(receipts) == 1
@@ -133,7 +133,7 @@ def test_a_receipt_that_cannot_be_written_is_exit_2_not_exit_0(tmp_path, capsys,
     """A gate that exits 0 having written no receipt is indistinguishable from a gate
     nobody ran — which is the exact failure the receipt exists to prevent."""
     ws = F.build(tmp_path)
-    monkeypatch.setattr(check_mock, "_default_scanner", lambda: F.no_vocab)
+    monkeypatch.setattr(check_mock, "_default_scanner", lambda workspace: F.no_vocab)
 
     def boom(*a, **kw):
         raise OSError("read-only file system")
@@ -404,7 +404,7 @@ def test_a_failing_workspace_exits_1_and_prints_one_finding_per_line(
 ):
     ws = F.build(tmp_path, assessment=F.ASSESSMENT.replace(
         "tag=VAGUE-OUTCOME", "tag=WEAK-ANSWER"))
-    monkeypatch.setattr(check_mock, "_default_scanner", lambda: F.no_vocab)
+    monkeypatch.setattr(check_mock, "_default_scanner", lambda workspace: F.no_vocab)
     code = check_mock.main(argv(ws))
     out = capsys.readouterr().out.strip().splitlines()
     assert code == 1
