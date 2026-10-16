@@ -609,6 +609,10 @@ _RATE_TRANSITION = re.compile(
     r"(?:提升|提高|上升|升|增加|增|降低|下降|降|减少|减)?(?:到|至)\s*"
     r"(?P<after>[0-9]+(?:\.[0-9]+)?\s*[%％])")
 _METRIC_FORECAST = re.compile(r"预计|预期|预测|目标|计划|有望|将|可能|假设|如果|若")
+# Guidance may put an editorial verb directly before a Chinese metric name.
+# Strip only that framing, not arbitrary prefixes of a captured metric.
+_RATE_EDITORIAL_PREFIX = re.compile(
+    r"^(?:请|建议|需要|应|可)?(?:保留|引用|复述|呈现|展示|说明|解释|核对|核实|提及)")
 
 
 def _rate_transitions(text: str):
@@ -659,7 +663,8 @@ def mask_copied_numbers(line: str, corpus: str) -> str:
             out[start:end] = " " * (end - start)
     known_rates = {key for key, _ in _rate_transitions(corpus)}
     for key, match in _rate_transitions(line):
-        if key in known_rates:
+        editorial_key = (_RATE_EDITORIAL_PREFIX.sub('', key[0], count=1), *key[1:])
+        if key in known_rates or editorial_key in known_rates:
             for field in ('before', 'after'):
                 start, end = match.span(field)
                 out[start:end] = ' ' * (end - start)

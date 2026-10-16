@@ -667,6 +667,29 @@ def test_a_sourced_rate_transition_survives_a_connector_paraphrase(transition):
     assert lint.scan_text(text, 'report.md')
 
 
+@pytest.mark.parametrize('prefix', ['保留', '请保留', '建议保留', '引用', '说明', '核对'])
+def test_editorial_guidance_can_name_a_verified_historical_rate(prefix):
+    source = '无结果率从18%降至11%，本人负责指标定义与产品方案，未编写检索模型。'
+    text = ('用反馈入口、查询报表、指标定义和产品方案说明本人工作；'
+            + prefix + '无结果率从18%降至11%及未编写模型的边界。')
+    assert lint.scan_text(text, 'mock/answer-guide.md', lint._normalise(source)) == []
+    assert lint.scan_text(text, 'mock/answer-guide.md')
+
+
+@pytest.mark.parametrize('text', [
+    '保留客户无结果率从18%降至11%。',
+    '保留面试通过率从18%降至11%。',
+    '保留无结果率从18%降至10%。',
+    '保留无结果率从11%升至18%。',
+    '计划保留无结果率从18%降至11%。',
+    '保留无结果率从18%降至11%，所以录用概率11%。',
+])
+def test_editorial_framing_does_not_change_metric_or_forecast_rules(text):
+    source = '无结果率从18%降至11%。'
+    assert any(f.startswith('PERCENT:') for f in lint.scan_text(
+        text, 'mock/answer-guide.md', lint._normalise(source)))
+
+
 @pytest.mark.parametrize('text', [
     '首次审批创建完成率从61%升至75%。',
     '首次审批创建完成率从74%降至61%。',
@@ -680,12 +703,16 @@ def test_rate_transition_exemption_cannot_reuse_values_for_new_claims(text):
     assert any(f.startswith('PERCENT:') for f in lint.scan_text(text, 'report.md', lint._normalise(source)))
 
 
-def test_rate_transition_requires_unchanged_source_evidence(tmp_path):
+@pytest.mark.parametrize('text', [
+    '分析客户漏斗，首次审批创建完成率从61%升至74%。',
+    '建议保留首次审批创建完成率从61%升至74%。',
+])
+def test_rate_transition_requires_unchanged_source_evidence(tmp_path, text):
     import hashlib
     cv = _write(tmp_path, 'cv-source.txt', '首次审批创建完成率从61%提升至74%。')
     _write(tmp_path, 'evidence-blocks.json', json.dumps({'sources': {'cv': {
         'path': str(cv), 'sha256': hashlib.sha256(cv.read_bytes()).hexdigest()}}}))
-    _write(tmp_path, 'report.md', '分析客户漏斗，首次审批创建完成率从61%升至74%。')
+    _write(tmp_path, 'report.md', text)
     assert lint.main(['--workspace', str(tmp_path)]) == 0
     cv.write_text('首次审批创建完成率从61%提升至73%。')
     assert lint.main(['--workspace', str(tmp_path)]) == 1
