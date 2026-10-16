@@ -702,12 +702,14 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
             cursor += 3
         return True
 
+    def entry_start_height(title: str) -> float:
+        title_display, _ = text_and_links(title)
+        return len(wrap(title_display, 12.6, right - left)) * 17 + 36
+
     def add_entry(title: str, fields: list[tuple[str, str]]) -> bool:
         """Flow a wide table entry as labeled paragraphs, without a card frame."""
         nonlocal cursor
-        title_display, _ = text_and_links(title)
-        title_height = len(wrap(title_display, 12.6, right - left)) * 17
-        if cursor + title_height + 36 > bottom:
+        if cursor + entry_start_height(title) > bottom:
             new_page()
         if not add_block(title, 12.6, heading_color, 5):
             return False
@@ -729,29 +731,12 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
         cursor += 6
         return True
 
-    def add_table(block: list[str]) -> bool:
-        nonlocal cursor
-        rows = [_table_cells(line) for line in block]
-        if len(rows) < 3 or not _is_table_rule(rows[1]):
-            return all(add_block(" | ".join(row), 12, body_color, 6) for row in rows)
-        header, rows = rows[0], rows[2:]
-        if len(header) > 4:
-            for row in rows:
-                if len(row) != len(header):
-                    continue
-                # " — ", not " ", because the first two columns are usually
-                # employer then role: "MarvelX AI" + "AI Engineer" joined by a
-                # space reads as one mangled name with no visible boundary.
-                title = " — ".join(piece for piece in row[:2] if piece)
-                fields = [(label, value) for label, value in zip(header[2:], row[2:]) if value]
-                if not add_entry(title, fields):
-                    return False
-            return True
-
+    def table_layout(header, rows):
+        """Use the same wrapped cell heights for lookahead and painting."""
         widths = ([0.32, 0.68] if len(header) == 2 else
                   [1 / len(header)] * len(header))
         widths = [fraction * (right - left) for fraction in widths]
-        size, leading = 11.5, 15.5
+        size = 11.5
 
         def cell_data(values):
             cells = []
@@ -766,14 +751,58 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
                 cells.append(entries or [(wrap(display, size, width - 12), None)])
             return cells
 
-        def row_height(cells):
-            return max(sum(len(lines) * leading for lines, _ in entries)
-                       for entries in cells) + 10
+        header_cells = cell_data(header)
+        prepared = [cell_data(row) for row in rows]
+        return widths, header_cells, prepared, [table_row_height(cells) for cells in prepared]
+
+    def table_row_height(cells):
+        return max(sum(len(lines) * 15.5 for lines, _ in entries)
+                   for entries in cells) + 10
+
+    def table_start_height(block: list[str], available: float) -> float:
+        rows = [_table_cells(line) for line in block]
+        if len(rows) < 3 or not _is_table_rule(rows[1]):
+            display, _ = text_and_links(" | ".join(rows[0]))
+            return len(wrap(display, 12, right - left)) * 16.2
+        header, rows = rows[0], [row for row in rows[2:] if len(row) == len(rows[0])]
+        if not rows:
+            return 0
+        if len(header) > 4:
+            return entry_start_height(" — ".join(piece for piece in rows[0][:2] if piece))
+        _, header_cells, _, heights = table_layout(header, rows)
+        start = table_row_height(header_cells) + heights[0]
+        if start > available:
+            return entry_start_height(rows[0][0])
+        # The renderer keeps the final two rows together when they fit. At
+        # the start of a two-row table the heading must reserve that pair too.
+        if len(rows) == 2 and start + heights[1] <= available:
+            start += heights[1]
+        return start
+
+    def add_table(block: list[str], keep_heading: bool = False) -> bool:
+        nonlocal cursor
+        rows = [_table_cells(line) for line in block]
+        if len(rows) < 3 or not _is_table_rule(rows[1]):
+            return all(add_block(" | ".join(row), 12, body_color, 6) for row in rows)
+        header, rows = rows[0], rows[2:]
+        rows = [row for row in rows if len(row) == len(header)]
+        if len(header) > 4:
+            for row in rows:
+                # Preserve the employer/role boundary in wide-table entries.
+                title = " — ".join(piece for piece in row[:2] if piece)
+                fields = [(label, value) for label, value in zip(header[2:], row[2:]) if value]
+                if not add_entry(title, fields):
+                    return False
+            return True
+
+        widths, header_cells, prepared, heights = table_layout(header, rows)
+        header_height = table_row_height(header_cells)
+        size, leading = 11.5, 15.5
 
         def draw_row(cells, heading=False):
             nonlocal cursor
             assert page is not None
-            start, height, x = cursor, row_height(cells), left
+            start, height, x = cursor, table_row_height(cells), left
             if heading:
                 page.draw_rect(pymupdf.Rect(left, start, right, start + height),
                                fill=(245 / 255, 247 / 255, 253 / 255), color=None)
@@ -789,24 +818,23 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
                            color=(197 / 255, 210 / 255, 227 / 255), width=0.5)
             return True
 
-        header_cells = cell_data(header)
-        header_height = row_height(header_cells)
-        rows = [row for row in rows if len(row) == len(header)]
-        prepared = [cell_data(row) for row in rows]
-        heights = [row_height(cells) for cells in prepared]
         complete_height = header_height + sum(heights)
-        if len(rows) <= 2 and complete_height <= (bottom - top) / 2 and cursor + complete_height > bottom:
+        if (not keep_heading and len(rows) <= 2 and complete_height <= (bottom - top) / 2
+                and cursor + complete_height > bottom):
             new_page()
         needs_header = True
         for row_index, (row, cells, height) in enumerate(zip(rows, prepared, heights)):
-            if height + header_height > bottom - top:
+            if (height + header_height > bottom - top
+                    or (keep_heading and row_index == 0 and cursor + height + header_height > bottom)):
                 # Keep all evidence from an unusually tall row; fields can span pages.
                 if not add_entry(row[0], list(zip(header[1:], row[1:]))):
                     return False
                 needs_header = True
                 continue
             tail_height = height
-            if row_index == len(rows) - 2 and height + heights[-1] + header_height <= bottom - top:
+            if (row_index == len(rows) - 2 and height + heights[-1] + header_height <= bottom - top
+                    and not (keep_heading and row_index == 0
+                             and cursor + height + heights[-1] + header_height > bottom)):
                 tail_height += heights[-1]
             if cursor + tail_height + (header_height if needs_header else 0) > bottom:
                 new_page()
@@ -844,7 +872,7 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
                        and lines[index][0].strip().startswith("|")):
                     table.append(lines[index][0].strip())
                     index += 1
-                if not add_table(table):
+                if not add_table(table, keep_heading=after_heading):
                     return False, "report block does not fit on a page"
                 after_heading = False
                 continue
@@ -867,12 +895,21 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
                 # actual height before painting the heading, or it can move to
                 # the next page alone despite the old two-line reservation.
                 following_height, blank_height = 32.4, 0
-                for next_line, next_literal in lines[index:]:
+                for next_index in range(index, len(lines)):
+                    next_line, next_literal = lines[next_index]
                     next_line = next_line.strip()
                     if not next_line:
                         blank_height += 4
                         continue
-                    if not next_literal and not next_line.startswith(("#", "|")):
+                    if not next_literal and next_line.startswith("|"):
+                        table = []
+                        while (next_index < len(lines) and not lines[next_index][1]
+                               and lines[next_index][0].strip().startswith("|")):
+                            table.append(lines[next_index][0].strip())
+                            next_index += 1
+                        following_height = table_start_height(
+                            table, bottom - top - heading_height - gap - blank_height)
+                    elif not next_literal and not next_line.startswith("#"):
                         if next_line.startswith(("- ", "* ", "> ")):
                             next_line = next_line[2:]
                         next_text, _ = text_and_links(next_line)

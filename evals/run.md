@@ -5,6 +5,12 @@ Read `evals/README.md` first — it says what this can and cannot show.
 Results root: `~/code_project/job-hunt-workspace/iteration-<N>/`. Outside the
 repo, deliberately. Never write run outputs inside the repo.
 
+After a repair, rerun the entire agreed acceptance scope on the final code,
+including the full workflow scenarios; a targeted regression and unit-suite
+pass alone do not complete acceptance. Keep previous failures as evidence and
+use fresh outputs, captures and independent reviews for the new run. If that
+run exposes another defect, repair it and repeat the complete agreed scope.
+
 ## The output contract — every run saves exactly this
 
 ~~~

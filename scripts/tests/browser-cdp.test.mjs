@@ -71,6 +71,19 @@ test('capture retains the exact refusal page for the user instead of closing it'
   assert.equal(result.capture.trace.at(-1).method,'JobHunt.handoffTarget');
 });
 
+for (const timedOut of [false, true]) {
+  test('redirected capture retains the exact requested URL: timeout='+timedOut,async()=>{
+    const {Socket,commands}=fixture({pageTextReady:!timedOut});
+    const requested='https://search.example/link?url=article%2F123&query=PM';
+    const result=await capture({endpoint:'ws://127.0.0.1:9222/devtools/browser/test',
+      url:requested,waitForText:'Job description',waitStagesMs:[2,4,8],settleMs:0,WebSocketImpl:Socket});
+    assert.equal(result.requested_url,requested);
+    assert.equal(result.url,'https://example.com/');
+    assert.equal(result.load_timed_out,timedOut);
+    assert.equal(commands.find(c=>c.method==='Page.navigate').params.url,result.requested_url);
+  });
+}
+
 test('a navigation failure still closes the created tab',async()=>{
   const {Socket,commands,target}=fixture({navigationError:true});
   await assert.rejects(capture({endpoint:'ws://127.0.0.1:9222/devtools/browser/test',url:'https://example.com/',settleMs:0,WebSocketImpl:Socket}),/Navigation failed/);

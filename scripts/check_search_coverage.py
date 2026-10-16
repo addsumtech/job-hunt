@@ -79,6 +79,13 @@ def _plan(value):
     if any(s["method"] == "search" for s in value["sources"]):
         if any(not _nonempty(d.get("query")) for d in value["directions"]):
             raise ValueError("search directions require an actual query")
+    search_sources = {s["id"] for s in value["sources"] if s["method"] == "search"}
+    for direction in value["directions"]:
+        overrides = direction.get("query_by_source", {})
+        if (not isinstance(overrides, dict)
+                or any(key not in search_sources or not _nonempty(query)
+                       for key, query in overrides.items())):
+            raise ValueError("query_by_source requires nonempty queries keyed by registered search source ids")
     return value
 
 
@@ -329,8 +336,9 @@ def _inspect(workspace):
                 raise ValueError("done coverage requires a review reason")
             if source["method"] == "search":
                 query = call.get("query")
-                matches_query = (query == direction["query"] if query else
-                                 direction["query"] in shlex.split(call.get("command_line") or ""))
+                planned_query = direction.get("query_by_source", {}).get(source["id"], direction["query"])
+                matches_query = (query == planned_query if query else
+                                 planned_query in shlex.split(call.get("command_line") or ""))
                 if not matches_query:
                     raise ValueError("coverage search does not match planned direction query")
 
