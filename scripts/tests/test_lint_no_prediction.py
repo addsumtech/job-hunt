@@ -691,6 +691,35 @@ def test_editorial_framing_does_not_change_metric_or_forecast_rules(text):
 
 
 @pytest.mark.parametrize('text', [
+    '解释“首次审批创建完成率从61%提升至74%”的统计分母，以及上线前后各4周的比较方式，准备回答还有哪些因素可能影响结果。',
+    '首次审批创建完成率从61%提升至74%，准备回答还有哪些因素可能影响结果。',
+    '首次审批创建完成率由61%提高到74%，说明其他变量可能造成的影响。',
+    '首次审批创建完成率从61%升至74%，讨论什么原因可能导致观察到的变化。',
+])
+def test_sourced_history_can_discuss_uncertain_causes(text):
+    source = '首次审批创建完成率从61%提升至74%，对比同批客户上线前后各4周。'
+    assert lint.scan_text(text, 'report.md', lint._normalise(source)) == []
+    assert lint.scan_text(text, 'report.md')
+
+
+@pytest.mark.parametrize('text', [
+    '预计首次审批创建完成率从61%提升至74%，回答哪些因素可能影响结果。',
+    '目标是：首次审批创建完成率从61%提升至74%，讨论其他因素可能影响结果。',
+    '首次审批创建完成率从61%提升至74%，是下季度计划，讨论其他因素可能影响结果。',
+    '首次审批创建完成率从61%提升至74%，如果资源到位就能实现。',
+    '哪些因素可能导致首次审批创建完成率从61%提升至74%。',
+    '首次审批创建完成率从61%提升至75%，回答哪些因素可能影响结果。',
+    '首次审批创建完成率从74%降至61%，回答哪些因素可能影响结果。',
+    '面试通过率从61%提升至74%，回答哪些因素可能影响结果。',
+    '首次审批创建完成率从61%提升至74%，回答哪些因素可能影响结果，录用概率74%。',
+])
+def test_causal_discussion_does_not_exempt_targets_or_new_numbers(text):
+    source = '首次审批创建完成率从61%提升至74%。'
+    assert any(f.startswith('PERCENT:') for f in lint.scan_text(
+        text, 'report.md', lint._normalise(source)))
+
+
+@pytest.mark.parametrize('text', [
     '首次审批创建完成率从61%升至75%。',
     '首次审批创建完成率从74%降至61%。',
     '面试通过率从61%升至74%。',
@@ -706,6 +735,7 @@ def test_rate_transition_exemption_cannot_reuse_values_for_new_claims(text):
 @pytest.mark.parametrize('text', [
     '分析客户漏斗，首次审批创建完成率从61%升至74%。',
     '建议保留首次审批创建完成率从61%升至74%。',
+    '首次审批创建完成率从61%升至74%，准备回答还有哪些因素可能影响结果。',
 ])
 def test_rate_transition_requires_unchanged_source_evidence(tmp_path, text):
     import hashlib

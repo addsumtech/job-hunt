@@ -613,6 +613,8 @@ _METRIC_FORECAST = re.compile(r"预计|预期|预测|目标|计划|有望|将|�
 # Strip only that framing, not arbitrary prefixes of a captured metric.
 _RATE_EDITORIAL_PREFIX = re.compile(
     r"^(?:请|建议|需要|应|可)?(?:保留|引用|复述|呈现|展示|说明|解释|核对|核实|提及)")
+_RATE_CAUSAL_DISCUSSION = re.compile(
+    r"(?:哪些|什么|其他|其它)(?:因素|变量|原因)\s*可能\s*(?:影响|导致|造成)")
 
 
 def _rate_transitions(text: str):
@@ -622,7 +624,12 @@ def _rate_transitions(text: str):
         left = max(text.rfind(c, 0, match.start()) for c in '。；;\n\x00') + 1
         ends = [text.find(c, match.end()) for c in '。；;\n\x00']
         right = min((end for end in ends if end >= 0), default=len(text))
-        if _METRIC_FORECAST.search(text[left:right]):
+        # A follow-up about other possible causes does not forecast the rate.
+        # Exempt only that causal qualifier after the result; keep any target,
+        # condition or forecast elsewhere in the sentence visible.
+        suffix = _RATE_CAUSAL_DISCUSSION.sub(
+            lambda cause: cause.group(0).replace('可能', ''), text[match.end():right])
+        if _METRIC_FORECAST.search(text[left:match.end()] + suffix):
             continue
         key = (match['metric'].casefold(),
                re.sub(r'\s+', '', match['before']).replace('％', '%'),
