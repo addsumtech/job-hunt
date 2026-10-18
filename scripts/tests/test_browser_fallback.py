@@ -70,6 +70,14 @@ def test_loading_page_rows_still_require_verbatim_evidence(tmp_path):
         browser.validate_snapshot(snap, rows)
 
 
+@pytest.mark.parametrize('requested', [None, '', 'file:///tmp/page', 'https://user:secret@example.com/', 42])
+def test_requested_url_must_be_a_credential_free_web_url(tmp_path, requested):
+    _, _, snap, rows, _ = setup_capture(tmp_path)
+    snap['requested_url'] = requested
+    with pytest.raises(ValueError, match='requested_url'):
+        browser.validate_snapshot(snap, rows)
+
+
 @pytest.mark.parametrize("text", ["", " \n\t "])
 @pytest.mark.parametrize("status", [None, 200, 403])
 def test_textless_recruitment_landing_page_is_not_zero_matches(tmp_path, text, status):

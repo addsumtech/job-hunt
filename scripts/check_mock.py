@@ -678,7 +678,7 @@ def check_answer_guide(path: pathlib.Path, workspace: pathlib.Path) -> tuple:
 
 # ----------------------------------------------------------------- banned vocabulary
 
-def _default_scanner():
+def _default_scanner(workspace: pathlib.Path):
     """scripts/lint_no_prediction.py is Plan 2's. This is the ONLY adapter point —
     if its function is named differently there, change it here and nowhere else.
 
@@ -690,7 +690,14 @@ def _default_scanner():
         import lint_no_prediction
     except ImportError:
         return None
-    return getattr(lint_no_prediction, "scan_text", None)
+    scanner = getattr(lint_no_prediction, "scan_text", None)
+    capture_corpus = getattr(lint_no_prediction, "capture_corpus", None)
+    if scanner is None or capture_corpus is None:
+        return None
+    # Use the same verified source corpus as the standalone lint and assessment
+    # gate. Without it, true historical metrics pass there but fail in mock guides.
+    corpus = capture_corpus(workspace)
+    return lambda text, source: scanner(text, source, corpus)
 
 
 def check_vocabulary(paths: list, scanner) -> list:
@@ -1079,7 +1086,7 @@ def run(workspace, round_no: int, answer_bank=None, today=None, vocab_scanner=_A
     answer_bank = pathlib.Path(answer_bank) if answer_bank else _answer_bank_default(workspace)
     skill_root = pathlib.Path(skill_root) if skill_root else _skill_root_default()
     today = today or datetime.date.today()
-    scanner = _default_scanner() if vocab_scanner is _AUTO else vocab_scanner
+    scanner = _default_scanner(workspace) if vocab_scanner is _AUTO else vocab_scanner
 
     assessment_path = workspace / "mock" / f"assessment-{round_no}.md"
     transcript_path = workspace / "mock" / f"transcript-{round_no}.md"

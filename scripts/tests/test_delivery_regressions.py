@@ -183,6 +183,45 @@ def test_heading_stays_with_the_start_of_its_first_paragraph(tmp_path, paragraph
                    for page in document for block in page.get_text('blocks'))
 
 
+@pytest.mark.parametrize('layout,rows,words', [
+    ('compact', 4, 30), ('compact', 2, 15), ('compact', 1, 50),
+    ('compact', 1, 126), ('compact', 2, 63), ('compact', 1, 500), ('wide', 3, 30),
+])
+def test_heading_stays_with_first_table_entry(tmp_path, layout, rows, words):
+    import pymupdf
+    source = '# Report\n\n' + '\n\n'.join(f'Prior block {i}.' for i in range(23))
+    source += '\n\n## Next actions\n\n'
+    header = '| Timing | Action | Evidence |'
+    rule = '|---|---|---|'
+    if layout == 'wide':
+        header, rule = '| Timing | Role | Action | Evidence | Link |', '|---|---|---|---|---|'
+    table_rows = []
+    for i in range(rows):
+        values = [f'Day{i}', 'practice ' * words, f'Fact{i}']
+        if layout == 'wide':
+            values = [f'Day{i}', 'Engineer', 'practice ' * words, f'Fact{i}',
+                      f'[Official](https://example.com/{i})']
+        table_rows.append('| ' + ' | '.join(values) + ' |')
+    source += header + '\n' + rule + '\n' + '\n'.join(table_rows)
+    md, pdf = tmp_path / 'report.md', tmp_path / 'report.pdf'
+    md.write_text(source, encoding='utf-8')
+    assert deliver._render_portable_report(
+        md, pdf, deliver._portable_report_style(source)) == (True, '')
+    with pymupdf.open(pdf) as document:
+        headings = [page.number for page in document if page.search_for('Next actions')]
+        starts = [page.number for page in document if page.search_for('Day0')]
+        assert headings == starts and len(headings) == 1
+        text = '\n'.join(page.get_text() for page in document)
+        assert text.count('practice') == rows * words
+        assert all(f'Fact{i}' in text for i in range(rows))
+        if layout == 'wide':
+            assert {link['uri'] for page in document for link in page.get_links()
+                    if link['kind'] == pymupdf.LINK_URI} == {
+                        f'https://example.com/{i}' for i in range(rows)}
+        assert all(page.rect.contains(block[:4])
+                   for page in document for block in page.get_text('blocks'))
+
+
 def test_compact_comparison_table_keeps_columns_headers_and_links_across_pages(tmp_path):
     import pymupdf
     md, pdf = tmp_path / 'report.md', tmp_path / 'report.pdf'

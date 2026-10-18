@@ -1,4 +1,6 @@
 import datetime
+import hashlib
+import json
 import pathlib
 import sys
 import types
@@ -257,13 +259,73 @@ def test_the_vocabulary_scanner_sees_the_candidate_facing_files(tmp_path):
     assert "cheatsheet.md" in seen
 
 
+def _bind_candidate_history(ws):
+    source = ws / "source-profile.txt"
+    source.write_text("无结果率从18%降至11%。首次审批创建完成率从61%提升至74%，"
+                      "对比同批客户上线前后各4周。", encoding="utf-8")
+    (ws / "evidence-blocks.json").write_text(json.dumps({"sources": {"cv": {
+        "path": str(source), "sha256": hashlib.sha256(source.read_bytes()).hexdigest()
+    }}}), encoding="utf-8")
+    return source
+
+
+@pytest.mark.parametrize("artifact", ["cheatsheet.md", "answer-guide.md", "open-loops.md",
+                                      "assessment-2.md"])
+@pytest.mark.parametrize("history", [
+    "无结果率从18%降至11%。",
+    "保留首次审批创建完成率从61%提升至74%，对比同批客户上线前后各4周。",
+    "首次审批创建完成率从61%提升至74%，讨论其他因素可能影响结果。",
+])
+def test_mock_cli_preserves_verified_history_on_every_scanned_surface(
+        tmp_path, artifact, history):
+    ws = F.build(tmp_path)
+    _bind_candidate_history(ws)
+    path = ws / "mock" / artifact
+    path.write_text(path.read_text() + "\n" + history + "\n", encoding="utf-8")
+    assert check_mock.main(_argv(ws)) == 0
+
+
+@pytest.mark.parametrize("text", [
+    "首次审批创建完成率从61%提升至75%。",
+    "首次审批创建完成率从74%降至61%。",
+    "面试通过率从61%提升至74%。",
+    "预计首次审批创建完成率从61%提升至74%。",
+    "首次审批创建完成率从61%提升至74%，这是下季度目标。",
+    "录用概率74%。",
+])
+def test_mock_cli_still_rejects_new_metrics_values_and_predictions(tmp_path, text, capsys):
+    ws = F.build(tmp_path)
+    _bind_candidate_history(ws)
+    (ws / "mock" / "cheatsheet.md").write_text(text, encoding="utf-8")
+    assert check_mock.main(_argv(ws)) == 1
+    assert "PERCENT:" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("trust", ["missing_binding", "changed_source", "unrecorded_raw"])
+def test_mock_cli_does_not_trust_unverified_history(tmp_path, trust, capsys):
+    ws = F.build(tmp_path)
+    source = _bind_candidate_history(ws)
+    if trust == "missing_binding":
+        (ws / "evidence-blocks.json").unlink()
+    elif trust == "changed_source":
+        source.write_text(source.read_text() + " changed", encoding="utf-8")
+    else:
+        (ws / "evidence-blocks.json").unlink()
+        (ws / "raw").mkdir()
+        (ws / "raw" / "invented.json").write_text(
+            json.dumps({"text": source.read_text()}), encoding="utf-8")
+    (ws / "mock" / "cheatsheet.md").write_text("无结果率从18%降至11%。", encoding="utf-8")
+    assert check_mock.main(_argv(ws)) == 1
+    assert "PERCENT:" in capsys.readouterr().out
+
+
 def _argv(ws):
     return ["--workspace", str(ws), "--round", "2", "--today", "2026-08-09",
             "--skill-root", str(F.skill_root(ws))]
 
 
 def test_an_absent_lint_module_is_exit_2_never_a_silent_skip(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(check_mock, "_default_scanner", lambda: None)
+    monkeypatch.setattr(check_mock, "_default_scanner", lambda workspace: None)
     ws = F.build(tmp_path)
     code = check_mock.main(_argv(ws))
     assert code == 2
@@ -272,7 +334,7 @@ def test_an_absent_lint_module_is_exit_2_never_a_silent_skip(tmp_path, monkeypat
 
 def test_an_absent_lint_module_still_leaves_a_could_not_run_receipt(tmp_path, monkeypatch):
     import journal
-    monkeypatch.setattr(check_mock, "_default_scanner", lambda: None)
+    monkeypatch.setattr(check_mock, "_default_scanner", lambda workspace: None)
     ws = F.build(tmp_path)
     check_mock.main(_argv(ws))
     receipts = journal.read_receipts(ws, "check_mock")
@@ -287,7 +349,7 @@ def test_a_renamed_scan_function_is_exit_2_not_a_traceback(tmp_path, monkeypatch
     a check that failed for some other reason'."""
     stub = types.ModuleType("lint_no_prediction")      # no scan_text attribute
     monkeypatch.setitem(sys.modules, "lint_no_prediction", stub)
-    assert check_mock._default_scanner() is None
+    assert check_mock._default_scanner(tmp_path) is None
     ws = F.build(tmp_path)
     code = check_mock.main(_argv(ws))
     assert code == 2
@@ -295,6 +357,15 @@ def test_a_renamed_scan_function_is_exit_2_not_a_traceback(tmp_path, monkeypatch
 
 
 def test_run_resolves_the_scanner_itself_when_not_injected(tmp_path, monkeypatch):
-    monkeypatch.setattr(check_mock, "_default_scanner", lambda: F.no_vocab)
+    monkeypatch.setattr(check_mock, "_default_scanner", lambda workspace: F.no_vocab)
     ws = F.build(tmp_path)
     assert check_mock.run(ws, 2, today=TODAY, skill_root=F.skill_root(ws)) == []
+
+
+def test_a_missing_corpus_loader_fails_closed(tmp_path, monkeypatch, capsys):
+    stub = types.ModuleType("lint_no_prediction")
+    stub.scan_text = F.no_vocab
+    monkeypatch.setitem(sys.modules, "lint_no_prediction", stub)
+    ws = F.build(tmp_path)
+    assert check_mock.main(_argv(ws)) == 2
+    assert "lint_no_prediction" in capsys.readouterr().err

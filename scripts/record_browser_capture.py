@@ -59,6 +59,8 @@ def validate_snapshot(snapshot, rows):
         raise ValueError("snapshot must be an object and rows must be an array")
     if not web_url(snapshot.get("url")) or not isinstance(snapshot.get("text"), str):
         raise ValueError("snapshot requires an HTTP(S) url and original text")
+    if "requested_url" in snapshot and not web_url(snapshot["requested_url"]):
+        raise ValueError("requested_url must be an HTTP(S) URL without credentials")
     stamp = snapshot.get("retrieved_at")
     if not isinstance(stamp, str):
         raise ValueError("snapshot requires retrieved_at with a timezone")
