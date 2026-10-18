@@ -5,11 +5,13 @@ Read `evals/README.md` first — it says what this can and cannot show.
 Results root: `~/code_project/job-hunt-workspace/iteration-<N>/`. Outside the
 repo, deliberately. Never write run outputs inside the repo.
 
-After a repair, rerun the entire agreed acceptance scope on the final code,
-including the full workflow scenarios; a targeted regression and unit-suite
-pass alone do not complete acceptance. Keep previous failures as evidence and
-use fresh outputs, captures and independent reviews for the new run. If that
-run exposes another defect, repair it and repeat the complete agreed scope.
+After a repair, validate the changed behavior and directly affected workflows.
+Keep the original failure as evidence and rerun its regression on the final code.
+Expand to related integration checks when shared logic or data structures change;
+rerun the full workflow scenarios only when the impact or agreed release scope
+requires them. Once those checks pass, do not repeat or broaden them without a
+new change, failure or unresolved concern. Record what was actually verified;
+incremental verification must not be described as a new full-workflow pass.
 
 ## The output contract — every run saves exactly this
 
