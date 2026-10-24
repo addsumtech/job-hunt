@@ -86,11 +86,13 @@ def test_macos_office_export_prefers_launchservices_then_keeps_direct_fallback(
     profile, folder, docx = tmp_path / "profile", tmp_path / "out", tmp_path / "cv.docx"
     commands = check_pages._office_export_commands("/opt/homebrew/bin/soffice",
                                                     profile, folder, docx)
-    assert commands[0][:7] == ["open", "-W", "-n", "-a", str(app), "--args",
+    # -g/-j: launched in the background and hidden, so measuring a Word file never
+    # takes the user's focus (`open -a` alone activates the app despite --headless).
+    assert commands[0][:9] == ["open", "-g", "-j", "-W", "-n", "-a", str(app), "--args",
                                "-env:UserInstallation=" + profile.as_uri()]
-    assert commands[0][7:] == ["--headless", "--convert-to", "pdf", "--outdir",
+    assert commands[0][9:] == ["--headless", "--convert-to", "pdf", "--outdir",
                                 str(folder), str(docx.resolve())]
-    assert commands[1] == ["/opt/homebrew/bin/soffice", *commands[0][6:]]
+    assert commands[1] == ["/opt/homebrew/bin/soffice", *commands[0][8:]]
 
 
 def test_office_export_stays_direct_without_a_macos_app(tmp_path, monkeypatch):
