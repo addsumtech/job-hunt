@@ -344,12 +344,25 @@ input" is not a point on that scale.
 
 ## 9. Market convention cards — verbatim, id-allowlisted
 
-Load `references/market-conventions/<market>.yaml`. Render only entries whose
-`applies_when` is satisfied, and render `text_en` / `text_zh` **character for
-character**. You may not author, strengthen or extend an entry, attach a number to one,
-or invent one.
+Print the table's run-time half instead of opening the YAML:
+
+```
+python3 scripts/convention_cards.py --market <market> --lang <user language>
+```
+
+For every entry in `references/market-conventions/<market>.yaml` it prints, copied
+verbatim from the table, exactly what this step uses: the `id`, `applies_when`,
+`review_by` and the reader text (`text_zh` for zh, `text_en` for en, both for ja/ko/es;
+`--text zh|en` overrides; `--table <file>` reads a table the session names instead of the
+shipped one). The `source`, `why` and `unverified` fields are the
+maintainer's review trail and never reach a card, so do not read the YAML itself. Render
+only entries whose `applies_when` is satisfied, and render `text_en` / `text_zh`
+**character for character**. You may not author, strengthen or extend an entry, attach a
+number to one, or invent one.
 
 **If an entry's `review_by` has passed, still render it, with a 「已过复核期」 banner.**
+`convention_cards.py` flags such an entry on its `review_by` line, with the banner in
+your `--lang`, using the same date check the gate uses.
 A date going by while the code did not change should not stop the skill working. The CI
 lint (`check_conventions.py --ci`) fails on the expired date so a person fixes it; the
 runtime gate downgrades it to `WARN_EXPIRED_REVIEW_BY` and instead requires the banner
@@ -468,8 +481,9 @@ start another mode automatically.
 - [ ] The disclaimer is present, unchanged, directly under the block.
 - [ ] No percentage, no `n/m` score, no prediction word — except a quoted employer
       rubric with its source named on the next line.
-- [ ] Convention cards are verbatim from `references/market-conventions/<market>.yaml`,
-      `applies_when` was honoured, and `conventions_rendered` lists their ids.
+- [ ] Convention cards are verbatim from `references/market-conventions/<market>.yaml`
+      as `scripts/convention_cards.py` printed them, `applies_when` was honoured, and
+      `conventions_rendered` lists their ids.
 - [ ] Any rendered entry whose `review_by` has passed carries the 「已过复核期」 /
       "past its review date" banner, in the card's own language.
 - [ ] Every consistency notice that fired is attached where it fired.

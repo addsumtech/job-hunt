@@ -55,6 +55,16 @@ unverified:
     disclaims: [cn-boss-profile-is-the-screen]
 ```
 
+## How a run reads a table
+
+An assess run does not open these files. `scripts/convention_cards.py --market <key>`
+prints each entry's `id`, `applies_when`, `review_by` (flagging a passed date with the
+stale banner) and `text_en` / `text_zh`, verbatim. `source`, `why`, `added`,
+`protected_trait_note` and `unverified` are for the person reviewing the entry and never
+reach a run. A new field that a run must see has to be added to that script too, or no
+run will ever read it. `check_assessment.py` still reads the YAML itself, so the gate
+compares a card against the table, not against the script's output.
+
 ## Rules for adding an entry
 
 - **No numbers.** A statistic here cannot be sourced and must not be invented.
