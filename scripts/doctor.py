@@ -31,11 +31,28 @@ import tempfile
 from opencli_compat import installed_package
 from host_execution import HOST_EXECUTION_REQUIRED, tectonic_needs_host_execution
 
-# Keep diagnostics importable before requirements.txt has been installed.
-REPORT_ENGINES = ("tectonic", "xelatex")
-
 REPO = pathlib.Path(__file__).resolve().parent.parent
 REQUIREMENTS = REPO / "requirements.txt"
+RENDER_CV = REPO / "scripts" / "render_cv.py"
+
+# The engines render_cv.find_latex_engine accepts, and where it looks besides
+# PATH. Copied rather than imported: render_cv imports PyYAML and python-docx,
+# and this diagnostic has to run before requirements.txt is installed.
+# test_doctor.py holds the two in step. CV and letter PDFs never use pandoc —
+# an earlier version of this check required it, and a machine with only
+# tectonic was told on every mode entry that it could not render a CV PDF.
+CV_ENGINES = ("tectonic", "xelatex", "lualatex", "pdflatex")
+CJK_CV_ENGINES = ("xelatex", "tectonic")
+ENGINE_DIRS = ["/opt/homebrew/bin", "/usr/local/bin", "/Library/TeX/texbin",
+               "~/.cargo/bin", "/usr/bin", "/bin"]
+
+# A tiny, fictional profile. JSON is valid YAML, so writing it needs no PyYAML.
+_PROBE_PROFILE = {
+    "meta": {"name": "Probe Candidate", "language": "en", "target_market": "uk"},
+    "contact": {"email": "probe@example.invalid"},
+    "experience": [{"title": "Engineer", "org": "Example Ltd", "start": "2020",
+                    "end": "2022", "bullets": ["Built a small renderer probe."]}],
+}
 
 # Which import each requirement actually provides. A requirement's install name
 # and its module name differ often enough (python-docx -> docx, PyYAML -> yaml)
@@ -73,34 +90,60 @@ def _process_output(result) -> str:
     return text(getattr(result, "stdout", "")) + text(getattr(result, "stderr", ""))
 
 
+def find_cv_engine(cjk: bool = False) -> str | None:
+    """The engine render_cv would pick, found the same way: PATH, then ENGINE_DIRS."""
+    for engine in (CJK_CV_ENGINES if cjk else CV_ENGINES):
+        found = shutil.which(engine)
+        if found:
+            return found
+        for directory in ENGINE_DIRS:
+            candidate = pathlib.Path(directory).expanduser() / engine
+            if candidate.is_file():
+                return str(candidate)
+    return None
+
+
+def office_binary() -> str | None:
+    """LibreOffice exactly as check_pages.py finds it to measure a .docx."""
+    return shutil.which("soffice") or shutil.which("libreoffice")
+
+
 def can_render_pdf() -> tuple[bool, str]:
-    """Check the optional Pandoc/template PDF path by rendering one."""
-    if not shutil.which("pandoc"):
-        return False, "pandoc is not installed"
-    engines = [e for e in REPORT_ENGINES
-               if shutil.which(e)]
-    if not engines:
-        return False, "no supported report LaTeX engine (tectonic or xelatex)"
+    """Check the CV/letter PDF path by rendering a CV through render_cv itself.
+
+    render_cv compiles its own LaTeX with tectonic/xelatex/lualatex/pdflatex;
+    pandoc is not involved, so it is not asked for here.
+    """
+    engine = find_cv_engine()
+    if engine is None:
+        return False, ("no LaTeX engine render_cv can use "
+                       "(tectonic, xelatex, lualatex or pdflatex)")
+    name = pathlib.Path(engine).stem
     with tempfile.TemporaryDirectory() as tmp:
         d = pathlib.Path(tmp)
-        md = d / "probe.md"
-        md.write_text("# probe\n\nHello.\n", encoding="utf-8")
+        profile = d / "probe.yaml"
+        profile.write_text(json.dumps(_PROBE_PROFILE), encoding="utf-8")
         pdf = d / "probe.pdf"
         try:
-            result = subprocess.run(["pandoc", str(md), "-o", str(pdf),
-                                     f"--pdf-engine={engines[0]}",
-                                     "-V", "mainfont=Times New Roman"],
-                                    capture_output=True, timeout=180, check=False)
+            result = subprocess.run([sys.executable, str(RENDER_CV), str(profile),
+                                     "--format", "pdf", "--out", str(pdf)],
+                                    capture_output=True, timeout=300, check=False)
         except (OSError, subprocess.SubprocessError) as exc:
-            return False, f"pandoc + {engines[0]} failed to run: {exc}"
+            return False, f"render_cv + {name} failed to run: {exc}"
+        output = _process_output(result)
         if result.returncode == 0 and pdf.is_file() and pdf.stat().st_size > 0:
-            return True, f"pandoc + {engines[0]} (report font configuration)"
-        if tectonic_needs_host_execution(engines[0], _process_output(result)):
+            if find_cv_engine(cjk=True) is None:
+                return True, (f"render_cv + {name}; Latin script only — CJK CVs need "
+                              "xelatex or tectonic")
+            return True, f"render_cv + {name}"
+        if (tectonic_needs_host_execution(engine, output)
+                or f"NOTICE_{HOST_EXECUTION_REQUIRED}" in output):
             return False, (f"{HOST_EXECUTION_REQUIRED}: Tectonic is installed, but this "
                            "restricted macOS process cannot initialize SystemConfiguration; "
                            "rerun PDF rendering and verification through the host's approved "
                            "trusted or elevated execution route")
-    return False, f"pandoc + {engines[0]} produced no PDF"
+    reason = next((line.strip() for line in output.splitlines() if line.strip()), "")
+    return False, f"render_cv + {name} produced no PDF" + (f": {reason[:200]}" if reason else "")
 
 
 def can_render_report() -> tuple[bool, str]:
@@ -125,9 +168,9 @@ def fast_capabilities() -> list[str]:
     renders a PDF. So this trades one direction of accuracy away, deliberately,
     and the asymmetry is the point:
 
-      it is SOUND about missing   -- no pandoc means no template-based CV PDF
-      it is UNSOUND about present -- pandoc and an engine can both be installed
-                                     and still fail to produce a file
+      it is SOUND about missing   -- no engine render_cv can find means no CV PDF
+      it is UNSOUND about present -- an engine can be installed and still fail
+                                     to produce a file
 
     A warning may only fire when it is sure, or it becomes the line everyone
     filters out. Confirming that a capability WORKS stays with `doctor.py`, which
@@ -138,11 +181,16 @@ def fast_capabilities() -> list[str]:
     for pkg, module in requirements():
         if not importable(module):
             missing.append(f"python package {pkg}")
-    if not shutil.which("pandoc") or not any(
-            shutil.which(e) for e in REPORT_ENGINES):
-        missing.append("Template CV PDF rendering (pandoc + a LaTeX engine; optional for reports)")
+    if find_cv_engine() is None:
+        missing.append("CV/letter PDF rendering (tectonic or another LaTeX engine; "
+                       "optional for reports)")
+    elif find_cv_engine(cjk=True) is None:
+        missing.append("CJK CV/letter PDF rendering (xelatex or tectonic; "
+                       "lualatex/pdflatex cannot typeset CJK)")
     if not shutil.which("pdftotext"):
         missing.append("pdftotext")
+    if not office_binary():
+        missing.append("LibreOffice (soffice) to measure Word page counts")
     if not shutil.which("opencli"):
         missing.append("opencli")
     return missing
@@ -156,9 +204,11 @@ def install_hint(binary: str) -> str:
                 "release; follow references/agent-setup.md")
     mac = platform.system() == "Darwin"
     brew = {"pandoc": "brew install pandoc", "tectonic": "brew install tectonic",
-            "pdftotext": "brew install poppler"}
+            "pdftotext": "brew install poppler",
+            "soffice": "brew install --cask libreoffice"}
     apt = {"pandoc": "sudo apt install pandoc", "tectonic": "sudo apt install tectonic",
-           "pdftotext": "sudo apt install poppler-utils"}
+           "pdftotext": "sudo apt install poppler-utils",
+           "soffice": "sudo apt install libreoffice-writer"}
     return (brew if mac else apt).get(binary, f"install {binary}")
 
 
@@ -233,11 +283,10 @@ def checks() -> list[dict]:
     ok, detail = can_render_pdf()
     pdf_fix = ("rerun only the PDF render and verification through the host's approved "
                "trusted or elevated execution route; do not reinstall Tectonic"
-               if detail.startswith(HOST_EXECUTION_REQUIRED) else
-               f"{install_hint('pandoc')} && {install_hint('tectonic')}")
+               if detail.startswith(HOST_EXECUTION_REQUIRED) else install_hint("tectonic"))
     out.append({
-        "what": "template-based CV/letter PDF (optional for reports)", "ok": ok,
-        "cost": "template-based PDF CVs and letters are unavailable; "
+        "what": "template-based CV/letter PDF (render_cv; optional for reports)", "ok": ok,
+        "cost": "PDF CVs and letters from render_cv/render_letter are unavailable; "
                 "bundled report PDFs, Markdown and .docx use separate capabilities",
         "fix": pdf_fix,
         "auto": False, "detail": detail,
@@ -248,6 +297,15 @@ def checks() -> list[dict]:
         "cost": "check_pages cannot verify a template-based CV; "
                 "report delivery can still verify text using PyMuPDF",
         "fix": install_hint("pdftotext"), "auto": False,
+    })
+    office = office_binary()
+    out.append({
+        "what": "measure Word page counts (LibreOffice soffice)",
+        "ok": bool(office),
+        "cost": "check_pages reports DOCX_NOT_MEASURED for cv.docx and letter.docx, "
+                "so check_apply cannot pass a delivery that includes Word files",
+        "fix": install_hint("soffice"), "auto": False,
+        **({"detail": office} if office else {}),
     })
     out.append({
         "what": "job adapters (opencli)", "ok": bool(shutil.which("opencli")),
