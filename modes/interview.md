@@ -554,3 +554,6 @@ believing you vetted it.
   you"; "strong candidate" / "weak candidate" / "hire" / "no-hire"; any comparison to other
   candidates; any claim about what the interviewer thought or would conclude; or a rating on
 a scale the employer did not publish (the published-rubric exception above applies).
+  Predicting the **questions** is the job ("大概率会被问到系统设计", "likely to be asked
+  about…"); predicting the **outcome** is not, and that includes numberless certainty
+  ("你肯定能过", "you will definitely pass").

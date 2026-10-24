@@ -35,7 +35,10 @@ For example, partial responsibility evidence calls for explaining the relevant
 work and the missing ownership. A bare “0 of 4 demonstrated” can obscure real
 experience; keep that mechanical count internal and say what the client has
 actually done. Never convert a partial into a demonstrated result to improve the
-headline. Do not invent an outcome probability. When the user explicitly asks
+headline. Do not invent an outcome probability, and do not write a numberless
+certainty about the outcome either (肯定能拿到面试, 进面稳了, "you will definitely get
+an interview"); `lint_no_prediction.py` blocks both. Saying which topics an
+interview is likely to cover is preparation, not prediction. When the user explicitly asks
 to see the evidence counts, explain their scope once and link the detailed record.
 
 Full consultations normally include a PDF and editable text. Explicit chat-only,

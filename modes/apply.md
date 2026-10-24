@@ -422,7 +422,9 @@ evidence:                          # the judge findings the classification rests
 
 Follow SKILL.md "Client deliverables": write `report.md` (read
 `references/report-writing.md` first), render and review it, run
-`lint_no_prediction.py`, then `python3 scripts/deliver.py --workspace <ws>` last (client files go to `~/Downloads/<workspace-name>/`). The
+`lint_no_prediction.py` (a metric quoted verbatim from the candidate's master, whose
+`master-fingerprint.json` still matches, is allowed; never delete a true number to pass
+it), then `python3 scripts/deliver.py --workspace <ws>` last (client files go to `~/Downloads/<workspace-name>/`). The
 CV goes to `简历/`, the interview brief to `面试准备/`, the report to `报告/`. A cover
 letter is provided on demand; it is not the domestic default. Do not start a mock
 interview or another mode automatically.
