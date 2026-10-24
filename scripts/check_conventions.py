@@ -315,7 +315,12 @@ def main(argv: list[str] | None = None) -> int:
                           f"workspace {args.workspace} does not exist")
     files = list(args.market_file)
     if args.all:
-        files += [CONVENTIONS_DIR / f"{key}.yaml" for key in MARKET_KEYS]
+        # Every expected table, plus every table that is actually there: listing only
+        # MARKET_KEYS meant a new table landed unlinted, and its `market` value (which
+        # must be one of MARKET_KEYS) was never checked by anyone.
+        expected = [CONVENTIONS_DIR / f"{key}.yaml" for key in MARKET_KEYS]
+        present = sorted(CONVENTIONS_DIR.glob("*.yaml")) if CONVENTIONS_DIR.is_dir() else []
+        files += expected + [path for path in present if path not in expected]
     def _cannot_run(reason: str, code: str = "NO_INPUT") -> int:
         """In --ci mode there is no journal to write to, so say why on stderr and exit 2.
         Exit 2 stays 'could not run', distinct from 1 = 'a table is bad', in both modes."""

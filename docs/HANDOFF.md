@@ -1,14 +1,14 @@
 # job-hunt — 接手说明
 
-**状态更新于 2026-10-24。** 下面「当前状态」一节是这一天核对过的；之后的章节保留 2026-08-24 的原文，
-其中提到的遗留项有些已经修掉（见 CHANGELOG「未发布」）。**先跑一次 `make check`，再信任这里的任何一句话。**
+**更新于 2026-10-24（1.3.0 发布当天）。** 这份文件以前在 8 月里过时了两次，接手的人信了旧状态就会重建已经存在的东西。
+**先跑一次 `make check`，再信任这里的任何一句话。**
 
 ---
 
 ## 当前状态
 
-- 四个模式（apply、assess、discover、interview）都已上线；`evals/` 已建成，第 2 轮评估记录在 `evals/iterations/`。
-- 版本：1.3.0（2026-10-24）。1.2.1 到 1.2.3 没有单独打 tag，修复并入 1.3.0。
+- 四个模式（apply、assess、discover、interview）都已上线；`evals/` 已建成。
+- 版本：1.3.0（2026-10-24，PR #34，tag `v1.3.0`）。1.2.1 到 1.2.3 没有单独打 tag，修复并入 1.3.0。
 - `make check`（2026-10-24，Python 3.11 venv）：
 
 ```
@@ -18,74 +18,66 @@ check_conventions --ci: exit 0
 NO_HIDDEN_CHARS
 ```
 
-跑测试需要一个装了 `requirements.txt` 和 pytest 的 Python 3.10+；macOS 自带的 `python3` 是 3.9，Homebrew 的新版 Python 通常没有这些包。
+跑测试需要一个装了 `requirements.txt` 和 pytest 的 Python 3.10+（README 里有 venv 命令）；macOS 自带的
+`python3` 是 3.9，脚本会以 `PYTHON_TOO_OLD` 退出 2。
 
 ---
 
 ## `make check` 绿色证明了什么，以及不证明什么
 
-**它证明的：**单元测试彼此自洽；市场表通过 lint；迁移前那份 skill 没有丢任何一行字节。
+**它证明的：**单元测试彼此自洽；市场表通过 lint；迁移前那份 skill 没有丢任何一行字节；源码和文档里没有
+隐藏字符。
 
-**它不证明的：**任何模式被对照 baseline 臂测量过。计划 5 从未建成，所以这个 skill **从未跑过一次
-端到端行为评估**。`check_skill_lossless.py` 衡量的是字节还在不在，**不是内容有没有在需要的时刻到达
-上下文**——只有真跑一轮才能回答第二个问题，而仓库里没有任何东西会跑它。
-
-这句话请原样保留在 README 里。仓库从来没有声称自己被评估过（对 README/SKILL/modes 全文 grep
-`benchmark` / `baseline arm` / `pass rate` 是零命中），所以没有任何不诚实的东西发货——这是流程债，
-不是活体缺陷。但它是完整性判断上的决定性一条。
+**它不证明的：**内容有没有在需要的时刻到达模型的上下文。行为评估在 `evals/`：第 2 轮（2026-09-05/06）
+对 15 个场景分别跑了带 skill 和不带 skill 的版本，每组一次（n = 1），记录在 `evals/iterations/`。
+1.3.0 大幅改写了模式文件和闸门，**之后没有重跑行为评估**；要说 1.3.0 的行为比 1.2.x 好，得先跑一轮
+（`evals/run.md`，结果用 `make eval-verify RESULTS=<dir>` 评分）。
 
 ---
 
-## 2026-08-23/24 的对抗审计与五轮修复
+## 审计记录
 
-做了一次 8 维度对抗审计（每条发现派独立 agent 反驳，外加 421 个变异体的变异测试），报告
-[artifact](https://claude.ai/code/artifact/82fe0378-d852-49a6-aa65-9edba0ceb735)。38 条发现存活。
-已按损害顺序修掉五簇并推送到 main：
+**2026-08-23/24 的对抗审计**（8 个维度，每条发现派独立 agent 反驳，外加 421 个变异体）修掉了五簇问题，
+详见当时的提交 `8a5ca6f..cc537ff`。
 
-| 遍 | 修了什么 | commit |
-|---|---|---|
-| 1 | 交付产物（PDF/docx）是全仓被验证最少的对象 | `8a5ca6f..e3330d8` |
-| 2 | interview 的证据检查不检查它声称检查的东西 | `e3330d8..b5ae658` |
-| 3 | discover 的溯源锚点停在没人读的文件上 | `b5ae658..1303beb` |
-| 4 | 预测禁令在它默认输出的语言里没有执行 | `1303beb..f746066` |
-| 5 | 收据是关于「某个时刻」的断言，不是关于字节的 | `f746066..cc537ff` |
+**2026-10-24 的全面审查 → 1.3.0。** 三路并行审查（脚本正确性、给 agent 的指令、用户文档和安装），
+每条发现都先复现再修。要点：
 
-**每一遍的新测试都拿 `8a5ca6f` 回归验证过判别力**（`git checkout 8a5ca6f -- <改过的脚本>`，
-确认新测试在旧代码上变红）。这一条请继续做下去：第一遍写的测试里有两条在旧代码上也通过，
-一条是 fixture 太弱（DOI 只到 548.8pt 根本没出血），一条是**在 `MISSING_CHARACTERS` 上 skip
-——而那正是 bug 本身，等于测试在它本该失败的时候把自己跳过了**。
+- 防造假：check_claims 拦下截短的头衔、雇主名、学位与论文状态。
+- 防预测：lint_no_prediction 拦下不带数字的确定性预测（九种语言），同时减少了一批误报。
+- 交付：多个工作区交付到同一目录不再互相覆盖；不再生成冒牌的简历 PDF；能检出缺字方块。
+- 可照做：解释器与 cwd 约定写进 SKILL.md；修正 discover 的 `--workspace .` 等照做必失败的指令；
+  脚本拒绝把技能目录当工作区。
+- 上下文：discover 80KB → 58KB，report-writing 42KB → 30KB；assess 用 `convention_cards.py`；
+  apply 评审按文件路径读取。
+
+**判别力规则继续执行**：每条修复的新测试都要先在旧代码上确认会失败（把旧版脚本拷到临时副本跑新测试）。
 
 ---
 
-## 还没修的（按审计的修复顺序）
+## 还没做完的
 
-- **第 6 遍（本次进行中）** 文档漂移：posting schema 四份声明已统一并由
-  `scripts/tests/test_posting_schema_agreement.py` 逐一 diff；`claims.yaml` 已在
-  `modes/apply.md` Step 4、`references/gap-analysis.md` 和 `assets/claims.example.yaml` 写明；
-  SKILL.md 已把模式路由提到最前面。
-- **第 7 遍** 测试基础设施：变异测试进 `make mutants` 并在 CI 上对**新增**存活体报错；一条参数化的
-  「缺主输入 → exit 2 且恰好一条 could_not_run 收据」契约测试（能一次关掉整类）；断言 finding
-  **代码在行首**而不是自由子串。
-- **第 8 遍** 建 `evals/`（计划 5，94 个任务）。
-- **零散**：`modes/discover.md` 仍硬编码 `--workspace .`（从别的 cwd 跑会把整轮产物写进 agent 的当前
-  目录，而三个脚本都 exit 0）；`paths.slugify()` 对西里尔/希腊/阿拉伯/泰文返回空串；
-  `check_conventions --ci` 枚举 `MARKET_KEYS` 而不是 glob 目录，新市场表落地即无人 lint。
+- **变异测试**：1.3.0 合并后在 CI 跑了一次（run 40056907221）。check_claims.py 出现 29 个新存活体，
+  正在补测试；render_cv.py 的结果出来后同样处理。基线文件是 `scripts/mutants-baseline.json`，只有本地
+  `make mutants-record` 能改它，每条都要写理由。
+- **行为评估**：见上一节，1.3.0 之后没有重跑。
+- **安装体积**：仓库根目录就是 skill，`npx skills add` 会把整个仓库（含 docs、evals、tests，约 10MB）
+  拷进用户目录，且不支持排除文件。要彻底解决只能把 skill 挪进子目录，会牵动两条安装路径和一批测试。
+- **SkillHub / ClawHub 上架版本**需要各自的账号重新发布。
 
 ---
 
 ## 三件别忘了的事
 
-1. **`check_skill_lossless.py` 是唯一能证明那 1500 行存量没在搬迁中丢失的东西。** 每次改完
-   SKILL.md / README.md / references 都重跑它。删掉一行是可以的，但必须进
-   `scripts/lossless-allowlist.json` 并**写下理由**——现在有 24 条豁免，每条都有一段话说明为什么
-   那行该消失。别为了让闸门变绿而批量豁免。
+1. **`check_skill_lossless.py` 是唯一能证明迁移前那 1317 行存量没丢的东西。** 每次改完 SKILL.md、README、
+   modes、references、agents 都重跑它。删掉一行是可以的，但必须进 `scripts/lossless-allowlist.json`
+   并**写下理由**，现在有 88 条豁免。别为了让闸门变绿而批量豁免；能保留原句就保留原句。
 
-2. **`~/.claude/skills/job-application` 保留作归档，不要删，不要改。** `864ad7f` 是无损基线，
-   remote `ja` 指向它，别往它推。
+2. **`864ad7f` 是无损基线**（迁移前 job-application 的最后一个提交，迁移合并让它成为 HEAD 的祖先），
+   任何克隆里都能解析，不需要额外的 remote 或 tag。
 
-3. **规矩**：只 stage 具名路径（不要 `git add -A`）；不要用 `-c` 覆盖 git identity
-   （`dong845 <ldh199803@gmail.com>`）；**除非当次明确要求，否则不 push**。
-   发版：main 上 CI 绿了再打 tag；**tag 推送后不再移动**，发版后的修复进下一个补丁版本。
+3. **规矩**：只 stage 具名路径（不要 `git add -A`）；用自己的 git identity，不要用 `-c` 冒用别人的；
+   发版时 main 上 CI 绿了再打 tag；**tag 推送后不再移动**，发版后的修复进下一个补丁版本。
    `git fetch` 默认不会更新已有 tag，挪过的 tag 会让同一个版本号在不同人手里是不同代码
    （v1.0.0、v1.1.0 都发生过）。
 

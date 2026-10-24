@@ -331,6 +331,21 @@ def test_ci_mode_still_fails_on_a_bad_table(tmp_path, monkeypatch, capsys):
     assert "DIGIT_IN_PROSE" in capsys.readouterr().out
 
 
+def test_ci_mode_lints_a_table_that_is_not_in_market_keys(tmp_path, monkeypatch, capsys):
+    """A table dropped into the directory is linted too. --ci used to enumerate
+    MARKET_KEYS, so a new `fr.yaml` was never read and its unknown market never
+    reported."""
+    good = tmp_path / "cn.yaml"
+    good.write_text(yaml.safe_dump(GOOD, allow_unicode=True), encoding="utf-8")
+    stray = json.loads(json.dumps(GOOD))
+    stray["market"] = "fr"
+    (tmp_path / "fr.yaml").write_text(yaml.safe_dump(stray, allow_unicode=True), encoding="utf-8")
+    monkeypatch.setattr(cck, "CONVENTIONS_DIR", tmp_path)
+    monkeypatch.setattr(cck, "MARKET_KEYS", ("cn",))
+    assert cck.main(["--ci", "--today", "2026-08-09"]) == 1
+    assert "fr.yaml" in capsys.readouterr().out
+
+
 # overlap_reviewed: a note legitimately names the entry it disclaims, so some token
 # overlap is ordinary. Firing on all of it made 15 WARN lines print on a fully passing
 # run — the "reader learns to skip the line" failure this repo's own testing rule names.
