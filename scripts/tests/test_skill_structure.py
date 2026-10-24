@@ -133,13 +133,7 @@ def test_the_self_check_names_every_script():
             # Reads references/discovery-sources.md for check_shortlist; there is
             # no run step, and a self-check line telling a round to "run the
             # catalogue" would describe work nobody does.
-            "discovery_catalogue.py",
-            # PENDING, not library-only: assess §9 runs it, and its self-check
-            # line belongs in references/workflow-checklist.md's assess block,
-            # which a parallel change owned when this script landed (2026-10-24).
-            # modes/assess.md's own §12 already names it. Remove this entry in
-            # the same commit that adds the checklist line.
-            "convention_cards.py"}
+            "discovery_catalogue.py"}
     section = _self_check_items()
     for f in sorted((ROOT / "scripts").glob("*.py")):
         if f.name in skip:

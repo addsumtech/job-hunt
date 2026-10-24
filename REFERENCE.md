@@ -126,6 +126,7 @@ job-hunt/
     ├── check_candidate_match.py      # discover gate: evidence-backed CV-to-detail recommendation mapping
     ├── check_claims.py              # claim provenance + master-profile immutability
     ├── check_conventions.py         # CI — market-convention table lint
+    ├── convention_cards.py          # assess: one market table's runtime fields, verbatim (lookup, no receipt)
     ├── check_hidden_chars.py        # CI — invisible / BiDi control characters in source and docs
     ├── check_evidence_refs.py       # evidence refs resolve; no block ids in reader prose
     ├── check_letter.py              # letter body constraints

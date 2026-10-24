@@ -261,6 +261,8 @@ In assess mode:
       rule for what may be in one; the tables are `references/market-conventions/cn.yaml`,
       `references/market-conventions/nl.yaml`, `references/market-conventions/de.yaml`,
       `references/market-conventions/uk.yaml`, `references/market-conventions/us.yaml`.
+- [ ] Printed the cards with `scripts/convention_cards.py --market <market> --lang <lang>`
+      instead of reading the table, and copied its text and any stale banner verbatim?
 - [ ] Ran `scripts/evidence_blocks.py`, `scripts/count_coverage.py`,
       `scripts/consistency.py`, `scripts/check_evidence_refs.py`,
       `scripts/lint_no_prediction.py` and `scripts/check_assessment.py`, and quoted
