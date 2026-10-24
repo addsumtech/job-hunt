@@ -247,8 +247,23 @@ def test_snapshot_profile_no_longer_writes_the_profile_into_the_skill(skill_copy
 # (run_tool.py instead a direct paths.skill_workspace_refusal call, because it
 # is the launcher that must still start on an old system Python). Shrinking
 # this set is the point; this test goes red when it changes either way.
-OUTSIDE_CLI_IO = {"check_search_coverage.py", "render_report.py", "run_tool.py"}
+OUTSIDE_CLI_IO = {"run_tool.py"}
 
 
 def test_the_workspace_scripts_outside_the_guard_are_exactly_the_known_ones():
     assert set(workspace_scripts()) - set(entry_scripts()) == OUTSIDE_CLI_IO
+
+
+def test_the_launcher_refuses_the_skill_root_itself(skill_copy):
+    """run_tool.py stays outside cli_io so it can start on an old system Python,
+    and refuses a workspace inside the skill before it reads runtime.json or runs
+    anything — the recorded OpenCLI/AnySearch reads would otherwise write raw/
+    captures and journal.jsonl beside SKILL.md."""
+    before = _tree(skill_copy)
+    proc = subprocess.run([sys.executable, str(skill_copy / "scripts" / "run_tool.py"),
+                           "--root", str(skill_copy / "no-runtime"), "--workspace", ".",
+                           "opencli", "51job", "search", "x"],
+                          capture_output=True, text=True, encoding="utf-8", cwd=str(skill_copy))
+    assert proc.returncode == 2, proc.stderr
+    assert "WORKSPACE_IN_SKILL" in proc.stderr
+    assert _tree(skill_copy) == before

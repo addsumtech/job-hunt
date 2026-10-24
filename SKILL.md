@@ -115,7 +115,8 @@ skill root with the prepared interpreter — the `python` path in the runtime's
 macOS's 3.9 or a Python without the dependencies; never `pip install` into it.
 `<ws>` / `<workspace>` / `<round>` always mean the absolute path of this run's
 workspace, never `.` (that would be the skill directory), and raw captures go under
-`<ws>/raw/`.
+`<ws>/raw/`. A script exits 2 with `PYTHON_TOO_OLD` on an interpreter older than 3.10 and with
+`WORKSPACE_IN_SKILL` for a workspace inside the skill; fix the call, don't work around it.
 
 Resolve the workspace through `scripts/paths.py`, look for a prior matching run,
 and create the selected directory before entering:

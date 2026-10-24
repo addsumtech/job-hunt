@@ -53,7 +53,8 @@ missing packages; it does not imply an offline installation bundle.
 ## Use the prepared runtime
 
 Use the wrapper from the skill root so every command resolves to the prepared
-Python, Node and OpenCLI, including paths with spaces:
+Python, Node and OpenCLI, including paths with spaces. If `python3` is older than 3.10 (macOS `/usr/bin/python3` is 3.9), every script exits 2
+with `PYTHON_TOO_OLD` instead of running; call it as `python3 scripts/run_tool.py python scripts/<tool>.py …`:
 
 ```sh
 python scripts/run_tool.py python scripts/doctor.py

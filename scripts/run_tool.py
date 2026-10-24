@@ -23,6 +23,14 @@ def main(argv=None):
     ap.add_argument("tool", choices=("python", "opencli", "anysearch", "browser", "browser-session"))
     ap.add_argument("args", nargs=argparse.REMAINDER)
     args = ap.parse_args(argv)
+    if args.workspace is not None:
+        # The launcher must still start on an old system Python, so it does not
+        # go through cli_io; it refuses a workspace inside the skill directly.
+        import paths
+        reason = paths.skill_workspace_refusal(args.workspace)
+        if reason:
+            print(reason, file=sys.stderr)
+            return 2
     budget_file = None
     runtime = json.loads((args.root.expanduser() / "runtime.json").read_text())
     env = os.environ.copy()

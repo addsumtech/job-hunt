@@ -402,6 +402,7 @@ After completing all REFRAME and KEYWORD-INSERT edits, review the **full CV** fo
 3. **Voice and specificity:** Does the CV read as one person's work history, or as a generic template filled in with different nouns? Each role should have at least one detail that is unmistakably that candidate's experience.
 4. **Prose quality:** Flawless-but-voiceless prose signals AI generation to experienced recruiters. Preserve natural sentence rhythms even when the grammar is corrected.
 5. **The 2026 vocabulary:** `spearheaded`, `pivotal`, `intricate`, `showcasing`, `delve`, `realm`, `robust`, `cutting-edge`, `seamless`, "a valuable asset". `lint_cv.py` reports these as `AI_VOCABULARY` over the whole document, and `check_letter.py` adds the structural tells on a letter (`EM_DASH_DENSITY`, `NOT_JUST_PIVOT`, `TRICOLON_DENSITY`).
+   Skills, certification and publication lines are not scanned for it: there the word is part of a product name or a citation ("Pivotal Cloud Foundry").
 
 If the uniformity check fails on any dimension, make targeted repairs before delivering the final CV.
 

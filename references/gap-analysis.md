@@ -358,6 +358,7 @@ After completing all REFRAME and KEYWORD-INSERT edits, review the **full CV** fo
 4. **Prose quality:** Flawless-but-voiceless prose signals AI generation to experienced recruiters. Preserve natural sentence rhythms even when the grammar is corrected.
 
 5. **The 2026 vocabulary:** `spearheaded`, `pivotal`, `intricate`, `showcasing`, `delve`, `realm`, `robust`, `cutting-edge`, `seamless`, "a valuable asset". These are the terms recruiters currently report flagging, and `scripts/lint_cv.py` reports them as `AI_VOCABULARY` — over the **whole document**, not only the bullets, because the summary is the line a recruiter reads first and it used to be the one line nothing checked.
+   Skills, certification and publication lines are not scanned for it: there the word is part of a product name or a citation.
 
 If the uniformity check fails on any dimension, make targeted repairs before delivering the final CV.
 
