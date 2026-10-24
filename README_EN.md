@@ -203,12 +203,13 @@ Files are stored locally; model calls and web access depend on your chosen agent
 Automated checks cover evidence references, source-profile preservation, verdict parsing, personal-data handling, rendering, and mode handoffs:
 
 ```bash
-python3 -m pip install pytest
+python3 -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt pytest
 make check
 make eval-lint
 ```
 
-`make check` runs Python tests, migration content-preservation checks and market-table checks. Tests that use external tools need those tools installed; local skill-installation checks are optional.
+`make check` runs Python tests, migration content-preservation checks, market-table checks and a hidden-character scan. It needs Python 3.10+ with `requirements.txt` installed (macOS's built-in `python3` is 3.9). Tests that use external tools need those tools installed; local skill-installation checks are optional.
 
 [`evals/`](evals/README.md) contains 20 behavioural scenarios. The second iteration (2026-09-05/06) ran 15 scenarios with and without the skill, once per group (n = 1). Ten behavioural checks changed from baseline `FAIL` to with-skill `PASS`. See the [evaluation record](evals/iterations/iteration-2-with-skill.md) for results, untested checks and the invalid scenario.
 

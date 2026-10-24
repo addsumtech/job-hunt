@@ -204,12 +204,13 @@ Agent 先验证 OpenCLI，确认不兼容后才使用内置 CDP 读取脚本。I
 自动化检查覆盖证据引用、源档案保护、评审结果解析、个人信息处理、排版和模式交接等环节：
 
 ```bash
-python3 -m pip install pytest
+python3 -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt pytest
 make check
 make eval-lint
 ```
 
-`make check` 运行 Python 测试、迁移内容保留检查和市场惯例表检查。涉及外部工具的测试需要相应环境，本机安装检查可按需开启。
+`make check` 运行 Python 测试、迁移内容保留检查、市场惯例表检查和隐藏字符检查，需要 Python 3.10 及以上并装好 `requirements.txt`（macOS 自带的 `python3` 是 3.9）。涉及外部工具的测试需要相应环境，本机安装检查可按需开启。
 
 [`evals/`](evals/README.md) 收录 20 个行为评估场景。第 2 轮评估（2026-09-05/06）对 15 个场景分别运行带 Skill 和不带 Skill 的版本，每组运行一次（n = 1）。其中 10 项行为检查从基线的 `FAIL` 变为带 Skill 的 `PASS`。详细结果、未覆盖项和无效场景见[评估记录](evals/iterations/iteration-2-with-skill.md)。
 

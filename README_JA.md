@@ -203,12 +203,13 @@ Agent はその情報源を一時停止し、ログインや認証を案内し�
 自動チェックは、根拠への参照、元プロフィールの保護、レビュー結果の解析、個人情報の扱い、組版、モード間の引き継ぎなどを対象にしています。
 
 ```bash
-python3 -m pip install pytest
+python3 -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt pytest
 make check
 make eval-lint
 ```
 
-`make check` は Python テスト、移行時の内容保持チェック、市場慣行表のチェックを実行します。外部ツールを使うテストには対応する環境が必要です。ローカルの Skill インストール検査は必要に応じて有効にできます。
+`make check` は Python テスト、移行時の内容保持チェック、市場慣行表のチェック、不可視文字の検査を実行します。Python 3.10 以上と `requirements.txt` の依存関係が必要です（macOS 標準の `python3` は 3.9 です）。外部ツールを使うテストには対応する環境が必要です。ローカルの Skill インストール検査は必要に応じて有効にできます。
 
 [`evals/`](evals/README.md) には 20 の動作評価シナリオがあります。第 2 回評価（2026-09-05/06）では、15 のシナリオを Skill あり・なしで各一回実行しました（n = 1）。10 項目の動作チェックが、ベースラインの `FAIL` から Skill 使用時の `PASS` に変わりました。結果、未実施の項目、無効になったシナリオは[評価記録](evals/iterations/iteration-2-with-skill.md)に掲載しています。
 

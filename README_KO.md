@@ -203,12 +203,13 @@ Agent가 해당 정보원을 일시 중지하고 로그인이나 인증을 안�
 자동 검사는 근거 참조, 원본 프로필 보호, 검토 결과 파싱, 개인정보 처리, 조판, 모드 간 전환 등을 다룹니다.
 
 ```bash
-python3 -m pip install pytest
+python3 -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt pytest
 make check
 make eval-lint
 ```
 
-`make check`는 Python 테스트, 마이그레이션 내용 보존 검사, 시장 관행 표 검사를 실행합니다. 외부 도구를 사용하는 테스트는 해당 환경이 필요하며 로컬 Skill 설치 검사는 선택해서 실행할 수 있습니다.
+`make check`는 Python 테스트, 마이그레이션 내용 보존 검사, 시장 관행 표 검사, 숨은 문자 검사를 실행합니다. Python 3.10 이상과 `requirements.txt` 의존성이 필요합니다(macOS 기본 `python3`는 3.9입니다). 외부 도구를 사용하는 테스트는 해당 환경이 필요하며 로컬 Skill 설치 검사는 선택해서 실행할 수 있습니다.
 
 [`evals/`](evals/README.md)에는 행동 평가 시나리오 20개가 있습니다. 2차 평가(2026-09-05/06)에서는 15개 시나리오를 Skill 사용·미사용으로 각각 한 번 실행했습니다(n = 1). 행동 검사 10개가 기준 실행의 `FAIL`에서 Skill 사용 시 `PASS`로 바뀌었습니다. 결과, 미실행 항목, 무효 시나리오는 [평가 기록](evals/iterations/iteration-2-with-skill.md)에 정리되어 있습니다.
 
