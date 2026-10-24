@@ -98,7 +98,9 @@ API key can be inherited via environment without printing it.
 |---|---|
 | Assess, interview, Markdown and Word documents | Default setup's Python environment |
 | Consultation report PDF in Chinese, English, Japanese, Korean or Spanish | Default setup: PyMuPDF and bundled report fonts; no Pandoc or TeX required |
-| Template-based CV/letter PDF | Pandoc, Tectonic or XeLaTeX, Poppler, and output-language fonts; agent installs missing tools and verifies a real render |
+| Template-based CV/letter PDF | Tectonic or XeLaTeX (LuaLaTeX/pdfLaTeX for Latin script only), Poppler, and output-language fonts; no Pandoc. Agent installs missing tools and verifies a real render |
+| Word page measurement (`check_pages.py` on `.docx`) | LibreOffice with `soffice` or `libreoffice` on PATH; without it `DOCX_NOT_MEASURED` blocks `check_apply` |
+| A selected report font (`meta.cjk_font` applied to the report) | Pandoc plus Tectonic or XeLaTeX |
 | CJK template-based CV PDF | A usable XeTeX engine plus xeCJK and the selected fonts; LuaLaTeX/pdfLaTeX alone do not satisfy this capability |
 | Japanese form PDF | Follow the template's Word/LibreOffice export workflow; prepare its converter only when requested |
 | GitHub-specific research | Reuse or prepare official GitHub CLI `gh`; existing login may be needed, and remains with the user |
@@ -167,9 +169,9 @@ render a PDF when a PDF failed to appear. A capability that does not enter the
 scaffolding is a capability nobody uses.
 
 The fast check is sound about what is MISSING and silent about what works — no
-pandoc on PATH means no template-based CV PDF; bundled report PDFs still work.
-Pandoc plus an engine can both be
-present and still fail. Confirming a capability stays with `doctor.py`, which
+LaTeX engine where `render_cv.py` looks means no template-based CV PDF, and no
+`soffice` means Word page counts cannot be measured; bundled report PDFs still work.
+An engine can be present and still fail. Confirming a capability stays with `doctor.py`, which
 renders one. A warning may only fire when it is sure, or it becomes the line
 everyone filters out.
 

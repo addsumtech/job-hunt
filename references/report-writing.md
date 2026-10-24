@@ -568,8 +568,14 @@ Delivery also refuses prediction language in the report.
 Run `deliver.py` as the last step. It requires `report.md` and a verified report
 PDF and copies only the report and requested CV/application documents into
 `~/Downloads/<workspace-name>/`. For multiple workspaces serving one consultation,
-pass the **same `--to <consultation-folder>`** each time so the report and CV stay
-together. Quote that folder and its client files in the reply. The workspace and
+pass the **same `--to <consultation-folder>`** each time. The first delivery fills that
+folder; a later workspace, or another mode of the same workspace, goes to its own
+subfolder (named after the company and role, or the mode) instead of overwriting it,
+and `deliver.py` prints `NOTICE_SEPARATE_FOLDER`. A redelivery returns to the same
+place and removes its own files it no longer produces. Quote the folder named on the
+last line (`Tell the user these files are in: …`) and its client files in the reply.
+The hidden `.jobhunt-delivery.json` there records which workspace wrote each file;
+do not delete or edit it. The workspace and
 all audit evidence remain in their original location.
 
 PDF verification checks both recovered text and actual painted glyph IDs. A

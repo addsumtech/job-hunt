@@ -935,7 +935,8 @@ request permits `report_scope: preliminary` with `preliminary_request` recorded.
 Follow SKILL.md "Client deliverables" (write `report.md` after reading
 `references/report-writing.md`, render and review it, run `lint_no_prediction.py`,
 then `python3 scripts/deliver.py --workspace <ws>` last (client files go to `~/Downloads/<workspace-name>/`)). For several rounds of one
-consultation pass the same `--to <consultation-folder>`. If `deliver.py` refuses
+consultation pass the same `--to <consultation-folder>`; a later round lands in its own
+subfolder there instead of overwriting the first. If `deliver.py` refuses
 incomplete evidence, keep the draft and say what is missing; never copy files into
 the delivery by hand. A preliminary report needs `brief.preliminary_request`. Do not
 start a mock interview or another mode automatically.

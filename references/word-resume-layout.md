@@ -75,8 +75,11 @@ selection, the bundled report renderer may use its embedded fallback fonts as
 described below. Never describe those as Times New Roman or SimSun. A newer
 explicit user typography request overrides the reference template.
 Record a requested Chinese font in `meta.cjk_font` of the workspace profile.
-Delivery honors that selection before its bundled report fonts; a missing selected
-font is reported instead of silently substituted. Without an explicit selection,
+Where Pandoc and Tectonic/XeLaTeX are installed, delivery uses it for the report
+before its bundled fonts, and a selected font that fails is reported instead of
+silently substituted. Without that toolchain delivery uses the bundled fonts and
+prints `NOTICE_REPORT_FONT_NOT_APPLIED`; prepare the toolchain if the client asked
+for that font in the report, or tell them which font the report uses. Without an explicit selection,
 the bundled report renderer remains available without a TeX installation.
 
 ## Prevent source syntax in Word

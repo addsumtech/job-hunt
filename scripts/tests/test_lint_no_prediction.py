@@ -1131,3 +1131,13 @@ def test_a_yaml_comment_in_the_master_is_not_a_fact(tmp_path):
               "experience: []\n")
     ws, _master = _apply_round(tmp_path, master_text=master)
     assert lint.main(["--workspace", str(ws)]) == 1
+
+
+def test_an_explicit_file_that_is_not_there_is_exit_2(tmp_path, capsys):
+    """`--files` naming a missing path is "could not run" (exit 2, one receipt),
+    not a FileNotFoundError traceback with exit 1, which reads as findings."""
+    import journal
+    ws = tmp_path / "ws"; ws.mkdir()
+    assert lnp.main(["--workspace", str(ws), "--files", str(ws / "report.md")]) == 2
+    assert "not found" in capsys.readouterr().err
+    assert [r["verdict"] for r in journal.read_receipts(ws, lnp.GATE)] == ["could_not_run"]

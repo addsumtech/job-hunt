@@ -1025,7 +1025,18 @@ def main(argv=None) -> int:
               f"--record --master <profile.yaml> at apply-mode entry", file=sys.stderr)
         return 2
 
-    fp = json.loads(fp_path.read_text(encoding="utf-8"))
+    try:
+        fp = json.loads(fp_path.read_text(encoding="utf-8"))
+        if not isinstance(fp, dict) or not isinstance(fp.get("path"), str):
+            raise ValueError("no master path recorded")
+    except (OSError, UnicodeError, ValueError) as exc:
+        # A corrupt fingerprint verifies nothing; say so with the could-not-run
+        # code rather than a traceback and exit 1, which reads as "findings".
+        journal.receipt(ws, GATE, {}, "could_not_run",
+                        [f"NO_MASTER_FINGERPRINT: {fp_path} is unreadable ({exc})"])
+        print(f"cannot run {GATE}: NO_MASTER_FINGERPRINT — {fp_path} is unreadable; "
+              f"re-run with --record --master <profile.yaml>", file=sys.stderr)
+        return 2
     master = pathlib.Path(fp["path"])
     findings = []
     master_profile, readable = {}, False

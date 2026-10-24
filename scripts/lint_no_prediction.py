@@ -1165,6 +1165,11 @@ def main(argv: list[str] | None = None) -> int:
     if not files:
         return cannot_run(workspace,
                           f"no rendered file to scan under {workspace}")
+    # An explicit --files path that is not there is "could not run", not a
+    # traceback with exit 1 — the code a caller reads as "findings".
+    for path in files:
+        if not path.is_file():
+            return cannot_run(workspace, f"{path} not found")
 
     corpus = capture_corpus(workspace)
     findings: list[str] = []

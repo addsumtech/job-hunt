@@ -184,7 +184,9 @@ Run `scripts/deliver.py --workspace <ws>` last. It copies client files to
 `~/Downloads/<workspace-name>/`, with `报告/求职建议报告.pdf` and editable text;
 requested application files go under `简历/` and an interview brief under
 `面试准备/`. Use the same `--to` directory for
-workspaces serving one consultation. Keep audit records private. In discover,
+workspaces serving one consultation; a second workspace or mode lands in its own
+subfolder there (`NOTICE_SEPARATE_FOLDER`), never over the first. Quote the folder
+named on `deliver.py`'s last line. Keep audit records private. In discover,
 assess and interview, a source CV is not automatically redelivered. The reviewed
 PDF must survive delivery byte-for-byte. `--no-pdf` is an explicit format exception.
 If `deliver.py` refuses, keep the draft in the workspace and say what is missing;

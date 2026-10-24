@@ -430,6 +430,12 @@ CV goes to `简历/`, the interview brief to `面试准备/`, the report to `报
 letter is provided on demand; it is not the domestic default. Do not start a mock
 interview or another mode automatically.
 
+`deliver.py` never converts `cv.md` or `letter.md` to PDF. It copies the `cv.pdf` /
+`letter.pdf` that `render_cv.py` / `render_letter.py` or the Word export produced;
+when one is missing it delivers the Markdown/Word files, reports `NOTICE_PDF_MISSING`
+and exits 2. Produce the PDF and deliver again, or use `--no-pdf` only when the
+client asked for no PDF.
+
 CV typography: English uses Times New Roman and Chinese uses SimSun (宋体),
 including names and headings, unless the user explicitly requests otherwise. Verify
 embedded PDF fonts, not only DOCX settings. Preserve template font sizes and aim for a

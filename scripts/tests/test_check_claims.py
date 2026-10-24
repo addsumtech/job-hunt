@@ -160,6 +160,18 @@ def test_verifying_without_a_recorded_fingerprint_is_exit_2(tmp_path, capsys):
     assert "NO_MASTER_FINGERPRINT" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize("body", ["{not json", "[]", '{"sha256": "x"}', '{"path": 5}'])
+def test_a_corrupt_fingerprint_is_exit_2_with_one_receipt(tmp_path, capsys, body):
+    """A fingerprint that cannot be read verified nothing. It used to raise
+    (JSONDecodeError / TypeError / KeyError) and exit 1, the code for findings."""
+    ws = tmp_path / "ws"; ws.mkdir()
+    (ws / "tailored-profile.yaml").write_text("meta: {}\n", encoding="utf-8")
+    (ws / check_claims.FINGERPRINT).write_text(body, encoding="utf-8")
+    assert check_claims.main(["--workspace", str(ws)]) == 2
+    assert "NO_MASTER_FINGERPRINT" in capsys.readouterr().err
+    assert [r["verdict"] for r in journal.read_receipts(ws, "check_claims")] == ["could_not_run"]
+
+
 def test_each_run_leaves_exactly_one_receipt_including_the_exit_2_path(tmp_path):
     ws, _ = _setup(tmp_path, MASTER)
     check_claims.main(["--workspace", str(ws)])
