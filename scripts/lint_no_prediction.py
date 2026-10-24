@@ -43,6 +43,21 @@ positive on output this skill's own files mandate:
   not being estimated is not a forecast. Only a closed refusal clause is masked;
   a later prediction and any number remain visible to the scan.
 
+* Dates carrying a four-digit year (`2026/11/30`, `09/2021`) and `24/7`. A
+  deadline is not a score, and neither is a support rota.
+
+The candidate's own facts are part of that capture lookup in two forms only,
+both bound by hash: the CV that evidence-blocks.json names, and — in apply mode,
+which builds no evidence blocks — the master profile master-fingerprint.json
+names (`check_claims.py --record`), parsed to its YAML leaves and never inside
+the workspace.
+
+The vocabulary bans the OUTCOME forecast, and only that. A word of chance or
+certainty fires when it governs this candidate receiving an interview, a place on
+the shortlist or an offer — not when it governs a question being asked
+(`面试中大概率会被问到系统设计`) or names a subject (`概率论`, `maximum likelihood
+estimation`), which are interview preparation and a posting's requirement.
+
 The one allowlist: where an employer publishes its own rubric, the skill may walk the
 candidate through THAT scale, in the employer's wording, with the source named. Quoting
 an employer's scale is reporting. Treating it as a conclusion is inventing.
@@ -53,16 +68,21 @@ itself is absent -- there is nothing to append to.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import pathlib
 import re
 import sys
+
+import yaml
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 import journal  # noqa: E402
 import vocab  # noqa: E402
 import report_locales as locales  # noqa: E402
+# Derived, not re-typed: the file check_claims.py --record writes at apply entry.
+from check_claims import FINGERPRINT as MASTER_FINGERPRINT  # noqa: E402
 
 GATE = "lint_no_prediction"
 
@@ -78,6 +98,22 @@ VERDICT_LABELS = tuple(sorted(
 _URL = re.compile(r"https?://\S+")
 # A planning horizon, not a score. modes/assess.md §10 mandates the table.
 ROADMAP_HORIZON = re.compile(r"(?<![0-9])30\s*/\s*60\s*/\s*90(?![0-9])")
+# Dates and the round-the-clock idiom, not scores. `截止 2026/11/30` and `24/7
+# on-call` both fired SCORE_PATTERN (measured 2026-10-24) on a report's
+# application deadline and a posting's own support rota. A date is recognised by
+# its YEAR — a 19xx/20xx component at either end of the chain (`2026/11/30`,
+# `2021/09`, `2025/26`, `30/11/2026`, `09/2021`) — because no score has a
+# four-digit year as its numerator or its denominator. A bare `11/30` stays a
+# finding: day/month and n/m are indistinguishable without the year.
+_D = r"[0-9０-９]"
+_YEAR = r"(?:[1１][9９]|[2２][0０])" + _D + r"{2}"
+_SLASH = r"[/／]"
+_DATE = re.compile(
+    r"(?<![0-9０-９.．])(?:"
+    + _YEAR + _SLASH + _D + r"{1,2}(?:" + _SLASH + _D + r"{1,2})?"
+    + r"|" + _D + r"{1,2}" + _SLASH + r"(?:" + _D + r"{1,2}" + _SLASH + r")?" + _YEAR
+    + r")(?![0-9０-９])(?![.．][0-9０-９])")
+ROUND_THE_CLOCK = re.compile(r"(?<![0-9０-９])[2２][4４]\s*[/／]\s*[7７](?![0-9０-９])")
 _MOCK_OPEN = re.compile(r"^\s*MOCK-[A-Z]+-V1\s*$")
 _MOCK_CLOSE = re.compile(r"^\s*END-MOCK-[A-Z]+-V1\s*$")
 _QUOTE_FIELD = re.compile(r"quote=")
@@ -126,8 +162,33 @@ _SCORE = re.compile(
 # 出勤率. A ban that fires on honest, mandated content is a ban that gets
 # switched off. These are the words that describe GETTING THE JOB, and
 # nothing else.
-_ZH_RATE = ("概率|通过率|命中率|录取率|录用率|成功率|入围率|中签率|面试率|"
-            "机率|機率|錄取率|錄用率|成功機會|勝算")
+#
+# 概率 is ALSO the name of a subject. 「熟悉概率论与数理统计」 is one of the most
+# common requirements on a data or ML posting, and a report that quotes the
+# requirement it is assessing blocked delivery as a forecast (measured
+# 2026-10-24: DELIVER_REPORT_PREDICTION, exit 2). So the word is exempt when the
+# next morpheme makes it the subject — 概率论 / 概率统计 / 概率分布 / 概率模型 —
+# and NOT exempt once an outcome stands in front of it: 录用概率模型 is still
+# a hiring probability, whatever noun follows it.
+_PROB_SUBJECT_ZH = (r"(?:论|論|统计|統計|分布|模型|图模型|圖模型|密度|编程|編程"
+                    r"|[与和及與]\s*(?:数理|數理)?\s*(?:统计|統計))")
+_OUTCOME_BEFORE_PROB_ZH = (r"(?:面试|面試|录用|錄用|录取|錄取|入围|入圍|通过|通過|成功|"
+                           r"中签|上岸|进面|offer)\s*")
+# Predicting the interview QUESTIONS is the prep job, not a forecast of the
+# outcome: `面试中大概率会被问到系统设计，请准备一个例子` blocked delivery
+# (measured 2026-10-24). 被问到 / 问到 / 追问 / 考察 / 涉及 … — the object is a
+# question or a topic. `让你` / `要求你` only with a verb of explaining or
+# producing, because `大概率会让你进入下一轮` is the outcome again. Bare 大概率
+# fires through 概率 below, so the release has to be granted there as well as on
+# the hedge list — and ONLY for 大概率, the idiom; 录用概率 never reaches it.
+_ZH_ASKED = (r"(?:会|将|还会|也会)?(?:被)?(?:问到|问及|问起|问你|问|追问|深挖|考察|考查|"
+             r"考到|考你|聊到|聊|谈到|提到|提问|涉及|围绕|聚焦|"
+             r"(?:让|要求)你(?:讲|解释|介绍|描述|展开|画|写|设计|手写|演示|举例))")
+_ZH_RATE = (_OUTCOME_BEFORE_PROB_ZH + r"(?:概率|机率|機率)"
+            r"|(?<!大)(?:概率|机率|機率)(?!" + _PROB_SUBJECT_ZH + r")"
+            r"|(?<=大)概率(?!" + _PROB_SUBJECT_ZH + r")(?!" + _ZH_ASKED + r")"
+            r"|通过率|命中率|录取率|录用率|成功率|入围率|中签率|面试率|"
+            r"錄取率|錄用率|成功機會|勝算")
 # The real report said 不提供匹配分或录用概率. Consume only named quantities,
 # conjunctions and a clause ending; no arbitrary text or numeric estimate can
 # hide inside this exception. Double negations are not refusals.
@@ -221,12 +282,27 @@ _FORECAST_NL = (r"\bwaarschijnlijkheid\b"
                 r"|\b(?:kans|kansen)\b[^.!?]{0,40}\b(?:" + _NL_LIKELIHOOD + r")\b"
                 r"|\b(?:" + _NL_LIKELIHOOD + r")\b[^.!?]{0,25}\b(?:kans|kansen)\b"
                 r"|\bkrijgt\b[^.!?]{0,40}\b(?:gesprek|uitnodiging|aanbod)\b")
-_FORECAST_FR = (r"\b(?:probabilité|probabilités|chances? d[eu']"
-                r"(?:\s|’)?(?:être|obtenir|décrocher))\b")
-_FORECAST_ES_IT = (r"\b(?:probabilidad|probabilidades|probabilità)\b")
-_FORECAST_JA = (r"可能性が[^。！？]{0,10}高い|見込みが[^。！？]{0,10}高い|確率"
+# The probability NOUN is also the name of a subject in every one of these
+# languages — `probabilités et statistiques`, `probabilidad y estadística`,
+# 確率論, 확률론 — and a posting's own requirement quoted in a report is not a
+# forecast. Same exemption as _PROB_SUBJECT_ZH, same narrowness: the subject has
+# to be named right next to the word.
+_FORECAST_FR = (r"(?<!théorie des )(?<!calcul des )(?<!distribution de )"
+                r"\b(?:probabilité|probabilités)\b"
+                r"(?!\s+(?:et\s+statistiques?|conditionnelles?)\b)"
+                r"|\bchances? d[eu'](?:\s|’)?(?:être|obtenir|décrocher)\b")
+_FORECAST_ES_IT = (r"(?<!teoría de la )(?<!teoría de )(?<!distribución de )"
+                   r"(?<!teoria della )(?<!calcolo delle )(?<!distribuzione di )"
+                   r"\b(?:probabilidad|probabilidades|probabilità)\b"
+                   r"(?!\s+(?:y\s+estad[ií]stica|e\s+statistica|condicional|condizionata)\b)")
+# 確率的 is "stochastic" (確率的勾配降下法 = SGD), not a chance of anything.
+_JA_PROB = (r"(?:合格|内定|採用|通過|面接|選考)\s*(?:の)?\s*確率"
+            r"|確率(?!論|統計|分布|モデル|過程|的|密度|変数)")
+_FORECAST_JA = (r"可能性が[^。！？]{0,10}高い|見込みが[^。！？]{0,10}高い|" + _JA_PROB +
                 r"|受かる見込み|通る見込み")
-_FORECAST_KO = r"확률|가능성이\s*[^.!?]{0,10}?(?:높|큽)|합격할 것"
+_KO_PROB = (r"(?:합격|채용|면접|서류)\s*확률"
+            r"|확률(?!\s*(?:론|통계|분포|모델|적|과정|변수|밀도))")
+_FORECAST_KO = _KO_PROB + r"|가능성이\s*[^.!?]{0,10}?(?:높|큽)|합격할 것"
 
 # ---------------------------------------------------------------------------
 # The ADVERB and ADJECTIVE forms. Measured 2026-09-08: the patterns above cover
@@ -275,12 +351,38 @@ _LIKELY = (r"(?<!the most )(?<!a most )(?<!the )(?<!a )(?<!an )(?<!this )(?<!tha
            r"(?<!its )(?<!their )(?<!our )likely"
            r"(?!\s+(?:\w+\s+)?(?:cause|reason|explanation|probe|question|topic|"
            r"source|culprit|outcome|scenario|route|path|next step)\b)")
-_HEDGE_EN = (r"very likely|almost certainly|quite likely|highly likely"
+# Predicting the QUESTIONS is the interview-prep job, not a forecast of the
+# outcome. `面试中大概率会被问到系统设计，请准备一个例子` blocked delivery
+# (measured 2026-10-24) — the sentence the interview mode exists to write — and
+# so did `The interview will probably focus on system design`. The hedge is
+# released only when what it governs, immediately after it, is being ASKED or a
+# topic COMING UP; `大概率会通过` and `will probably get an interview` keep it.
+# The object list for `get/face … questions` is closed for the same reason:
+# `get an interview` must not borrow the exemption that `get an interview
+# question` earns.
+# `asked to interview` / `asked back` is the invitation itself, so `asked` only
+# releases the hedge when it is not followed by one.
+_EN_ASKED = (r"\s+(?:to\s+)?(?:be\s+)?(?:asked|quizzed|tested|probed|pressed|grilled"
+             r"|questioned|challenged)\b"
+             r"(?!\s+(?:to\s+(?:interview|come\s+in|attend|meet|join)|back\b"
+             r"|for\s+an?\s+(?:interview|second|follow-up|final)))"
+             r"|\s+(?:to\s+)?(?:come\s+up|ask|cover|include|involve|focus|feature|probe"
+             r"|test|dig|explore|revolve|center|centre|touch\s+on|start\s+with"
+             r"|open\s+with|begin\s+with|consist)\b"
+             r"|\s+(?:to\s+)?(?:get|face|hear|see|encounter|field)\s+"
+             r"(?:(?:an?|some|the|several|a\s+few|follow-up|technical|behaviou?ral"
+             r"|coding|system[- ]design|tough|hard|interview)\s+)*"
+             r"(?:questions?|follow-ups?|probes?|prompts?|case\s+stud(?:y|ies)"
+             r"|exercises?|take-homes?)\b")
+_HEDGE_EN = (r"(?:very likely|almost certainly|quite likely|highly likely"
              r"|most " + _LIKELY + r"|" + _LIKELY +
-             r"|probably|certainly|surely|doubtless")
+             r"|probably|certainly|surely|doubtless)(?!" + _EN_ASKED + r")")
 _OUTCOME_EN = (r"interview|offer|callback|call back|short-?list(?:ed|ing)?|hired"
                r"|invited|invitation|accepted|through to the next round")
-_HEDGE_ZH = r"很可能|多半|大概率|八成|十有八九|极有可能|极可能|应该能|多半会"
+# _ZH_ASKED (defined beside _ZH_RATE, which needs it for bare 大概率) is the
+# Chinese half of the same release.
+_HEDGE_ZH = (r"(?:很可能|多半|大概率|八成|十有八九|极有可能|极可能|应该能|多半会)"
+             r"(?!" + _ZH_ASKED + r")")
 _OUTCOME_ZH = r"面试|录取|入围|offer|通过初筛|拿到|进面"
 _HEDGE_DE = r"h[o\u00f6]chstwahrscheinlich|wahrscheinlich|vermutlich|sicherlich"
 _OUTCOME_DE = (r"vorstellungsgespr[a\u00e4]ch|einladung|eingeladen|zusage|angebot"
@@ -339,6 +441,203 @@ _HEDGED_FORECAST = "|".join([
     _hedged(_HEDGE_KO, _OUTCOME_KO, latin=False),
 ])
 
+
+# ---------------------------------------------------------------------------
+# CERTAINTY. The hedges above are words of PROBABILITY, and a forecast does not
+# need one. Measured 2026-10-24, all three exit 0 and delivered:
+#
+#   你肯定能拿到面试，进面基本稳了。
+#   You will definitely get an interview. An interview is almost guaranteed.
+#   这个岗位你很有希望拿到 offer，十拿九稳。
+#
+# The certainty words cannot simply join the hedge lists, because the hedge
+# lists fire on PROXIMITY to an outcome noun, and certainty words are the most
+# common words in interview advice: `面试前一定要准备…`, `肯定的是…`, `you
+# should definitely prepare a system-design example`, `面接では必ず志望動機を
+# 聞かれます`. Each of those sits a few characters from 面试 / interview / 面接
+# and none is a forecast.
+#
+# So a certainty word fires only when it governs the candidate RECEIVING an
+# outcome — the outcome is the object of the verb it modifies (`definitely
+# get an interview`, `肯定能拿到面试`, `必ず内定をもらえます`) — or when the
+# outcome is the SUBJECT and certainty is its predicate (`an interview is almost
+# guaranteed`, `进面基本稳了`, `内定は確実です`). `一定要` / `肯定的是`, a modal of
+# NECESSITY (`通過する必要`, `통과해야`), and a negated guarantee (`不一定能`,
+# `无法保证`, `not guaranteed an interview`) are left alone: the first two are
+# advice, the last is the honest disclaimer.
+
+# The outcome as an English OBJECT. A following noun that turns it into a topic
+# of preparation releases it: `interview questions`, `interview format`, `offer
+# negotiation` are what the skill is for.
+_PREP_TAIL_EN = (r"(?!\s+(?:questions?|prep(?:aration)?|format|process|tips|practice"
+                 r"|panel|loop|feedback|negotiations?|logistics|slots?|schedule)\b)")
+_OUTCOME_OBJ_EN = (r"(?:an?\s+|the\s+|this\s+|that\s+|your\s+)?"
+                   r"(?:(?:job\s+)?offers?|interviews?|callbacks?|call[\s-]backs?"
+                   r"|shortlist\s+(?:place|spot)|(?:second|next|final)\s+round|onsite)\b"
+                   + _PREP_TAIL_EN)
+# `be interviewed` is deliberately absent: in interview prep the candidate
+# already HAS the interview, and `you will most likely be interviewed by the
+# hiring manager` is the format. `make the cut` is absent because a project
+# "making the cut" for the CV is the commoner sentence.
+_RECEIVE_EN = (r"(?:get|land|receive|secure|win|earn|snag|be\s+(?:offered|given|sent))\s+"
+               + _OUTCOME_OBJ_EN +
+               r"|be\s+(?:invited|shortlisted|hired|selected|called\s+back|asked\s+back"
+               r"|offered\s+the\s+(?:job|role|position)|moved\s+forward|accepted)\b"
+               r"|(?:pass|clear|get\s+(?:through|past)|make\s+it\s+(?:through|past))\s+"
+               r"(?:the\s+|this\s+|your\s+)?(?:(?:cv|resume|résumé|initial|first|phone"
+               r"|recruiter|hr)\s+)?(?:screen(?:ing)?|first\s+round|shortlisting|interviews?"
+               r"|ats(?!\s+(?:pars\w*|checks?|tests?|scans?|format\w*|keywords?)))\b"
+               r"|make\s+(?:the\s+)?shortlist\b")
+_CERTAIN_EN = (r"definitely|certainly|surely|undoubtedly|absolutely|unquestionably"
+               r"|almost\s+certainly|without\s+(?:a\s+)?doubt|no\s+doubt|for\s+sure"
+               r"|most\s+likely|very\s+likely|highly\s+likely|probably|likely")
+# `not guaranteed an interview`, `no one is guaranteed an interview` are the
+# honest disclaimer, not the forecast.
+_NOT_NEGATED_EN = (r"(?<!not )(?<!never )(?<!n't )(?<!n’t )(?<!no )"
+                   r"(?<!one is )(?<!body is )(?<!one's )(?<!one’s )")
+_CERTAIN_FORECAST_EN = (
+    # will definitely get an interview / are going to definitely be shortlisted
+    r"(?:\b(?:will|would)\b|'ll|’ll|\b(?:are|is|am|'re|’re)\s+going\s+to\b)\s*"
+    r"(?:" + _CERTAIN_EN + r")\s+(?:" + _RECEIVE_EN + r")"
+    # definitely will be shortlisted
+    r"|\b(?:" + _CERTAIN_EN + r")\s+(?:will|would)\s+(?:" + _RECEIVE_EN + r")"
+    # bound / sure / certain / guaranteed to get an interview — but not the
+    # imperative `make sure to` / `be sure to`, which is advice.
+    r"|(?<!make )(?<!makes )(?<!making )(?<!be )" + _NOT_NEGATED_EN +
+    r"\b(?:(?:almost|nearly|virtually|practically)\s+)?"
+    r"(?:guaranteed|bound|sure|certain|assured|destined)\s+to\s+"
+    r"(?:(?:" + _CERTAIN_EN + r")\s+)?(?:" + _RECEIVE_EN + r")"
+    # guaranteed an interview / assured of an offer
+    r"|" + _NOT_NEGATED_EN + r"\b(?:(?:almost|nearly|virtually|practically)\s+)?"
+    r"(?:guaranteed|assured\s+of)\s+" + _OUTCOME_OBJ_EN +
+    # an interview is almost guaranteed / the offer is a done deal. `to` after
+    # the predicate is the scheme or the format talking — `an interview is
+    # guaranteed to applicants who meet the minimum criteria`, `the interview is
+    # certain to include a case study` — so it releases the sentence.
+    r"|\b(?:(?:job\s+)?offers?|interviews?|callbacks?|shortlist\s+(?:place|spot))\s+"
+    r"(?:is|are|looks|seems|feels|(?:will|would|should)\s+be)\s+"
+    r"(?:(?:almost|nearly|virtually|practically|basically|essentially|pretty\s+much"
+    r"|all\s+but|more\s+or\s+less|as\s+good\s+as)\s+)?"
+    r"(?:guaranteed|assured|certain|a\s+given|a\s+(?:sure|safe)\s+(?:thing|bet)"
+    r"|a\s+done\s+deal|a\s+formality|a\s+foregone\s+conclusion|locked\s+in|yours)\b"
+    r"(?!\s+to\b)"
+    r"|\b(?:job|role|position)\s+is\s+(?:(?:basically|practically|as\s+good\s+as)\s+)?"
+    r"yours\b(?!\s+to\b)")
+
+# Chinese. RECEIVE is the outcome as an object. 面试 followed by 官/题/经验/…
+# is the interviewer or the material, not the invitation.
+_ZH_CLAUSE = r"[^，,。！？；;!?\n]"
+_ZH_IV = r"面试(?!官|题|问题|经验|技巧|准备|流程|形式|环节)"
+_RECEIVE_ZH = (
+    r"(?:拿到|拿下|获得|得到|收到|斩获|争取到|约到)\s*" + _ZH_CLAUSE + r"{0,6}?"
+    r"(?:" + _ZH_IV + r"|offer|录用|录取|复试|终面|[一二三四]面|HR\s*面)"
+    r"|拿\s*(?:offer|" + _ZH_IV + r")"
+    r"|进(?:入|到)?\s*(?:" + _ZH_IV + r"|下一轮|复试|终面|[一二三四]面|候选名单)|进面"
+    r"|(?:通过|过)(?:了)?\s*(?:简历(?:筛选|关)|初筛|筛选|笔试|" + _ZH_IV +
+    r"|复试|终面|[一二三四]面|HR\s*面|背调|ATS)"
+    r"|过筛|过(?=\s*[，,。！？；;!?]|\s*$)"
+    r"|被" + _ZH_CLAUSE + r"{0,3}?(?:录用|录取|选中|聘用|约面|邀请(?:参加)?面试)"
+    r"|入围|上岸|拿下(?:这个|该)?(?:岗位|职位|offer)")
+# 稳 alone is the first half of 稳定; it is a certainty word only directly
+# before the verb it guarantees (稳拿 / 稳过 / 稳进). 保证 is absent on purpose:
+# its commonest use in an honest report is the disclaimer — 没有任何方法能保证
+# 拿到面试 — and the negation sits too far back for a lookbehind to see.
+_CERTAIN_ZH = (r"肯定|一定|必然|必定|绝对|铁定|笃定|准保|保准|稳稳(?:地)?|稳(?=[拿过进])"
+               r"|毫无疑问|无疑|十拿九稳|板上钉钉|很有希望|大有希望|很有机会|大有机会|有望"
+               r"|有很大(?:的)?(?:希望|机会|把握)|有(?:十足|充分)(?:的)?把握")
+_ZH_NEGATOR_BEFORE = (r"(?<!不)(?<!未必)(?<!无法)(?<!不能)(?<!难以)(?<!没法)(?<!没有)"
+                      r"(?<!并非)(?<!无)(?<!不敢)(?<!不是)")
+_ZH_RECEIVED_NOUN = (r"(?:拿到|拿下|获得|收到)\s*" + _ZH_CLAUSE + r"{0,4}?"
+                     r"(?:" + _ZH_IV + r"|offer|录用|录取)"
+                     r"|offer|录用|录取|入围|进面|上岸|初筛|过筛"
+                     r"|通过(?:初筛|筛选|简历筛选|" + _ZH_IV + r")|简历筛选")
+# Bare 面试 as the subject takes only the unambiguous certainty predicates:
+# `英文面试没问题` says the candidate can handle an English interview, which
+# is an assessment of ability, not of the outcome.
+_ZH_SURE_PREDICATE = (r"稳了|稳稳的|稳的|没跑了?|跑不了|十拿九稳|板上钉钉|妥了|毫无悬念|有戏"
+                      r"|肯定的|必然的|铁定的|胜券在握|指日可待")
+_CERTAIN_FORECAST_ZH = (
+    # 肯定能拿到面试 / 一定可以顺利通过初筛 / 有望拿到 offer. The outcome verb must
+    # follow at once (a pronoun and a modal of ABILITY at most), which is what
+    # keeps 一定要… (necessity) and 肯定的是… (assertion) out.
+    _ZH_NEGATOR_BEFORE + r"(?:" + _CERTAIN_ZH + r")(?:地)?"
+    r"(?:你|您|他|她|也|都|还|就)?(?:能够|能|会|可以|可|将|就能|就会)?"
+    r"(?:顺利|直接|轻松|成功)?(?:地)?(?:" + _RECEIVE_ZH + r")"
+    # 进面基本稳了 / 拿到offer是板上钉钉的事 / 录用基本没跑了
+    r"|(?:" + _ZH_RECEIVED_NOUN + r")\s*(?:的事|这件事|这事)?"
+    r"(?:已经|基本上|基本|应该|肯定|绝对|完全|几乎|算是|就)?(?:是)?"
+    r"(?:" + _ZH_SURE_PREDICATE + r"|不成问题|没问题)"
+    r"|" + _ZH_IV + r"\s*(?:已经|基本上|基本|应该|肯定|绝对|完全|几乎|算是|就)?(?:是)?"
+    r"(?:" + _ZH_SURE_PREDICATE + r")"
+    # 拿到面试的机会很大 / 进面的希望很大 — a likelihood stated as high. 可能性
+    # stays allowed bare: the mandated disclaimer says 不给出…可能性估计.
+    r"|(?:" + _ZH_IV + r"|offer|录用|录取|入围|进面|上岸|通过(?:初筛|筛选|面试)"
+    r"|拿到(?:面试|offer))\s*(?:的)?(?:机会|希望|把握|可能性?|几率)"
+    r"(?:很|非常|相当|极|比较|较)?(?:大|高|不小|不低|很足|十足)")
+
+# Japanese / Korean / Spanish: the same two shapes. A modal of necessity after
+# the outcome verb (必要 / なければ / 해야 / 하세요) is advice, not a forecast.
+_RECEIVE_JA = (r"(?:面接|内定|採用|合格|選考|書類選考|一次面接|二次面接|最終面接|オファー)"
+               r"(?:に|を|が|へ|まで)?(?:呼ばれ|進め|進ん|進む|進み|もらえ|貰え|もら|獲得"
+               r"|通過|通り|通る|通れ|受か|招かれ|案内され)"
+               r"|採用され|合格(?:でき|する|します|です)")
+# Necessity (必要 / なければ) and a negated certainty (とは限らない — "not
+# necessarily") both follow the verb in Japanese.
+_JA_NECESSITY = (r"(?![^。！？]{0,6}?(?:必要|なければ|べき|ください|ましょう|ように"
+                 r"|とは限|わけでは|保証はな|保証され|かどうか))")
+_CERTAIN_FORECAST_JA = (
+    r"(?:間違いなく|確実に|必ず|きっと|絶対(?:に)?|ほぼ確実に)[^。！？]{0,8}?"
+    r"(?:" + _RECEIVE_JA + r")" + _JA_NECESSITY +
+    r"|(?:内定|採用|合格|書類通過|選考通過|面接(?:への)?(?:招待|案内))(?:は|が|も)?"
+    r"(?:ほぼ|まず|もう)?(?:確実|間違いない|間違いなし)")
+_RECEIVE_KO = (r"(?:면접|합격|채용|오퍼|서류(?:\s*전형)?|최종)\s*(?:을|를|에|이|가|은|는)?\s*"
+               r"(?:받|붙|통과|합격하|합격할|합격합|채용되|채용될|초대되|초대받|불려)")
+_KO_NECESSITY = (r"(?![^.!?。]{0,6}?(?:해야|하려면|하기\s*위해|하세요|하십시오|하도록"
+                 r"|하시길|하기를|것은\s*아니|건\s*아니|지\s*않|지는\s*않|는지))")
+_CERTAIN_FORECAST_KO = (
+    r"(?:확실히|반드시|분명히|분명|틀림없이|무조건|당연히)[^.!?。]{0,10}?"
+    r"(?:" + _RECEIVE_KO + r")" + _KO_NECESSITY +
+    r"|(?:합격|채용|면접\s*기회|오퍼|서류\s*통과)\s*(?:은|는|이|가)?\s*(?:거의\s*)?"
+    r"(?:확실(?!하지\s*않|치\s*않|하지\s*못)|따\s*놓은\s*당상|틀림없)")
+_RECEIVE_ES = (r"(?:conseguir|obtener|recibir|lograr)\w*\s+(?:una?\s+|la\s+|el\s+)?"
+               r"(?:entrevista|oferta|plaza|puesto)\b"
+               r"|\b(?:te|le|les|os)\s+(?:llam(?:ar[aá]n?|en|an)|invit(?:ar[aá]n?|en|an)"
+               r"|contrat(?:ar[aá]n?|en|an)|seleccion(?:ar[aá]n?|en|an)|ofrec(?:er[aá]n?|en)"
+               r"|ofrezcan|entrevist(?:ar[aá]n?|en|an))\b"
+               r"|\bpasar\w*\s+(?:el|la|los|las)\s+(?:filtro|criba|entrevista|selecci[oó]n"
+               r"|primera\s+ronda)")
+_CERTAIN_FORECAST_ES = (
+    # `no es seguro que te llamen` is the disclaimer.
+    r"(?<!no es )(?<!no está )(?<!nada )"
+    r"\b(?:sin\s+(?:ninguna\s+)?duda|definitivamente|seguro\s+que|seguramente"
+    r"|con\s+(?:toda\s+)?seguridad|ciertamente|de\s+seguro)\b[^.!?]{0,30}?"
+    r"(?:" + _RECEIVE_ES + r")"
+    r"|\b(?:entrevista|oferta|plaza|puesto)\s+(?:est[aá]|queda)\s+"
+    r"(?:(?:pr[aá]cticamente|casi)\s+)?(?:garantizad[oa]|asegurad[oa])\b"
+    r"|\b(?:tienes|tendr[aá]s)\s+(?:la|una|el)\s+(?:entrevista|oferta|plaza|puesto)\s+"
+    r"(?:(?:pr[aá]cticamente|casi)\s+)?(?:garantizad[oa]|asegurad[oa])\b")
+_CERTAIN_FORECAST = "|".join([_CERTAIN_FORECAST_EN, _CERTAIN_FORECAST_ZH,
+                              _CERTAIN_FORECAST_JA, _CERTAIN_FORECAST_KO,
+                              _CERTAIN_FORECAST_ES])
+
+# The probability NOUNS, minus the subject that shares their name. `probability
+# and statistics`, `maximum likelihood estimation`, `odds ratio` are posting
+# requirements and statistics vocabulary; a report quoting the posting it
+# assesses blocked delivery on them. Each exemption names the subject right next
+# to the word, so `the probability of an interview` and `your odds` still fire.
+_EN_PROBABILITY_NOUNS = (
+    r"|(?<!statistics and )(?<!statistics & )(?<!theory of )(?<!conditional )"
+    r"(?<!joint )(?<!marginal )(?<!posterior )(?<!prior )(?<!bayesian )"
+    r"\bprobabilit(?:y|ies)\b"
+    r"(?!\s+(?:theory|and\s+(?:mathematical\s+)?statistics|&\s+statistics"
+    r"|and\s+stochastic|distributions?|densit(?:y|ies)|mass\s+functions?"
+    r"|models?|modell?ing|spaces?|measures?|calibration)\b)"
+    r"|(?<!\blog[- ])(?<!\bat )\bodds\b(?!\s+ratios?\b)"
+    r"|(?<!maximum )(?<!log-)(?<!log )(?<!marginal )(?<!partial )(?<!quasi-)"
+    r"(?<!profile )(?<!pseudo-)(?<!empirical )"
+    r"\blikelihood\b(?!\s*(?:ratios?|functions?|estimat(?:es?|ion|ors?)|principle"
+    r"|equations?|maximi[sz]ation|-based|based|surfaces?|models?)\b)")
+
 _WORDS = re.compile(
     # `chances?` used to be bare. That was tolerable while this file only ever
     # read English — and it stopped being tolerable when the skill started
@@ -354,7 +653,7 @@ _WORDS = re.compile(
     r"(?:interview|offer|job|role|position|success|being|getting|landing|"
     r"a\s+callback|progressing)"
     r"|\bchances?\s+(?:are|is|were|seem|look|looked)\b"
-    r"|\bprobabilit(?:y|ies)\b|\bodds\b|\blikelihood\b"
+    + _EN_PROBABILITY_NOUNS +
     r"|\blikely to be (?:hired|interviewed|shortlisted|rejected)\b"
     r"|\b(?:strong|weak) candidate\b|\bwould pass\b|\bno-hire\b"
     r"|\b\d+(?:\.\d+)?\s*(?:percent|per cent)\b"
@@ -365,16 +664,21 @@ _WORDS = re.compile(
     r"|\bshoo-?in\b|\ba lock\b|\bin the bag\b"
     r"|(?:\b(?:will|would|should)\b|'ll|’ll)\s*(?:almost certainly\s+|certainly\s+|surely\s+|"
     r"probably\s+|likely\s+)?(?:get|land|receive|secure)\s+(?:an?\s+|the\s+)?"
-    r"(?:interview|offer|job|role|position)\b"
-    r"|\bexpect\s+(?:an?\s+|the\s+)?(?:interview|offer)\b"
+    r"(?:interview|offer|job|role|position)\b" + _PREP_TAIL_EN +
+    # `Expect the interview to cover caching` is the format, not the outcome.
+    r"|\bexpect\s+(?:an?\s+|the\s+)?(?:interview|offer)\b" + _PREP_TAIL_EN +
+    r"(?!\s+to\s+(?:cover|include|focus|involve|feature|probe|test|start|open|begin"
+    r"|last|take|run|consist|be\s+(?:held|run|conducted|virtual|remote|online"
+    r"|technical|structured|in\s+person|a\s+panel))\b)"
     r"|\byou'?re? (?:a )?(?:strong|weak|clear|obvious) (?:fit|match|candidate)\b"
     # 確率 is the Japanese/traditional spelling of 概率.
-    r"|確率"
+    r"|" + _JA_PROB +
     r"|" + _ZH_RATE + r"|" + _ZH_TENTHS + r"|" + _ZH_PERCENT_SPELLED
     + r"|" + _FORECAST_DE + r"|" + _FORECAST_NL + r"|" + _FORECAST_FR
     + r"|" + _FORECAST_ES_IT + r"|" + _FORECAST_JA + r"|" + _FORECAST_KO
     + r"|" + _JA_TENTHS
-    + r"|" + _HEDGED_FORECAST,
+    + r"|" + _HEDGED_FORECAST
+    + r"|" + _CERTAIN_FORECAST,
     re.IGNORECASE)
 _ATTRIBUTION = re.compile(r"^\s*>?\s*(?:—|--|-|Source:|来源[:：])\s+.*https?://\S+")
 
@@ -534,6 +838,57 @@ def journaled_captures(workspace: pathlib.Path) -> list:
     return sorted(out)
 
 
+def master_profile_strings(workspace: pathlib.Path) -> list:
+    """The candidate's master profile, as bound at apply-mode entry. Else [].
+
+    Apply mode never builds evidence-blocks.json, so before this the candidate's
+    own CV was never a trusted source there: a report quoting `Reduced p99 latency
+    by 40% for the ranking service` word for word from the master was refused at
+    delivery, and the cheapest way past it was to delete a true number.
+
+    `check_claims.py --record` writes master-fingerprint.json at apply entry —
+    the master's path and sha256 — and the claim gate already treats that file
+    as the candidate's source of truth. The same binding is honoured here, on
+    the same terms as the evidence CV: the bytes on disk must still hash to the
+    recorded value, and only numbers quoted WITH their captured neighbours are
+    masked (mask_copied_numbers is unchanged).
+
+    Three narrowings, each closing an off switch:
+
+    * The master must lie OUTSIDE the workspace. It always does
+      (`<profile_dir>/profile.yaml` vs `<profile_dir>/applications/<slug>/`), and
+      a fingerprint naming report.md or tailored-profile.yaml would let the text
+      under scan authorise its own numbers.
+    * Leaves are PARSED from the YAML, never read as raw text. A comment is not
+      a fact about the candidate — check_claims learned that from a `PhD` that
+      existed only in a YAML comment.
+    * Hash and parse read the SAME bytes, so a file swapped between the two
+      reads cannot be trusted on the strength of the original's hash.
+
+    Anything unreadable returns [] — this only ever REMOVES findings, so a short
+    corpus fails closed.
+    """
+    try:
+        record = json.loads((workspace / MASTER_FINGERPRINT).read_text(encoding="utf-8"))
+        expected = record["sha256"]
+        master = pathlib.Path(record["path"])
+        if not isinstance(expected, str):
+            return []
+        root = workspace.resolve()
+        master = (master if master.is_absolute() else workspace / master).resolve()
+        if master == root or root in master.parents:
+            return []
+        data = master.read_bytes()
+        if hashlib.sha256(data).hexdigest() != expected:
+            return []
+        profile = yaml.safe_load(data.decode("utf-8"))
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError, yaml.YAMLError):
+        return []
+    out: list[str] = []
+    _json_strings(profile, out)
+    return out
+
+
 def capture_corpus(workspace: pathlib.Path) -> str:
     """Everything this round actually CAPTURED, normalised for membership tests.
 
@@ -571,6 +926,7 @@ def capture_corpus(workspace: pathlib.Path) -> str:
             pieces.append(cv.read_text(encoding="utf-8"))
     except (OSError, ValueError, KeyError, TypeError):
         pass
+    pieces += master_profile_strings(workspace)
     for path in journaled_captures(workspace):
         try:
             node = json.loads(path.read_text(encoding="utf-8", errors="replace"))
@@ -690,6 +1046,8 @@ def mask_exempt_spans(line: str) -> str:
     the reported span still lines up with the original text."""
     masked = _URL.sub(lambda m: " " * len(m.group(0)), line)
     masked = ROADMAP_HORIZON.sub(lambda m: " " * len(m.group(0)), masked)
+    masked = _DATE.sub(lambda m: " " * len(m.group(0)), masked)
+    masked = ROUND_THE_CLOCK.sub(lambda m: " " * len(m.group(0)), masked)
     masked = _REFUSED_PREDICTION_ZH.sub(lambda m: " " * len(m.group(0)), masked)
     masked = _REFUSED_PREDICTION_EN.sub(lambda m: " " * len(m.group(0)), masked)
     for label in VERDICT_LABELS:
@@ -832,8 +1190,10 @@ def main(argv: list[str] | None = None) -> int:
         print("NOTICE_CAPTURED_NUMBERS: a number this round captured is exempt, but "
               "only when quoted WITH the words around it — the neighbours are what "
               "make it a quotation rather than a reuse of the digits. The candidate's "
-              "own CV counts only while evidence-blocks.json binds it by hash. So: "
-              "quote the captured wording, bind the evidence, or drop the number. A "
+              "own CV counts only while evidence-blocks.json binds it by hash, or — "
+              "in apply mode — while master-fingerprint.json (check_claims.py "
+              "--record) still matches the master profile. So: quote the captured "
+              "wording, bind the evidence, or drop the number. A "
               "fit score or an outcome probability is never exempt.", file=sys.stderr)
     journal.receipt(workspace, GATE, hashes,
                     "fail" if findings else "pass", findings)
