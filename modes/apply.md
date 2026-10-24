@@ -147,7 +147,8 @@ it reads is `<workspace>/claims.yaml`. **Append a row at the moment you write ea
 REFRAME or KEYWORD-INSERT.** A term in the tailored CV that is neither in the
 master profile nor sourced by a row here is `UNSOURCED`, and `check_apply.py` will
 not let the package be delivered over it. A title that lost a subordinate-rank word
-(`Assistant Manager` → `Manager`) or a status marker (`(in progress)`) is
+(`Assistant Manager` → `Manager`), a status marker (`(in progress)`) or a publication
+status (`(under review)`, `(submitted)`, `preprint`, 审稿中) is
 `QUALIFIER_STRIPPED`, and an employer or institution shortened into a different name
 is `ORG_TRUNCATED`; both block delivery the same way. Restore the real wording; a
 claims row is only for a genuine, sourced equivalence.

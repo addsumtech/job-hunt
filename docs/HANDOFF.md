@@ -8,12 +8,12 @@
 ## 当前状态
 
 - 四个模式（apply、assess、discover、interview）都已上线；`evals/` 已建成，第 2 轮评估记录在 `evals/iterations/`。
-- 版本：manifest 与 README 徽章写的是 1.2.3，但 GitHub 上最新的 tag 和 Release 停在 v1.2.0，1.2.1 到 1.2.3 没有打 tag。
+- 版本：1.3.0（2026-10-24）。1.2.1 到 1.2.3 没有单独打 tag，修复并入 1.3.0。
 - `make check`（2026-10-24，Python 3.11 venv）：
 
 ```
-5591 passed, 8 skipped
-LOSSLESS: 1317/1317 baseline lines accounted for across 55 files, 88 waived
+5739 passed, 8 skipped
+LOSSLESS: 1317/1317 baseline lines accounted for across 57 files, 88 waived
 check_conventions --ci: exit 0
 NO_HIDDEN_CHARS
 ```
