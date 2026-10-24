@@ -1,3 +1,45 @@
+# Mode: apply
+
+## Entry conditions
+
+An assessment should exist. Its verdict decides how this mode opens, and only one
+of the five stops it:
+
+- `强烈建议投` / `值得投` — enter.
+- `可以冲刺` (stretch) and `大概率被筛掉` (likely_screen_out) — **enter.** These do
+  not block: building a solid application for a role the candidate is reaching for
+  is not a defect, and refusing here would systematically underserve exactly the
+  people this skill is for — stretch candidates and career switchers. Say the
+  verdict out loud, then do the work well.
+- `硬性阻断` (blocked) — **ask once**: "this is a legal-level barrier, not a
+  phrasing problem — still want to apply?" If the user says yes, proceed and do the
+  work properly. Ask once, not every step; a second ask is nagging, and a silent
+  refusal is deciding for them.
+- `证据不足—不出结论` (insufficient_evidence) — this is a refusal, not a level. Say what could not be read
+  (the posting, the CV, an illegible region of an image source) and get that first.
+
+No assessment at all is not a blocker either: run apply, and say plainly that no
+fit assessment was made.
+
+## On entering this mode
+
+The workspace path is `paths.workspace(name, company, role, date)` (Step 4), so it needs
+the company and role. As soon as you have them, create that directory and record the
+entry, before writing any artifact into it — `check_apply.py` requires the record, and
+the hash is what proves the file you read is the file on disk:
+
+```bash
+python3 scripts/enter_mode.py --workspace <workspace> --mode apply \
+    --because "<why apply, in one line, from what the user asked>"
+```
+
+Fingerprint the master once Step 1 has fixed which master and which CV language this
+run uses (the end of Step 1 below).
+
+## Fast path
+
+**Fast path (reduce friction for the common case).** When the user already hands you a parseable CV *and* a clear posting (URL or pasted text) and is not building from scratch, do not gate every step with its own round-trip. Do the work, then present the parsed profile, the extracted requirements, and the tailoring plan **together in one message**, and proceed unless the user objects or corrects something. Still run every step and the non-negotiable three-judge review loop — this only collapses the *confirmation* round-trips, never the analysis or the judges. Reserve the full step-by-step interview for when information is genuinely missing (building a CV from scratch, an unreachable posting, or ambiguous requirements).
+
 ## Step 0 — Interview the user
 
 Make a **single `AskUserQuestion` call** with up to 4 questions. Drop any question the user already answered in their opening request; keep the rest.
@@ -5,16 +47,18 @@ Make a **single `AskUserQuestion` call** with up to 4 questions. Drop any questi
 Use the host's supported question mechanism and limits. Never invent a missing
 tool or use an unavailable interaction mode just to reproduce this example.
 
-On a host without that tool — codex, another agent, or a Claude Code **subagent**, which does not get it either — the requirement is the SHAPE, not the tool: the same questions, in ONE message, each with concrete lettered options rather than an open prompt. Never degrade to one question per turn; a four-round interrogation before any work is what makes people abandon the run. With no interactive user at all, state the assumptions you proceeded on and carry them into the completion message. Measured: ten of the fifteen with_skill eval runs recorded this tool as unavailable. See `references/portability.md`.
+On a host without that tool — codex, another agent, or a Claude Code **subagent** — the requirement is the SHAPE, not the tool: ask the same questions in ONE message, each with lettered options. Never degrade to one question per turn. With no interactive user at all, state the assumptions you proceeded on and carry them into the completion message. See `references/portability.md`.
 
 1. **CV source** — Do you have a CV to use, or should I build one for you? (If they choose *build*, follow up: can you share an example whose style I should mimic, or should I design a clean template?)
 2. **Target region** — offer the three clusters (see `references/cv-craft.md §2`): **(1) Anglophone developed** (US, Canada, UK, Ireland, Australia, NZ), **(2) EU / EEA** (NL, DE, FR, BE, ES, IT, Nordics, …), **(3) East & SE Asia** (China, Japan, Korea, Singapore, Malaysia, Thailand), plus **Other**. The region options ARE these clusters — do **not** promote an individual country to its own top-level choice even when it is a returning user's saved default (e.g. the **Netherlands is offered *inside* EU / EEA**, never as a separate region). Once they pick a cluster, confirm the **specific country** (it refines length/photo/personal-data conventions) and the **CV language**: English for Cluster 1; **English or the official local language** for Clusters 2 and 3 (match the posting when unsure). Set `meta.target_market`, `meta.language`, and — for a non-built-in language — `meta.headings`. This drives formatting, content conventions, and the rendered language.
 
-   **A saved profile is never an answer to this question.** The instruction above to drop questions the user already answered means answered *by the user, in this request* — not found in a file. A master profile's `meta.target_market` records where a PREVIOUS application went; a CV is a record of what someone has done, and nothing in it says where they now want to work. Reading a region off it is the same class of error as reading a salary floor off a payslip.
-
-   The cost is not cosmetic, because this one field arms the personal-data interlock. A returning user whose master says `nl` (Cluster 2) who is now applying in the US gets `_suppress_personal_data` returning False, and a photo or date of birth reaches a CV that US employers route straight to rejection. The reverse is just as wrong: inheriting a Cluster-1 market strips the Bewerbungsfoto a German employer expects. **Ask it every run, of every user, saved profile or not.**
-
-   Discover mode carries the same rule for the same reason (`modes/discover.md`, "Before Step 0"). Assess and interview also confirm the market under their own entry rules. A market explicitly confirmed for this target in the current conversation does not need to be asked again merely because the mode changed.
+   **A saved profile is never an answer to this question.** `meta.target_market` records a
+   previous application, and this field arms the personal-data interlock (a wrong market
+   can put a photo or date of birth on a US CV, or strip the photo a German employer
+   expects). Ask it every run, unless the market was explicitly confirmed for this target
+   earlier in the current conversation. "Already answered" means answered *by the user, in this
+   request*, never found in a file. Assess and interview also confirm the market under their own
+   entry rules; a market already confirmed for this target in this conversation does not need to be asked again.
 3. **Output formats** — Markdown / PDF / .docx (multi-select).
 4. **Motivation letter** — Do you want a cover/motivation letter as well?
 
@@ -46,6 +90,17 @@ The canonical profile schema is `assets/profile.example.yaml`. Everything downst
 
 **One candidate has one CV per language, and saving a new one never overwrites another language's.** A Chinese CV is a different document from an English one — different conventions, length rules and personal-data expectations — not a translation of it, so a user who supplies both has two masters: `profile.yaml` and `profile.<lang>.yaml` beside it. **Save through `python3 scripts/save_profile.py --name <name> --profile <file>`, never by writing the path yourself.** It resolves the slot by reading each existing master's own `meta.language` rather than trusting a filename, so a second English CV goes back into the legacy `profile.yaml` instead of becoming a duplicate; it backs up what it replaces; and it refuses a profile with no `meta.language`, because the unsuffixed slot is where a legacy English master usually lives and dropping an untagged CV there is the overwrite this is here to prevent. On the read side the same rule runs backwards: tailor from the master whose language matches the CV language chosen in Step 0, and say which file you took as the base. Reaching for the English master to build a Chinese CV throws away the one the user wrote for exactly that purpose.
 
+**Then fingerprint that master.** The path comes from `scripts/paths.py` and takes the CV
+language, because one candidate can have one master per language; without it this
+resolves to `profile.yaml` and the provenance gate checks a Chinese CV against an
+English master:
+
+```bash
+python3 scripts/check_claims.py --workspace <workspace> \
+    --master "$(python3 -c "import sys;sys.path.insert(0,'scripts');import paths;print(paths.master_for_language('<name>', '<cv language>'))")" \
+    --record
+```
+
 ## Step 2 — Job posting → structured requirements
 
 Read `references/job-posting-extraction.md` and follow it.
@@ -58,10 +113,6 @@ Read `references/job-posting-extraction.md` and follow it.
   `role_title`, `company`, `seniority`, `location`, `must_haves`, `nice_to_haves`,
   `responsibilities`, `keywords`, `company_values_tone`, `red_flags`, `salary_range`,
   `application_type`.
-  This list used to be nine. `company` is what `check_letter.py` verifies the letter's
-  recipient against, and `application_type: structured` is the only signal that routes
-  to the supporting-statement branch — the document a UK NHS or Civil Service panel
-  actually scores. Dropping either is silent: the run simply never produces it.
 - **Detect a structured / competency-based application.** Use `structured` when the employer requests a supporting statement, criterion-by-criterion evidence, a competency response or a structured application form. Essential / Desirable headings or a framework name alone do not change a CV application into a statement. Read `references/structured-applications.md`, confirm any genuinely ambiguous requested document, and preserve an explicitly requested CV alongside the statement.
 - **Confirm the must-haves and keywords with the user** before moving on.
 - After confirmation, write the extracted and confirmed posting to `posting.yaml` in the application workspace (defined in Step 4 below). This persists the posting for re-runs and the user's records.
@@ -72,7 +123,7 @@ Read `references/gap-analysis.md` and follow it.
 
 - Build the **strong / partial / missing** table comparing the profile to the requirements, each row backed by evidence from the CV.
 - **Run the responsibility-evidence pass** (`gap-analysis.md §1`): for each of the posting's `responsibilities[]`, classify the candidate's strongest real evidence `demonstrated / adjacent / none`. This aligns the CV to the *day-job*, not just the requirements checklist — a `demonstrated` responsibility buried in the CV becomes a LEAD-WITH instruction; a `none` on a core responsibility is a real fit gap to surface.
-- **Record the before-tailoring FIT SNAPSHOT in internal `fit-snapshot.md`** (`gap-analysis.md`, keyword-coverage section): must-have coverage ("X of N strongly evidenced" + per-must-have table), responsibility match ("M of K core responsibilities demonstrated"), and the seniority/domain read in one line each, ending with an honest **apply verdict** (strong apply / worth applying / stretch / likely screen-out / blocked). Include the required disclaimer (a count of evidence, not a forecast of the outcome). Use it to explain the meaningful before/after changes in the client report, without copying the internal count block.
+- **Record the before-tailoring FIT SNAPSHOT in internal `fit-snapshot.md`** (`gap-analysis.md` §4, "FIT SNAPSHOT"): must-have coverage ("X of N strongly evidenced" + per-must-have table), responsibility match ("M of K core responsibilities demonstrated"), and the seniority/domain read in one line each, ending with an honest **apply verdict** (strong apply / worth applying / stretch / likely screen-out / blocked). Include the required disclaimer (a count of evidence, not a forecast of the outcome). Use it to explain the meaningful before/after changes in the client report, without copying the internal count block.
 - Present the **tailoring plan** as the four lists: **AMPLIFY / REFRAME / KEYWORD-INSERT / HONEST-GAPS**.
 - **Non-standard candidate?** If the profile shows an employment gap >6 months, a domain/function switch vs. the posting, a seniority mismatch (over- or under-leveled), an extended absence/re-entry, very thin experience (student/new-grad), a **senior-leadership/executive** profile, a **military-to-civilian** transition, or an **internationally-trained/relocating** candidate, read `references/candidate-situations.md` and apply the matching honest-positioning playbook **before** building the tailoring plan. These are the candidates the skill helps most.
 - **Non-technical or regulated role?** If the target is not a software/research/engineering job (e.g. clinical, sales, trades, legal, finance, public-sector, creative, teaching, hospitality), read `references/role-families.md` and apply that family's conventions — what to surface first and how competence is evidenced — when shaping the tailoring plan and section order. The metric-in-every-bullet default doesn't fit these; the qualitative-evidence rule in `gap-analysis.md §2` does.
@@ -97,10 +148,6 @@ REFRAME or KEYWORD-INSERT.** A term in the tailored CV that is neither in the
 master profile nor sourced by a row here is `UNSOURCED`, and `check_apply.py` will
 not let the package be delivered over it.
 
-That matters because the wrong way out is the easy one. Faced with `UNSOURCED`
-and no spec for this file, the two visible escapes are to delete a keyword the
-candidate has genuinely earned — the under-selling failure this skill names as
-its own — or to invent a row shape. Neither is necessary: the file is six keys.
 
 ```yaml
 - term: PACS export                       # the exact string as it appears in the CV
@@ -285,46 +332,6 @@ PyMuPDF. Consultation report PDFs use bundled fonts and do not require TeX.
 - Scripts need their dependencies: `pip install -r requirements.txt` (PyYAML, python-docx).
 - Standalone LaTeX PDF output needs a LaTeX engine — `tectonic` is recommended. Without it, **Markdown and .docx still work**, and the renderer emits a `.tex` file you can compile later.
 
-## Entry conditions
-
-An assessment should exist. Its verdict decides how this mode opens, and only one
-of the five stops it:
-
-- `强烈建议投` / `值得投` — enter.
-- `可以冲刺` (stretch) and `大概率被筛掉` (likely_screen_out) — **enter.** These do
-  not block: building a solid application for a role the candidate is reaching for
-  is not a defect, and refusing here would systematically underserve exactly the
-  people this skill is for — stretch candidates and career switchers. Say the
-  verdict out loud, then do the work well.
-- `硬性阻断` (blocked) — **ask once**: "this is a legal-level barrier, not a
-  phrasing problem — still want to apply?" If the user says yes, proceed and do the
-  work properly. Ask once, not every step; a second ask is nagging, and a silent
-  refusal is deciding for them.
-- `证据不足—不出结论` (insufficient_evidence) — this is a refusal, not a level. Say what could not be read
-  (the posting, the CV, an illegible region of an image source) and get that first.
-
-No assessment at all is not a blocker either: run apply, and say plainly that no
-fit assessment was made.
-
-## On entering this mode
-
-Record the entry before doing anything else — `check_apply.py` requires it, and the
-hash is what proves the file you read is the file on disk:
-
-```bash
-python3 scripts/enter_mode.py --workspace <workspace> --mode apply \
-    --because "<why apply, in one line, from what the user asked>"
-# The master path comes from scripts/paths.py, never hand-built — and it takes
-# the CV LANGUAGE, because one candidate can have one master per language.
-# Without it this resolves to profile.yaml every time, and the provenance gate
-# then checks a Chinese CV against an English master: real skills read as
-# UNSOURCED, and skills the candidate does not have in this language pass.
-#   python3 -c "import sys;sys.path.insert(0,'scripts');import paths;print(paths.master_for_language('<name>', '<cv language>'))"
-python3 scripts/check_claims.py --workspace <workspace> \
-    --master "$(python3 -c "import sys;sys.path.insert(0,'scripts');import paths;print(paths.master_for_language('<name>', '<cv language>'))")" \
-    --record
-```
-
 ## Gate commands, in the order they run
 
 **Confirmed statement-only structured applications:** first write the sourced
@@ -376,28 +383,12 @@ python3 scripts/check_render_freshness.py --workspace <ws> --round <n>
 python3 scripts/check_apply.py --workspace <ws>
 ```
 
-**The `--record` runs are setup; the runs without it are the checks.** `check_claims
---record` and `check_render_freshness --record` store a baseline and verify nothing —
-their receipt says `baseline_recorded`, and `check_apply.py` reports a gate whose LATEST
-receipt is one of those as `NOT_VERIFIED`. So the order above is not cosmetic: run each
-verifying pass **after** the last `--record` for that gate. On a round 2 or a resumed
-run this bites — re-recording the dispatch hashes for the new round leaves the previous
-round's verification behind, and only the new round's verifying run clears it.
-
-**`check_apply.py` also fails on any gate in `journal.jsonl` whose latest receipt says
-`fail`** — including gates it does not require by name. A gate that ran, found something
-and was left failing blocks the package; fix the finding and re-run that gate.
-
-**Every round runs the WHOLE pre-dispatch block again, not just the tailoring.** After any
-edit to `tailored-profile.yaml` or to a rendered artifact — which is what a round 2 IS —
-re-run `check_personal_data`, `check_claims`, `lint_cv`, and `check_pages`/`check_letter`/
-`check_word_limits` where they apply, before dispatching the judges again.
-
-This is not a style preference. `check_apply.py` re-hashes each required gate's recorded
-`input_hashes` against the bytes on disk and reports `STALE_RECEIPT` when they differ: a
-gate's pass is a claim about the file it read, and after an edit it is a claim about a file
-that no longer exists. A round-2 package whose gates were only run in round 1 will be
-refused, correctly, at the very end — after the judges have been paid for.
+**Run each verifying pass after the last `--record` for that gate**: a `--record` receipt
+says `baseline_recorded` and `check_apply.py` reports it as `NOT_VERIFIED`. It also
+fails on any gate whose latest receipt is `fail`. **Every round re-runs the whole
+pre-dispatch block** after any edit (`check_personal_data`, `check_claims`, `lint_cv`,
+and `check_pages`/`check_letter`/`check_word_limits` where they apply); otherwise
+`check_apply.py` reports `STALE_RECEIPT` at the very end.
 
 ## `honest-stop.yaml` — required whenever the loop ends without a PASS
 
@@ -423,69 +414,23 @@ evidence:                          # the judge findings the classification rests
 - `poorly_built` — a judge rejected over something fixable that tailoring should have
   caught. A tailoring miss to own and, budget permitting, fix.
 
-## Hand the artifacts over — `deliver.py`, not a sentence in the final message
+## Hand the artifacts over
 
-A workspace under `~/.claude/job-profiles/` is where the skill works, and it is
-not where a person looks. Nobody browses a dotfile directory, and a path pasted
-into a chat message is gone the moment the session scrolls. So the last step of
-every mode is a command, not a claim:
-
-```bash
-python3 scripts/deliver.py --workspace <ws>
-```
-
-Delivery uses two child folders, whose names `deliver.py` writes in Chinese for every client: `简历/` (application documents) for `简历.docx`, `简历.pdf` and other requested application documents; `报告/` (report) for `求职建议报告.pdf` (the advice report) and its editable text. Filenames never include the employer, role or internal workspace slug.
-
-Author `report.md` for **every full consultation**, respecting explicit chat-only/no-file requests and answering the client's actual
-question in their language: conclusion, supporting evidence, relevant career
-constraints or facts still to confirm, and practical next steps. Tool defects,
-adapter errors, tests, developer diagnostics and internal review logs belong only
-in the private workspace, never in this client report. Do not copy an internal
-`completion.md` into it. A narrow text edit remains in chat; it does not initiate report delivery.
-
-Before drafting, read `references/report-writing.md`; revise the report for clear
-recommendations, specific reasons and actionable advice, then inspect the rendered
-pages. Preserve source facts, required labels and the user's approved formatting.
-
-After authoring `report.md`, run `lint_no_prediction.py --workspace <ws>`.
-Delivery also refuses prediction language in the report.
-
-Run `deliver.py` as the last step. It requires `report.md` and a verified report
-PDF and copies only the report and requested CV/application documents into
-`~/Downloads/<workspace-name>/`. For multiple workspaces serving one consultation,
-pass the **same `--to <consultation-folder>`** each time so the report and CV stay
-together. Quote that folder and its client files in the reply. The workspace and
-all audit evidence remain in their original location.
-
-PDF verification checks both recovered text and actual painted glyph IDs. A
-missing or refused PDF means incomplete delivery (exit 2); repair the cause and
-rerun before declaring completion. `--no-pdf` is only for an explicit user format
-exception. A cover letter is provided on demand; it is not the domestic default.
-Do not automatically start a mock interview or another mode.
-
-
-For the default Word layout and fictional bilingual examples, see [references/word-resume-layout.md](../references/word-resume-layout.md).
-
-When Word files are delivered, `check_pages.py` requires LibreOffice to measure them independently. A `DOCX_NOT_MEASURED` finding means Word pagination was not verified; install the dependency and rerun, or clearly report the remaining limitation. A passing LaTeX PDF does not establish Word pagination.
-
-For native Word/LibreOffice export, complete ordinary save and print dialogs directly with the host's available UI tools. Disabled document controls can mean a modal dialog is waiting, not that the application is frozen. Before asking the user to restart or take over, inspect the current app windows and accessibility state; if the dialog is absent from that view, inspect a screenshot and use the host's supported interaction method. Save a separately named output when checking another renderer so existing artifacts remain intact, then verify that the file exists and inspect its text and page layout before reporting success.
-
-Request user intervention only for an observed blocker the available tools cannot resolve or an action that requires human participation under the host's rules. State what is actually visible and what was attempted; do not diagnose a crash from grey controls or one unchanged tool response. This document-export guidance does not change the login, verification or refusal rules for job websites.
+Follow SKILL.md "Client deliverables": write `report.md` (read
+`references/report-writing.md` first), render and review it, run
+`lint_no_prediction.py`, then `python3 scripts/deliver.py --workspace <ws>` last (client files go to `~/Downloads/<workspace-name>/`). The
+CV goes to `简历/`, the interview brief to `面试准备/`, the report to `报告/`. A cover
+letter is provided on demand; it is not the domestic default. Do not start a mock
+interview or another mode automatically.
 
 CV typography: English uses Times New Roman and Chinese uses SimSun (宋体),
-including names and headings, unless the user explicitly requests otherwise.
-For reports, follow `references/word-resume-layout.md`: an explicitly selected
-font/template wins; otherwise the portable renderer may use its embedded fonts.
-Verify embedded PDF fonts, not only DOCX settings. Preserve template font sizes
-and aim for a well-filled page; any added gap before a section heading is at
-most one blank line. Never invent content or shrink fonts just to fill a page.
+including names and headings, unless the user explicitly requests otherwise. Verify
+embedded PDF fonts, not only DOCX settings. Preserve template font sizes and aim for a
+well-filled page; never invent content or shrink fonts just to fill a page. The default
+Word layout, fictional bilingual examples and native Word/LibreOffice export dialogs are
+in `references/word-resume-layout.md`.
 
-## Judge lanes
+When Word files are delivered, `check_pages.py` needs LibreOffice to measure them. A
+`DOCX_NOT_MEASURED` finding means Word pagination was not verified: install it and
+rerun, or report that limitation. A passing LaTeX PDF does not establish Word pagination.
 
-1. `must_have_fit >= 3` (the candidate plausibly belongs in the pile — a real human would not bin this on sight). You are the *broad* filter: a deliberate, honestly-positioned stretch applicant (career-changer, re-entry, someone genuinely a notch junior) should clear *your* gate at a 3; it is the **Hiring Manager** who owns the strict `>= 4` deep cut. Reserve a `must_have_fit` of 1–2 for a CV that is genuinely off-target or missing the core of the role, not for one that is a legitimate stretch. Rejecting every stretch here would defeat the skill's whole purpose — those are the candidates it most exists to help.
-
-- **Catch over-tailoring tells.** A Skills section that mirrors the posting's keyword list near-verbatim with no supporting evidence in any bullet is coverage-gaming, not strength — treat unsupported keyword density as an `evidence`/`credibility` concern and name the specific skills that appear with zero supporting context. The ATS screener (Judge 1) rewards literal keyword presence and structurally cannot catch stuffing; you are the only backstop.
-
-## Fast path
-
-**Fast path (reduce friction for the common case).** When the user already hands you a parseable CV *and* a clear posting (URL or pasted text) and is not building from scratch, do not gate every step with its own round-trip. Do the work, then present the parsed profile, the extracted requirements, and the tailoring plan **together in one message**, and proceed unless the user objects or corrects something. Still run every step and the non-negotiable three-judge review loop — this only collapses the *confirmation* round-trips, never the analysis or the judges. Reserve the full step-by-step interview for when information is genuinely missing (building a CV from scratch, an unreachable posting, or ambiguous requirements).

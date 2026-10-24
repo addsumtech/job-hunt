@@ -20,6 +20,12 @@ question needs.
 
 ## 0. Before the first question
 
+**Without an application package** (the user brought a posting and a CV but no apply run):
+create the workspace with `paths.workspace(...)` as assess does, extract the posting into
+`posting.yaml` per `modes/assess.md` §3, and save the CV the user gave you as `cv.md`.
+`check_mock.py` requires `posting.yaml` (`NO_POSTING` otherwise), and the first assessment
+pass reads `cv.md`.
+
 **Record the mode entry first, before reading anything else:**
 
 ```bash
@@ -27,11 +33,8 @@ python3 scripts/enter_mode.py --workspace <workspace> --mode interview \
     --because "<why interview, in one line, from what the user asked>"
 ```
 
-This writes the content hash of this file to `journal.jsonl`. `scripts/check_mock.py`
-fails the round with `NO_MODE_ENTRY` if the record is absent and `MODE_FILE_CHANGED` if
-this file was edited after you read it. That is not bookkeeping: this file is layer 1.5,
-loaded unconditionally on entering the mode rather than "if relevant", and a file skipped
-with nothing reporting it is a file that has been silently deleted.
+`scripts/check_mock.py` fails the round with `NO_MODE_ENTRY` without this record and
+`MODE_FILE_CHANGED` if this file changed after you read it.
 
 Then read `references/interview-shapes.md` in full. It holds the market × family loop
 shapes, the four band descriptors, and both closed tag sets — you cannot write
@@ -106,11 +109,9 @@ If the adapter returns 403 or "need login", report the source as unavailable and
   values returned byte-identical rows). Use `papers` as a company/role index only.
 ```
 
-**Why the COUNTRY RULE is first among equals.** `opencli nowcoder search "ASML 面试"`
-returns three real posts, all describing that company's **China entity** — 宣讲会, 笔试,
-then 二面 and an HR call. That is not the Veldhoven loop. The company name matches, the
-content is genuine, the process is the wrong one, and **nothing about it looks wrong.** The
-same held for Philips. This is the most dangerous failure available in this source.
+**The COUNTRY RULE comes first:** `opencli nowcoder search "ASML 面试"` returns genuine
+posts about the company's China entity — matching name, wrong process, nothing that
+looks wrong.
 
 ### `mock/question-log.yaml`
 
@@ -179,10 +180,8 @@ rejected:
 
 ## 3. Run ONE round, inline
 
-**The interviewer is you, in this conversation.** A spawned subagent has no channel to ask
-a question and wait for the human — `agents/hiring-manager.md:21` pastes its inputs at
-dispatch time and `:97` requires it to end with a fixed block. That is a mechanical fact,
-not a preference, and it decides the architecture before any trade-off analysis.
+**The interviewer is you, in this conversation** — a spawned subagent has no channel
+to ask a question and wait for the human.
 
 **One round per dispatch.** Finish the round, assess it, write the artifacts, and stop.
 Round n+1 starts fresh.
@@ -449,8 +448,6 @@ The `MOCK-ASSESSMENT-V1` block must actually assess something: at least one `BAN
 `posting.yaml` (`NO_COVERAGE_ROW`, which names the uncovered one). `mock/open-loops.md` and
 `mock/cheatsheet.md` must exist and be non-empty (`NO_OPEN_LOOPS`, `NO_CHEATSHEET`). None of
 these applies to `MOCK-PROVENANCE-V1`: `ROUND:` plus `FINDINGS: none` is its documented clean
-shape. Until 2026-08 none of them was checked at all, so headers plus `FINDINGS: none` in both
-blocks was a fully passing round — an assessor that produced nothing produced this exit 0.
 
 ## 8. Round n+1
 
@@ -479,44 +476,10 @@ Deliver the debrief report. The CV used by the assessors remains source material
 `deliver.py` does not copy or render it in this mode unless the user explicitly
 requests the existing application documents and you pass `--include-applications`.
 
-A workspace under `~/.claude/job-profiles/` is where the skill works, and it is
-not where a person looks. Nobody browses a dotfile directory, and a path pasted
-into a chat message is gone the moment the session scrolls. So the last step of
-every mode is a command, not a claim:
-
-```bash
-python3 scripts/deliver.py --workspace <ws>
-```
-
-Delivery uses two child folders, whose names `deliver.py` writes in Chinese for every client: `简历/` (application documents) for `简历.docx`, `简历.pdf` and other requested application documents; `报告/` (report) for `求职建议报告.pdf` (the advice report) and its editable text. Filenames never include the employer, role or internal workspace slug.
-
-Author `report.md` for **every full consultation**, respecting explicit chat-only/no-file requests and answering the client's actual
-question in their language: conclusion, supporting evidence, relevant career
-constraints or facts still to confirm, and practical next steps. Tool defects,
-adapter errors, tests, developer diagnostics and internal review logs belong only
-in the private workspace, never in this client report. Do not copy an internal
-`completion.md` into it. A narrow text edit remains in chat; it does not initiate report delivery.
-
-Before drafting, read `references/report-writing.md`; revise the report for clear
-recommendations, specific reasons and actionable advice, then inspect the rendered
-pages. Preserve source facts, required labels and the user's approved formatting.
-
-After authoring `report.md`, run `lint_no_prediction.py --workspace <ws>`.
-Delivery also refuses prediction language in the report.
-
-Run `deliver.py` as the last step. It requires `report.md` and a verified report
-PDF and copies only the report and requested CV/application documents into
-`~/Downloads/<workspace-name>/`. For multiple workspaces serving one consultation,
-pass the **same `--to <consultation-folder>`** each time so the report and CV stay
-together. Quote that folder and its client files in the reply. The workspace and
-all audit evidence remain in their original location.
-
-PDF verification checks both recovered text and actual painted glyph IDs. A
-missing or refused PDF means incomplete delivery (exit 2); repair the cause and
-rerun before declaring completion. `--no-pdf` is only for an explicit user format
-exception. A cover letter is provided on demand; it is not the domestic default.
-Do not automatically start a mock interview or another mode.
-
+Then follow SKILL.md "Client deliverables": write `report.md` (read
+`references/report-writing.md` first), render and review it, run
+`lint_no_prediction.py`, then `python3 scripts/deliver.py --workspace <ws>` last (client files go to `~/Downloads/<workspace-name>/`). Do
+not start another mode automatically.
 
 ## Self-check before reporting the session complete
 
@@ -580,18 +543,8 @@ believing you vetted it.
 
 ### Mock-interview session mechanics
 
-- **Information isolation.** The interviewer is inline and sees everything. The first
-  assessment pass sees the transcript, `posting.yaml` and `cv.md` — **the first assessment
-  pass does not see `interview-brief.md` or `claims.yaml`**, so it cannot credit the
-  candidate for a source fact they never said out loud. The second pass sees the transcript,
-  `claims.yaml` and `interview-brief.md` but not the rubric, and emits only
-  `UNSOURCED-FACT` / `OVER-CLAIM` / `CONTRADICTED`. Feeding the two passes different inputs
-  is what turns the honesty tripwire from an intention into a mechanism.
-- **One round per dispatch.** Assess, write the artifacts, stop. Round n+1 carries an
-  open-loops summary, never the full transcript.
-- **Flush the transcript after every answer**, not at the end of the round. A crashed
-  session then loses one answer instead of a round, and the assessors read a file rather
-  than this conversation.
+- Flush the transcript after every answer; the first assessment pass does not see
+  `interview-brief.md` or `claims.yaml` (see §3–§4).
 - **Bands, not scores.** `not_present` / `asserted` / `instanced` / `held_under_probe`, plus
   the non-band flag `contradicted`. They are unnumbered so they cannot be averaged, and
   `held_under_probe` is the ceiling on purpose: a higher band would require knowing what
@@ -600,7 +553,4 @@ believing you vetted it.
   "X out of Y"; a probability, likelihood or odds; "you would pass / fail / they would hire
   you"; "strong candidate" / "weak candidate" / "hire" / "no-hire"; any comparison to other
   candidates; any claim about what the interviewer thought or would conclude; or a rating on
-  a scale the employer did not publish. **The one exception**: where the employer publishes
-  its own rubric, you may walk the candidate through that published scale in the employer's
-  own wording, attributed, as a checklist of what the panel is told to look for. Quoting an
-  employer's scale is reporting; applying it as a verdict is fabrication.
+a scale the employer did not publish (the published-rubric exception above applies).

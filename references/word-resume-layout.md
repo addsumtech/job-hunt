@@ -105,3 +105,13 @@ text boxes, headers and footers are included. Native Word equations are allowed.
 Fix the indicated source or native formatting, re-render, re-export any paired
 PDF and repeat the visual review. A text check supplements page-by-page review;
 it cannot identify every ambiguous notation or replace inspection of the output.
+
+## Native export dialogs
+
+For native Word/LibreOffice export, complete ordinary save and print dialogs directly with the host's available UI tools. Disabled document controls can mean a modal dialog is waiting, not that the application is frozen. Before asking the user to restart or take over, inspect the current app windows and accessibility state; if the dialog is absent from that view, inspect a screenshot and use the host's supported interaction method. Save a separately named output when checking another renderer so existing artifacts remain intact, then verify that the file exists and inspect its text and page layout before reporting success.
+
+Request user intervention only for an observed blocker the available tools cannot resolve or an action that requires human participation under the host's rules. State what is actually visible and what was attempted; do not diagnose a crash from grey controls or one unchanged tool response. This document-export guidance does not change the login, verification or refusal rules for job websites.
+
+For reports, an explicitly selected font/template wins; otherwise the portable
+renderer may use its embedded fonts. Any added gap before a section heading is at
+most one blank line.

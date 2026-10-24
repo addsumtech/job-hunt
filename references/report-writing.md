@@ -497,7 +497,7 @@ user asks to fill the page, record a `minimum_content_bottom_pt` requirement and
 verify it alongside one-page pagination; a large blank bottom requires rework.
 Do not add invented experience, repeated claims or empty paragraphs to fill space.
 
-Delivery uses two child folders, whose names `deliver.py` writes in Chinese for every client: `简历/` (application documents) for `简历.docx`, `简历.pdf` and other requested application documents; `报告/` (report) for `求职建议报告.pdf` (the advice report) and its editable text. Filenames never include the employer, role or internal workspace slug.
+Delivery uses child folders whose names `deliver.py` writes in Chinese for every client: `简历/` (application documents) for `简历.docx`, `简历.pdf` and other requested application documents; `报告/` (report) for `求职建议报告.pdf` (the advice report) and its editable text; `面试准备/` for an interview brief when one is delivered. Filenames never include the employer, role or internal workspace slug.
 
 In `discover`, `assess` and `interview`, an existing CV is source material, so
 delivery copies only the report by default. Use `--include-applications` only

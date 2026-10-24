@@ -82,8 +82,10 @@ prove the live connection. Diagnose unsupported routes before using the bundled
 reader under [browser-fallback.md](browser-fallback.md).
 
 AnySearch's bundled entry is `third_party/anysearch/anysearch_cli.js`. Read its
-`doc` output for current command/parameter schemas; use `batch_search` for
-independent queries. It uses an HTTP API, not CDP. Anonymous quotas and service
+`doc` output for current command/parameter schemas. In discovery, run one recorded
+`search` per query through `run_tool.py --workspace`; the recorded wrapper accepts
+only one `search` per invocation, and an unrecorded `batch_search` leaves no
+per-query evidence. It uses an HTTP API, not CDP. Anonymous quotas and service
 failures are reported as such; do not rotate identities. An explicitly configured
 API key can be inherited via environment without printing it.
 

@@ -8,16 +8,10 @@ job listings with a provisional verdict on each. **What it does not do:** it nev
 chains into `apply`. Thirty rows do not become thirty CVs; the whole point of
 ranking a shortlist is to let a person choose.
 
-**The shortlist is written in the user's language** — spec §10: CVs follow the
-target market; assessments, shortlists and interview debriefs follow the user. A Dutch- or US-market round run by someone who
-writes to you in English produces an English `shortlist.md`, and that is ordinary
-output, not an edge case. Every literal `check_shortlist.py` requires the document
-to contain follows that language: the English and Chinese examples are below,
-and Japanese, Korean and Spanish templates are in
-[report-localization.md](../references/report-localization.md). The gate accepts
-all five. **Pick one and stay in it.** A document with English prose and Chinese
-furniture is worse than either language alone: it reads to the user as a bug, and
-no gate can report it, because both halves are individually correct.
+**Write the shortlist in the user's language, one language end to end** (CVs follow the
+target market; shortlists, assessments and debriefs follow the user). English and Chinese
+literals are below; Japanese, Korean and Spanish are in
+[report-localization.md](../references/report-localization.md). The gate accepts all five.
 
 Native report anchors (use the complete templates and real answers from the
 language contract; no invented retrieval or login state):
@@ -127,17 +121,11 @@ python3 scripts/enter_mode.py --workspace <ws> --mode discover \
     --because "<why discover, in one line, from what the user asked>"
 ```
 
-This writes a `mode_entry` record carrying **this file's content hash** into
-`journal.jsonl`. It is not bookkeeping: it is the half of the layer-1.5 backstop
-that a gate can see. `check_shortlist.py` fails the run with `NO_MODE_ENTRY` when
-the record is absent, and with `MODE_FILE_CHANGED` when the hash no longer matches
-the file on disk — meaning what was read is not what is now here, so re-enter and
-re-read. It is also what makes every receipt in this run stamped
-`"mode": "discover"` instead of `"unknown"`.
-
-Then read this file in full. Both halves matter: the gate below requires
-`shortlist.yaml` fields that are defined nowhere else, and the hash proves the
-definition you followed is the definition on disk.
+This writes a `mode_entry` with this file's content hash to `journal.jsonl`.
+`check_shortlist.py` fails with `NO_MODE_ENTRY` when it is absent and
+`MODE_FILE_CHANGED` when this file changed afterwards (re-enter and re-read).
+Then read this file in full: the `shortlist.yaml` fields the gate requires are
+defined only here.
 
 ## Entry conditions (any one)
 
@@ -147,10 +135,7 @@ definition you followed is the definition on disk.
 4. `assess` returned `stretch` and the user has not said they want that specific job.
 5. The user supplied two or more postings (ranking mode).
 
-Discover is **never** triggered as a side effect of another mode. The user starting
-it is the opt-in. Probing could not confirm whether read commands leave server-side
-traces (whether `linkedin inbox` marks a thread read, for instance), so there are no
-implicit calls.
+Discover is **never** triggered as a side effect of another mode; no implicit calls.
 
 ## Ownership
 
@@ -158,9 +143,6 @@ implicit calls.
 |---|---|
 | `profile.yaml` (never modified by any mode) | `searches/<YYYY-MM-DD>-<slug>/`, plus `search-preferences.yaml` — the one spine file discover owns |
 
-Discover is the **only** mode that writes `search-preferences.yaml`. `assess` reads
-it and must not create it: a file two modes write is a file whose contents nobody
-can account for.
 
 Workspace layout — **the path shape is load-bearing**, the resume-an-unfinished-run
 feature finds work by this shape:
@@ -174,8 +156,9 @@ feature finds work by this shape:
   shortlist.md               readable: §0 来源与读取质量, §0.1 触发原因, §0.2 披露
                              (English round: §0 Sources and read quality,
                               §0.1 Trigger, §0.2 Disclosure)
-  raw/<site>-<n>.json        adapter stdout, VERBATIM, never edited
-  raw/<site>-<n>.err         adapter stderr for the same call
+  raw/<site>-<n>.json        adapter stdout, VERBATIM, never edited (run_tool.py names
+                             it raw/<site>-<32-hex id>.json; <n> is that id)
+  raw/<site>-<n>.stderr.txt  adapter stderr for the same call
   raw/opencli-help/<site>.yaml   the adapter's own metadata for this run
   raw/auth-status.json       the auth probe output
   journal.jsonl              mode_entry + adapter_call records + gate receipts
@@ -209,24 +192,13 @@ experience_track: "medical imaging / MRI reconstruction"
 employer_types: ["国企", "外企"]     # cn only — see below; omit for other markets
 ```
 
-**`employer_types` is asked for a `cn` round and omitted everywhere else.** In the
-Chinese market the same job title means different work, hours, pay structure and
-security depending on whether the employer is a 大型私企, a 中小型私企, a 国企 or
-a 外企, and the adapter hands you that distinction for free: 51job returns
-`companyType` and `companySize` on every card, so a stated preference can be
-applied to real rows instead of guessed at. Ask it as a multi-select alongside
-the other preferences, and treat "no preference" as a legitimate answer rather
-than as all four.
+**`employer_types` is asked for a `cn` round only** (大型私企 / 中小型私企 / 国企 / 外企;
+51job returns `companyType` and `companySize` on every card) and omitted elsewhere.
+Ask it as a multi-select; "no preference" is a valid answer, not all four. It is a preference, not a filter: rank a
+row outside the chosen types lower and say its type in `why_matched`.
 
-It is a preference, not a filter: a row outside the chosen types is not dropped
-silently — it is ranked below and its `why_matched` says which type it is. The
-user asked for a lean, not a wall.
-
-**Every field here is asked, never inferred.** Reading a salary floor off a past
-payslip, an avoid-list off a CV, or a target market off the language someone happens
-to be typing in produces a file that looks like the user's preferences and is not —
-and because it is reused across every later round, one wrong inference quietly
-steers months of searching.
+**Every field here is asked, never inferred** — not from a payslip, a CV, or the
+language the user happens to type in. The file is reused across later rounds.
 
 - **First run** (the file does not exist): ask the questions above, in the
   user's language, in one pass. `salary_floor: null` is a legitimate answer and the
@@ -241,13 +213,6 @@ steers months of searching.
   them: preferences are durable, a brief is one round.
 
 ## Before Step 0 — region, then platforms, then the login hand-off
-
-**This order is not a suggestion, and getting it wrong costs the round.** Measured
-2026-09-06: a round opened by confirming a stored `search-preferences.yaml` whose
-`target_market` was `nl`, bundling the region into a yes/no confirmation of eight
-other fields. The user actually wanted China. Everything downstream — which
-adapters exist, which languages the queries run in, which convention table
-applies, whether the stored salary floor means anything — had to be redone.
 
 Run these three in order, before the trigger reason and before `brief.yaml`.
 
@@ -291,24 +256,12 @@ before calling a discovery adapter.
 | Netherlands · Germany · UK · rest of Europe | Indeed's **country site** (`nl.indeed.com`, `de.indeed.com`, `uk.indeed.com`) through the diagnosed browser route — see below | `linkedin` | the **`indeed` adapter** — it resolves locations against a US gazetteer and answers a London search with Ohio |
 | Middle East · anywhere with no convention table | Indeed's country site **if the official country directory lists one**, through the same browser route | `linkedin` | the **`indeed` adapter**, same reason; `target_market: other`, and say plainly there is no convention data for this market |
 
-**The Europe row used to read "— / `linkedin` / do not use: indeed", and that
-cost a round.** The ban belongs to the **installed adapter**, whose origin is
-hardcoded to `www.indeed.com`; it was never a statement about Indeed's Dutch,
-German or British site. But the table is what a round reads, and the paragraph
-that says so sits forty lines further down under Step 2 — so a European round
-stopped at "LinkedIn only", which is one source that needs a login. Measured
-2026-09-20 on a live Netherlands round: one of three directions was lost to
-LinkedIn navigation refusals, two of ten descriptions never loaded, and the
-delivered report had to tell the user only one source had been searched.
-
-So the country site is now in the no-login column, and it is reached the same way
-the Chinese site is — the diagnosed built-in browser route, never the adapter.
-**Expect it to refuse automated access**: Indeed served a Cloudflare challenge to
-the adapter on 2026-09-08, and a plain HEAD to `nl.indeed.com`, `de.indeed.com`
-and `uk.indeed.com` from this environment returned HTTP 403 on 2026-09-20 (the
-hosts resolve and answer, so the domains are right; the bot-block is real). A
-403 or a challenge is a **site refusal** — stop that site for the round and say
-so. It is never evidence that the country has no matching jobs.
+The ban in the last two rows belongs to the installed **`indeed` adapter** (origin
+hardcoded to `www.indeed.com`), not to Indeed's country sites. Read a country site
+through the built-in browser route (fallback reason `unsupported_extraction`, see
+`references/browser-fallback.md`). Expect a bot-block there: a 403 or a challenge is
+a **site refusal** — stop that site for the round and say so; it is never evidence
+that the country has no matching jobs.
 
 **No adapter covers a market's own boards, and that does not put them out of
 reach.** Employer career pages and market-native boards are readable through the
@@ -317,21 +270,13 @@ roles in the Netherlands, `academictransfer.com` is the canonical one. None of
 them were measured here, so treat a named board as a place to look rather than a
 verified adapter, and record what was actually read.
 
-**A site being absent from the "job listings" columns does not make it useless,
-and saying it has "no search command" is wrong.** `nowcoder` has a search command;
-`discovery-sources.md` records what it returns. It is an interview-experience
-(面经) source, not a job source. It informs a round but does not produce shortlist
-rows, because a forum thread is not a posting with a `source_id` a row can be
-traced to.
-
-For a Chinese campus round (`seniority: new_grad`), name Nowcoder as a place to
-read 面经 and 内推 threads alongside the shortlist — a pointer, not a row.
-`maimai`'s only read command is `search-talents`, the
-recruiter side, so it has nothing to offer a candidate. `upwork` is freelance
-work rather than employment.
-
-Get this wrong in the other direction and the cost is real: told that nowcoder
-"has no job-search command", a 校招 round skips the site most relevant to it.
+**A site being absent from the "job listings" columns does not make it useless, and
+saying it has "no search command" is wrong.** `nowcoder` has a search command, but it
+returns 面经; a forum thread is not a posting with a `source_id` a row can be traced to.
+`nowcoder` (面经/内推 threads), `maimai` (recruiter-side `search-talents` only) and
+`upwork` (freelance) produce no shortlist rows. For a Chinese campus round
+(`seniority: new_grad`), point to Nowcoder 面经 and 内推 threads in the report — a
+pointer, not a row.
 
 ### 3. Hand the login to the user, then wait
 
@@ -347,16 +292,10 @@ So say it plainly and wait:
 > It is a logged-in adapter, which `source-policy.md` puts in the yellow tier:
 > the search runs inside your own session, and account risk is not zero.
 
-**`opencli auth status` can be confidently wrong, so re-probe before you believe
-it.** Measured 2026-09-06: the quick probe reported `boss` as `not_logged_in`
-while the session was live — `opencli boss login` answered `already_logged_in`
-and `opencli auth status --site boss --full` returned `logged_in`. This is worse
-than the `unknown` case the probe section below describes, because the answer
-looks decided. **Before telling a user to log into a site the probe called
-`not_logged_in`, re-probe that site with `--full`.** A round that skips a site on
-a false negative reports a thin market that is not thin: in the measured round,
-`boss` turned out to hold the three best-matched postings of the day, and it was
-one wrong probe away from never being searched.
+**`opencli auth status` can be confidently wrong** (a quick probe once said `boss` was
+`not_logged_in` while `opencli boss login` answered `already_logged_in`). Before asking the user
+to log into a site the quick probe called `not_logged_in`, re-probe it with
+`opencli auth status --site <site> --full`.
 
 Only once the region is fixed, the platforms are named, and the sessions the
 round needs are actually live, go on to the trigger reason and `brief.yaml`.
@@ -430,7 +369,7 @@ profile that might change tomorrow. Before the first detail fetch, create the
 round-local snapshot once:
 
 ```bash
-python3 scripts/snapshot_profile.py --workspace . --profile <master-profile.yaml>
+python3 scripts/snapshot_profile.py --workspace <ws> --profile <master-profile.yaml>
 ```
 
 This writes `candidate-profile.yaml` without changing the master. If the source CV
@@ -505,8 +444,14 @@ the user's explicit completion/continue reply before a new linked round.
 
 ## Step 1 — probe the login state (three states, not two)
 
+Every live OpenCLI or browser read goes through one persistent browser session, so
+start it once for the task (`run_tool.py` refuses a live read without it). The auth
+probe is not a planned source, so run it **without** `--workspace` and save it into
+the round yourself:
+
 ```bash
-opencli auth status -f json > raw/auth-status.json
+python3 scripts/run_tool.py browser-session start
+python3 scripts/run_tool.py opencli auth status -f json > <ws>/raw/auth-status.json
 ```
 
 - `status: "logged_in"` — usable.
@@ -522,13 +467,10 @@ opencli auth status -f json > raw/auth-status.json
   verification; classify the actual page. Never run `opencli 51job login`; it does
   not exist.
 
-Also save each adapter's own contract before calling it — `check_no_write.py` reads
-it from here:
-
-```bash
-mkdir -p raw/opencli-help
-opencli <site> --help -f yaml > raw/opencli-help/<site>.yaml
-```
+Each adapter's own contract lands in `<ws>/raw/opencli-help/<site>.yaml`, which
+`check_no_write.py` reads. `run_tool.py --workspace <ws> opencli <site> …` saves it
+automatically before every recorded read; save it yourself only for a capture made
+by another runner.
 
 ## Step 2 — choose sources
 
@@ -543,37 +485,16 @@ every documented column populated. `indeed` also works without login but returns
 empty titles (Step 4). Use the command pairs and adapter metadata in
 `references/discovery-sources.md`; read the relevant source entry first.
 
-**`indeed` serves the US site only, and its `--location` is inert outside the US.**
-It does not fail on a non-US place — it resolves the name against a US gazetteer
-and returns US rows: `opencli indeed search … --location "London"` came back with
-every row in Columbus, Ohio (London, OH), exit 0, `classification: ok`; `--location
-"Manchester, United Kingdom"` returned California and New York (measured
-2026-08-16). So **for a `uk`, `nl` or `de` market, `indeed` is not the no-login
-default** — use `linkedin` and record in `§0` that `indeed` was skipped, with this
-reason. If you use it anyway, read every returned `location` before it becomes a
-row, and never let it produce a "no results" conclusion: the adapter searched a
-different country, which is not the same as the country having no jobs. Downstream,
-`check_shortlist.py` warns with `WARN_ROW_OUTSIDE_BRIEF_MARKET` on a row whose
-location names a country outside `brief.markets` — but an empty shortlist has no
-rows to warn about, so the only thing standing between a UK user and "there are no
-London backend roles" is this paragraph, read before the call.
-
-This restriction belongs to the installed **OpenCLI adapter**, not to Indeed's
-worldwide website. Select the country site from Indeed's official
-[country directory](https://www.indeed.com/countries), then use this round's
-`brief.locations` for cities within that country. Never reuse a previous test's
-`New York, NY` or infer the target country from the browser's current page.
-For `cn`, Indeed's country site is `https://cn.indeed.com/`; for `nl`, `de` and
-`uk` they are `https://nl.indeed.com/`, `https://de.indeed.com/` and
-`https://uk.indeed.com/`. A request for any of those markets must not run against
-`www.indeed.com` with only `--location` changed to the country.
-With the current US-only adapter, use the diagnosed built-in browser route on
-the Chinese site if Indeed is needed, or use the already-supported Chinese
-sources (`51job`, `boss`). Keep the original country-domain URLs for both
-search and detail; do not feed a Chinese posting's ID to the US-only detail
-command. Check each returned location against the requested country and city.
-If the regional site cannot be read, report that source limitation; never
-substitute US jobs or conclude that China has no matching jobs.
+**The `indeed` adapter serves the US site only** and resolves `--location` against a
+US gazetteer: `--location "London"` returned every row in Columbus, Ohio (exit 0,
+`classification: ok`). For `cn`, `uk`, `nl` or `de`, do not
+use the adapter: read the country site (`https://cn.indeed.com/`, `nl.`, `de.`, `uk.`;
+others from Indeed's [country directory](https://www.indeed.com/countries)) through
+the browser route in the region table, with this round's `brief.locations`, or use
+the region's other sources. Keep country-domain URLs for search and detail. Read
+every returned `location` against the requested country and city
+(`WARN_ROW_OUTSIDE_BRIEF_MARKET` only catches rows, not an empty result), and never
+turn a wrong-country or unreadable result into "no jobs in this market".
 
 ## Step 3 — generate queries in BOTH languages
 
@@ -585,48 +506,21 @@ and the resulting empty result looks exactly like "there are no such jobs".
 
 Record every query string in `brief.yaml.target_titles` so the round is reproducible.
 
-**Split the row budget across the query set BEFORE the first call — the cap is per
-site per round, not per query.** `max_rows_per_round` is 25 and a single
-`--limit 25` spends all of it, so a round that runs its first query at full limit
-has no budget left for the other nine and for the second language. That is not
-hypothetical: a measured round declared ten queries, ran one English query at
-`--limit 25`, and never issued the Dutch-language or medical-imaging queries at
-all — two of the three tracks the user asked for, missing from a shortlist that
-read like an answer to the whole brief.
+**Split the row budget across the query set BEFORE the first call — the cap is per site per round, not per query.**
+With N queries and a cap of R rows, run each at about `R // N`, rounding up for the
+tracks the user named first. Two or three queries at 8-12 rows beat one at 25. More
+coverage than one round allows is a second round with its own slug, never a raised cap.
 
-Divide first: with N queries and a cap of R rows, run each at roughly `R // N`,
-rounding up for the tracks the user named first and down for the speculative
-ones. Two or three well-aimed queries at 8-12 rows each beat one at 25. If the
-brief genuinely needs more coverage than one round's cap allows, that is a second
-round with its own slug — never a raised cap.
-
-**Then order them: most specific first, broadest last.** Dividing the budget is
-not enough on its own, because a broad query fills whatever budget it is given
-and a narrow one usually does not. Run `MRI reconstruction` before
-`medical imaging AI` before `machine learning engineer`, and hand the leftover
-rows back to the broad query at the end.
-
-The reason is what each query is worth to THIS candidate, not how many rows it
-returns. A specialist term is where their credential is a hard qualification and
-where few applicants compete; the generic term returns what every ML engineer in
-the market already sees. Measured: a round ran `machine learning engineer` first,
-at the full cap, and never reached `MRI reconstruction` at position six — the
-most expensive rows in the round were spent on its least informative query, and
-the candidate's own specialism went unsearched.
-
-So `brief.target_titles` is written in run order, specific to broad, and the
-order is part of the plan rather than the sequence they were thought of in.
-
-`check_shortlist.py` reports a declared query that appears in no adapter call as
-`QUERIES_DECLARED_NOT_RUN`, so under-searching is now visible rather than
-silent — but it fires at the END, after the calls are spent. The arithmetic above
-is what stops the round from getting there.
+**Then order them: most specific first, broadest last** (`MRI reconstruction` → `medical imaging AI` →
+`machine learning engineer`) and give leftover rows to the broad query last. Write
+`brief.target_titles` in that run order. A declared query that no adapter call ran is
+reported as `QUERIES_DECLARED_NOT_RUN`, but only at the end.
 
 ## Step 4 — run the search, read the exit code first
 
 Before the first retrieval, follow [Search completion coverage](../references/search-coverage.md):
 write `search-coverage.yaml` with the planned sources and directions and run
-`python3 scripts/check_search_coverage.py --workspace . --record-plan`.
+`python3 scripts/check_search_coverage.py --workspace <ws> --record-plan`.
 Use a direction's `query_by_source` when a source needs more specific terms,
 such as employer, city and recruitment year for WeChat; keep the ordinary
 job-board query as its default. Preregister the actual terms before reading.
@@ -717,7 +611,8 @@ nowhere else; `check_shortlist.py` requires all seventeen fields.
   verification: collected_unverified # fresh_verified|collected_unverified|stale_possible
   raw_text: "…the card text the evaluator actually saw…"
   why_matched: "…"                 # see the rule below
-  verdict: worth_applying          # the five levels, nothing else
+  verdict: stretch                 # the five levels, nothing else; a card_only row
+                                   # never carries strong_apply/worth_applying (Step 8)
   provisional: true                # always true in discover
   effort: evening                  # quick|evening|multi_day|not_closable
 ```
@@ -738,19 +633,11 @@ nowhere else; `check_shortlist.py` requires all seventeen fields.
 - De-duplicate across platforms on company + normalised title + location; keep the
   row with the higher `quality`.
 
-**Three fields anchor the row to the capture — and `title` is deliberately not one
-of them.** Verifying `source_id` alone let a row keep a real jobId and invent
-title, company, location, salary and `raw_text`: an identifier is one field to
-copy. So `check_shortlist.py` also requires
-
-- `raw_text` — the card text **copied**, not summarised and not translated. It is
-  checked in pieces against `raw/<site>-*.json` (a hand-joined card is never one
-  contiguous substring of the JSON) and most of it must be found there, or
-  `RAW_TEXT_NOT_IN_RAW` fires and names the parts that were not. Your own words
-  belong in `why_matched`. Normalising the title above is expected output, and is
-  exactly why the title is not the anchored field.
-- `id` — exactly `<site>-<source_id>`, or `BAD_ROW_ID`. It is the only thing tying
-  the id a reader quotes back to the capture the row was traced to.
+**`check_shortlist.py` anchors each row to its capture.** `raw_text` is the card text
+**copied** — not summarised or translated — and most of it must be found in
+`raw/<site>-*.json` (`RAW_TEXT_NOT_IN_RAW`). `id` is exactly `<site>-<source_id>`
+(`BAD_ROW_ID`). Your own words go in `why_matched`; normalising `title` is expected, which
+is why the title is not the anchored field.
 
 **`why_matched` is one of exactly three places where the no-fabrication fence is
 restated, and this is that restatement.** Cite the brief field and the raw field
@@ -814,17 +701,10 @@ the matching disclosure.** That is two obligations, and both are checked:
   See [report-localization.md](../references/report-localization.md) for both stamp
   sets before writing a Japanese, Korean or Spanish report.
 
-A YAML boolean is not a disclosure — nobody reading the round sees it. The distinction
-is load-bearing: a bounded detail review is still not a tailored application
-assessment. **规则：discover 的档位永不被带进 assess——assess 一律重算。**
+A YAML boolean is not a disclosure. **规则：discover 的档位永不被带进 assess——assess 一律重算。**
 
-If a card cannot support any level at all, the card is **dropped from the shortlist**
-and counted in `shortfall_reason` — name it there, with what was missing. It does
-**not** become a row carrying `insufficient_evidence`: that is an orthogonal refusal
-state, not a sixth level and not a listing, and `check_shortlist.py` would reject
-such a row with `BAD_VERDICT`. A shortlist row asserts "this posting exists and here
-is what I make of it"; a card you cannot read supports the first half and not the
-second, so it belongs in the shortfall, not in the list.
+A card that cannot support any level is **dropped from the shortlist** and named in `shortfall_reason`;
+it never becomes an `insufficient_evidence` row (`BAD_VERDICT`).
 
 ## Step 8 — detail fetch and CV mapping, bounded
 
@@ -840,15 +720,16 @@ fetch, is recorded in
 `shortlist.yaml.detail_fetch_exceptions` with a reason, but it does not bypass source limits or the
 matching-review cap. Unmapped reads use `detail_unmapped` as described above.
 
-Each detail call goes through `scripts/check_opencli_result.py` too, and its stdout
-lands in `raw/<site>-detail-<id>.json`. For every fetched detail selected for mapping,
+Each detail call goes through the same `run_tool.py --workspace <ws> opencli …`
+wrapper, which records and classifies it (do not run `check_opencli_result.py` again
+for it); its stdout lands in `raw/<site>-<n>.json` like any other read. For every fetched detail selected for mapping,
 write one `candidate-match.yaml` row with exact quoted job evidence, JSON-pointer CV
 evidence into `candidate-profile.yaml`, requirement type, screening role, match,
 recency, effort and role alignment. Do not create requirement rows from card text.
 Run the renderer before authoring the reader-facing summary:
 
 ```bash
-python3 scripts/check_candidate_match.py --workspace . --render --lang <zh|en|ja|ko|es>
+python3 scripts/check_candidate_match.py --workspace <ws> --render --lang <zh|en|ja|ko|es>
 ```
 
 Copy each rendered line beside that posting's direct link in `shortlist.md`; do not
@@ -876,7 +757,7 @@ sources:                        # one entry per site used
     identity_field: title
     identity_field_empty_rows: 0
     detail_command: "opencli 51job detail <jobId> --url <captured-url>"
-    raw_files: ["raw/51job-1.json"]
+    raw_files: ["raw/51job-0d4e9a7c2b1f4e3a8c6d5b2a1f0e9d8c.json"]
 rows: [...]
 ```
 
@@ -900,7 +781,7 @@ rows:
         recency: current              # current | recent | dated | undated
         effort: quick                 # quick | evening | multi_day | not_closable
         job_evidence:
-          - file: raw/51job-detail-173199597.json
+          - file: raw/51job-7b3c1e9f0a2d4c5e8f6a1b0c9d2e3f4a.json
             quote: "熟悉 Python/C++"
         cv_evidence:
           - path: /skills/Technical/0
@@ -908,7 +789,7 @@ rows:
     alignment:
       level_direction: lateral        # step_up | lateral | step_down | unclear
       domain_fit: same_domain         # same_domain | adjacent | cross_over | unclear
-      job_evidence: [{file: raw/51job-detail-173199597.json, quote: "算法工程师"}]
+      job_evidence: [{file: raw/51job-7b3c1e9f0a2d4c5e8f6a1b0c9d2e3f4a.json, quote: "算法工程师"}]
       cv_evidence: [{path: /experience/0/title, quote: "算法工程师"}]
   - id: 51job-173198362
     basis: card
@@ -926,7 +807,7 @@ row's original `raw_text` or direct URL.
 them, which is why `SOURCE_REPORT_MISSING` is that file's backstop.
 
 `raw_files` entries are **workspace-relative and keep the `raw/` prefix** —
-`raw/51job-1.json`, never the bare basename. One spelling, so that a name which
+`raw/51job-0d4e9a7c2b1f4e3a8c6d5b2a1f0e9d8c.json`, never the bare basename. One spelling, so that a name which
 resolves is a name that was captured; `SOURCE_REPORT_RAW_PATH` fires on the other
 one rather than letting a correct file report as a missing capture.
 
@@ -985,26 +866,19 @@ Obtained real postings:         no
 Degraded output type:           direction-level shortlist
 ```
 
-The last four answers ship **pre-filled as 否 / no**, in both blocks. That is the
-design: concealing a retry or a bypass has to be an active overwrite, not an
-omission — which is why the pre-filled answer matters as much as the label, and why
-`check_shortlist.py` checks the answer of every spelling it finds, not just the
-Chinese one, or the Japanese, Korean or Spanish template. It fires
-`DEGRADED_WITHOUT_DISCLOSURE` when the block is absent in all supported
-languages and `DISCLOSURE_INCOMPLETE` when a line is missing or an answer is blank.
-
-And the wording rule: **"没有匹配" is a claim, and it needs a receipt.** All-adapters-
-failed and genuinely-found-nothing produce the identical shape, so
-`EMPTY_RESULT_UNSUPPORTED` fires unless at least one adapter exited 0. If every
-adapter died, say *that*, not "there are no jobs".
+The last four answers ship pre-filled 否 / no; change one only if a retry or bypass
+actually happened. `check_shortlist.py` fires `DEGRADED_WITHOUT_DISCLOSURE` when no
+supported-language block is present and `DISCLOSURE_INCOMPLETE` when a line or
+answer is missing. **"没有匹配" needs a receipt:** `EMPTY_RESULT_UNSUPPORTED` fires
+unless at least one adapter exited 0. If every adapter failed, say that.
 
 ## Step 10 — gates, and cite the receipts
 
 ```bash
-python3 scripts/check_no_write.py       --workspace .
-python3 scripts/check_candidate_match.py --workspace .
-python3 scripts/lint_no_prediction.py   --workspace .
-python3 scripts/check_shortlist.py      --workspace .
+python3 scripts/check_no_write.py       --workspace <ws>
+python3 scripts/check_candidate_match.py --workspace <ws>
+python3 scripts/lint_no_prediction.py   --workspace <ws>
+python3 scripts/check_shortlist.py      --workspace <ws>
 ```
 
 All four must exit 0. **This mode may not claim success without a passing receipt for
@@ -1012,7 +886,7 @@ each in `journal.jsonl`** — a skipped script produces no output, and that look
 exactly like a clean one.
 
 Those four gates validate a round. Before a **complete consultation delivery**,
-also run `python3 scripts/check_search_coverage.py --workspace .` at the report
+also run `python3 scripts/check_search_coverage.py --workspace <ws>` at the report
 owner and require its passing receipt. `deliver.py` independently rechecks the
 current coverage file, all declared rounds, raw captures and unresolved leads
 before copying files. A prior pass or changing modes cannot bypass that check.
@@ -1029,6 +903,7 @@ request permits `report_scope: preliminary` with `preliminary_request` recorded.
 | `NO_RAW_TEXT` | a row has an empty `raw_text` | recover the card text, or drop the row; nothing else ties its claims to the capture |
 | `BAD_ROW_ID` | a row's `id` is not `<site>-<source_id>` | rewrite the id. It is the handle a reader quotes, and it must name the posting the row was traced to. |
 | `SOURCE_REPORT_RAW_PATH` | a `raw_files` entry is not a `raw/…` workspace-relative path | write `raw/<site>-<n>.json`. One spelling for one file. |
+| `SOURCE_REPORT_MISSING_RAW` | a `raw_files` entry names a file that does not exist | copy the exact capture name from `raw/` (`run_tool.py` names it `raw/<site>-<32-hex id>.json`); never invent `raw/<site>-1.json` |
 | `WARN_ROW_OUTSIDE_BRIEF_MARKET` | *(warning, does not fail)* a row's location names a country outside `brief.markets` | check the adapter's geography — see `indeed` in Step 2. Drop the row, or keep it and say why the warning is a false alarm. |
 | `URL_NOT_FROM_ADAPTER` | the URL was assembled, not returned | replace it with the adapter's URL or drop the field. If you delete the row, delete it **from both files**. |
 | `MD_ROW_NOT_IN_SHORTLIST` | `shortlist.md` renders a posting URL that is in no `shortlist.yaml` row | the .md is what the user acts on. Either the row belongs in the yaml and was traced, or it was retrieved by nothing — delete it from the .md. |
@@ -1052,61 +927,18 @@ request permits `report_scope: preliminary` with `preliminary_request` recorded.
 | `WRITE_COMMAND` | a write command was journaled | stop. Tell the user exactly what ran. It cannot be undone. |
 | `UNKNOWN_ACCESS` | a command's access could not be resolved | save `opencli <site> --help -f yaml` into `raw/opencli-help/` and re-run |
 
-**Deleting a row means deleting it from both files.** `shortlist.yaml` is what
-the provenance checks read; `shortlist.md` is what the user reads and acts on.
-Removing a fabricated row from the machine file alone moves it out of the
-checked artifact and leaves it in the read one — the remediation becomes the
-cover-up. `MD_ROW_NOT_IN_SHORTLIST` reports it if you forget.
+**Deleting a row means deleting it from both files.** `shortlist.yaml` and `shortlist.md`
+(`MD_ROW_NOT_IN_SHORTLIST` reports the half you forgot).
 
-## Hand the artifacts over — `deliver.py`, not a sentence in the final message
+## Hand the artifacts over
 
-A workspace under `~/.claude/job-profiles/` is where the skill works, and it is
-not where a person looks. Nobody browses a dotfile directory, and a path pasted
-into a chat message is gone the moment the session scrolls. So the last step of
-every mode is a command, not a claim:
-
-```bash
-python3 scripts/deliver.py --workspace <ws>
-```
-
-Delivery uses two child folders, whose names `deliver.py` writes in Chinese for every client: `简历/` (application documents) for `简历.docx`, `简历.pdf` and other requested application documents; `报告/` (report) for `求职建议报告.pdf` (the advice report) and its editable text. Filenames never include the employer, role or internal workspace slug.
-
-Author `report.md` for **every full consultation**, respecting explicit chat-only/no-file requests and answering the client's actual
-question in their language: conclusion, supporting evidence, relevant career
-constraints or facts still to confirm, and practical next steps. Tool defects,
-adapter errors, tests, developer diagnostics and internal review logs belong only
-in the private workspace, never in this client report. Do not copy an internal
-`completion.md` into it. A narrow text edit remains in chat; it does not initiate report delivery.
-
-Before drafting, read `references/report-writing.md`; revise the report for clear
-recommendations, specific reasons and actionable advice, then inspect the rendered
-pages. Preserve source facts, required labels and the user's approved formatting.
-
-After authoring `report.md`, run `lint_no_prediction.py --workspace <ws>`.
-Delivery also refuses prediction language in the report.
-
-Run `deliver.py` as the last step. It requires `report.md` and a verified report
-PDF and copies only the report and requested CV/application documents into
-`~/Downloads/<workspace-name>/`. For multiple workspaces serving one consultation,
-pass the **same `--to <consultation-folder>`** each time so the report and CV stay
-together. Quote that folder and its client files in the reply. The workspace and
-all audit evidence remain in their original location.
-
-If `deliver.py` refuses incomplete evidence, keep the draft in the workspace and
-state what is still missing. Do not manually copy or rename it into a client
-delivery to bypass the refusal; a preliminary report still requires the user's
-explicit request recorded in `brief.preliminary_request`.
-
-In the final reply, link only the delivery folder and its client files unless the
-user asks for the internal records. Copy absolute paths from the actual delivery
-output and verify each target exists; do not reconstruct long paths by hand.
-
-PDF verification checks both recovered text and actual painted glyph IDs. A
-missing or refused PDF means incomplete delivery (exit 2); repair the cause and
-rerun before declaring completion. `--no-pdf` is only for an explicit user format
-exception. A cover letter is provided on demand; it is not the domestic default.
-Do not automatically start a mock interview or another mode.
-
+Follow SKILL.md "Client deliverables" (write `report.md` after reading
+`references/report-writing.md`, render and review it, run `lint_no_prediction.py`,
+then `python3 scripts/deliver.py --workspace <ws>` last (client files go to `~/Downloads/<workspace-name>/`)). For several rounds of one
+consultation pass the same `--to <consultation-folder>`. If `deliver.py` refuses
+incomplete evidence, keep the draft and say what is missing; never copy files into
+the delivery by hand. A preliminary report needs `brief.preliminary_request`. Do not
+start a mock interview or another mode automatically.
 
 ## Self-check before reporting the round
 
@@ -1118,7 +950,7 @@ Do not automatically start a mock interview or another mode.
       and all three round caps; `candidate-profile.yaml` frozen before any detail fetch.
 - [ ] `raw/opencli-help/<site>.yaml` saved for every site called.
 - [ ] `raw/auth-status.json` saved; `unknown` re-probed with `--full`.
-- [ ] Every adapter call classified by `scripts/check_opencli_result.py`.
+- [ ] Every adapter call recorded and classified (by `run_tool.py --workspace`, or by `scripts/check_opencli_result.py` for another runner's capture).
 - [ ] Queries generated in both languages of the market.
 - [ ] For domestic discovery, the WeChat source plan has been reconciled with
       actual query/article captures and unresolved gaps under
@@ -1126,7 +958,7 @@ Do not automatically start a mock interview or another mode.
 - [ ] Identity field asserted non-empty on every row; `indeed` rows recovered.
 - [ ] Every row's `raw_text` is the card text **copied** from the capture, and its
       `id` is `<site>-<source_id>`.
-- [ ] `indeed` not used as the no-login default for a non-US market, and if it was
+- [ ] The `indeed` adapter not used for a non-US market (country sites go through the browser route), and if it was
       used, every returned `location` read against `brief.markets` before the row
       was kept — the US site answers a London search with Ohio.
 - [ ] Every row carries `provisional: true` **and** `shortlist.md` carries the
@@ -1160,77 +992,13 @@ Do not automatically start a mock interview or another mode.
 
 **Voice.** Follow `references/report-writing.md` for the client report: make each role's source visible, explain what was not searched, and end with concrete actions. Keep raw evidence IDs and tool diagnostics in the internal shortlist records.
 
-## Discovery: the read-only surface
+## When a platform says stop, stop
 
-### OpenCLI-first fallback for discovery
-
-Apply the fixed source-to-tool routes in [supplementary-sources.md](../references/supplementary-sources.md):
-WeChat (Sogou WeChat), Xiaohongshu, Douyin and Toutiao use OpenCLI. Do not
-reconsider that tool choice. AnySearch search uses its HTTP API.
-
-Begin every discovery round with OpenCLI's offline CDP routing and read-adapter
-capability checks in `scripts/doctor.py`. Use OpenCLI only after its actual
-website adapter is verified to use CDP. Never use browser extensions, even when
-already installed or reported connected. A generic OpenCLI health result is not
-proof of CDP routing. Only when the checks diagnose a missing CLI, disconnected
-CDP connection, or unsupported CDP extraction, follow [the one-way browser
-fallback](../references/browser-fallback.md) with an available built-in CDP route.
-If that fallback is unavailable too, disclose the gap; do not switch back to
-OpenCLI for the same round. Keep browser evidence and gate receipts; a site
-refusal is not a fallback reason and stops reads across both tools. Neither
-backend submits applications.
-Both OpenCLI and its fallback use the customer's daily browser unless they
-explicitly request a separate one; follow [daily-browser routing](../references/daily-browser.md).
-Use [network recovery](../references/network-recovery.md) for a generic
-transport failure that has not yet established a fallback reason.
-
-### opencli: the four command pairs this skill actually uses
-
-| site | search | detail | login state (2026-08-09) | identity field |
-|---|---|---|---|---|
-| `51job` | `opencli 51job search "<kw>" --area <city> --page 1 --limit 20 --window background -f json` | `opencli 51job detail <jobId>` | no auth adapter | `title` |
-| `indeed` | `opencli indeed search "<kw>" --location "<loc>" --fromage 7 --start 0 --limit 15 --window background -f json` | `opencli indeed job <id>` | no auth adapter | `title` — **measured EMPTY**, recover via detail. **US site only**, see below |
-| `linkedin` | `opencli linkedin search "<kw>" --location "<loc>" --date-posted week --start 0 --limit 10 --window background -f json` | `opencli linkedin job-detail <job-url>` | logged in (cookie session) | `title` |
-| `boss` | `opencli boss search "<kw>" --city <city> --page 1 --limit 15 --window background -f json` | `opencli boss detail <security_id>` | logged in (cookie session) | `name`, **not** `title` |
-
-**`indeed` serves the US site, and `--location` is resolved against a US
-gazetteer.** A non-US place name does not fail — it silently returns US rows:
-`--location "London"` came back with every row in Columbus, Ohio (London, OH is
-25 miles away), exit 0, `classification: ok`, and `--location "Manchester, United
-Kingdom"` returned California and New York (measured 2026-08-16; the adapter's own
-`opencli indeed --help` describes it as "rendered DOM via browser session, US
-site"). So for a `uk`/`nl`/`de` market this ADAPTER is the wrong tool — but that
-is not a reason to stop at `linkedin` alone, which needs a login. Indeed's own
-country site (`nl.indeed.com`, `de.indeed.com`, `uk.indeed.com`) is read through
-the diagnosed browser route; the region table in `modes/discover.md` carries it,
-along with the bot-block to expect there. If you use the adapter anyway, read
-every returned `location` before it becomes a row. This is a third shape of risk-register row 2: not
-found-nothing and not all-adapters-failed, but **adapter-succeeded-and-searched-
-the-wrong-country**, where every receipt is green and the honest conclusion
-("there are no London backend roles") is the wrong one. `check_shortlist.py`
-answers only the row half of this, as the warning `WARN_ROW_OUTSIDE_BRIEF_MARKET`;
-nothing can report the empty half, which is why it is written here instead.
-
-Always `-f json`. Always `--window background`.
-And **always branch on the exit code before you read stdout**:
-a login wall gives exit 1, EMPTY stdout and a YAML error body on stderr even under
-`-f json`, so `JSON.parse(stdout || '[]')` turns a 403 into a zero-result success.
-Never run a command whose published `access:` is `write` —
-`check_no_write.py` reads that field out of the tool itself.
-
-### When a platform says stop, stop
-
-A platform limit is any refusal the platform itself put up: a risk-control or
-captcha body, a rate-limit, or a refusal on a site `opencli auth status` says you
-are logged into. When one appears, stop automatic reads and offer the user a
-recovery hand-off before ending the search. Follow
-[the pause-and-resume workflow](../references/user-recovery.md): explain the actual
-login, verification or rate-limit obstacle and wait for explicit confirmation.
-“Done, continue” after that prompt requests one new bounded round with the same
-source/backend and a link to the old workspace; never erase the stopped journal.
-While paused, preserve already retrieved rows and offer partial results. The
-following rules govern the stopped round; use its degraded output when recovery
-is declined/unavailable, not as a silent substitute for waiting:
+A platform limit is any refusal the platform put up: a risk-control or captcha body,
+a rate limit, or a refusal on a site `opencli auth status` says you are logged into.
+Follow [user recovery](../references/user-recovery.md); "done, continue" starts one
+new bounded round linked to the old workspace, never an erased journal. For the
+stopped round:
 
 1. **Stop that site for that round.**
 2. Do not retry.
@@ -1238,32 +1006,17 @@ is declined/unavailable, not as a silent substitute for waiting:
    fresh `--window` is still a retry.
 4. Do not route around it — no other adapter, no public mirror, no logged-in
    session standing in for a logged-out one.
-5. Pause for user recovery and continue independent sources. Use the
-   **direction-level degraded output** only if the user chooses it or recovery
-   is unavailable: 3-5 target directions, with `rows: []` in the internal YAML
-   files and no posting entries, so it cannot claim a posting exists.
-6. Fill in the disclosure table, whose answers ship pre-filled as localized "no" precisely
-   so that concealing a retry has to be an active overwrite rather than an
-   omission. Six lines, one language — `modes/discover.md` gives the block in both.
+5. Continue independent sources; use the direction-level degraded output only if
+   the user chooses it or recovery is unavailable.
+6. Fill in the disclosure table (six lines, pre-filled "no") above, in the document's one language.
 
-The per-platform trigger strings are data and live in
-`references/risk-control-signals.yaml`; **this rule is not data and does not live
-in a reference file**, because the moment it needs to be applied is the moment
-nobody is going to go and look it up.
+Trigger strings are data in `references/risk-control-signals.yaml`. Always `-f json`,
+always `--window background`, and **always branch on the exit code before you read stdout**.
+Never run a command whose published `access:` is `write`.
 
-**READ `references/source-policy.md` before the first live retrieval of any run**
-— before the first `opencli` adapter call — and again before agreeing to page
-further, to fetch more detail pages, or to work while the user is away. It is the
-ONE source standard: what is green, what is yellow-with-caps, and what is never
-done whatever the user asks. Its two round caps are enforced rather than
-suggested: `brief.yaml` must carry `max_rows_per_round` and `max_pages_per_site`,
-and `check_shortlist.py` fails the run with `CAP_MISSING` or `CAP_ABOVE_CEILING`.
-
-**READ `references/discovery-sources.md` before calling a discovery adapter.**
-This includes 51job, indeed, linkedin, boss, upwork, nowcoder, maimai and any site
-added later. It carries that
-adapter's flags, its measured login state, its identity field and its detail
-command — and `shortlist.yaml`'s `sources:` entry cannot be filled in without
-them, so `check_shortlist.py` fails the run with `SOURCE_REPORT_MISSING` if you
-skipped it.
+Begin every discovery round with OpenCLI's offline CDP routing check (`scripts/doctor.py`).
+If the one-way browser fallback is unavailable too, disclose the gap; do not switch back to
+OpenCLI for the same round.
+**READ `references/source-policy.md` before the first live retrieval of any run** and
+`references/discovery-sources.md` before calling a discovery adapter.
 <!-- END discover-inserts (plan 3) -->

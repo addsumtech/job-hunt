@@ -243,9 +243,11 @@ does not require these; a discover run is not reportable without them:
       See `references/search-coverage.md` for the multi-round manifest and schema.
 
 Ran, leaving an `adapter_call` record rather than a gate receipt:
-- [ ] `scripts/check_opencli_result.py` — once per adapter invocation. It is a
-      wrapper, not a gate: it exits 0 (classified) or 2 (could not classify), never 1,
-      so there is no receipt to look for and no pass/fail to read into the exit code.
+- [ ] Every adapter invocation classified exactly once — by `run_tool.py --workspace`
+      for its own reads, or by `scripts/check_opencli_result.py` for another runner's
+      capture. It is a wrapper, not a gate: it exits 1 when the classification is not
+      `ok` and 2 when it could not classify, and leaves an `adapter_call` record rather
+      than a receipt. Classifying the same read twice records two calls.
 
 Every line above says what evidence it leaves, and the headings differ for a
 reason: a checklist that promises a receipt where none can exist teaches its reader
