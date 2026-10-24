@@ -37,6 +37,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import check_assessment  # noqa: E402
 import check_shortlist  # noqa: E402
+import report_locales  # noqa: E402
 
 # Constants whose strings the MODE FILE has to teach the model to write, because
 # the gate greps the produced document for them.
@@ -114,17 +115,59 @@ def _cases():
             for name, needle in _needles(mode)]
 
 
+# discover.md teaches the zh/en literals itself and sends a Japanese, Korean or
+# Spanish shortlist to the language contract before anything is written; that
+# file holds the ja/ko/es stamps and disclosure templates. A literal that exists
+# only in those three languages is taught there, and the route itself is pinned
+# below so the mode file cannot drop it and leave the literals unreachable.
+ROUTED_LOCALES = {
+    "discover": ("references/report-localization.md", ("ja", "ko", "es")),
+}
+ROUTE_SENTENCE = ("Writing the shortlist in Japanese, Korean or Spanish: read "
+                  "`references/report-localization.md`")
+
+
+def _routed_only(mode):
+    """Strings that exist only in the routed languages' gate text."""
+    if mode not in ROUTED_LOCALES:
+        return set()
+    _, langs = ROUTED_LOCALES[mode]
+
+    def values(lang):
+        # _strings on a dict yields its keys; the literals are the values.
+        return _strings(list(report_locales.GATE_TEXT[lang].values()))
+
+    routed = {s for lang in langs for s in values(lang)}
+    own = {s for lang in report_locales.LANGUAGES if lang not in langs
+           for s in values(lang)}
+    return routed - own
+
+
 @pytest.mark.parametrize("mode, const, needle", _cases(),
                          ids=lambda v: str(v)[:34])
 def test_the_mode_file_teaches_every_literal_its_gate_greps_for(mode, const, needle):
     """The gate reads the produced document for this string. If layer 1.5 never
     shows it, the model has no way to know to write it — and the failure lands on
     the user as a rejected card, not here."""
-    body = (ROOT / "modes" / f"{mode}.md").read_text(encoding="utf-8")
+    where = f"modes/{mode}.md"
+    if needle in _routed_only(mode):
+        where = ROUTED_LOCALES[mode][0]
+    body = (ROOT / where).read_text(encoding="utf-8")
     assert needle in body, (
-        f"{const} contains {needle!r}, which modes/{mode}.md never shows. "
+        f"{const} contains {needle!r}, which {where} never shows. "
         f"The gate greps the card for it, so a run that follows the mode file "
         f"verbatim produces a card the gate rejects.")
+
+
+@pytest.mark.parametrize("mode", sorted(ROUTED_LOCALES))
+def test_a_routed_language_contract_is_named_before_the_first_step(mode):
+    """The ja/ko/es literals are only teachable if the mode file sends the run to
+    the contract before it writes anything, not in a footnote after Step 9."""
+    # Compare on joined whitespace: where the sentence wraps is not the rule.
+    body = " ".join((ROOT / "modes" / f"{mode}.md").read_text(encoding="utf-8").split())
+    assert ROUTE_SENTENCE in body, f"modes/{mode}.md no longer routes ja/ko/es"
+    assert body.index(ROUTE_SENTENCE) < body.index("## Step 0")
+    assert (ROOT / ROUTED_LOCALES[mode][0]).is_file()
 
 
 @pytest.mark.parametrize("mode", sorted(ANCHORS))

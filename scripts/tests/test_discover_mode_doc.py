@@ -10,13 +10,26 @@ import pathlib
 
 import check_opencli_result as coc
 import check_shortlist as cs
+import report_locales
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 MODE = REPO / "modes" / "discover.md"
+# Where discover.md sends a Japanese, Korean or Spanish shortlist before it is
+# written, and where it sends the run once a gate reports a finding. Literals
+# that moved there are pinned there; the routes are pinned in the mode file.
+LOCALIZATION = REPO / "references" / "report-localization.md"
+FINDING_CODES = REPO / "references" / "discover" / "finding-codes.md"
+OWN_LANGS = ("zh", "en")
+ROUTED_LANGS = ("ja", "ko", "es")
 
 
 def text():
     return MODE.read_text(encoding="utf-8")
+
+
+def gate_text(lang, key):
+    value = report_locales.GATE_TEXT[lang][key]
+    return (value,) if isinstance(value, str) else tuple(value)
 
 
 def test_every_row_field_the_gate_requires_is_defined_here():
@@ -48,9 +61,19 @@ def test_only_the_top_three_verdicts_may_get_a_detail_fetch():
 
 def test_the_disclosure_block_ships_prefilled_with_no():
     body = text()
-    for pair in cs.DISCLOSURE_LABELS:
-        for label in pair:
-            assert label in body, f"disclosure label {label!r} missing"
+    localization = LOCALIZATION.read_text(encoding="utf-8")
+    # Every label the gate accepts is taught somewhere the run is sent: zh/en in
+    # the mode file, ja/ko/es in the language contract it routes to.
+    assert {lang for lang in OWN_LANGS + ROUTED_LANGS} == set(report_locales.LANGUAGES)
+    for label in (label for pair in cs.DISCLOSURE_LABELS for label in pair):
+        assert label in body or label in localization, f"disclosure label {label!r} missing"
+    for lang in OWN_LANGS:
+        for label in gate_text(lang, "disclosure"):
+            assert label in body, f"{lang} disclosure label {label!r} missing from discover.md"
+    for lang in ROUTED_LANGS:
+        for label in gate_text(lang, "disclosure"):
+            assert label in localization, (
+                f"{lang} disclosure label {label!r} missing from report-localization.md")
     # Pre-filled in BOTH spellings. Pairing the labels and leaving this
     # assertion on the three Chinese ones would ship the English half of the
     # block without the one backstop that makes it worth having: an answer that
@@ -129,13 +152,48 @@ def test_the_platform_limit_stop_rule_is_absolute():
 
 
 def test_the_finding_codes_an_operator_must_react_to_are_explained():
-    body = text()
+    """The finding table is read when a gate fires, so it lives in its own
+    reference; the mode file must still route there and keep the repair rules a
+    run has to know before any gate fires."""
+    codes = FINDING_CODES.read_text(encoding="utf-8")
     for code in ("SOURCE_ID_NOT_IN_RAW", "RAW_TEXT_NOT_IN_RAW", "NO_RAW_TEXT",
                  "BAD_ROW_ID", "SOURCE_REPORT_RAW_PATH",
                  "WARN_ROW_OUTSIDE_BRIEF_MARKET", "EMPTY_RESULT_UNSUPPORTED",
                  "DETAIL_FETCH_OUT_OF_BAND", "DEGRADED_WITHOUT_DISCLOSURE",
                  "WRITE_COMMAND", "UNKNOWN_ACCESS"):
-        assert code in body
+        row = next((line for line in codes.splitlines()
+                    if line.startswith("| `") and f"`{code}`" in line.split("|")[1]), None)
+        assert row, f"{code} has no row in {FINDING_CODES.name}"
+        assert row.rstrip().endswith("|") and len(row.split("|")) >= 5, row
+    body = text()
+    assert "references/discover/finding-codes.md" in body
+    assert "When a gate reports a finding" in body
+    step10 = body[body.index("## Step 10"):body.index("## Hand the artifacts over")]
+    assert "references/discover/finding-codes.md" in step10
+    # The rules a repair must follow, known before the first finding arrives.
+    flat_step10 = " ".join(step10.split())
+    assert "never edit either to reconcile a finding" in flat_step10
+    assert "the receipts are right" in flat_step10
+    assert "Deleting a row means deleting it from both files." in flat_step10
+
+
+def test_the_on_demand_discover_references_are_reachable_where_they_are_needed():
+    """Moving text out of the mode file only helps if the run is sent to it at
+    the moment it applies: the finding table when a gate fires, the multi-posting
+    report rules when report.md is written. read_guidance fails if SKILL.md has
+    no route to the file at all."""
+    codes = read_guidance("references/discover/finding-codes.md")
+    assert "| `NOT_A_LISTING_SOURCE` |" in codes
+    report = read_guidance("references/discover/multi-posting-report.md")
+    for rule in ("Group the job directory by hiring company",
+                 "Exclude confirmed closed postings from the entire",
+                 "Keep job identities consistent across the priority table"):
+        assert rule in report, rule
+    body = text()
+    handover = body[body.index("## Hand the artifacts over"):]
+    assert "references/discover/multi-posting-report.md" in handover
+    assert "references/discover/multi-posting-report.md" in read_guidance(
+        "references/report-writing.md")
 
 
 def test_the_row_id_format_and_the_raw_text_anchor_are_both_stated():
@@ -152,12 +210,18 @@ def test_the_indeed_us_site_restriction_is_stated_before_the_first_call():
     # Measured 2026-08-16: `--location "London"` returns Columbus, Ohio with
     # exit 0. An empty shortlist has no rows for the gate to warn about, so this
     # paragraph is the only backstop on the false-empty branch — and it has to
-    # arrive before Step 4 runs the search.
+    # arrive before Step 4 runs the search. The mode file states the rule (a US
+    # gazetteer, wrong-country rows that still exit 0 and classify ok), not the
+    # incident.
     body = text()
+    flat_body = " ".join(body.split())
     assert "US site" in body
-    assert "Columbus, Ohio" in body
+    rule = ("resolves `--location` against a US gazetteer, so a non-US city silently "
+            "returns US rows with exit 0 and `classification: ok`")
+    assert rule in flat_body
     assert body.index("US site") < body.index("## Step 4"), (
         "the restriction has to be read before the search, not after it")
+    assert flat_body.index(rule) < flat_body.index("## Step 4")
 
 
 def test_the_raw_files_path_convention_is_pinned_to_one_spelling():
@@ -222,11 +286,22 @@ def test_insufficient_evidence_is_never_a_shortlist_row():
 
 def test_both_discover_stamps_are_required_in_the_rendered_markdown_too():
     body = text()
-    for spelling in cs.PROVISIONAL_STAMP:
-        assert spelling in body, f"provisional stamp {spelling!r} is defined nowhere"
-    for spelling in cs.DETAIL_PROVISIONAL_STAMP:
-        assert spelling in body, f"detail provisional stamp {spelling!r} is defined nowhere"
+    localization = LOCALIZATION.read_text(encoding="utf-8")
+    for spelling in cs.PROVISIONAL_STAMP + cs.DETAIL_PROVISIONAL_STAMP:
+        assert spelling in body or spelling in localization, (
+            f"provisional stamp {spelling!r} is defined nowhere")
+    for key in ("provisional", "detail_provisional"):
+        for lang in OWN_LANGS:
+            for spelling in gate_text(lang, key):
+                assert spelling in body, f"{lang} {key} stamp {spelling!r} missing from discover.md"
+        for lang in ROUTED_LANGS:
+            for spelling in gate_text(lang, key):
+                assert spelling in localization, (
+                    f"{lang} {key} stamp {spelling!r} missing from report-localization.md")
     assert "MD_MISSING_PROVISIONAL_STAMP" in body
+    # And Step 7, where the stamp is chosen, sends a ja/ko/es round to them.
+    step7 = body[body.index("## Step 7"):body.index("## Step 8")]
+    assert "references/report-localization.md" in step7
 
 
 def test_the_english_scaffolding_of_the_document_is_defined_here_too():
@@ -302,17 +377,19 @@ def test_the_platform_table_names_what_each_region_can_actually_use():
 
 def test_the_login_is_handed_to_the_user_and_never_run_here():
     t = text()
-    assert "opencli boss login" in t
+    assert "`opencli <site> login` is a **write** command" in t
     assert "never run here" in t
     assert "account risk is not zero" in t
 
 
 def test_a_not_logged_in_probe_must_be_re_probed_before_it_is_believed():
-    """The probe can be confidently wrong, which is worse than `unknown`."""
-    t = text()
-    assert "--full" in t
-    assert "confidently wrong" in t or "can be confidently wrong" in t
-    assert "not_logged_in" in t
+    """The probe can be confidently wrong, which is worse than `unknown`: a quick
+    probe once said `boss` was `not_logged_in` while the session was live."""
+    flat_t = " ".join(text().split())
+    assert "can report `not_logged_in` for a live session" in flat_t
+    assert ("Before asking the user to log into a site the quick probe called "
+            "`not_logged_in`, re-probe it with `opencli auth status --site <site> --full`"
+            ) in flat_t
 
 
 # ---- the cn-only employer-type preference ---------------------------------
