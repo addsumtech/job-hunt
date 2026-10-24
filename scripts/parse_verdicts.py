@@ -55,9 +55,10 @@ def _key_at(line):
 def _key_positions(lines):
     """{KEY: index of its LAST occurrence}.
 
-    Last, not first: a judge that was pasted its own agent file echoes the
-    template block and two worked examples, each containing a literal VERDICT
-    line. The output contract says the real block is the last thing in the reply.
+    Last, not first: a judge that has read its own agent file (opened by path,
+    or pasted in by the fallback dispatch) can echo the template block and two
+    worked examples, each containing a literal VERDICT line. The output contract
+    says the real block is the last thing in the reply.
     """
     pos = {}
     for i, line in enumerate(lines):

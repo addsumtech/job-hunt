@@ -11,9 +11,17 @@ import deliver
 import render_cv
 
 
+# The stale PDF must be THIS workspace's earlier delivery for the refusal to owe
+# its removal: deliver.py treats unrecorded client files in a fresh --to folder as
+# another workspace's and leaves them alone. So the earlier delivery is this
+# workspace's in the two ways one can be: an older deliver.py writing into the
+# default folder named after the workspace (which recorded nothing), and a
+# current one writing to a shared --to (which recorded it in the manifest).
+@pytest.mark.parametrize("owner", ["default-folder", "manifest"])
 @pytest.mark.parametrize("text", ["مرشح افتراضي", "מועמד לדוגמה"])
 def test_rtl_rerender_removes_stale_source_and_delivery_keeps_refusal(
-        tmp_path, capsys, text):
+        tmp_path, capsys, monkeypatch, text, owner):
+    import hashlib
     ws = tmp_path / "round"
     ws.mkdir()
     profile = ws / "profile.yaml"
@@ -36,12 +44,24 @@ def test_rtl_rerender_removes_stale_source_and_delivery_keeps_refusal(
     assert not pdf.with_suffix(".tex").exists()
 
     (ws / "report.md").write_text(text, encoding="utf-8")
-    dest = tmp_path / "delivery"
+    if owner == "default-folder":
+        monkeypatch.setattr(deliver, "DEFAULT_ROOT", tmp_path / "Downloads")
+        dest = tmp_path / "Downloads" / ws.name
+        args = ["--workspace", str(ws)]
+    else:
+        dest = tmp_path / "delivery"
+        args = ["--workspace", str(ws), "--to", str(dest)]
     (dest / "简历").mkdir(parents=True)
     (dest / "简历" / "简历.pdf").write_bytes(b"%PDF previous delivery")
     (dest / "简历" / "简历.tex").write_text("previous source", encoding="utf-8")
     (dest / "unrelated.tex").write_text("keep this", encoding="utf-8")
-    assert deliver.main(["--workspace", str(ws), "--to", str(dest)]) == 2
+    if owner == "manifest":
+        (dest / deliver.MANIFEST_NAME).write_text(json.dumps({"format": 1, "deliveries": [{
+            "workspace": str(ws.resolve()), "workspace_name": ws.name,
+            "mode": deliver.journal.current_mode(ws), "folder": "",
+            "files": {"简历/简历.pdf": hashlib.sha256(b"%PDF previous delivery").hexdigest()},
+        }]}), encoding="utf-8")
+    assert deliver.main(args) == 2
     output = capsys.readouterr()
     assert "NOTICE_PDF_REFUSED" in output.err
     assert "right-to-left" in output.err
