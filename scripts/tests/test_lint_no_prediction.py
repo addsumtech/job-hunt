@@ -1324,3 +1324,133 @@ def test_a_far_negation_of_the_outcome_is_not_a_forecast(text):
                          ids=range(len(_FAR_NEGATION_TWINS_STILL_FIRE)))
 def test_the_negation_mask_ends_on_the_outcome_it_denies(text):
     assert lint.scan_text(text, "report.md"), text
+
+
+# ---------------------------------------------------------------------------
+# Verified 2026-10-24, third pass. Every line in a *_RELEASED / *_FIRES list gave
+# the wrong answer on the lint before this block; every *_TWINS / *_QUIET line
+# gives the same answer on both, and is what keeps each fix from becoming an off
+# switch or a cry-wolf.
+#
+#   a. The question release reached de/nl/fr/it at last. `zeker`, `sicuramente`,
+#      `sicherlich`, `wahrscheinlich`, `probablement` next to an interview word
+#      fired when what they governed was a QUESTION — and so did the older
+#      `krijgt … gesprek` / `werden … Vorstellungsgespräch … bekommen` shapes,
+#      when the interview was only where the questions get asked.
+#   b. The JA/KO release covered an outcome clause chained in front of it:
+#      `面接に呼ばれて…聞かれる可能性が高い` puts the invitation under the same
+#      predicate. A conditional outcome (たら / 場合 / 면) is preparation.
+#   c. A certainty word separated from the outcome by one short phrase of means
+#      or time, or one comma-delimited aside, passed.
+# ---------------------------------------------------------------------------
+
+_EU_QUESTION_RELEASED = [
+    "Nel colloquio ti chiederanno sicuramente del tuo progetto.",
+    "Nel colloquio probabilmente ti chiederanno del progetto.",
+    "Al colloquio ti faranno sicuramente domande sul tuo progetto.",
+    "Il colloquio verterà sicuramente sul tuo progetto.",
+    "In het gesprek vragen ze zeker naar je scriptie.",
+    "In het gesprek wordt zeker gevraagd naar je motivatie.",
+    "Tijdens het gesprek krijg je zeker vragen over je scriptie.",
+    "Je krijgt in het gesprek zeker vragen over je scriptie.",
+    "Im Vorstellungsgespräch fragt man Sie sicherlich nach Ihrer Motivation.",
+    "Im Interview wird wahrscheinlich nach Kafka gefragt.",
+    "Im Vorstellungsgespräch werden Sie wahrscheinlich nach Ihrem Projekt gefragt.",
+    "Sie werden im Vorstellungsgespräch Fragen bekommen.",
+    "En entretien, on vous demandera probablement votre motivation.",
+    "Lors de l'entretien, on vous posera sûrement des questions sur Kafka.",
+    "Lors de l'entretien, on vous interrogera probablement sur Kafka.",
+    "En entretien, il sera sûrement question de votre projet.",
+]
+# Being asked to COME is the invitation; an outcome received before the question
+# blocks the release, whether as a verb ahead of it or as the hedge's own object.
+_EU_QUESTION_TWINS = [
+    "Nel colloquio ti chiederanno sicuramente di venire a un secondo colloquio.",
+    "Probabilmente otterrai un colloquio e ti chiederanno del progetto.",
+    "Ze vragen je zeker voor een tweede gesprek.",
+    "Je wordt waarschijnlijk uitgenodigd voor een gesprek waarin ze vragen naar je scriptie.",
+    "Je krijgt na het eerste gesprek een aanbod.",
+    "Man wird Sie wahrscheinlich fragen, ob Sie zum Vorstellungsgespräch kommen können.",
+    "Sie bekommen wahrscheinlich ein Vorstellungsgespräch und man fragt nach Ihrem Projekt.",
+    "Sie werden im Vorstellungsgespräch eine Zusage bekommen.",
+    "On vous demandera probablement de venir passer un entretien.",
+    "Vous obtiendrez probablement un entretien et on vous interrogera sur Kafka.",
+]
+
+
+@pytest.mark.parametrize("text", _EU_QUESTION_RELEASED, ids=range(len(_EU_QUESTION_RELEASED)))
+def test_a_likely_question_is_not_a_forecast_in_german_dutch_french_italian(text):
+    assert lint.scan_text(text, "report.md") == [], text
+
+
+@pytest.mark.parametrize("text", _EU_QUESTION_TWINS, ids=range(len(_EU_QUESTION_TWINS)))
+def test_that_release_does_not_reach_an_invitation_or_a_received_outcome(text):
+    assert "PREDICTION_WORD" in codes(_out(lint.scan_text(text, "report.md"))), text
+
+
+_OUTCOME_CHAINED_BEFORE_THE_QUESTION = [
+    "面接に呼ばれて志望動機を聞かれる可能性が高いです。",
+    "面接に呼ばれ、志望動機を聞かれる可能性が高い。",
+    "内定をもらって条件を聞かれる可能性が高いです。",
+    "面接に呼ばれ、おそらく志望動機を聞かれます。",
+    "면접에 초대되어 경력을 질문받을 가능성이 높습니다.",
+    "면접에 초대되고 아마 경력을 물어볼 것입니다.",
+]
+_CONDITIONAL_OUTCOME_IS_PREPARATION = [
+    "面接に進んだら、志望動機を聞かれる可能性が高いです。",
+    "面接に進んだ場合、志望動機を聞かれる可能性が高いです。",
+    "書類選考を通過すれば、面接で志望動機を聞かれる可能性が高いです。",
+    "面接に進む前に、聞かれる可能性が高い質問を整理しましょう。",
+    "면접에 초대되면 경력을 질문받을 가능성이 높습니다.",
+    "서류 통과 후 면접에서 질문받을 가능성이 높습니다.",
+]
+
+
+@pytest.mark.parametrize("text", _OUTCOME_CHAINED_BEFORE_THE_QUESTION,
+                         ids=range(len(_OUTCOME_CHAINED_BEFORE_THE_QUESTION)))
+def test_the_question_release_does_not_cover_an_outcome_chained_before_it(text):
+    assert "PREDICTION_WORD" in codes(_out(lint.scan_text(text, "report.md"))), text
+
+
+@pytest.mark.parametrize("text", _CONDITIONAL_OUTCOME_IS_PREPARATION,
+                         ids=range(len(_CONDITIONAL_OUTCOME_IS_PREPARATION)))
+def test_a_conditional_outcome_before_the_question_is_still_preparation(text):
+    assert lint.scan_text(text, "report.md") == [], text
+
+
+_CERTAINTY_ACROSS_A_SHORT_PHRASE = [
+    "肯定能通过内推拿到面试。",
+    "你一定可以靠这段经历拿到offer。",
+    "你一定能在三个月内拿到offer。",
+    "You will definitely, with this CV, get an interview.",
+    "You will, with this CV, definitely get an interview.",
+    "You will definitely be able to get an interview.",
+    "Sie bekommen sicher über Ihr Netzwerk ein Interview.",
+    "Vous aurez certainement, grâce à ce CV, un entretien.",
+    "Avrai di sicuro con questo profilo un colloquio.",
+]
+# Necessity, a time frame for something else, a question about the outcome, a
+# second clause, and a preposition whose own object is the interview.
+_SHORT_PHRASE_TWINS_STAY_QUIET = [
+    "一定要准备好项目案例再去面试。",
+    "一定要通过内推拿到面试再辞职。",
+    "肯定会在你拿到offer前做背调。",
+    "肯定会问你怎么拿到offer的。",
+    "You will definitely, when you get an interview, be asked about caching.",
+    "You should definitely, with this CV, prepare a story for the gap.",
+    "Sie bekommen sicher nach dem Interview eine Rückmeldung.",
+    "Vous aurez certainement après l'entretien une réponse.",
+    "Vous aurez certainement avec l'équipe un entretien technique.",
+]
+
+
+@pytest.mark.parametrize("text", _CERTAINTY_ACROSS_A_SHORT_PHRASE,
+                         ids=range(len(_CERTAINTY_ACROSS_A_SHORT_PHRASE)))
+def test_certainty_still_governs_the_outcome_across_one_short_phrase(text):
+    assert "PREDICTION_WORD" in codes(_out(lint.scan_text(text, "report.md"))), text
+
+
+@pytest.mark.parametrize("text", _SHORT_PHRASE_TWINS_STAY_QUIET,
+                         ids=range(len(_SHORT_PHRASE_TWINS_STAY_QUIET)))
+def test_the_bounded_gap_does_not_reach_advice_or_another_clause(text):
+    assert lint.scan_text(text, "report.md") == [], text

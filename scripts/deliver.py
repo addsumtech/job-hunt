@@ -6,7 +6,9 @@ folder for all workspaces answering one consultation: a manifest in that folder
 records which workspace and mode wrote each file, so a second workspace (or a
 second mode of the same workspace) goes to its own subfolder instead of
 overwriting the first, and a redelivery removes its own files that it no longer
-produces. Internal audit artifacts stay in the workspace. A report PDF is
+produces. Client files no manifest accounts for (an older deliver.py wrote none)
+count as another workspace's unless they match this round byte-for-byte or the
+folder is this workspace's default one. Internal audit artifacts stay in the workspace. A report PDF is
 required unless --no-pdf is explicitly requested; CV and letter PDFs are copied
 from their renderers' output, never converted from Markdown here. Exit 2 means
 incomplete delivery; never call that complete. The last line names the folder
@@ -440,6 +442,52 @@ def _alive(root: pathlib.Path, entry: dict) -> bool:
     return any((root / rel).is_file() for rel in entry["files"])
 
 
+# Client documents with no manifest entry. An older deliver.py wrote exactly these
+# names straight into the destination and recorded nothing, so a folder that
+# held a whole consultation before 1.3.0 looked EMPTY to the ownership check: the
+# next workspace delivered into it and overwrote another workspace's report and
+# CV (measured 2026-10-24). Unaccounted files therefore count as somebody else's,
+# with two exceptions that prove they are this workspace's own: every one of them
+# is byte-identical to what this run would copy to that name, or the destination
+# is the default folder deliver.py names after this very workspace
+# (DEFAULT_ROOT / <workspace name>). A report PDF the older run RENDERED cannot be
+# matched in advance, so in a shared --to folder it keeps the round in a subfolder
+# — the outcome that overwrites nothing.
+def unaccounted_files(root: pathlib.Path, deliveries: list[dict]) -> list[str]:
+    """Client documents at the top of `root` that no manifest entry recorded."""
+    recorded = {rel for entry in deliveries for rel in entry["files"]}
+    return sorted(tail for tail in _CLIENT_TAILS
+                  if tail not in recorded and (root / tail).is_file())
+
+
+def planned_copies(workspace: pathlib.Path, make_pdf: bool,
+                   include_applications: bool | None) -> dict[str, pathlib.Path]:
+    """{client path: workspace file} for what deliver() copies byte-for-byte."""
+    _, sources = _delivery_sources(workspace, make_pdf, include_applications)
+    planned = {client_path(src.relative_to(workspace)).as_posix(): src for src in sources}
+    if make_pdf and (workspace / "report.pdf").is_file():
+        # A reviewed report PDF is copied, never re-rendered (see deliver()).
+        planned[client_path(pathlib.Path("report.pdf")).as_posix()] = workspace / "report.pdf"
+    return planned
+
+
+def foreign_files(root: pathlib.Path, deliveries: list[dict], workspace: pathlib.Path,
+                  make_pdf: bool, include_applications: bool | None) -> list[str]:
+    """The unaccounted client documents in `root` this workspace cannot claim."""
+    unaccounted = unaccounted_files(root, deliveries)
+    if not unaccounted or root == (DEFAULT_ROOT / workspace.name).resolve():
+        return []
+    planned = planned_copies(workspace, make_pdf, include_applications)
+
+    def same(rel: str) -> bool:
+        try:
+            return rel in planned and (root / rel).read_bytes() == planned[rel].read_bytes()
+        except OSError:
+            return False
+
+    return [rel for rel in unaccounted if not same(rel)]
+
+
 def _safe_folder_name(text: str) -> str:
     text = re.sub(r'[\x00-\x1f<>:"/\\|?*]+', " ", text)
     text = re.sub(r"\s+", " ", text).strip().strip(".").strip()
@@ -459,10 +507,14 @@ def _posting_label(workspace: pathlib.Path) -> str:
 
 
 def choose_folder(root: pathlib.Path, deliveries: list[dict], workspace: pathlib.Path,
-                  mode: str) -> tuple[str, dict | None, dict | None]:
+                  mode: str, foreign: list[str] | tuple = ()
+                  ) -> tuple[str, dict | None, dict | None]:
     """(folder, this owner's previous entry, the entry it had to step around).
 
     `folder` is "" for the destination itself, otherwise one subfolder name.
+    `foreign` (see foreign_files) holds the destination's top level like a
+    recorded delivery would; the entry stepped around is then
+    `{"unaccounted": foreign}`.
     """
     live = [entry for entry in deliveries if _alive(root, entry)]
     own = next((entry for entry in live if entry["workspace"] == str(workspace)
@@ -470,6 +522,8 @@ def choose_folder(root: pathlib.Path, deliveries: list[dict], workspace: pathlib
     if own is not None:
         return own["folder"], own, None
     taken = {entry["folder"]: entry for entry in live}
+    if "" not in taken and foreign:
+        taken[""] = {"unaccounted": list(foreign)}
     if "" not in taken:
         return "", None, None
     mode_label = MODE_FOLDERS.get(mode, "其他交付")
@@ -1405,6 +1459,21 @@ def _brief_page_problem(pdf: pathlib.Path) -> str:
     return ""
 
 
+def _delivery_sources(workspace: pathlib.Path, make_pdf: bool,
+                      include_applications: bool | None
+                      ) -> tuple[bool, list[pathlib.Path]]:
+    """(applying, the workspace files deliver() copies to the client folder)."""
+    # In apply the application documents are the product, so a missing CV or
+    # letter PDF leaves the delivery incomplete. Elsewhere they are existing
+    # source documents copied on explicit request: say what is missing, no more.
+    applying = journal.current_mode(workspace) not in {"discover", "assess", "interview"}
+    if include_applications is None:
+        include_applications = applying
+    return applying, [p for p in sorted(workspace.rglob("*"))
+                      if p.is_file() and is_deliverable(p, workspace, include_applications)
+                      and not (make_pdf and p.name == "report.pdf")]
+
+
 def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
             make_pdf: bool = True, include_applications: bool | None = None,
             notices: list[str] | None = None
@@ -1450,15 +1519,7 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
             if isinstance(meta, dict) and meta.get("cjk_font"):
                 report_font, font_origin = meta["cjk_font"], name
                 break
-    # In apply the application documents are the product, so a missing CV or
-    # letter PDF leaves the delivery incomplete. Elsewhere they are existing
-    # source documents copied on explicit request: say what is missing, no more.
-    applying = journal.current_mode(workspace) not in {"discover", "assess", "interview"}
-    if include_applications is None:
-        include_applications = applying
-    sources = [p for p in sorted(workspace.rglob("*"))
-               if p.is_file() and is_deliverable(p, workspace, include_applications)
-               and not (make_pdf and p.name == "report.pdf")]
+    applying, sources = _delivery_sources(workspace, make_pdf, include_applications)
 
     # Validate all requested Word files before copying anything. This also covers
     # hand-authored reports/statements and formatting split across Word runs.
@@ -1656,9 +1717,11 @@ def main(argv: list[str] | None = None) -> int:
               "copied and the workspace is untouched.", file=sys.stderr)
         return 2
 
+    include_applications = True if args.include_applications else None
     try:
         deliveries = read_manifest(dest)
-        folder, previous, displaced = choose_folder(dest, deliveries, ws, mode)
+        foreign = foreign_files(dest, deliveries, ws, not args.no_pdf, include_applications)
+        folder, previous, displaced = choose_folder(dest, deliveries, ws, mode, foreign)
     except ManifestError as exc:
         print(f"DELIVER_MANIFEST_UNREADABLE: {exc}. It records which workspace wrote "
               "each file here, so nothing was copied rather than risk overwriting "
@@ -1669,7 +1732,7 @@ def main(argv: list[str] | None = None) -> int:
 
     notices: list[str] = []
     written, notes = deliver(ws, out, ws.name, make_pdf=not args.no_pdf,
-                             include_applications=True if args.include_applications else None,
+                             include_applications=include_applications,
                              notices=notices)
     if not written:
         for note in notes:
@@ -1678,11 +1741,18 @@ def main(argv: list[str] | None = None) -> int:
               file=sys.stderr)
         return 2
     if displaced is not None:
+        if "unaccounted" in displaced:
+            held = ("client documents no delivery manifest accounts for "
+                    f"({', '.join(displaced['unaccounted'])}: left by an older deliver.py "
+                    "or placed by hand, so possibly another workspace's)")
+        else:
+            held = (f"the documents delivered from workspace "
+                    f"{displaced.get('workspace_name') or displaced['workspace']} "
+                    f"({displaced['mode']} mode)")
         notices.insert(0, (
-            f"NOTICE_SEPARATE_FOLDER: {dest} already holds the documents delivered from "
-            f"workspace {displaced.get('workspace_name') or displaced['workspace']} "
-            f"({displaced['mode']} mode), so this delivery went to the subfolder "
-            f"{folder}/ instead of overwriting them. Quote both folders to the user."))
+            f"NOTICE_SEPARATE_FOLDER: {dest} already holds {held}, so this delivery went "
+            f"to the subfolder {folder}/ instead of overwriting them. Quote both folders "
+            "to the user."))
     notices.extend(finish_manifest(dest, deliveries, ws, mode, folder, previous, written))
 
     # A record, not a gate receipt: delivery decides nothing and has no verdict.

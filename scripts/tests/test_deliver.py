@@ -794,6 +794,123 @@ def test_an_untrustworthy_manifest_stops_delivery_before_copying(tmp_path, capsy
     assert (tmp_path / "victim.txt").read_text(encoding="utf-8") == "keep"
 
 
+# ---- client files an older deliver.py left with no manifest ------------------
+#
+# MEASURED (2026-10-24): before 1.3.0 deliver.py wrote the same 报告/ and 简历/
+# names straight into the destination and recorded nothing. A folder holding
+# such a delivery looked empty to the ownership check, and the next workspace
+# overwrote its report and CV while exiting 0.
+
+def _legacy_delivery(dest, marker):
+    """What an older deliver.py left: client files, and no manifest."""
+    (dest / "报告").mkdir(parents=True)
+    (dest / "简历").mkdir()
+    (dest / "报告/求职建议报告.md").write_text(f"# Advice\n\n{marker} report.\n", encoding="utf-8")
+    _pdf(dest / "简历/简历.pdf", f"{marker} curriculum")
+    return snapshot(dest)
+
+
+def test_files_an_older_deliver_left_without_a_manifest_are_not_overwritten(tmp_path, capsys):
+    beta = posting_workspace(tmp_path, "beta", "Beta Corp", "Data Scientist", "BETA")
+    dest = tmp_path / "consultation"
+    legacy = _legacy_delivery(dest, "ACME")
+    assert not (dest / MANIFEST).exists()
+    capsys.readouterr()
+    assert run(beta, dest, "--no-pdf") == 0
+    output = capsys.readouterr()
+    sub = "Beta Corp Data Scientist"
+    assert {rel: data for rel, data in snapshot(dest).items() if not rel.startswith(sub)} == legacy
+    assert client_files(dest / sub) == {"报告/求职建议报告.md", "简历/简历.md", "简历/简历.pdf"}
+    assert "NOTICE_SEPARATE_FOLDER" in output.err and sub in output.err
+    assert "简历/简历.pdf" in output.err, "the notice names the files it stepped around"
+    assert output.out.rstrip().endswith(str(dest / sub))
+
+
+def test_the_next_workspace_does_not_overwrite_them_either(tmp_path):
+    """The first delivery writes a manifest that records only its own subfolder.
+    The unrecorded top-level files must stay protected for every later one."""
+    beta = posting_workspace(tmp_path, "beta", "Beta Corp", "Data Scientist", "BETA")
+    gamma = posting_workspace(tmp_path, "gamma", "Gamma AG", "ML Engineer", "GAMMA")
+    dest = tmp_path / "consultation"
+    legacy = _legacy_delivery(dest, "ACME")
+    assert run(beta, dest, "--no-pdf") == 0
+    assert run(gamma, dest, "--no-pdf") == 0
+    after = snapshot(dest)
+    assert {rel: after[rel] for rel in legacy} == legacy
+    assert "GAMMA" in (dest / "Gamma AG ML Engineer/报告/求职建议报告.md").read_text(encoding="utf-8")
+    assert run(beta, dest, "--no-pdf") == 0, "a redelivery returns to its own subfolder"
+    assert {p.name for p in dest.iterdir() if p.is_dir()} == {
+        "报告", "简历", "Beta Corp Data Scientist", "Gamma AG ML Engineer"}
+
+
+def test_unrecorded_files_identical_to_this_rounds_copies_are_its_own(tmp_path, capsys):
+    """The twin: an older deliver.py's copy of THIS workspace's files, byte for
+    byte. Nothing would be lost by writing over it, so the round stays put."""
+    ws = posting_workspace(tmp_path, "acme", "Acme BV", "ML Engineer", "ACME")
+    dest = tmp_path / "consultation"
+    (dest / "报告").mkdir(parents=True)
+    (dest / "简历").mkdir()
+    shutil.copy2(ws / "report.md", dest / "报告/求职建议报告.md")
+    shutil.copy2(ws / "cv.pdf", dest / "简历/简历.pdf")
+    capsys.readouterr()
+    assert run(ws, dest, "--no-pdf") == 0
+    assert "NOTICE_SEPARATE_FOLDER" not in capsys.readouterr().err
+    assert client_files(dest) == {"报告/求职建议报告.md", "简历/简历.md", "简历/简历.pdf"}
+
+
+def test_one_changed_byte_makes_the_unrecorded_files_foreign(tmp_path):
+    ws = posting_workspace(tmp_path, "acme", "Acme BV", "ML Engineer", "ACME")
+    dest = tmp_path / "consultation"
+    (dest / "报告").mkdir(parents=True)
+    (dest / "简历").mkdir()
+    shutil.copy2(ws / "report.md", dest / "报告/求职建议报告.md")
+    (dest / "简历/简历.pdf").write_bytes((ws / "cv.pdf").read_bytes() + b"\n")
+    assert run(ws, dest, "--no-pdf") == 0
+    assert (dest / "简历/简历.pdf").read_bytes() == (ws / "cv.pdf").read_bytes() + b"\n"
+    assert client_files(dest / "Acme BV ML Engineer") == {
+        "报告/求职建议报告.md", "简历/简历.md", "简历/简历.pdf"}
+
+
+def test_unrecorded_files_in_this_workspaces_default_folder_are_its_own(tmp_path, monkeypatch):
+    """The other twin: ~/Downloads/<workspace name>/ is named after this very
+    workspace, so an older deliver.py's files there are this workspace's earlier
+    round, and the new one replaces them in place."""
+    monkeypatch.setattr(deliver, "DEFAULT_ROOT", tmp_path / "Downloads")
+    ws = posting_workspace(tmp_path, "acme-ml-engineer-2026-10-24", "Acme BV", "ML Engineer",
+                           "ROUND-TWO")
+    folder = tmp_path / "Downloads" / ws.name
+    _legacy_delivery(folder, "ROUND-ONE")
+    assert deliver.main(["--workspace", str(ws), "--no-pdf"]) == 0
+    assert client_files(folder) == {"报告/求职建议报告.md", "简历/简历.md", "简历/简历.pdf"}
+    assert "ROUND-TWO" in (folder / "报告/求职建议报告.md").read_text(encoding="utf-8")
+    assert (folder / "简历/简历.pdf").read_bytes() == (ws / "cv.pdf").read_bytes()
+
+
+def test_another_workspaces_default_folder_is_not_this_ones(tmp_path, monkeypatch):
+    """Delivering INTO a folder named after a different workspace is a shared
+    --to like any other: its unrecorded files are that workspace's."""
+    monkeypatch.setattr(deliver, "DEFAULT_ROOT", tmp_path / "Downloads")
+    beta = posting_workspace(tmp_path, "beta", "Beta Corp", "Data Scientist", "BETA")
+    other = tmp_path / "Downloads" / "acme-ml-engineer-2026-10-24"
+    legacy = _legacy_delivery(other, "ACME")
+    assert run(beta, other, "--no-pdf") == 0
+    assert {rel: data for rel, data in snapshot(other).items()
+            if not rel.startswith("Beta Corp")} == legacy
+
+
+def test_only_the_clients_own_files_leave_the_folder_usable(tmp_path):
+    """Files deliver.py never writes are not a delivery: a client's own notes in
+    the folder do not push the round into a subfolder."""
+    ws = posting_workspace(tmp_path, "acme", "Acme BV", "ML Engineer", "ACME")
+    dest = tmp_path / "consultation"
+    (dest / "简历").mkdir(parents=True)
+    (dest / "简历/notes.txt").write_text("the client's own note", encoding="utf-8")
+    (dest / "求职建议报告.md").write_text("a draft the client saved here", encoding="utf-8")
+    assert run(ws, dest, "--no-pdf") == 0
+    assert client_files(dest) == {"报告/求职建议报告.md", "简历/简历.md", "简历/简历.pdf",
+                                  "简历/notes.txt", "求职建议报告.md"}
+
+
 # ---- CV and letter PDFs come from their renderers, never from the report one --
 #
 # MEASURED: with no cv.pdf, cv.md went through the REPORT renderer into 简历.pdf
