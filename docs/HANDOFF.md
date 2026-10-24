@@ -8,11 +8,11 @@
 ## 当前状态
 
 - 四个模式（apply、assess、discover、interview）都已上线；`evals/` 已建成。
-- 版本：1.3.0（2026-10-24，PR #34，tag `v1.3.0`）。1.2.1 到 1.2.3 没有单独打 tag，修复并入 1.3.0。
+- 版本：1.3.1（2026-10-24）。1.3.0 见 PR #34；1.2.1 到 1.2.3 没有单独打 tag，修复并入 1.3.0。
 - `make check`（2026-10-24，Python 3.11 venv）：
 
 ```
-5739 passed, 8 skipped
+5837 passed, 8 skipped
 LOSSLESS: 1317/1317 baseline lines accounted for across 57 files, 88 waived
 check_conventions --ci: exit 0
 NO_HIDDEN_CHARS
@@ -57,9 +57,13 @@ NO_HIDDEN_CHARS
 
 ## 还没做完的
 
-- **变异测试**：1.3.0 合并后在 CI 跑了一次（run 40056907221）。check_claims.py 出现 29 个新存活体，
-  正在补测试；render_cv.py 的结果出来后同样处理。基线文件是 `scripts/mutants-baseline.json`，只有本地
-  `make mutants-record` 能改它，每条都要写理由。
+- **变异测试**：1.3.0 合并后在 CI 跑了一次（run 40056907221）。check_apply.py 通过；check_claims.py 的
+  29 个新存活体已在 1.3.1 补齐（本地全量：141 个变异体，存活 15，其中 13 条旧债、2 条等价，均记入基线）；
+  **render_cv.py 的结果在 1.3.1 发布时还没出来**，出来后按同样方法处理。基线文件是
+  `scripts/mutants-baseline.json`，只有本地 `make mutants-record` 能改它（它会重写整个文件，记得把其他
+  目标的条目合并回来），每条都要写理由。
+- **真实模拟测试**：材料已备好，在 `~/code_project/job-hunt-workspace/sim-1.3.x-20261024/`
+  （`SIM-PLAN.md`、`CODEX-DISCOVER-PROMPT.md`，只用虚构候选人），尚未开跑。
 - **行为评估**：见上一节，1.3.0 之后没有重跑。
 - **安装体积**：仓库根目录就是 skill，`npx skills add` 会把整个仓库（含 docs、evals、tests，约 10MB）
   拷进用户目录，且不支持排除文件。要彻底解决只能把 skill 挪进子目录，会牵动两条安装路径和一批测试。
