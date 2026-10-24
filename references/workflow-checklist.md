@@ -148,6 +148,8 @@ Read-when:
 - [ ] In interview mode? `modes/interview.md`, loaded on entry, not on demand — and
       `references/interview-shapes.md` in full before the first question.
 - [ ] In discover mode? `modes/discover.md`, loaded on entry, not on demand.
+- [ ] A discover gate reported a finding? Read `references/discover/finding-codes.md`.
+- [ ] Writing a report that compares several postings? Also read `references/discover/multi-posting-report.md`.
 - [ ] Matching a discovered role to a CV? Read `references/candidate-matching.md`,
       then run `scripts/snapshot_profile.py` once to freeze
       `candidate-profile.yaml` before mapping any detail.

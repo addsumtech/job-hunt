@@ -92,6 +92,9 @@ job-hunt/
   user-recovery.md         # human login/verification hand-off and linked new round
 │   ├── supplementary-sources.md     # optional career background research
 │   ├── discovery-sources.md         # Per-adapter catalogue for discover
+│   ├── discover/                    # discover-only, read on demand
+│   │   ├── finding-codes.md         #   what each discover gate finding means and how to fix it
+│   │   └── multi-posting-report.md  #   grouping and layout rules for a report comparing postings
 │   ├── candidate-matching.md         # Evidence-backed CV-to-detail matching for discovery
 │   ├── search-coverage.md            # Preregistered search scope and completion evidence
 │   ├── gap-analysis.md              # Gap analysis, tailoring methodology, claim provenance
