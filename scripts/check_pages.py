@@ -425,6 +425,10 @@ def _macos_libreoffice_app():
     with the same private profile without that AppKit initialization crash.
     Keep the direct command as a fallback: a custom or older installation may
     not have an app bundle but can still export successfully.
+
+    `open -a` activates the app it launches, and `--headless` does not stop that:
+    LibreOffice would take the user's keyboard focus every time a Word file is
+    measured. `-g` keeps it in the background and `-j` launches it hidden.
     """
     if platform.system() != "Darwin":
         return None
@@ -443,7 +447,7 @@ def _office_export_commands(office, profile, folder, docx):
     direct = [str(office), *args]
     app = _macos_libreoffice_app()
     if app and shutil.which("open"):
-        return [["open", "-W", "-n", "-a", str(app), "--args", *args], direct]
+        return [["open", "-g", "-j", "-W", "-n", "-a", str(app), "--args", *args], direct]
     return [direct]
 
 
