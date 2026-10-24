@@ -6,6 +6,7 @@ Usage:
 """
 import argparse
 import pathlib
+import re
 # The compile itself now runs inside render_cv.compile_latex, but this import
 # stays: `render_letter.subprocess` is the same module object as
 # `render_cv.subprocess`, and it is the handle the letter's engine-argv test
@@ -53,7 +54,7 @@ def render_docx(d, out_path):
     from docx.shared import Mm, Pt, RGBColor
     from docx.oxml.ns import qn
     doc = Document()
-    meta = d.get("meta", {}) or {}
+    meta = _meta(d)
     section = doc.sections[0]
     section.page_width, section.page_height = (
         (Mm(215.9), Mm(279.4)) if render_cv.paper_for(meta) == "letterpaper"
@@ -69,7 +70,7 @@ def render_docx(d, out_path):
         fonts.attrib.pop(qn("w:" + attr), None)
     east_asia = meta.get("cjk_font") or {
         "zh": "SimSun", "ja": "Yu Mincho", "ko": "Malgun Gothic"
-    }.get(meta.get("language", "en"))
+    }.get(meta["language"])
     if east_asia:
         fonts.set(qn("w:eastAsia"), east_asia)
     style.paragraph_format.space_before = Pt(0)
@@ -131,9 +132,208 @@ _CLOSING = {
 }
 
 
+# ── what language the letter is in, when it does not say ─────────────────────
+#
+# references/motivation-letter.md §4 and modes/apply.md give letter.yaml an
+# "exact schema" with no `meta` block, and this file read `meta.language` and
+# `meta.target_market` with English and A4 as the defaults. So a letter written
+# to the documented schema could not be anything else: a Chinese letter with no
+# salutation rendered "Dear Hiring Team," and "Sincerely," around Chinese
+# paragraphs (and check_letter passed it), and a US application shipped cv.pdf on
+# Letter beside letter.pdf and letter.docx on A4.
+#
+# The body is the evidence. Script settles CJK outright (see `infer_language` for
+# why CJK characters are weighed against Latin words). For Latin script, a short
+# list of function words per language is counted, and a language is named only
+# when it clearly wins; a body that does not say stays undecided, rather than
+# being guessed, and the old default applies.
+_KANA = ("\u3040", "\u30ff")
+_HANGUL = (("\u1100", "\u11ff"), ("\u3130", "\u318f"), ("\uac00", "\ud7af"))
+_HAN = (("\u3400", "\u4dbf"), ("\u4e00", "\u9fff"), ("\uf900", "\ufaff"))
+
+
+def _in(ch, ranges) -> bool:
+    return any(lo <= ch <= hi for lo, hi in ranges)
+
+
+def script_counts(text) -> dict:
+    """{'kana', 'hangul', 'han', 'latin'} character counts."""
+    counts = {"kana": 0, "hangul": 0, "han": 0, "latin": 0}
+    for ch in str(text or ""):
+        if _KANA[0] <= ch <= _KANA[1]:
+            counts["kana"] += 1
+        elif _in(ch, _HANGUL):
+            counts["hangul"] += 1
+        elif _in(ch, _HAN):
+            counts["han"] += 1
+        elif ch.isalpha() and (ch.isascii() or "\u00c0" <= ch <= "\u024f"):
+            counts["latin"] += 1
+    return counts
+
+
+def cjk_count(counts) -> int:
+    return counts["kana"] + counts["hangul"] + counts["han"]
+
+
+# Function words, chosen for being frequent in a formal letter and hard to meet
+# in another of these languages: a word that is ordinary in two of them ("de",
+# "la", "in", "is", "was", "es", "do") is left out of both, so one shared word
+# cannot tip the count. `_LATIN_MIN_SHARE` and the two-to-one margin are why a
+# short or mixed body comes back undecided.
+#
+# Left out on purpose, because they are ordinary in a language they do not
+# belong to: en am/will (German), de die (Dutch) / des (French), nl de/en
+# (French, Spanish), fr le (Italian), it il (French), es del/con/mi/su (Italian)
+# and para/por/este (Portuguese), pt um (German) / dos (Spanish) / sua (Italian).
+_FUNCTION_WORDS = {
+    "en": "the and of to that with for my have this your at be which from by it "
+          "are we our would not but has been their you",
+    "de": "der das und ich nicht mit für ist ein eine einen zu den dem von auf bei "
+          "ihre ihr sich auch dass mich mein meine habe wir sie über durch sehr "
+          "ihnen bin",
+    "nl": "het een van ik niet voor op bij dat zijn uw mijn ook naar om heb wij "
+          "graag kan wordt deze aan maar mij",
+    "fr": "les et une je j qu pour avec dans est mon mes votre vos au sur pas ce "
+          "cette nous vous aux suis très par plus été",
+    "es": "el los las y mis sus más pero soy muy nuestro nuestra también cuando "
+          "estoy hasta",
+    "it": "gli di della delle degli dei dalla che è mio mia sono nel nella alla ho "
+          "anche questo questa più essere vostro vostra presso",
+    "pt": "os uma em na é meu minha seu ao mas sou muito nossa nosso também não eu",
+}
+_WORD_SETS = {lang: set(words.split()) for lang, words in _FUNCTION_WORDS.items()}
+_SHARED = {w for lang, ws in _WORD_SETS.items() for w in ws
+           if any(w in other for o, other in _WORD_SETS.items() if o != lang)}
+_WORD_SETS = {lang: ws - _SHARED for lang, ws in _WORD_SETS.items()}
+_LATIN_MIN_SHARE = 0.08
+_LATIN_WORD_RE = re.compile(r"[a-z\u00df-\u00f6\u00f8-\u024f]+")
+
+
+def infer_language(text):
+    """'zh' | 'ja' | 'ko' | 'en' | 'de' | 'nl' | 'fr' | 'es' | 'it' | 'pt', or None
+    when the text does not settle it.
+
+    CJK characters are weighed against Latin WORDS, not Latin letters. One CJK
+    character carries about what a short word does, and a Chinese letter keeps
+    team and tool names in English — "我在Google Cloud Platform的Distributed
+    Systems团队负责…" has more Latin letters than Han and is still Chinese."""
+    counts = script_counts(text)
+    cjk = cjk_count(counts)
+    words = _LATIN_WORD_RE.findall(str(text or "").lower())
+    if cjk and cjk >= len(words):
+        if counts["hangul"] > counts["han"] + counts["kana"]:
+            return "ko"
+        if counts["kana"] >= 0.1 * (counts["han"] + counts["kana"]):
+            return "ja"
+        return "zh"
+    if not words:
+        return None
+    scores = sorted(((sum(w in ws for w in words), lang)
+                     for lang, ws in _WORD_SETS.items()), reverse=True)
+    (best, lang), (second, _) = scores[0], scores[1]
+    if best >= 3 and best >= _LATIN_MIN_SHARE * len(words) and best >= 2 * second:
+        return lang
+    return None
+
+
+def body_text(d) -> str:
+    return " ".join(str(p) for p in body_paragraphs(journal.as_mapping(d)))
+
+
+def declared_language(d) -> str:
+    meta = journal.as_mapping(journal.as_mapping(d).get("meta"))
+    return str(meta.get("language") or "").strip().lower()[:2]
+
+
 def _language(d) -> str:
-    meta = d.get("meta") if isinstance(d.get("meta"), dict) else {}
-    return str(meta.get("language") or "en").strip().lower()[:2]
+    """meta.language, else the body's own language, else English (the old default)."""
+    return declared_language(d) or infer_language(body_text(d)) or "en"
+
+
+def _meta(d) -> dict:
+    """`meta` with `language` filled in, for the font and paper choices."""
+    meta = dict(journal.as_mapping(journal.as_mapping(d).get("meta")))
+    meta["language"] = _language(d)
+    return meta
+
+
+# ── the rest of the application package ──────────────────────────────────────
+#
+# The letter lives in the application workspace beside tailored-profile.yaml,
+# whose `meta.target_market` the user chose in Step 0 and which already decides
+# the CV's paper. Reading it is what puts the two documents of one package on one
+# paper size. posting.yaml has no market field, only the posting's own location
+# text, so it is consulted last and only to recognise a US/Canada posting.
+_WORKSPACE_PROFILES = ("tailored-profile.yaml", "profile.yaml")
+_INHERITED_FONTS = ("main_font", "cjk_font")
+
+
+def _read_mapping(path):
+    try:
+        return journal.load_yaml(path, dict) if path.is_file() else {}
+    except journal.YamlUnreadable:
+        # The CV renderer and its gates report an unreadable profile; a letter
+        # falls back to its own defaults rather than failing over a sibling file.
+        return {}
+
+
+def resolved_letter(d, workspace=None):
+    """`(letter, notes)`: `d` with the meta it left out filled in from evidence.
+
+    Each key `d` states itself wins. Otherwise: `language` from the body
+    (`infer_language`), then from the workspace profile; `target_market`/`paper`
+    from the workspace profile, then — for Letter paper only — from a US/Canada
+    location in posting.yaml; `main_font`/`cjk_font` from the workspace profile,
+    so a font the CV needed to keep its glyphs is the letter's font too. `notes`
+    says what was taken from where, one line each, for the caller to print.
+    """
+    d = journal.as_mapping(d)
+    own = journal.as_mapping(d.get("meta"))
+    meta = dict(own)
+    notes = []
+    ws = pathlib.Path(workspace) if workspace is not None else None
+    profile_meta, profile_name = {}, None
+    if ws is not None:
+        for name in _WORKSPACE_PROFILES:
+            found = journal.as_mapping(_read_mapping(ws / name).get("meta"))
+            if found:
+                profile_meta, profile_name = found, name
+                break
+
+    if not (own.get("target_market") or own.get("paper")):
+        taken = [k for k in ("target_market", "paper") if profile_meta.get(k)]
+        for key in taken:
+            meta[key] = profile_meta[key]
+        if taken:
+            notes.append(f"letter.yaml has no meta.target_market; using "
+                         f"{', '.join(f'{k}={profile_meta[k]!r}' for k in taken)} "
+                         f"from {profile_name}, so the letter prints on the CV's "
+                         f"paper size")
+        elif ws is not None:
+            location = _read_mapping(ws / "posting.yaml").get("location")
+            if isinstance(location, str) and render_cv.north_america(location):
+                meta["paper"] = "letter"
+                notes.append(f"letter.yaml has no meta.target_market; posting.yaml's "
+                             f"location {location!r} is in the US/Canada, so the "
+                             f"letter prints on Letter paper")
+    for key in _INHERITED_FONTS:
+        if not own.get(key) and profile_meta.get(key):
+            meta[key] = profile_meta[key]
+
+    if not declared_language(d):
+        inferred = infer_language(body_text(d))
+        fallback = str(profile_meta.get("language") or "").strip().lower()[:2]
+        if inferred:
+            meta["language"] = inferred
+            notes.append(f"letter.yaml has no meta.language; the body reads as "
+                         f"{inferred!r}")
+        elif fallback:
+            meta["language"] = fallback
+            notes.append(f"letter.yaml has no meta.language and the body does not "
+                         f"settle it; using {profile_name}'s {fallback!r}")
+    out = dict(d)
+    out["meta"] = meta
+    return out, notes
 
 
 def salutation_for(d) -> str:
@@ -174,15 +374,19 @@ def build_latex(d, engine=None, cjk=False):
     e = render_cv.latex_escape
     s = d.get("sender", {}) or {}
     r = d.get("recipient", {}) or {}
+    # The sender's name keeps a space between CJK characters, as the CV's name
+    # does: `山田 太郎` is a Japanese name, not a folded scalar.
+    sender_name = e(s.get("name", ""), keep_cjk_spaces=True)
     # `meta` is passed for the paper size. Without it the CV in an application
     # package printed on Letter for a US role while the letter beside it printed
-    # on A4 — one package, two page sizes, and nothing said so.
+    # on A4 — one package, two page sizes, and nothing said so. `_meta` adds the
+    # letter's language, which picks the CJK font chain for a Japanese letter.
     parts = render_cv.latex_preamble(engine=engine, cjk=cjk, margin="2.5cm",
-                                     meta=d.get("meta")) + [
+                                     meta=_meta(d)) + [
         r"\pagestyle{empty}",
         r"\begin{document}",
         r"\noindent %s\\ %s\\ %s\\[1em]" % (
-            e(s.get("name", "")), e(s.get("email", "")), e(s.get("location", ""))),
+            sender_name, e(s.get("email", "")), e(s.get("location", ""))),
     ]
     if d.get("date"):
         parts.append(r"%s\\[1em]" % e(d["date"]))
@@ -194,7 +398,7 @@ def build_latex(d, engine=None, cjk=False):
         parts.append(e(para) + r"\\[1em]")
     if closing_for(d):
         parts.append(e(closing_for(d)) + r"\\")
-    parts.append(e(s.get("name", "")))
+    parts.append(sender_name)
     parts.append(r"\end{document}")
     return "\n".join(parts) + "\n"
 
@@ -256,6 +460,12 @@ def main(argv=None):
         return 2
     render_cv.reset_photo_warnings()
     out = pathlib.Path(args.out)
+    # modes/apply.md renders `<workspace>/letter.yaml`, so the letter's own
+    # directory IS the application workspace, and the tailored profile beside it
+    # is what knows the market. Said on stderr, so nothing is silently assumed.
+    d, notes = resolved_letter(d, workspace=pathlib.Path(args.letter).resolve().parent)
+    for note in notes:
+        print(f"NOTICE: {note}.", file=sys.stderr)
 
     # Same early validation as render_cv.main: the letter shares `paper_for`, so
     # an override it cannot read must fail the same way for every format rather

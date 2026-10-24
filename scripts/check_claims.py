@@ -30,20 +30,42 @@ class (a comment's words are still words, so word boundaries alone do not); whol
 tokens are what kill the sub-word class. Neither alone does both. A tailored term
 is sourced when it equals a master leaf, appears as a whole phrase inside one of
 the candidate's own prose leaves, is a phrase of a master leaf **of its own kind**
-(so "Acme" from "Acme BV" and the de-escalation "Senior ML Engineer" → "ML
-Engineer" stay quiet, while a fabricated `MSc` *certification* is not sourced by a
-*degree*), or has a claims.yaml row. `links` are excluded from the permitted set:
-an account on a service is not a skill. (Whole-token matching already makes a bare
-URL inert — one URL is one token — so what the exclusion still buys is the
-`{label, url}` form, whose label is a leaf like any other.)
+(so the de-escalation "Senior ML Engineer" → "ML Engineer" stays quiet, while a
+fabricated `MSc` *certification* is not sourced by a *degree*), or has a
+claims.yaml row. `links` are excluded from the permitted set: an account on a
+service is not a skill. (Whole-token matching already makes a bare URL inert —
+one URL is one token — so what the exclusion still buys is the `{label, url}`
+form, whose label is a leaf like any other.)
 
-QUALIFIER_STRIPPED is deliberately narrow — only a dropped STATUS marker from a
-closed vocabulary ("(in progress)", "(expired 2023)", "(B1)", ", in progress"),
-where deleting it upgrades a real credential into a stronger one. It is NOT "the
-tailored term is a substring of a master leaf": that version fires on `Senior ML
-Engineer` → `ML Engineer` and on `PyTorch Lightning` → `PyTorch`, the truthful
-reframings this skill exists to permit, and a check that cries wolf on ordinary
-output is worse than no check, because the reader learns to skip the line.
+Employers and institutions are the exception to "a phrase of its own kind". A
+name may lose a legal-form or group suffix ("Acme BV" → "Acme", "Alibaba Group"
+→ "Alibaba", "株式会社リクルート" → "リクルート") or the sub-unit after its first
+comma ("Leiden University, Faculty of Science" → "Leiden University"), and
+nothing else: "Google" is a phrase of "Google Developer Student Club Leiden" and
+names a different, far larger organisation, which is the fabricated-employer
+class itself, and "TU Delft" off "TU Delft (exchange)" turns a semester into a
+degree. A shortened name is ORG_TRUNCATED, and prose does not source a name
+either — a client in a bullet is not an employer.
+
+QUALIFIER_STRIPPED is deliberately narrow. It fires on two closed vocabularies
+and nothing else: a dropped STATUS marker ("(in progress)", "(expired 2023)",
+"(B1)", "在读", "（备考中）"), where deleting it upgrades a real credential into a
+stronger one, and a dropped SUBORDINATE-RANK qualifier ("Assistant", "Associate",
+"Junior", "Deputy", "Vice", "Acting", "Interim", "Trainee", "Intern", 副, 助理,
+实习, 補佐, 부 …), where deleting it claims a more senior post than the one held.
+Words that point the other way — Senior, Lead, Principal, Staff, Head — are not
+in it: dropping them is a de-escalation, and stays quiet. It is NOT "the tailored
+term is a substring of a master leaf": that version fires on `Senior ML Engineer`
+→ `ML Engineer` and on `PyTorch Lightning` → `PyTorch`, the truthful reframings
+this skill exists to permit, and a check that cries wolf on ordinary output is
+worse than no check, because the reader learns to skip the line.
+
+ORDER is part of the rule. The trimmed term is compared with the master entry it
+came from (paired on dates and employer) and with every same-kind entry BEFORE
+any looser source is consulted. Measured 2026-10-24: with the qualifier check
+last, "MSc Computer Science" off "MSc Computer Science (in progress, expected
+2027)" came back sourced, because the summary said "MSc Computer Science student"
+and the prose pass cleared the claim before the qualifier was ever looked at.
 
 Also fails if profile.yaml changed during the run. Overwriting the master is
 destructive and unrecoverable, and the damage only surfaces on the NEXT
@@ -165,6 +187,7 @@ LINK_KEYS = ("links",)
 # rule of the whole skill failing on language rather than on substance.
 _STATUS_TOKENS = frozenset("""
     progress training ongoing expected anticipated planned pending prospective
+    preparation preparing
     partial incomplete unfinished discontinued withdrawn paused deferred
     expired lapsed revoked suspended provisional candidate coursework audited
     self-taught taught beginner basic elementary intermediate conversational
@@ -186,13 +209,59 @@ _STATUS_TOKENS = frozenset("""
 _STATUS_CJK = (
     "在读", "在讀", "在学", "在學", "预计", "預計", "已过期", "已失效", "待考",
     "初级", "初級", "入门", "入門", "肄业", "肄業", "未完成", "修读中", "修讀中",
+    # 备考 = studying for the exam, i.e. not passed. Simplified only on purpose:
+    # Japanese 備考 means "remarks", so the traditional form is listed as 備考中.
+    "备考", "備考中", "准备中", "準備中",
     # Japanese
     "見込", "見込み", "在学中", "履修中", "取得予定", "予定", "中退", "失効",
-    "初級", "日常会話",
-    # Korean
+    "初級", "日常会話", "勉強中",
+    # Korean. 준비 is written both glued (준비중) and spaced (준비 중); the
+    # spaced form leaves 중, which is in the ignorable set below.
     "재학", "재학중", "예정", "졸업예정", "수료", "중퇴", "이수중", "만료",
-    "초급", "기초",
+    "초급", "기초", "준비",
 )
+# A publication's status, whose removal turns a paper nobody has accepted into a
+# published one: "Deep cine recon. NeurIPS 2025 (under review)" → "Deep cine
+# recon. NeurIPS 2025" came back `sourced`. Only the words pointing that way —
+# `in press`, `accepted` and `forthcoming` mean accepted, and dropping them
+# claims nothing. Scoped to `publications` alone: "Code review" off a skill
+# list, a "manuscript" award, "Physical Review Letters" are not statuses.
+# `review` and `revision` are statuses only after `under` / `in`, so the pair is
+# merged into one token before the test (`_publication_tokens`).
+_PUBLICATION_STATUS_TOKENS = frozenset("""
+    submitted preprint manuscript unpublished under_review in_review under_revision
+    in_revision under_consideration
+    eingereicht unveröffentlicht in_begutachtung ingediend ongepubliceerd in_beoordeling
+    soumis soumise en_révision en_revision enviado enviada en_revisión sottomesso
+    sottomessa in_revisione
+""".split())
+_PUBLICATION_STATUS_PAIRS = {
+    "under": ("review", "revision", "consideration"),
+    "in": ("review", "revision", "begutachtung", "beoordeling", "revisione"),
+    "en": ("révision", "revision", "revisión"),
+}
+# Containment, like _STATUS_CJK. 심사 is "review" and stands alone in "심사 중".
+_PUBLICATION_STATUS_CJK = (
+    "投稿中", "已投稿", "审稿中", "審稿中", "在审", "在審", "返修", "査読中", "審査中",
+    "投稿済", "심사중", "심사", "투고",
+)
+
+
+def _publication_tokens(tokens) -> list:
+    """`tokens` with each `under review` / `in review` / `en révision` … pair
+    merged into the one status token it is in `_PUBLICATION_STATUS_TOKENS`."""
+    out, i = [], 0
+    while i < len(tokens):
+        if (i + 1 < len(tokens)
+                and tokens[i + 1] in _PUBLICATION_STATUS_PAIRS.get(tokens[i], ())):
+            out.append(f"{tokens[i]}_{tokens[i + 1]}")
+            i += 2
+            continue
+        out.append(tokens[i])
+        i += 1
+    return out
+
+
 # Tokens that carry no claim either way, so their presence in the dropped material
 # neither triggers the finding nor blocks it. Anything with a digit is here (a year,
 # a date) — checked AFTER the status test, so the CEFR levels above still win.
@@ -216,13 +285,119 @@ _IGNORABLE_TOKENS = frozenset(
      "du la le les et ou a pour depuis dans "
      # es / it
      "el los las y para desde con di da del della nel su "
+     # "CPA (exam in preparation)", "CFA Level III Candidate", "CPA (시험 준비 중)":
+     # the exam and its part number say nothing either way, and without them the
+     # whole-span rule let the status word go.
+     "exam exams examination i ii iii iv "
      # zh / ja / ko connectives that survive tokenisation
-     "年 月 版").split())
+     "年 月 版 중 시험").split())
+
+# Subordinate-rank qualifiers: words whose REMOVAL claims a more senior post.
+# Measured 2026-10-24, every one of these came back `sourced` because the short
+# title is a phrase of the long one: Assistant Manager → Manager, Associate
+# Director → Director, Junior Data Scientist → Data Scientist, 经理助理 → 经理,
+# 副总监 → 总监. A closed vocabulary, for the reason the status list is one.
+#
+# Only the subordinate direction is here. Senior / Lead / Principal / Staff /
+# Head are absent on purpose: dropping one is the honest de-escalation the gate
+# must stay quiet on. Position matters, so the words are split by which side of
+# the title they qualify — see `dropped_seniority`.
+#
+# Modifiers that qualify the head AFTER them ("Assistant Professor", "Vice
+# President", "Acting Director"). `co` is "Co Founder" written with a space; the
+# hyphenated "Co-Founder" is one token and already fails as unsourced.
+_RANK_BEFORE = frozenset("""
+    assistant asst associate assoc junior jr deputy vice acting interim adjunct co
+    stellvertretender stellvertretende stellv kommissarischer kommissarische
+    assistent assistentin
+    waarnemend waarnemende plaatsvervangend plaatsvervangende
+""".split())
+# Postpositive modifiers that qualify the head BEFORE them ("Directeur adjoint",
+# "Director adjunto").
+_RANK_AFTER = frozenset("""
+    adjoint adjointe interimaire intérimaire
+    adjunto adjunta interino interina suplente aggiunto aggiunta
+""".split())
+# Trainee nouns, written on either side of the field ("Intern Software
+# Engineer", "Software Engineer Intern", "Werkstudent Data Science").
+_RANK_EITHER = frozenset("""
+    intern interns internship trainee trainees apprentice apprenticeship
+    praktikant praktikantin werkstudent werkstudentin auszubildender
+    auszubildende azubi stagiair stagiaire becario becaria stagista tirocinante
+""".split())
+# Rank words that only ever appear inside a qualifier segment ("(en prácticas)").
+_RANK_ONLY = frozenset("practicas prácticas praktikum tirocinio".split())
+# CJK writes these glued to the title, so they are matched on the residue next to
+# the kept span: a marker that qualifies what follows must END the text before
+# it (副总监, 高级副总裁, 助理研究员, 見習いエンジニア, 수습기자), one that qualifies
+# what precedes must START the text after it (经理助理, 課長補佐, 部長代理, 課長心得,
+# 팀장 직무대리). 대리 alone is deliberately absent: in Korean it is itself a rank
+# (assistant manager), not a qualifier on one.
+_RANK_CJK_BEFORE = (
+    "副", "助理", "实习", "实习生", "實習", "實習生", "见习", "見習", "見習い",
+    "代理", "署理", "インターン", "수습", "인턴", "보조", "직무대리", "직무대행",
+)
+_RANK_CJK_AFTER = (
+    "助理", "补佐", "補佐", "代理", "心得", "见习", "見習", "实习", "實習",
+    "実習生", "研修生", "インターン", "인턴", "직무대리", "직무대행", "권한대행", "대행",
+)
+# Single characters too common inside other words to match by suffix: 标准
+# ("standard") ends in 准, 본부 ("headquarters") ends in 부. They count only when
+# they are the WHOLE residue — 准教授 → 教授, 부사장 → 사장, 부교수 → 교수.
+_RANK_CJK_WHOLE = ("准", "부")
+_RANK_CJK = frozenset(_RANK_CJK_BEFORE + _RANK_CJK_AFTER + _RANK_CJK_WHOLE)
+
+# Legal-form designators, which an employer or institution name may lose (the
+# group designators below and a sub-unit after the first comma are the only
+# other things it may). Stripped from the end; the few written FIRST — Japanese and
+# Korean forms (株式会社リクルート, (주)카카오 → tokens `株`, `주`) and the Dutch
+# foundation — are stripped from the front as well. A Western form is never
+# stripped from the front: "AS Roma" is not "Roma".
+_LEGAL_FORMS_LEADING = frozenset("""
+    株 有 주 株式会社 有限会社 合同会社 주식회사 유한회사 stichting
+""".split())
+_LEGAL_FORMS = frozenset("""
+    inc incorporated corp corporation co ltd limited llc l.l.c llp lp plc p.l.c
+    pllc gmbh ggmbh ag kg kgaa ohg ug se e.v stichting
+    bv b.v nv n.v vof
+    sa s.a sas s.a.s sarl s.a.r.l sl s.l slu cv c.v
+    spa s.p.a srl s.r.l
+    pty pte bhd sdn oy oyj ab as asa aps a/s kk k.k
+    株 有 주
+    股份有限公司 有限责任公司 有限責任公司 有限公司 株式会社 有限会社 合同会社
+    주식회사 유한회사
+""".split())
+# The same CJK forms written glued to the name (腾讯科技有限公司).
+_LEGAL_FORMS_GLUED = ("股份有限公司", "有限责任公司", "有限責任公司", "有限公司",
+                      "株式会社", "有限会社", "合同会社", "주식회사", "유한회사")
+# Corporate-group designators, dropped like a legal form but from the END only:
+# "Alibaba Group" → "Alibaba", "Tencent Holdings Ltd" → "Tencent", "腾讯控股" →
+# "腾讯", "楽天グループ株式会社" → "楽天". A group and its operating company are
+# the same employer for a CV's purposes; "Group Lotus" is not "Lotus".
+_GROUP_FORMS = frozenset("""
+    group holdings holding 集团 集團 控股 グループ ホールディングス 그룹 홀딩스
+""".split())
+_GROUP_FORMS_GLUED = ("集团", "集團", "控股", "グループ", "ホールディングス",
+                      "그룹", "홀딩스")
+# Between two legal forms only: "GmbH & Co. KG", "S.A. de C.V.".
+_LEGAL_JOINERS = frozenset("and und en et y e de".split())
+# A leading article: "de Volksbank", "The Boston Consulting Group".
+_LEADING_ARTICLES = frozenset("the de het".split())
 
 # Scripts written without word delimiters. See `phrase_in`.
 _UNSEGMENTED_RE = re.compile(r"[฀-๿　-鿿가-힯豈-﫿]")
 
-SOURCED, QUALIFIER = "sourced", "qualifier"
+# A delimited stretch of a leaf: "(in progress)", ", in progress", " — B1". The
+# characters are ones normalize_term turns into spaces anyway, so splitting on
+# them changes no token; a spaced hyphen is one too.
+_SEGMENT_BREAK = re.compile(r"[()\[\]{}<>,;:|·、【】《》〈〉「」『』—–]|\s-+\s")
+
+SOURCED, QUALIFIER, TRUNCATED, UNSOURCED = (
+    "sourced", "qualifier", "truncated", "unsourced")
+
+# Employer and institution names: matched by `_legal_core`, never by phrase, and
+# against each other — a PhD candidate's university is both.
+NAME_FAMILIES = ("experience.org", "education.institution")
 
 
 def normalize_term(s) -> str:
@@ -261,12 +436,17 @@ def phrase_in(term, text) -> bool:
     return bool(n) and any(have[i:i + n] == wanted for i in range(len(have) - n + 1))
 
 
-def _is_status(token) -> bool:
+def _is_status(token, publication=False) -> bool:
+    if publication and (token in _PUBLICATION_STATUS_TOKENS
+                        or any(w in token for w in _PUBLICATION_STATUS_CJK)):
+        return True
     return token in _STATUS_TOKENS or any(w in token for w in _STATUS_CJK)
 
 
 def _is_ignorable(token) -> bool:
-    return token in _IGNORABLE_TOKENS or any(ch.isdigit() for ch in token)
+    # A token with no letter or digit at all is a bare separator ("-", "&").
+    return (token in _IGNORABLE_TOKENS or any(ch.isdigit() for ch in token)
+            or not any(ch.isalnum() for ch in token))
 
 
 # A NEGATED completion is a status marker, and neither half of it is one on its
@@ -312,7 +492,7 @@ def _negated_completion(tokens) -> bool:
     return False
 
 
-def dropped_status(term, leaf):
+def dropped_status(term, leaf, family=None):
     """The status marker `term` drops off `leaf`, or None.
 
     What the term dropped must be a status and NOTHING BUT a status (plus dates
@@ -332,42 +512,358 @@ def dropped_status(term, leaf):
     Punctuation is whitespace by the time we compare, so "(B1)", ", in progress"
     and " — expected 2027" are one rule rather than three, and a master that
     writes the qualifier without brackets is not a way through.
+
+    Two narrower cases fire as well, both only when the term itself carries no
+    status word: everything AFTER the kept span is status ("Dutch" off "English
+    (native), Dutch (B1)"; "硕士" off "计算机科学硕士在读"), or the delimited
+    segments right after the kept span's own segment are ("MSc" off "MSc
+    Computer Science (in progress)" — the field went with the status, and the
+    status was still dropped). The segment must be the one directly after: in
+    "English (native), Dutch (B1)" the B1 belongs to Dutch, and "English" drops
+    nothing that qualified it.
+
+    `family == "publications"` adds the publication statuses (under review,
+    submitted, preprint, 投稿中 …) to the vocabulary, for that family only.
     """
-    wanted, have = _token_list(term), _token_list(leaf)
+    split = _split(term, leaf)
+    if split is None:
+        return None
+    pub = family == "publications"
+    before, after, later = split
+    term_tokens = _token_list(term)
+    if pub:
+        before, after, term_tokens = (_publication_tokens(before),
+                                      _publication_tokens(after),
+                                      _publication_tokens(term_tokens))
+        later = [_publication_tokens(seg) for seg in later]
+
+    def status_only(tokens):
+        return _status_only(tokens, pub)
+
+    def shown(tokens):
+        return " ".join(tokens).replace("_", " ")
+
+    dropped = before + after
+    if not dropped:
+        return None
+    if status_only(dropped):
+        return shown(dropped)
+    if _carries_status(term_tokens, pub):
+        return None
+    if status_only(after):
+        return shown(after)
+    # "(under review at MRM)" / "submitted to NeurIPS": a publication status
+    # names its venue, so the dropped span is never status alone — and dropping
+    # all of it still presents the paper as published.
+    if pub and after and _is_status(after[0], True):
+        lead = []
+        for token in after:
+            if not _accounted(token, True):
+                break
+            lead.append(token)
+        while lead and not _is_status(lead[-1], True):
+            lead.pop()
+        return shown(lead)
+    return shown(_leading_run(later, status_only)) or None
+
+
+# The negator and the completion word are the qualifier in "nog niet afgerond",
+# so they count as accounted-for rather than as leftover content. Widening
+# `_IGNORABLE_TOKENS` globally instead would make `completed` invisible
+# everywhere, and "MSc A" off "MSc A completed 2024" must stay silent — it drops
+# no status and reads as an honest trim.
+def _accounted(token, publication=False) -> bool:
+    return (_is_status(token, publication) or _is_ignorable(token)
+            or token in _NEGATORS or token in _COMPLETION_WORDS)
+
+
+def _carries_status(tokens, publication=False) -> bool:
+    return (any(_is_status(t, publication) for t in tokens)
+            or _negated_completion(tokens))
+
+
+def _status_only(tokens, publication=False) -> bool:
+    """A status marker and nothing else: at least one status, no content."""
+    return (bool(tokens) and _carries_status(tokens, publication)
+            and all(_accounted(t, publication) for t in tokens))
+
+
+def _leading_run(segments, test) -> list:
+    """The tokens of the segments at the front of `segments` that pass `test`."""
+    run = []
+    for seg in segments:
+        if not test(seg):
+            break
+        run += seg
+    return run
+
+
+def _segment_tokens(text) -> list:
+    """[(token, segment index)]: the tokens of `text`, each tagged with the
+    delimited segment it sits in. The tokens are `_token_list`'s, minus bare
+    separators such as the hyphen in "First Aid - expired 2024"."""
+    text = unicodedata.normalize("NFKC", str(text or ""))
+    return [(tok, i) for i, seg in enumerate(_SEGMENT_BREAK.split(text))
+            for tok in _token_list(seg)]
+
+
+def _split(term, leaf):
+    """What `leaf` says around `term`: (before, after, later_segments), or None.
+
+    None when `term` is not a whole-token phrase of `leaf`. `before` and `after`
+    are the leaf's tokens on either side of the first occurrence; `later_segments`
+    are the token lists of the delimited segments after the one the occurrence
+    ends in.
+
+    Chinese, Japanese and Korean glue a qualifier to the word it qualifies, so
+    "计算机科学硕士在读" is ONE token and a token match finds no "计算机科学硕士"
+    in it — which is how dropping 在读 passed whenever the master wrote it without
+    brackets. For a term in those scripts the occurrence is found by containment
+    instead, the same fallback `phrase_in` uses, and the residue either side is
+    what was dropped.
+    """
+    wanted = _token_list(term)
+    tagged = _segment_tokens(leaf)
+    have = [tok for tok, _seg in tagged]
     n = len(wanted)
-    if not n or len(have) <= n:
+    if not n or not have:
         return None
     at = next((i for i in range(len(have) - n + 1) if have[i:i + n] == wanted), None)
-    if at is None:
-        return None
-    dropped = have[:at] + have[at + n:]
-    if not any(_is_status(t) for t in dropped) and not _negated_completion(dropped):
-        return None
-    # The negator and the completion word are the qualifier here, so they count
-    # as accounted-for rather than as leftover content. Widening
-    # `_IGNORABLE_TOKENS` globally instead would make `completed` invisible
-    # everywhere, and "MSc A" off "MSc A completed 2024" must stay silent — it
-    # drops no status and reads as an honest trim.
-    def _accounted(token):
-        return (_is_status(token) or _is_ignorable(token)
-                or token in _NEGATORS or token in _COMPLETION_WORDS)
+    if at is not None:
+        before, after, last = have[:at], have[at + n:], at + n - 1
+    else:
+        needle = " ".join(wanted)
+        if not _UNSEGMENTED_RE.search(needle):
+            return None
+        joined = " ".join(have)
+        found = joined.find(needle)
+        if found < 0:
+            return None
+        end = found + len(needle)
+        starts = [0]
+        for tok in have[:-1]:
+            starts.append(starts[-1] + len(tok) + 1)
+        last = max(i for i, s in enumerate(starts) if s < end)
+        before, after = _token_list(joined[:found]), _token_list(joined[end:])
+    end_seg = tagged[last][1]
+    later = {}
+    for tok, seg in tagged:
+        if seg > end_seg:
+            later.setdefault(seg, []).append(tok)
+    return before, after, [later[k] for k in sorted(later)]
 
-    if any(not _accounted(t) for t in dropped):
+
+def _rank_before(token) -> bool:
+    """Does `token`, written BEFORE a title, make it a subordinate post?"""
+    return (token in _RANK_BEFORE or token in _RANK_EITHER
+            or token in _RANK_CJK_WHOLE
+            or any(token.endswith(m) for m in _RANK_CJK_BEFORE))
+
+
+def _rank_after(token) -> bool:
+    """Does `token`, written AFTER a title, make it a subordinate post?"""
+    return (token in _RANK_AFTER or token in _RANK_EITHER
+            or any(token.startswith(m) for m in _RANK_CJK_AFTER))
+
+
+def _is_rank(token) -> bool:
+    return (token in _RANK_BEFORE or token in _RANK_AFTER or token in _RANK_EITHER
+            or token in _RANK_ONLY or token in _RANK_CJK)
+
+
+def _rank_only(tokens) -> bool:
+    """A rank qualifier and nothing else ("(Acting)", ", Interim", "（实习）")."""
+    return (any(_is_rank(t) for t in tokens)
+            and all(_is_rank(t) or _accounted(t) for t in tokens))
+
+
+def dropped_seniority(term, leaf):
+    """The subordinate-rank qualifier `term` drops off `leaf`, or None.
+
+    Adjacency, not presence, is the rule — a rank word somewhere in the dropped
+    text is not enough:
+
+    * a modifier written before a title qualifies the title: "Manager, Data"
+      off "Assistant Manager, Data", "Director" off "Associate Director",
+      "President" off "Vice President", "总监" off "副总监" → fire. Connectives
+      are skipped, so "CEO" off "Personal Assistant to the CEO" fires too;
+    * a postpositive one qualifies what precedes it: "Engineer" off "Engineer
+      Intern", "Directeur" off "Directeur adjoint", "经理" off "经理助理";
+    * a dropped segment made of nothing but a rank ("Director (Interim)",
+      "Manager, Acting") fires wherever it sat.
+
+    And the quiet half, each of which contains a rank word:
+
+    * "Professor" off "Professor and Associate Dean" — "Associate" qualifies the
+      deanship that was dropped, not the professorship that was kept;
+    * "Software Engineer" off "Software Engineer, Acting Team Lead" — dropping an
+      extra post is a de-escalation;
+    * "Vice President" kept intact, and "Vice President" off "Senior Vice
+      President" — Senior is not a subordinate qualifier.
+    """
+    split = _split(term, leaf)
+    if split is None:
         return None
-    return " ".join(dropped)
+    before, after, later = split
+    if not before and not after:
+        return None
+    nearest = next((t for t in reversed(before) if not _is_ignorable(t)), None)
+    if nearest is not None and _rank_before(nearest):
+        return nearest
+    if after and _rank_after(after[0]):
+        return after[0]
+    dropped = before + after
+    if _rank_only(dropped):
+        return " ".join(dropped)
+    return " ".join(_leading_run(later, _rank_only)) or None
 
 
-def relation(term, leaf):
+def dropped_qualifier(term, leaf, family=None):
+    """("status" | "seniority", the dropped words), or None."""
+    status = dropped_status(term, leaf, family)
+    if status:
+        return "status", status
+    rank = dropped_seniority(term, leaf)
+    if rank:
+        return "seniority", rank
+    return None
+
+
+def _legal_core(name) -> str:
+    """`name` normalized, with legal-form and group designators and a leading
+    article off.
+
+    "Acme B.V." / "Acme BV" / "Acme" → "acme"; "Acme S.A. de C.V." → "acme";
+    "Tencent Holdings Ltd" → "tencent"; "株式会社リクルート" / "(株)リクルート" →
+    "リクルート"; "腾讯控股有限公司" → "腾讯"; "楽天グループ株式会社" → "楽天".
+    Nothing else is removed: "Google Developer Student Club Leiden" stays
+    itself, so it cannot be shortened to "Google".
+    """
+    if not isinstance(name, (str, int, float)) or isinstance(name, bool):
+        return ""
+    toks = _token_list(name)
+    changed = True
+    while changed and len(toks) > 1:
+        changed = False
+        while len(toks) > 1 and (toks[0] in _LEADING_ARTICLES
+                                 or toks[0] in _LEGAL_FORMS_LEADING):
+            toks.pop(0)
+            changed = True
+        tail = False
+        while len(toks) > 1 and (toks[-1] in _LEGAL_FORMS
+                                 or toks[-1] in _GROUP_FORMS):
+            toks.pop()
+            tail = changed = True
+        if tail and len(toks) > 1 and toks[-1] in _LEGAL_JOINERS:
+            toks.pop()
+    core = " ".join(toks)
+    changed = True
+    while changed:
+        changed = False
+        for form in _LEGAL_FORMS_GLUED + _GROUP_FORMS_GLUED:
+            if core.endswith(form) and len(core) > len(form):
+                core, changed = core[:-len(form)].strip(), True
+        for form in _LEGAL_FORMS_GLUED:
+            if core.startswith(form) and len(core) > len(form):
+                core, changed = core[len(form):].strip(), True
+    return core
+
+
+def _before_first_comma(name) -> str:
+    """Everything before the first comma of `name`, or "" when it has none.
+
+    "Leiden University, Faculty of Science" → "Leiden University". Only a comma
+    marks a sub-unit: "TU Delft (exchange)" has no comma, so the bracket stays
+    part of the name and dropping it is still a truncation.
+    """
+    text = unicodedata.normalize("NFKC", str(name or ""))
+    return text.split(",", 1)[0] if "," in text else ""
+
+
+def _relate(term, leaf, family=None):
+    """(relation, detail) of `term` to one master leaf of the same kind."""
+    if family in NAME_FAMILIES:
+        core = _legal_core(term)
+        if core and core in (_legal_core(leaf),
+                             _legal_core(_before_first_comma(leaf))):
+            return SOURCED, None
+        return (TRUNCATED, None) if phrase_in(term, leaf) else (None, None)
+    if normalize_term(term) == normalize_term(leaf):
+        return SOURCED, None
+    if not phrase_in(term, leaf):
+        return None, None
+    dropped = dropped_qualifier(term, leaf, family)
+    return (QUALIFIER, dropped) if dropped else (SOURCED, None)
+
+
+def relation(term, leaf, family=None):
     """How `term` relates to one master leaf of the same family.
 
-    SOURCED, QUALIFIER (the leaf says the same thing, and the term dropped a
-    status marker off it), or None.
+    SOURCED; QUALIFIER (the leaf says the same thing, and the term dropped a
+    status marker or a subordinate-rank qualifier off it); TRUNCATED (an
+    employer or institution name shortened beyond its legal form); or None.
     """
-    if normalize_term(term) == normalize_term(leaf):
-        return SOURCED
-    if not phrase_in(term, leaf):
+    return _relate(term, leaf, family)[0]
+
+
+# Entry-shaped sections, and the field that names the entry's organisation.
+_ENTRY_PATH = re.compile(r"^(experience|education|projects)\[(\d+)\]\.(\w+)$")
+_ENTRY_NAME = {"experience": "org", "education": "institution", "projects": "name"}
+
+
+def _scalar(value) -> str:
+    if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+        return ""
+    return normalize_term(value)
+
+
+def paired_value(where, tailored, master):
+    """The master's value of this field ON THE SAME ENTRY, or None.
+
+    The tailored entry is matched to a master entry by its dates (start counts
+    2, end 1) and its organisation (2) — never by position, because reordering
+    and dropping entries are honest moves. A match needs a score of 2 and a
+    unique best; anything less is no pairing, and the claim is then checked
+    against every same-kind entry instead. The field being checked is never used
+    to find its own pair.
+
+    Why pair at all: "Data Scientist" for a role the master records as "Junior
+    Data Scientist" is the commonest inflation there is, and when a later role
+    really is "Data Scientist" the family-wide check finds that exact title and
+    calls the claim sourced. The entry it came from is the only thing that says
+    otherwise.
+    """
+    m = _ENTRY_PATH.match(where)
+    if not m or not isinstance(tailored, dict) or not isinstance(master, dict):
         return None
-    return QUALIFIER if dropped_status(term, leaf) else SOURCED
+    section, index, field = m.group(1), int(m.group(2)), m.group(3)
+    entries = _as_list(tailored.get(section))
+    mine = entries[index] if index < len(entries) else None
+    if not isinstance(mine, dict):
+        return None
+    name_key = _ENTRY_NAME[section]
+    same_name = _legal_core if section != "projects" else _scalar
+    scored = []
+    for theirs in _as_list(master.get(section)):
+        if not isinstance(theirs, dict):
+            continue
+        score = 0
+        for key, weight in (("start", 2), ("end", 1)):
+            a = _scalar(mine.get(key))
+            if a and a == _scalar(theirs.get(key)):
+                score += weight
+        if field != name_key:
+            a = same_name(mine.get(name_key))
+            if a and a == same_name(theirs.get(name_key)):
+                score += 2
+        scored.append((score, theirs))
+    if not scored:
+        return None
+    best = max(score for score, _entry in scored)
+    winners = [entry for score, entry in scored if score == best]
+    if best < 2 or len(winners) != 1 or not winners[0].get(field):
+        return None
+    return _flat(winners[0][field])
 
 
 def _as_list(v):
@@ -515,6 +1011,50 @@ def _claim_index(claims):
     return live, retracted, findings
 
 
+def trace(term, family, paired, exact, prose, families):
+    """None when `term` is sourced, else (relation, master leaf, dropped words).
+
+    The relation is QUALIFIER, TRUNCATED or UNSOURCED (leaf and dropped None).
+
+    The order is the substance of the rule. A trimmed term is compared first with
+    the master entry it came from (`paired`), then with every master entry of its
+    own kind, and only THEN with the looser evidence: an exact leaf anywhere and
+    the candidate's prose. Run the other way round, the looser evidence clears a
+    claim before its dropped qualifier is ever looked at — the summary's "MSc
+    Computer Science student" sourced "MSc Computer Science" for a degree the
+    master marks "(in progress, expected 2027)".
+
+    Among same-kind entries an honest match beats a dropped qualifier, as it
+    always did: a holder of both "AWS … Architect – Associate" and "AWS …
+    Architect – Professional" may write "AWS … Architect". The pairing is what
+    stops that precedence from excusing the one entry the term actually came
+    from.
+    """
+    names = family in NAME_FAMILIES
+    if paired is not None:
+        rel, dropped = _relate(term, paired, family)
+        if rel == SOURCED:
+            return None
+        if rel is not None:
+            return rel, paired, dropped
+    kinds = NAME_FAMILIES if names else (family,)
+    kin = [(leaf, *_relate(term, leaf, family))
+           for kind in kinds for leaf in families.get(kind, ())]
+    if any(rel == SOURCED for _leaf, rel, _dropped in kin):
+        return None
+    hit = next(((rel, leaf, dropped) for leaf, rel, dropped in kin
+                if rel is not None), None)
+    if hit is not None:
+        return hit
+    if normalize_term(term) in exact:
+        return None
+    # A name is never sourced by prose: an employer that appears only in a
+    # bullet ("built dashboards for Shell") is a client, not an employer.
+    if not names and any(phrase_in(term, leaf) for leaf in prose):
+        return None
+    return UNSOURCED, None, None
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--workspace", required=True)
@@ -560,7 +1100,18 @@ def main(argv=None) -> int:
               f"--record --master <profile.yaml> at apply-mode entry", file=sys.stderr)
         return 2
 
-    fp = json.loads(fp_path.read_text(encoding="utf-8"))
+    try:
+        fp = json.loads(fp_path.read_text(encoding="utf-8"))
+        if not isinstance(fp, dict) or not isinstance(fp.get("path"), str):
+            raise ValueError("no master path recorded")
+    except (OSError, UnicodeError, ValueError) as exc:
+        # A corrupt fingerprint verifies nothing; say so with the could-not-run
+        # code rather than a traceback and exit 1, which reads as "findings".
+        journal.receipt(ws, GATE, {}, "could_not_run",
+                        [f"NO_MASTER_FINGERPRINT: {fp_path} is unreadable ({exc})"])
+        print(f"cannot run {GATE}: NO_MASTER_FINGERPRINT — {fp_path} is unreadable; "
+              f"re-run with --record --master <profile.yaml>", file=sys.stderr)
+        return 2
     master = pathlib.Path(fp["path"])
     findings = []
     master_profile, readable = {}, False
@@ -619,23 +1170,45 @@ def main(argv=None) -> int:
     # the answer, and it already fails the gate.
     for term, where, family in (atomic_claims(tailored) if readable else []):
         key = normalize_term(term)
-        if not key or key in exact:
+        if not key:
             continue
-        if any(phrase_in(term, leaf) for leaf in prose):
+        verdict = trace(term, family, paired_value(where, tailored, master_profile),
+                        exact, prose, families)
+        if verdict is None or key in live:
             continue
-        kin = [(relation(term, leaf), leaf) for leaf in families.get(family, ())]
-        if any(rel == SOURCED for rel, _leaf in kin):
+        rel, leaf, dropped = verdict
+        # The master's real name, not the literal 'profile.yaml', in every line
+        # below: one candidate can have several masters now, and a finding that
+        # names the wrong file sends the reader to a document the gate never read.
+        if rel == QUALIFIER and dropped[0] == "seniority":
+            findings.append(f'QUALIFIER_STRIPPED: "{term}" at '
+                            f'tailored-profile.yaml:{where} drops the seniority '
+                            f'qualifier "{dropped[1]}" off {master.name}\'s '
+                            f'"{leaf}" — without it the title claims a more senior '
+                            f'post than the one held. Keep the qualifier, or add a '
+                            f'claims.yaml row for the fact that it no longer '
+                            f'applies (a promotion, for instance)')
             continue
-        if key in live:
-            continue
-        stripped = next((leaf for rel, leaf in kin if rel == QUALIFIER), None)
-        if stripped is not None:
+        if rel == QUALIFIER:
+            reads_as = ("an accepted, published paper" if family == "publications"
+                        else "a completed, current credential")
             findings.append(f'QUALIFIER_STRIPPED: "{term}" at '
                             f'tailored-profile.yaml:{where} drops the status '
-                            f'qualifier off profile.yaml\'s "{stripped}" — the '
-                            f'unqualified form reads as a completed, current '
-                            f'credential. Keep the qualifier, or add a claims.yaml '
-                            f'row for the fact that it no longer applies')
+                            f'qualifier "{dropped[1]}" off {master.name}\'s '
+                            f'"{leaf}" — the unqualified form reads as {reads_as}. '
+                            f'Keep the qualifier, or add a '
+                            f'claims.yaml row for the fact that it no longer applies')
+            continue
+        if rel == TRUNCATED:
+            findings.append(f'ORG_TRUNCATED: "{term}" at '
+                            f'tailored-profile.yaml:{where} shortens {master.name}\'s '
+                            f'"{leaf}" — an employer or institution name may drop a '
+                            f'legal-form or group suffix (BV, GmbH, Inc., Group, '
+                            f'Holdings, 有限公司, 株式会社 …) or the sub-unit after its '
+                            f'first comma, and nothing else, because a shorter name '
+                            f'can name a different, larger organisation than the '
+                            f'one the candidate belonged to. Use the full name, or '
+                            f'add a claims.yaml row')
             continue
         if key in retracted:
             findings.append(f'RETRACTED_CLAIM: "{term}" at '
@@ -644,9 +1217,6 @@ def main(argv=None) -> int:
                             f'{retracted[key]["retracted"]} — remove the claim or '
                             f're-source it')
             continue
-        # The master's real name, not the literal 'profile.yaml'. One candidate
-        # can have several masters now, and a finding that names the wrong file
-        # sends the reader to check a document the gate never read.
         findings.append(f'UNSOURCED: "{term}" appears in '
                         f'tailored-profile.yaml:{where}, is absent from '
                         f'{master.name}, '

@@ -256,3 +256,162 @@ def test_body_strings_and_lists_preserve_complete_paragraphs(body, fmt, tmp_path
         assert all(p in text for p in paragraphs)
         if len(paragraphs) > 1:
             assert text.index(paragraphs[0]) < text.index(paragraphs[-1])
+
+
+# ---------------------------------------------------------------------------
+# motivation-letter.md §4 and modes/apply.md give letter.yaml an "exact schema"
+# with no `meta`, and this file defaulted a missing meta to English and A4. A
+# letter written to the documented schema therefore came out as: "Dear Hiring
+# Team," / "Sincerely," around Chinese paragraphs, and a US package with cv.pdf
+# on Letter beside letter.pdf and letter.docx on A4.
+# ---------------------------------------------------------------------------
+
+_ZH_BODY = ["您好，我希望应聘推荐算法工程师一职。我在推荐系统方向有五年经验，负责过召回模块的重构。",
+            "在上一份工作中，我主导了分布式训练框架的迁移，训练时长明显缩短。",
+            "期待有机会进一步交流。"]
+_DE_BODY = ["Ich habe vier Jahre lang Datenpipelines für ein Zahlungsunternehmen "
+            "aufgebaut, und die Arbeit Ihres Teams zur Betrugserkennung ist genau das "
+            "Problem, an dem ich weiter arbeiten möchte. Bei meinem jetzigen "
+            "Arbeitgeber habe ich den Bewertungsdienst neu gebaut."]
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("".join(_ZH_BODY), "zh"),
+    ("私は決済基盤のマイクロサービス化を担当し、障害件数を半減させました。", "ja"),
+    ("저는 결제 플랫폼의 마이크로서비스 전환을 담당하여 장애 건수를 절반으로 줄였습니다.", "ko"),
+    # A Chinese sentence keeps its team and tool names in English and has more
+    # Latin LETTERS than Han; it is still Chinese.
+    ("我在Google Cloud Platform的Distributed Systems团队负责存储基础设施的设计与实现。", "zh"),
+    ("I have spent four years building data pipelines for a payments company, and "
+     "the work your team has published is the problem I want to keep solving.", "en"),
+    (" ".join(_DE_BODY), "de"),
+    ("Ik heb vier jaar datapijplijnen gebouwd voor een betaalbedrijf, en het werk dat "
+     "uw team heeft gepubliceerd ligt het dichtst bij het probleem waar ik aan wil "
+     "blijven werken.", "nl"),
+    ("J'ai passé quatre ans à construire des pipelines de données pour une entreprise, "
+     "et le travail que votre équipe a publié est le problème sur lequel je veux "
+     "continuer à travailler avec vous.", "fr"),
+    # An English letter that names one Chinese employer is an English letter.
+    ("I have worked with the team at 阿里巴巴 for four years and I would like to "
+     "bring that experience to your company.", "en"),
+    # Too short, or a language this list does not know: undecided, not guessed.
+    ("Opening paragraph. Second paragraph.", None),
+    ("Przez cztery lata budowałem potoki danych dla firmy płatniczej i praca Państwa "
+     "zespołu jest problemem, nad którym chcę dalej pracować.", None),
+])
+def test_the_body_language_is_inferred_or_left_undecided(text, expected):
+    assert render_letter.infer_language(text) == expected
+
+
+def test_a_chinese_letter_without_meta_gets_no_english_furniture(tmp_path):
+    """The reproduction: no meta, no salutation, no closing — rendered with an
+    English opener and sign-off. There is no sourced Chinese default, so none is
+    printed and check_letter reports the gap."""
+    letter = {"sender": {"name": "张伟"}, "recipient": {"company": "阿里巴巴"},
+              "body": _ZH_BODY}
+    assert render_letter.salutation_for(letter) == ""
+    assert render_letter.closing_for(letter) == ""
+    md = render_letter.render_markdown(letter)
+    assert "Dear" not in md and "Sincerely" not in md
+    tex = render_letter.build_latex(letter, engine="tectonic", cjk=True)
+    assert "Dear" not in tex and "Sincerely" not in tex
+    # The Word file gets the Chinese East Asian font, as a declared zh letter does.
+    from docx import Document
+    from docx.oxml.ns import qn
+    render_letter.render_docx(letter, tmp_path / "letter.docx")
+    style = Document(str(tmp_path / "letter.docx")).styles["Normal"]
+    assert style.element.rPr.rFonts.get(qn("w:eastAsia")) == "SimSun"
+
+
+def test_a_german_body_without_meta_gets_the_german_defaults():
+    letter = {"body": _DE_BODY}
+    assert render_letter.salutation_for(letter) == "Sehr geehrte Damen und Herren,"
+    assert render_letter.closing_for(letter) == "Mit freundlichen Grüßen"
+
+
+def test_an_unsettled_body_keeps_the_english_default():
+    """The twin: inference must not turn a body it cannot read into a guess."""
+    letter = {"body": ["Opening paragraph.", "Second paragraph."]}
+    assert render_letter.salutation_for(letter) == "Dear Hiring Team,"
+
+
+def test_a_declared_language_still_wins_over_the_body():
+    letter = {"meta": {"language": "de"}, "body": _ZH_BODY}
+    assert render_letter.salutation_for(letter) == "Sehr geehrte Damen und Herren,"
+
+
+def _letter_ws(tmp_path, letter, profile_meta=None, posting=None):
+    import yaml
+    ws = tmp_path / "acme-engineer-2026-10-24"
+    ws.mkdir(parents=True, exist_ok=True)
+    (ws / "letter.yaml").write_text(yaml.safe_dump(letter, allow_unicode=True),
+                                    encoding="utf-8")
+    if profile_meta is not None:
+        (ws / "tailored-profile.yaml").write_text(
+            yaml.safe_dump({"meta": profile_meta, "contact": {"email": "j@x.com"}},
+                           allow_unicode=True), encoding="utf-8")
+    if posting is not None:
+        (ws / "posting.yaml").write_text(yaml.safe_dump(posting, allow_unicode=True),
+                                         encoding="utf-8")
+    return ws
+
+
+_US_LETTER = {"sender": {"name": "Jane Smith", "email": "jane@example.com"},
+              "recipient": {"company": "Meridian Inc."},
+              "salutation": "Dear Hiring Team,", "body": ["Opening paragraph."],
+              "closing": "Sincerely,"}
+
+
+@pytest.mark.parametrize("fmt", ["docx", "pdf"])
+def test_the_letter_takes_its_paper_from_the_workspace_profile(tmp_path, monkeypatch,
+                                                               capsys, fmt):
+    """cv.pdf for a US role is Letter; the letter beside it has to be too."""
+    from docx import Document
+    monkeypatch.setattr(render_letter.render_cv, "find_latex_engine", lambda **kw: None)
+    ws = _letter_ws(tmp_path, _US_LETTER, {"name": "Jane Smith", "target_market": "us",
+                                           "language": "en"})
+    out = ws / f"letter.{fmt}"
+    assert render_letter.main([str(ws / "letter.yaml"), "--format", fmt,
+                               "--out", str(out)]) == 0
+    if fmt == "docx":
+        assert Document(str(out)).sections[0].page_width.mm == pytest.approx(215.9, abs=0.1)
+    else:
+        assert "letterpaper" in out.with_suffix(".tex").read_text(encoding="utf-8")
+    assert "tailored-profile.yaml" in capsys.readouterr().err   # said, not assumed
+
+
+def test_the_letters_own_market_wins_over_the_workspace(tmp_path):
+    letter = dict(_US_LETTER, meta={"target_market": "nl"})
+    ws = _letter_ws(tmp_path, letter, {"target_market": "us"})
+    resolved, _ = render_letter.resolved_letter(letter, ws)
+    assert render_letter.render_cv.paper_for(resolved["meta"]) == "a4paper"
+
+
+def test_a_us_posting_location_is_the_last_resort_for_letter_paper(tmp_path):
+    ws = _letter_ws(tmp_path, _US_LETTER, posting={"company": "Meridian Inc.",
+                                                   "location": "Austin, TX, United States"})
+    resolved, notes = render_letter.resolved_letter(_US_LETTER, ws)
+    assert render_letter.render_cv.paper_for(resolved["meta"]) == "letterpaper"
+    assert any("posting.yaml" in n for n in notes)
+    # …and a non-US posting leaves the A4 default alone.
+    ws2 = _letter_ws(tmp_path / "nl", _US_LETTER, posting={"location": "Amsterdam, NL"})
+    resolved, _ = render_letter.resolved_letter(_US_LETTER, ws2)
+    assert render_letter.render_cv.paper_for(resolved["meta"]) == "a4paper"
+
+
+def test_an_unsettled_body_takes_the_workspace_profiles_language(tmp_path):
+    """A Polish letter: the body detector does not know Polish, the CV does."""
+    letter = {"body": ["Przez cztery lata budowałem potoki danych dla firmy."]}
+    ws = _letter_ws(tmp_path, letter, {"target_market": "pl", "language": "pl"})
+    resolved, _ = render_letter.resolved_letter(letter, ws)
+    assert resolved["meta"]["language"] == "pl"
+    assert render_letter.salutation_for(resolved) == ""   # not "Dear Hiring Team,"
+
+
+def test_the_sender_name_keeps_its_space():
+    """Same rule as the CV's name: `山田 太郎` is a Japanese name, not a folded
+    scalar, and the .md and .docx already kept the space."""
+    letter = {"meta": {"language": "ja"}, "sender": {"name": "山田 太郎"},
+              "body": ["貴社を志望します。"], "salutation": "拝啓", "closing": "敬具"}
+    tex = render_letter.build_latex(letter, engine="tectonic", cjk=True)
+    assert tex.count("山田 太郎") == 2 and "山田太郎" not in tex

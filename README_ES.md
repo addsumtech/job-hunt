@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="Licencia: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg"></a>
   <img alt="Para Claude Code y Codex" src="https://img.shields.io/badge/agents-Claude_Code_·_Codex-5b5bd6">
-  <a href="https://github.com/addsumtech/job-hunt/releases"><img alt="Versión: v1.2.3" src="https://img.shields.io/badge/release-v1.2.3-1f883d"></a>
+  <a href="https://github.com/addsumtech/job-hunt/releases"><img alt="Versión: v1.3.0" src="https://img.shields.io/badge/release-v1.3.0-1f883d"></a>
   <a href="https://skillhub.cn/skills/user_f486c577/best-job-hunt"><img alt="SkillHub: best-job-hunt" src="https://img.shields.io/badge/SkillHub-best--job--hunt-e8590c"></a>
   <a href="https://clawhub.ai/dong845/skills/job-hunt"><img alt="ClawHub: job-hunt" src="https://img.shields.io/badge/ClawHub-job--hunt-0f766e"></a>
 </p>
@@ -203,12 +203,13 @@ Los archivos se almacenan localmente; las llamadas al modelo y el acceso web dep
 Las comprobaciones automáticas cubren las referencias a evidencias, la conservación del perfil original, la lectura de los veredictos, los datos personales, la composición y los cambios de modo:
 
 ```bash
-python3 -m pip install pytest
+python3 -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt pytest
 make check
 make eval-lint
 ```
 
-`make check` ejecuta las pruebas de Python, las comprobaciones del contenido migrado y las tablas de mercado. Las pruebas que usan herramientas externas necesitan tenerlas instaladas; las comprobaciones de la instalación local de la skill son opcionales.
+`make check` ejecuta las pruebas de Python, las comprobaciones del contenido migrado, las tablas de mercado y la búsqueda de caracteres ocultos. Necesita Python 3.10 o posterior con `requirements.txt` instalado (el `python3` de macOS es 3.9). Las pruebas que usan herramientas externas necesitan tenerlas instaladas; las comprobaciones de la instalación local de la skill son opcionales.
 
 [`evals/`](evals/README.md) contiene 20 escenarios de comportamiento. La segunda iteración (2026-09-05/06) ejecutó 15 escenarios con y sin la skill, una vez por grupo (n = 1). Diez comprobaciones pasaron de `FAIL` en la referencia a `PASS` con la skill. El [registro de evaluación](evals/iterations/iteration-2-with-skill.md) recoge los resultados, las comprobaciones pendientes y el escenario invalidado.
 

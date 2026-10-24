@@ -1,30 +1,24 @@
 # job-hunt — 接手说明
 
-**更新于 2026-08-24。** 这份文件在 2026-08-10 到 2026-08-23 之间一直是错的：它写着「计划 2–5 未
-开始」，而计划 2/3/4 早在 8 月 16 日前就建完并上线了。接手的人如果信它，会去重建已经存在的东西。
-**先跑一次 `make check`，再信任这里的任何一句话。**
+**状态更新于 2026-10-24。** 下面「当前状态」一节是这一天核对过的；之后的章节保留 2026-08-24 的原文，
+其中提到的遗留项有些已经修掉（见 CHANGELOG「未发布」）。**先跑一次 `make check`，再信任这里的任何一句话。**
 
 ---
 
 ## 当前状态
 
-```
-计划 1  迁移 + P0 修复（apply）    ✅ 已交付
-计划 2  assess 模式                ✅ 已交付
-计划 3  discover 模式              ✅ 已交付
-计划 4  interview 模式             ✅ 已交付
-计划 5  行为 eval（evals/）        ❌ 0 / 94 任务 —— 目录不存在
-```
-
-`make check` 现在跑出来是：
+- 四个模式（apply、assess、discover、interview）都已上线；`evals/` 已建成，第 2 轮评估记录在 `evals/iterations/`。
+- 版本：1.3.0（2026-10-24）。1.2.1 到 1.2.3 没有单独打 tag，修复并入 1.3.0。
+- `make check`（2026-10-24，Python 3.11 venv）：
 
 ```
-1199 passed, 1 skipped
-LOSSLESS: 1317/1317 baseline lines accounted for across 32 files, 24 waived
+5739 passed, 8 skipped
+LOSSLESS: 1317/1317 baseline lines accounted for across 57 files, 88 waived
 check_conventions --ci: exit 0
+NO_HIDDEN_CHARS
 ```
 
-四个模式都软链进 `~/.claude/skills/job-hunt` 和 `~/.codex/skills/job-hunt`，两个 runtime 都能触发。
+跑测试需要一个装了 `requirements.txt` 和 pytest 的 Python 3.10+；macOS 自带的 `python3` 是 3.9，Homebrew 的新版 Python 通常没有这些包。
 
 ---
 

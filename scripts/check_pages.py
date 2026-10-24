@@ -343,6 +343,28 @@ def years_of_experience(profile, today_year: int):
     return None if dated else 0
 
 
+def _max_pages_override(profile):
+    """`meta.max_pages` when it is a usable page count, else None."""
+    override = (profile.get("meta") or {}).get("max_pages")
+    if isinstance(override, int) and not isinstance(override, bool) and override > 0:
+        return override
+    return None
+
+
+def budget_uses_experience(profile) -> bool:
+    """Whether years of experience decide the page budget at all.
+
+    They do not for an academic CV (no limit) or under an explicit
+    `meta.max_pages`, so an unreadable start date changes nothing there.
+    START_DATE_UNREAD told the user "or set meta.max_pages" and then kept
+    firing after they did — a finding whose own remedy could not clear it.
+    """
+    meta = profile.get("meta") or {}
+    if str(meta.get("cv_type") or "").strip().lower() in ACADEMIC:
+        return False
+    return _max_pages_override(profile) is None
+
+
 def max_pages(profile, today_year: int):
     """The page budget, or None when there is none.
 
@@ -354,8 +376,8 @@ def max_pages(profile, today_year: int):
     meta = profile.get("meta") or {}
     if str(meta.get("cv_type") or "").strip().lower() in ACADEMIC:
         return None
-    override = meta.get("max_pages")
-    if isinstance(override, int) and not isinstance(override, bool) and override > 0:
+    override = _max_pages_override(profile)
+    if override is not None:
         return override
     years = years_of_experience(profile, today_year)
     if years is None:
@@ -382,7 +404,7 @@ def findings_for(cv_pdf, profile, today_year: int, letter_pdf=None) -> list:
     # the PROFILE: the page budget below was chosen without these dates, and a
     # reader who cannot see that will not know why a one-page CV got two. It
     # does not belong behind "is the PDF readable" — the two are unrelated.
-    unread = unreadable_start_dates(profile)
+    unread = unreadable_start_dates(profile) if budget_uses_experience(profile) else []
     if unread:
         out.append(f"START_DATE_UNREAD: {', '.join(repr(d) for d in unread)} "
                    f"carries no 19xx/20xx year, so years of experience could not "
@@ -395,7 +417,11 @@ def findings_for(cv_pdf, profile, today_year: int, letter_pdf=None) -> list:
                    f"reader can open; re-render before sending it")
     else:
         budget = max_pages(profile, today_year)
-        if budget is not None and pages > budget:
+        if budget is not None and pages > budget and not budget_uses_experience(profile):
+            out.append(f"CV_TOO_LONG: {pathlib.Path(cv_pdf).name} is {pages} pages; "
+                       f"meta.max_pages allows {budget}. Cut, or raise meta.max_pages "
+                       f"with a reason")
+        elif budget is not None and pages > budget:
             years = years_of_experience(profile, today_year)
             basis = (f"{years} years of experience" if years is not None
                      else "an unread start date, so the permissive budget")
@@ -425,6 +451,10 @@ def _macos_libreoffice_app():
     with the same private profile without that AppKit initialization crash.
     Keep the direct command as a fallback: a custom or older installation may
     not have an app bundle but can still export successfully.
+
+    `open -a` activates the app it launches, and `--headless` does not stop that:
+    LibreOffice would take the user's keyboard focus every time a Word file is
+    measured. `-g` keeps it in the background and `-j` launches it hidden.
     """
     if platform.system() != "Darwin":
         return None
@@ -443,7 +473,7 @@ def _office_export_commands(office, profile, folder, docx):
     direct = [str(office), *args]
     app = _macos_libreoffice_app()
     if app and shutil.which("open"):
-        return [["open", "-W", "-n", "-a", str(app), "--args", *args], direct]
+        return [["open", "-g", "-j", "-W", "-n", "-a", str(app), "--args", *args], direct]
     return [direct]
 
 

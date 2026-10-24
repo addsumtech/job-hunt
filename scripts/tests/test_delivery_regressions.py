@@ -357,9 +357,96 @@ def test_delivery_carries_profile_font_to_report(tmp_path, monkeypatch):
         pdf.write_bytes(b'PDF')
         return True, ''
     monkeypatch.setattr(deliver, 'render_pdf', render)
+    # The selection is honoured wherever the pandoc + XeTeX path is installed.
+    monkeypatch.setattr(deliver, '_tex_report_path_available', lambda: True)
     written, notes = deliver.deliver(ws, dest, 'candidate')
     assert not notes and len(written) == 2
     assert seen == ['SimSun']
+
+
+def test_a_cv_font_does_not_make_the_report_require_pandoc(tmp_path, monkeypatch, capsys):
+    """MEASURED: `meta.cjk_font` set for the CV forced the Chinese REPORT through
+    pandoc; without pandoc it was refused (exit 2), while the same workspace
+    without that CV setting delivered through the bundled renderer."""
+    ws, dest = tmp_path / 'zh-co-role', tmp_path / 'delivery'
+    ws.mkdir()
+    (ws / 'report.md').write_text('# 求职建议报告\n\n这个岗位值得申请，推荐系统经历与要求相关。\n',
+                                  encoding='utf-8')
+    (ws / 'tailored-profile.yaml').write_text(
+        'meta:\n  name: 张伟\n  language: zh\n  cjk_font: Hiragino Sans GB\n', encoding='utf-8')
+    empty = tmp_path / 'no-tools'
+    empty.mkdir()
+    monkeypatch.setenv('PATH', str(empty))  # no pandoc, no TeX engine, no pdftotext
+    assert deliver.main(['--workspace', str(ws), '--to', str(dest)]) == 0
+    err = capsys.readouterr().err
+    assert (dest / '报告' / '求职建议报告.pdf').is_file()
+    assert 'NOTICE_REPORT_FONT_NOT_APPLIED' in err and 'Hiragino Sans GB' in err
+
+
+def test_a_selected_report_font_that_fails_on_an_installed_toolchain_is_still_refused(
+        tmp_path, monkeypatch):
+    ws, dest = tmp_path / 'workspace', tmp_path / 'delivery'
+    ws.mkdir()
+    (ws / 'report.md').write_text('中文报告内容。', encoding='utf-8')
+    (ws / 'tailored-profile.yaml').write_text('meta:\n  cjk_font: Missing Font\n', encoding='utf-8')
+    monkeypatch.setattr(deliver, '_tex_report_path_available', lambda: True)
+    monkeypatch.setattr(deliver, '_pandoc', lambda *args: False)
+    monkeypatch.setattr(deliver, '_render_portable_report',
+                        lambda *args: pytest.fail('selected font was replaced'))
+    assert deliver.main(['--workspace', str(ws), '--to', str(dest)]) == 2
+    assert not (dest / '报告' / '求职建议报告.pdf').exists()
+
+
+# ---- a .notdef box is missing whatever codepoint the PDF claims ------------
+#
+# MEASURED: XeTeX/Tectonic paint glyph 0 for a character the font lacks and
+# report it as U+FFFF (category Cn). The old filter skipped every "C*"
+# category, so an English report with "✓" fell back to pandoc + Times New
+# Roman and was delivered with a box in it, glyph_findings returning [].
+
+def _fake_trace(monkeypatch, chars):
+    import pymupdf
+
+    class Page:
+        def get_texttrace(self):
+            return [{"type": 0, "chars": [(code, glyph, (), ()) for code, glyph in chars]}]
+
+    class Document:
+        def __enter__(self):
+            return [Page()]
+
+        def __exit__(self, *args):
+            pass
+
+    monkeypatch.setattr(pymupdf, "open", lambda path: Document())
+
+
+@pytest.mark.parametrize('codepoint', [0xFFFF, 0xE000, 0x200B, 0x2713, 0xFFFD, -1])
+def test_glyph_zero_is_missing_whatever_codepoint_is_reported(tmp_path, monkeypatch, codepoint):
+    from pdf_glyphs import glyph_findings
+    _fake_trace(monkeypatch, [(ord('A'), 36), (codepoint, 0)])
+    findings = glyph_findings(tmp_path / 'boxed.pdf')
+    assert findings and findings[0].startswith('MISSING_PDF_GLYPHS'), findings
+
+
+@pytest.mark.parametrize('codepoint', [0x20, 0x0A, 0x09, 0x00, 0xA0, 0x3000])
+def test_whitespace_and_controls_at_glyph_zero_are_not_ink(tmp_path, monkeypatch, codepoint):
+    from pdf_glyphs import glyph_findings
+    _fake_trace(monkeypatch, [(ord('A'), 36), (codepoint, 0)])
+    assert glyph_findings(tmp_path / 'clean.pdf') == []
+
+
+@pytest.mark.skipif(not all(shutil.which(t) for t in ('pandoc', 'tectonic')),
+                    reason='requires the pandoc + tectonic report fallback')
+def test_a_box_from_the_tex_fallback_is_not_delivered(tmp_path, capsys):
+    ws, dest = tmp_path / 'workspace', tmp_path / 'delivery'
+    ws.mkdir()
+    (ws / 'report.md').write_text('# Application report\n\n## Conclusion\n\n'
+                                  '✓ Python matches the requirement.\n', encoding='utf-8')
+    assert deliver.main(['--workspace', str(ws), '--to', str(dest)]) == 2
+    err = capsys.readouterr().err
+    assert not (dest / '报告' / '求职建议报告.pdf').exists()
+    assert 'MISSING_PDF_GLYPHS' in err and 'U+2713' in err
 
 
 @pytest.mark.parametrize('language,label', render_cv._PRESENT.items())

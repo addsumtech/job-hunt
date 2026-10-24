@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg"></a>
   <img alt="For Claude Code and Codex" src="https://img.shields.io/badge/agents-Claude_Code_·_Codex-5b5bd6">
-  <a href="https://github.com/addsumtech/job-hunt/releases"><img alt="Release: v1.2.3" src="https://img.shields.io/badge/release-v1.2.3-1f883d"></a>
+  <a href="https://github.com/addsumtech/job-hunt/releases"><img alt="Release: v1.3.0" src="https://img.shields.io/badge/release-v1.3.0-1f883d"></a>
   <a href="https://skillhub.cn/skills/user_f486c577/best-job-hunt"><img alt="SkillHub: best-job-hunt" src="https://img.shields.io/badge/SkillHub-best--job--hunt-e8590c"></a>
   <a href="https://clawhub.ai/dong845/skills/job-hunt"><img alt="ClawHub: job-hunt" src="https://img.shields.io/badge/ClawHub-job--hunt-0f766e"></a>
 </p>
@@ -203,12 +203,13 @@ Files are stored locally; model calls and web access depend on your chosen agent
 Automated checks cover evidence references, source-profile preservation, verdict parsing, personal-data handling, rendering, and mode handoffs:
 
 ```bash
-python3 -m pip install pytest
+python3 -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt pytest
 make check
 make eval-lint
 ```
 
-`make check` runs Python tests, migration content-preservation checks and market-table checks. Tests that use external tools need those tools installed; local skill-installation checks are optional.
+`make check` runs Python tests, migration content-preservation checks, market-table checks and a hidden-character scan. It needs Python 3.10+ with `requirements.txt` installed (macOS's built-in `python3` is 3.9). Tests that use external tools need those tools installed; local skill-installation checks are optional.
 
 [`evals/`](evals/README.md) contains 20 behavioural scenarios. The second iteration (2026-09-05/06) ran 15 scenarios with and without the skill, once per group (n = 1). Ten behavioural checks changed from baseline `FAIL` to with-skill `PASS`. See the [evaluation record](evals/iterations/iteration-2-with-skill.md) for results, untested checks and the invalid scenario.
 

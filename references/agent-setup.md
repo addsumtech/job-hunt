@@ -53,7 +53,10 @@ missing packages; it does not imply an offline installation bundle.
 ## Use the prepared runtime
 
 Use the wrapper from the skill root so every command resolves to the prepared
-Python, Node and OpenCLI, including paths with spaces:
+Python, Node and OpenCLI, including paths with spaces. If `python3` is older than 3.10 (macOS `/usr/bin/python3` is 3.9), every gate exits 2
+with `PYTHON_TOO_OLD` instead of running.
+Then call it through the wrapper as
+`python3 scripts/run_tool.py python scripts/<tool>.py …`:
 
 ```sh
 python scripts/run_tool.py python scripts/doctor.py
@@ -82,8 +85,10 @@ prove the live connection. Diagnose unsupported routes before using the bundled
 reader under [browser-fallback.md](browser-fallback.md).
 
 AnySearch's bundled entry is `third_party/anysearch/anysearch_cli.js`. Read its
-`doc` output for current command/parameter schemas; use `batch_search` for
-independent queries. It uses an HTTP API, not CDP. Anonymous quotas and service
+`doc` output for current command/parameter schemas. In discovery, run one recorded
+`search` per query through `run_tool.py --workspace`; the recorded wrapper accepts
+only one `search` per invocation, and an unrecorded `batch_search` leaves no
+per-query evidence. It uses an HTTP API, not CDP. Anonymous quotas and service
 failures are reported as such; do not rotate identities. An explicitly configured
 API key can be inherited via environment without printing it.
 
@@ -93,7 +98,9 @@ API key can be inherited via environment without printing it.
 |---|---|
 | Assess, interview, Markdown and Word documents | Default setup's Python environment |
 | Consultation report PDF in Chinese, English, Japanese, Korean or Spanish | Default setup: PyMuPDF and bundled report fonts; no Pandoc or TeX required |
-| Template-based CV/letter PDF | Pandoc, Tectonic or XeLaTeX, Poppler, and output-language fonts; agent installs missing tools and verifies a real render |
+| Template-based CV/letter PDF | Tectonic or XeLaTeX (LuaLaTeX/pdfLaTeX for Latin script only), Poppler, and output-language fonts; no Pandoc. Agent installs missing tools and verifies a real render |
+| Word page measurement (`check_pages.py` on `.docx`) | LibreOffice with `soffice` or `libreoffice` on PATH; without it `DOCX_NOT_MEASURED` blocks `check_apply` |
+| A selected report font (`meta.cjk_font` applied to the report) | Pandoc plus Tectonic or XeLaTeX |
 | CJK template-based CV PDF | A usable XeTeX engine plus xeCJK and the selected fonts; LuaLaTeX/pdfLaTeX alone do not satisfy this capability |
 | Japanese form PDF | Follow the template's Word/LibreOffice export workflow; prepare its converter only when requested |
 | GitHub-specific research | Reuse or prepare official GitHub CLI `gh`; existing login may be needed, and remains with the user |
@@ -162,9 +169,9 @@ render a PDF when a PDF failed to appear. A capability that does not enter the
 scaffolding is a capability nobody uses.
 
 The fast check is sound about what is MISSING and silent about what works — no
-pandoc on PATH means no template-based CV PDF; bundled report PDFs still work.
-Pandoc plus an engine can both be
-present and still fail. Confirming a capability stays with `doctor.py`, which
+LaTeX engine where `render_cv.py` looks means no template-based CV PDF, and no
+`soffice` means Word page counts cannot be measured; bundled report PDFs still work.
+An engine can be present and still fail. Confirming a capability stays with `doctor.py`, which
 renders one. A warning may only fire when it is sure, or it becomes the line
 everyone filters out.
 

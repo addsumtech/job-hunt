@@ -127,6 +127,7 @@ These actions constitute misrepresentation. Do not do them, do not suggest them,
 |---|---|
 | Inventing a skill or tool the user has never used | Creates a falsehood the candidate cannot defend in an interview |
 | Inflating a title ("Senior Engineer" when the contract says "Engineer II") | Verifiable via background check; also dishonest |
+| Dropping a subordinate-rank word ("Assistant Manager" → "Manager", "副总监" → "总监") or shortening an employer or institution into a different one ("Google Developer Student Club" → "Google") | Same inflation; `check_claims.py` reports `QUALIFIER_STRIPPED` / `ORG_TRUNCATED` |
 | Changing employment dates to hide a gap or shorten a short tenure | Employment dates are checked; altering them is fraud |
 | Claiming sole credit for team accomplishments | Use "Co-led", "contributed to", "part of the team that" |
 | Adding a posting keyword the candidate has no genuine experience with | Keyword stuffing that the interview will immediately expose |
@@ -166,6 +167,10 @@ in `modes/apply.md` Step 4 and `assets/claims.example.yaml`.
 This is written here as well as there on purpose: this file owns the rule, and a
 rule whose only remedy is documented in a mode file loaded for a *different* mode
 is a rule a run can obey and still be unable to satisfy.
+
+**In the review loop** the checkpoint runs again on every edit made to answer a judge,
+before re-rendering. That step, including what to do with an ATS keyword the
+candidate does not have, is `modes/apply.md` Step 6, "If `REJECT`", step 1.
 
 ---
 
@@ -357,12 +362,13 @@ After completing all REFRAME and KEYWORD-INSERT edits, review the **full CV** fo
 4. **Prose quality:** Flawless-but-voiceless prose signals AI generation to experienced recruiters. Preserve natural sentence rhythms even when the grammar is corrected.
 
 5. **The 2026 vocabulary:** `spearheaded`, `pivotal`, `intricate`, `showcasing`, `delve`, `realm`, `robust`, `cutting-edge`, `seamless`, "a valuable asset". These are the terms recruiters currently report flagging, and `scripts/lint_cv.py` reports them as `AI_VOCABULARY` — over the **whole document**, not only the bullets, because the summary is the line a recruiter reads first and it used to be the one line nothing checked.
+   Skills, certification and publication lines are not scanned for it: there the word is part of a product name or a citation ("Pivotal Cloud Foundry").
 
 If the uniformity check fails on any dimension, make targeted repairs before delivering the final CV.
 
 The lint is the floor, not the check. It sees the word `pivotal`; it cannot see that three roles were written to the same template, and dimensions 1–4 above are exactly the part no gate measures. Passing `lint_cv` cleanly is not evidence the CV reads as a person's.
 
-Cross-reference: `motivation-letter.md §6` (AI-Authenticity) for the same principle applied to the cover letter — including the structural tells (em-dash density, "not just X, but Y", tricolon density) that are checked on a letter and deliberately **not** on a CV: a skills line reads "Python, C++, MATLAB" and a bullet is terse by design, so those checks would fire on every correct CV.
+Cross-reference: `motivation-letter.md §6` (AI-Authenticity) for the same principle applied to the cover letter — including the structural tells (em-dash density, "not just X, but Y", tricolon density; `check_letter.py` reports them as `EM_DASH_DENSITY`, `NOT_JUST_PIVOT`, `TRICOLON_DENSITY`) that are checked on a letter and deliberately **not** on a CV: a skills line reads "Python, C++, MATLAB" and a bullet is terse by design, so those checks would fire on every correct CV.
 
 ---
 
@@ -377,10 +383,6 @@ Cross-reference: `motivation-letter.md §6` (AI-Authenticity) for the same princ
 **Motivation letter / cover letter** — the same honest-reframing rule that governs the CV governs the cover letter. HONEST-GAPS mitigations that involve the cover letter must still be factually accurate. The cover letter may frame, contextualise, and project forward — it may not invent.
 
 **Interaction between gap analysis and the final CV** — the tailoring plan is the bridge. Once approved, each item in AMPLIFY, REFRAME, and KEYWORD-INSERT translates to a specific edit in the CV. HONEST-GAPS drive the cover-letter strategy. Do not edit the CV before the tailoring plan is confirmed by the user.
-
-## Claim-provenance checkpoint (mandatory)
-
-1. **Edit first (targeted):** Merge the `TOP_FEEDBACK` from all three judges (plus the ATS `MISSING_OR_WEAK` / `FORMAT_ISSUES` and the Recruiter's logistics/readability flags) and apply edits that address **only the flagged points** — do not re-tailor sections the judges didn't fault. Apply to `<workspace>/tailored-profile.yaml` (and `<workspace>/letter.yaml` if present). Ask the user any `SUPPLEMENTARY_QUESTIONS_FOR_CANDIDATE` from the Recruiter or Hiring Manager — honestly, never inviting fabrication. **A keyword the ATS screener flags as missing goes into the CV ONLY if the candidate genuinely has it** (the claim-provenance checkpoint still applies); otherwise it stays in HONEST-GAPS. **Re-run the claim-provenance checkpoint on every edit made this round before re-rendering** — any term added to satisfy an ATS REJECT must cite its source (a profile line or a user answer this session). The correct response to an ATS gap you cannot honestly close is to let the loop fail at round 3 and report it — *never* to insert an ungrounded keyword. A coverage gate failing because the candidate genuinely lacks must-haves is a true result, not a problem to engineer around.
 
 ## Hard disqualifiers are a wall
 

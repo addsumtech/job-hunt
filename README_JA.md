@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="ライセンス：MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg"></a>
   <img alt="Claude Code と Codex 向け" src="https://img.shields.io/badge/agents-Claude_Code_·_Codex-5b5bd6">
-  <a href="https://github.com/addsumtech/job-hunt/releases"><img alt="バージョン：v1.2.3" src="https://img.shields.io/badge/release-v1.2.3-1f883d"></a>
+  <a href="https://github.com/addsumtech/job-hunt/releases"><img alt="バージョン：v1.3.0" src="https://img.shields.io/badge/release-v1.3.0-1f883d"></a>
   <a href="https://skillhub.cn/skills/user_f486c577/best-job-hunt"><img alt="SkillHub：best-job-hunt" src="https://img.shields.io/badge/SkillHub-best--job--hunt-e8590c"></a>
   <a href="https://clawhub.ai/dong845/skills/job-hunt"><img alt="ClawHub：job-hunt" src="https://img.shields.io/badge/ClawHub-job--hunt-0f766e"></a>
 </p>
@@ -203,12 +203,13 @@ Agent はその情報源を一時停止し、ログインや認証を案内し�
 自動チェックは、根拠への参照、元プロフィールの保護、レビュー結果の解析、個人情報の扱い、組版、モード間の引き継ぎなどを対象にしています。
 
 ```bash
-python3 -m pip install pytest
+python3 -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt pytest
 make check
 make eval-lint
 ```
 
-`make check` は Python テスト、移行時の内容保持チェック、市場慣行表のチェックを実行します。外部ツールを使うテストには対応する環境が必要です。ローカルの Skill インストール検査は必要に応じて有効にできます。
+`make check` は Python テスト、移行時の内容保持チェック、市場慣行表のチェック、不可視文字の検査を実行します。Python 3.10 以上と `requirements.txt` の依存関係が必要です（macOS 標準の `python3` は 3.9 です）。外部ツールを使うテストには対応する環境が必要です。ローカルの Skill インストール検査は必要に応じて有効にできます。
 
 [`evals/`](evals/README.md) には 20 の動作評価シナリオがあります。第 2 回評価（2026-09-05/06）では、15 のシナリオを Skill あり・なしで各一回実行しました（n = 1）。10 項目の動作チェックが、ベースラインの `FAIL` から Skill 使用時の `PASS` に変わりました。結果、未実施の項目、無効になったシナリオは[評価記録](evals/iterations/iteration-2-with-skill.md)に掲載しています。
 

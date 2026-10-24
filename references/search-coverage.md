@@ -9,7 +9,7 @@ Before retrieval, explain the intended sources and directions and write
 `search-coverage.yaml` in the report workspace. Register with:
 
 ```bash
-python3 scripts/check_search_coverage.py --workspace . --record-plan
+python3 scripts/check_search_coverage.py --workspace <ws> --record-plan
 ```
 
 The script stores a tamper-evident plan in `journal.jsonl`. The first registration

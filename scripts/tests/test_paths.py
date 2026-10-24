@@ -169,3 +169,60 @@ def test_the_ordinary_case_is_unchanged():
     """The regression guard: the workspace shape is what resumption parses back."""
     assert paths.workspace("donghang-lyu", "DeepHealth", "Junior SWE",
                            "2026-09-05").name == "deephealth-junior-swe-2026-09-05"
+
+
+# ---------------------------------------------------------------------------
+# A run never lives inside the skill. `--workspace .` from the skill root put
+# the candidate's private candidate-profile.yaml and a journal.jsonl into the
+# skill directory, with nothing failing.
+# ---------------------------------------------------------------------------
+
+def test_the_skill_root_is_not_a_workspace(monkeypatch):
+    assert paths.skill_workspace_refusal(paths.SKILL_ROOT).startswith("WORKSPACE_IN_SKILL:")
+    monkeypatch.chdir(paths.SKILL_ROOT)
+    for spelling in (".", "scripts/..", "./"):
+        reason = paths.skill_workspace_refusal(spelling)
+        assert reason.startswith("WORKSPACE_IN_SKILL:") and " is the job-hunt" in reason
+
+
+def test_nothing_inside_the_skill_is_a_workspace_either(monkeypatch):
+    monkeypatch.chdir(paths.SKILL_ROOT)
+    for inside in ("evals/fixtures/workspaces/clean", "scripts/tests/fixtures/mock-dryrun",
+                   "not-yet-created/round-1"):
+        assert "is inside the job-hunt" in paths.skill_workspace_refusal(inside), inside
+
+
+def test_a_workspace_outside_the_skill_is_accepted(tmp_path):
+    ws = tmp_path / "job-profiles" / "demo" / "applications" / "acme-eng-2026-08-09"
+    assert paths.skill_workspace_refusal(ws) == ""
+    assert paths.skill_workspace_refusal(tmp_path) == ""
+
+
+def test_a_sibling_that_shares_the_skill_roots_name_as_a_prefix_is_accepted(tmp_path):
+    """Containment is by path component, not by string prefix: a workspace
+    folder called `job-hunt-workspace` next to `job-hunt` is not inside it."""
+    skill = tmp_path / "job-hunt"
+    (skill / "scripts").mkdir(parents=True)
+    sibling = tmp_path / "job-hunt-workspace" / "iteration-2"
+    sibling.mkdir(parents=True)
+    assert paths.skill_workspace_refusal(sibling, root=skill) == ""
+    assert paths.skill_workspace_refusal(skill / "scripts", root=skill) != ""
+
+
+def test_a_symlink_to_the_skill_is_still_the_skill(tmp_path):
+    skill = tmp_path / "real" / "job-hunt"
+    skill.mkdir(parents=True)
+    link = tmp_path / "skills-link"
+    link.symlink_to(skill, target_is_directory=True)
+    assert paths.skill_workspace_refusal(link, root=skill) != ""
+    assert paths.skill_workspace_refusal(link / "round", root=skill) != ""
+
+
+def test_another_spelling_on_a_case_insensitive_disk_is_still_the_skill(tmp_path):
+    skill = tmp_path / "Job-Hunt"
+    skill.mkdir()
+    other = tmp_path / "job-hunt"
+    if not other.exists():
+        pytest.skip("case-sensitive filesystem: the two spellings are two directories")
+    assert paths.skill_workspace_refusal(other, root=skill) != ""
+    assert paths.skill_workspace_refusal(other / "round", root=skill) != ""

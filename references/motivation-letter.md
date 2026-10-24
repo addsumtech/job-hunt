@@ -158,6 +158,10 @@ Both are accurate and professional. The content is identical; the rhythm and voc
 The file consumed by `scripts/render_letter.py` has this exact schema:
 
 ```yaml
+meta:
+  language: "en"        # ISO 639-1, the letter's language: en | nl | de | fr | es | it | zh | ja | ko | …
+  target_market: "us"   # same value as the CV's meta.target_market; us/ca → Letter paper, others → A4
+
 sender:
   name: "Jane Smith"
   email: "jane.smith@email.com"
@@ -183,6 +187,13 @@ closing: "Sincerely,"
 ```
 
 ### Field-by-field rules
+
+**`meta`** — copy `language` and `target_market` from `tailored-profile.yaml`'s `meta`, so the letter is in the
+CV's language and on the CV's paper. Optional: `paper: "a4" | "letter"` to force the size, `main_font`, `cjk_font`.
+When it is omitted, `render_letter.py` infers each value and says so on a `NOTICE:` line: language from the body,
+then the workspace's `tailored-profile.yaml`, then `en`; paper from that profile (or `profile.yaml`), then a US/Canada
+`posting.yaml` location → Letter, else A4. A salutation or closing in a different language from the body is
+`SALUTATION_LANGUAGE_MISMATCH` / `CLOSING_LANGUAGE_MISMATCH` in `check_letter.py`.
 
 **`sender`** — Fill from the candidate's profile. All three sub-fields are rendered on the letter header.
 

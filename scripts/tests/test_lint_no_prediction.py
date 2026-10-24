@@ -846,3 +846,481 @@ def test_a_clean_report_gets_no_number_hint(tmp_path, capsys):
     captured = capsys.readouterr()
     assert rc == 0
     assert "evidence-blocks.json" not in captured.err, captured.err
+
+
+# ---------------------------------------------------------------------------
+# Verified 2026-10-24. Five defects, each reproduced on the shipped code first.
+#
+#   1. A forecast with no number and no PROBABILITY word — only certainty —
+#      shipped and delivered.
+#   2. 概率论 / probability and statistics / maximum likelihood, quoted from
+#      the posting, blocked delivery as a forecast.
+#   3. Predicting the interview QUESTIONS — the interview mode's job — blocked
+#      delivery as a forecast of the outcome.
+#   4. A deadline `2026/11/30` and `24/7` support blocked delivery as scores.
+#   5. In apply mode (no evidence-blocks.json) a report quoting the master
+#      profile's own metric verbatim was refused.
+#
+# The must-fire and must-pass lists below were each checked against the
+# pre-fix lint: every line in them gave the wrong answer there. The *_STAY_*
+# lists are the other half — the narrowing that keeps each fix from becoming
+# either a cry-wolf or an off switch — and pass on both.
+# ---------------------------------------------------------------------------
+
+# Defect 1. The report lines are the reviewer's exact repro.
+_CERTAINTY_FORECASTS = [
+    "你肯定能拿到面试，进面基本稳了。",
+    "进面基本稳了。",
+    "这个岗位你很有希望拿到 offer，十拿九稳。",
+    "你一定能通过初筛。",
+    "你绝对会被录用。",
+    "拿到offer是板上钉钉的事。",
+    "这个 offer 稳了。",
+    "录用基本没跑了。",
+    "拿到面试的机会很大。",
+    "你铁定能进面。",
+    "稳拿 offer。",
+    "You will definitely get an interview.",
+    "An interview is almost guaranteed.",
+    "You will definitely be shortlisted.",
+    "You'll definitely land the offer.",
+    "You are guaranteed an interview.",
+    "You are bound to get an interview.",
+    "You're sure to be shortlisted.",
+    "The offer is a sure thing.",
+    "You will undoubtedly be invited to interview.",
+    "You will definitely pass the screen.",
+    "間違いなく面接に呼ばれます。",
+    "必ず内定をもらえます。",
+    "内定は確実です。",
+    "확실히 면접에 붙을 것입니다.",
+    "합격은 확실합니다.",
+    "Sin duda conseguirás una entrevista.",
+    "La entrevista está garantizada.",
+    "Seguro que te llaman para una entrevista.",
+]
+
+# The certainty words are the commonest words in interview ADVICE, so the rule
+# binds them to the candidate receiving an outcome. These must stay quiet.
+_CERTAINTY_STAYS_QUIET = [
+    "一定要准备好自我介绍。",
+    "面试前一定要准备项目案例。",
+    "肯定的是，岗位需要英文沟通。",
+    "一定要拿到 offer 再辞职。",
+    "面试官一定会问你为什么离职。",
+    "这一点肯定会被面试官追问。",
+    "英文面试没问题。",
+    "没有任何方法能保证拿到面试。",
+    "你不一定能拿到面试。",
+    "系统稳定通过压测。",
+    "You should definitely prepare a system design example.",
+    "You will definitely get questions on system design.",
+    "You will definitely get interview questions on caching.",
+    "You'll definitely be asked about Kubernetes.",
+    "The interview will definitely include a case study.",
+    "You will most likely be interviewed by the hiring manager and a senior engineer.",
+    "Be sure to get the offer in writing.",
+    "You are not guaranteed an interview.",
+    "No one is guaranteed an interview.",
+    "An interview is guaranteed to applicants who meet the minimum criteria.",
+    "The role is certain to involve travel.",
+    "Python is a safe bet for this team.",
+    "面接では必ず志望動機を聞かれます。",
+    "必ず選考を通過する必要があります。",
+    "必ず面接に進めるとは限りません。",
+    "면접에서 반드시 자기소개를 준비하세요.",
+    "반드시 서류를 통과해야 합니다.",
+    "En la entrevista, sin duda te preguntarán por tu experiencia.",
+    "No es seguro que te llamen para una entrevista.",
+]
+
+
+@pytest.mark.parametrize("text", _CERTAINTY_FORECASTS, ids=range(len(_CERTAINTY_FORECASTS)))
+def test_a_numberless_certainty_forecast_fires(text):
+    assert "PREDICTION_WORD" in codes(_out(lint.scan_text(text, "report.md"))), text
+
+
+@pytest.mark.parametrize("text", _CERTAINTY_STAYS_QUIET,
+                         ids=range(len(_CERTAINTY_STAYS_QUIET)))
+def test_certainty_in_advice_stays_quiet(text):
+    assert lint.scan_text(text, "report.md") == [], text
+
+
+def test_the_reported_certainty_report_is_refused(tmp_path):
+    """The reviewer's report.md, end to end: it exited 0 and was delivered."""
+    _write(tmp_path, "report.md",
+           "# 求职建议报告\n\n## 结论\n\n你肯定能拿到面试，进面基本稳了。\n\n"
+           "You will definitely get an interview. An interview is almost guaranteed.\n\n"
+           "这个岗位你很有希望拿到 offer，十拿九稳。\n")
+    assert lint.main(["--workspace", str(tmp_path)]) == 1
+    findings = [json.loads(line) for line in
+                (tmp_path / "journal.jsonl").read_text(encoding="utf-8").splitlines()
+                ][-1]["findings"]
+    lines = {f.split(":")[2].strip() for f in findings}
+    assert lines == {"5", "7", "9"}, findings
+
+
+# Defects 2, 3 and 4: honest text the shipped lint refused.
+_HONEST_BUT_REFUSED = [
+    # 2 — the subject called probability, quoted from a posting
+    "岗位要求'熟悉概率论与数理统计'",
+    "熟悉概率统计和机器学习。",
+    "掌握概率分布与假设检验。",
+    "熟悉概率图模型。",
+    "Requirements: probability and statistics, linear algebra.",
+    "Strong background in probability theory.",
+    "Experience with probability distributions.",
+    "Maximum likelihood estimation and Bayesian inference.",
+    "Familiar with likelihood ratio tests.",
+    "Write the likelihood function for the model.",
+    "Interpret an odds ratio from logistic regression.",
+    "Log-likelihood and log odds are reported for each model.",
+    "確率論と統計の知識",
+    "確率的勾配降下法",
+    "확률론과 통계 지식",
+    "Probabilidad y estadística",
+    "probabilités et statistiques",
+    # 3 — predicting the questions, not the outcome
+    "面试中大概率会被问到系统设计，请准备一个例子。",
+    "面试很可能会问你的论文。",
+    "面试多半会问到项目难点。",
+    "In the interview you will likely be asked about system design.",
+    "The interview will probably focus on system design.",
+    "The interview is likely to include a coding round.",
+    "Expect the interview to cover caching.",
+    "Expect the interview process to take three weeks.",
+    "You will likely get interview questions about caching.",
+    "You should get the interview format from the recruiter.",
+    # 4 — dates and the round-the-clock idiom
+    "截止日期 2026/11/30，请提前投递。",
+    "Deadline 30/11/2026.",
+    "Posted on 10/14/2026",
+    "2021/09-2025/06 北京大学",
+    "09/2021 - 06/2023 Leiden",
+    "2025/26 graduate scheme",
+    "提供 24/7 值班支持。",
+    "24/7 on-call rotation.",
+]
+
+# Their twins: the same words aimed at the OUTCOME, and n/m shapes that are
+# not dates, still fire.
+_STILL_REFUSED = [
+    "录用概率很高。",
+    "录用概率模型显示你能过。",
+    "面试中大概率会通过。",
+    "你大概率会被录用。",
+    "大概率会让你进入下一轮。",
+    "面试大概率会邀请你。",
+    "The probability of an interview is high.",
+    "The likelihood of an offer is high.",
+    "Your odds are good.",
+    "You will likely be invited to interview.",
+    "You'll probably be asked to come in for an interview.",
+    "You will probably get an interview.",
+    "Expect an offer to follow.",
+    "合格確率は高いです。",
+    "합격 확률은 높습니다.",
+    "You score 8/11 on the requirements.",
+    "30/60/91 is not the horizon",
+    "Coverage 20/20.",
+]
+
+
+@pytest.mark.parametrize("text", _HONEST_BUT_REFUSED, ids=range(len(_HONEST_BUT_REFUSED)))
+def test_honest_text_the_lint_used_to_refuse_now_passes(text):
+    assert lint.scan_text(text, "report.md") == [], text
+
+
+@pytest.mark.parametrize("text", _STILL_REFUSED, ids=range(len(_STILL_REFUSED)))
+def test_the_twins_of_those_exemptions_still_fire(text):
+    assert lint.scan_text(text, "report.md"), text
+
+
+def test_the_question_prediction_fixture_now_passes(tmp_path):
+    """The v11 fixture: a report whose only line of advice is to prepare for a
+    question the interviewer will probably ask."""
+    _write(tmp_path, "report.md",
+           "# 求职建议报告\n\n## 面试准备\n\n面试中大概率会被问到系统设计，请准备一个例子。\n")
+    assert lint.main(["--workspace", str(tmp_path)]) == 0
+
+
+# Defect 5. Apply mode binds the master profile with `check_claims.py --record`
+# and never builds evidence-blocks.json, so before the fix nothing made the
+# candidate's own CV a trusted source there.
+_MASTER_YAML = """\
+meta:
+  name: Jane Doe
+  language: en
+experience:
+- org: Acme BV
+  title: ML Engineer
+  bullets:
+  - Reduced p99 latency by 40% for the ranking service.
+"""
+_QUOTING_REPORT = ("# Application report\n\n"
+                   "- Your strongest evidence: Reduced p99 latency by 40% for the ranking "
+                   "service, which matches the posting's performance focus.\n")
+
+
+def _apply_round(tmp_path, master_text=_MASTER_YAML, report=_QUOTING_REPORT):
+    import check_claims
+    profile_dir = tmp_path / "job-profiles" / "jane"
+    ws = profile_dir / "applications" / "acme-ml-2026-10-24"
+    ws.mkdir(parents=True)
+    master = profile_dir / "profile.yaml"
+    master.write_text(master_text, encoding="utf-8")
+    (ws / "report.md").write_text(report, encoding="utf-8")
+    assert check_claims.main(["--workspace", str(ws), "--master", str(master),
+                              "--record"]) == 0
+    return ws, master
+
+
+def test_a_metric_quoted_from_the_recorded_master_profile_passes(tmp_path):
+    ws, _master = _apply_round(tmp_path)
+    assert not (ws / "evidence-blocks.json").exists()
+    assert lint.main(["--workspace", str(ws)]) == 0
+
+
+def test_the_master_binding_holds_only_while_the_hash_matches(tmp_path):
+    """Any edit after --record voids the binding — even one that leaves the
+    quoted bullet in place. A master that changed mid-run is check_claims'
+    MASTER_MUTATED, and it is not the file the fingerprint vouches for."""
+    ws, master = _apply_round(tmp_path)
+    master.write_text(_MASTER_YAML + "  - Mentored two interns.\n", encoding="utf-8")
+    assert lint.main(["--workspace", str(ws)]) == 1
+
+
+def test_no_fingerprint_means_no_master_trust(tmp_path):
+    ws, _master = _apply_round(tmp_path)
+    (ws / "master-fingerprint.json").unlink()
+    assert lint.main(["--workspace", str(ws)]) == 1
+
+
+def test_the_master_binding_is_the_exact_metric_rule_and_nothing_wider(tmp_path):
+    """The neighbours rule is unchanged: the master's `by 40% for` does not
+    authorise a different number, the same number with other neighbours, or any
+    other number on the same line."""
+    for report in ("- Reduced p99 latency by 45% for the ranking service.\n",
+                   "- Cut cloud spend 40% in 2025.\n",
+                   "- Reduced p99 latency by 40% for the ranking service; interview "
+                   "probability 80%.\n"):
+        ws, _master = _apply_round(tmp_path / str(abs(hash(report))), report=report)
+        assert lint.main(["--workspace", str(ws)]) == 1, report
+
+
+def test_a_fingerprint_inside_the_workspace_is_not_a_master(tmp_path):
+    """Pointing the fingerprint at a file under scan would let report.md authorise
+    its own numbers."""
+    import hashlib
+    ws, _master = _apply_round(tmp_path)
+    for inside in ("report.md", "tailored-profile.yaml"):
+        target = ws / inside
+        if not target.exists():
+            target.write_text("bullets:\n- " + _QUOTING_REPORT.splitlines()[-1][2:] + "\n",
+                              encoding="utf-8")
+        (ws / "master-fingerprint.json").write_text(json.dumps({
+            "path": str(target),
+            "sha256": hashlib.sha256(target.read_bytes()).hexdigest()}), encoding="utf-8")
+        assert lint.main(["--workspace", str(ws)]) == 1, inside
+
+
+def test_a_yaml_comment_in_the_master_is_not_a_fact(tmp_path):
+    """Leaves are parsed: a number that lives only in a comment authorises nothing."""
+    master = ("meta:\n  name: Jane Doe\n"
+              "# Reduced p99 latency by 40% for the ranking service.\n"
+              "experience: []\n")
+    ws, _master = _apply_round(tmp_path, master_text=master)
+    assert lint.main(["--workspace", str(ws)]) == 1
+
+
+def test_an_explicit_file_that_is_not_there_is_exit_2(tmp_path, capsys):
+    """`--files` naming a missing path is "could not run" (exit 2, one receipt),
+    not a FileNotFoundError traceback with exit 1, which reads as findings."""
+    import journal
+    ws = tmp_path / "ws"; ws.mkdir()
+    assert lnp.main(["--workspace", str(ws), "--files", str(ws / "report.md")]) == 2
+    assert "not found" in capsys.readouterr().err
+    assert [r["verdict"] for r in journal.read_receipts(ws, lnp.GATE)] == ["could_not_run"]
+
+
+# ---------------------------------------------------------------------------
+# Verified 2026-10-24, second pass. Each must-fire / must-pass line below gave
+# the wrong answer on the code before this block; the twins pass on both.
+#
+#   a. evidence-blocks.json could bind the scanned report — or any other file the
+#      run writes — as "the CV", so the text under scan authorised its own
+#      numbers. The master fingerprint already refused that; the evidence CV now
+#      does too.
+#   b. 八成会问到 fired through the 七成 = 70% rule although 八成 is the idiom
+#      _HEDGE_ZH had already released before a question.
+#   c. The question release existed in zh/en only, and the numberless-certainty
+#      rule in en/zh/ja/ko/es only.
+#   d. A negation further back than a lookbehind reaches (没人能肯定…, No one can
+#      say for certain that…) left the outcome clause to fire.
+# ---------------------------------------------------------------------------
+
+_SELF_QUOTE = "延迟下降 40% 是现有业绩，请核对测量口径。\n"
+
+
+def _bind_cv(ws, path):
+    import hashlib
+    _write(ws, "evidence-blocks.json", json.dumps({"sources": {"cv": {
+        "path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}}}))
+
+
+@pytest.mark.parametrize("target", ["report.md", "mock/answer-guide.md", "cv.md",
+                                    "tailored-profile.yaml", "judge-1-ats.txt"])
+def test_the_evidence_cv_cannot_be_a_file_the_run_wrote(tmp_path, target):
+    _write(tmp_path, "report.md", _SELF_QUOTE)
+    bound = tmp_path / target
+    if not bound.exists():
+        _write(tmp_path, target, _SELF_QUOTE)
+    _bind_cv(tmp_path, bound)
+    assert lint.main(["--workspace", str(tmp_path)]) == 1, target
+
+
+def test_the_evidence_cv_cannot_be_a_file_named_for_scanning(tmp_path):
+    notes = _write(tmp_path, "notes.txt", _SELF_QUOTE)
+    _bind_cv(tmp_path, notes)
+    assert lint.main(["--workspace", str(tmp_path), "--files", str(notes)]) == 1
+
+
+def test_a_symlinked_cv_source_is_judged_by_what_it_points_at(tmp_path):
+    _write(tmp_path, "report.md", _SELF_QUOTE)
+    link = tmp_path / "cv-source.txt"
+    link.symlink_to(tmp_path / "report.md")
+    _bind_cv(tmp_path, link)
+    assert lint.main(["--workspace", str(tmp_path)]) == 1
+
+
+@pytest.mark.parametrize("source", ["cv-source.txt", "source-profile.txt", "inputs/cv.md",
+                                    "../outside/cv.txt"])
+def test_a_cv_source_the_candidate_supplied_is_still_trusted(tmp_path, source):
+    """The twin: evidence_blocks.py's default `<ws>/cv-source.txt`, a pasted
+    source, an original under inputs/, and a file outside the workspace."""
+    ws = tmp_path / "ws"
+    cv = _write(ws, source, "用 Go 重构核心服务，延迟下降 40%。\n")
+    _write(ws, "report.md", _SELF_QUOTE)
+    _bind_cv(ws, cv)
+    assert lint.main(["--workspace", str(ws)]) == 0, source
+    cv.write_text("用 Go 重构核心服务，延迟下降 50%。\n", encoding="utf-8")
+    assert lint.main(["--workspace", str(ws)]) == 1, source
+
+
+_QUESTION_NOW_RELEASED = [
+    "面试中八成会问到系统设计，请准备一个例子。",
+    "八成会被问到项目难点。",
+    "面接では志望動機を聞かれる可能性が高いです。",
+    "面接で質問される可能性が高いテーマです。",
+    "面接ではおそらく志望動機を聞かれます。",
+    "면접에서 프로젝트 경험에 대해 질문받을 가능성이 높습니다.",
+    "면접에서 아마 프로젝트 경험을 물어볼 것입니다.",
+    "En la entrevista es probable que te pregunten por tu experiencia con Kafka.",
+    "Es muy probable que te pregunten por Kafka en la entrevista.",
+    "En la entrevista probablemente te pidan que expliques un proyecto.",
+]
+# The same words aimed at the outcome, a figure rather than the idiom, and a verb
+# of receiving between the hedge and the question.
+_QUESTION_TWINS_STILL_FIRE = [
+    "七成会问到系统设计。",
+    "8成会问到系统设计。",
+    "你八成能拿到面试。",
+    "八成会通过初筛。",
+    "面接に呼ばれる可能性が高いです。",
+    "おそらく面接に呼ばれて志望動機を聞かれます。",
+    "면접에 초대될 가능성이 매우 높습니다.",
+    "아마 면접에 붙고 경력을 물어볼 것입니다.",
+    "Es muy probable que te inviten a una entrevista y te pregunten por Kafka.",
+    "Es probable que consigas una entrevista y te pregunten por Kafka.",
+    "Es probable que te llamen para una entrevista.",
+]
+
+
+@pytest.mark.parametrize("text", _QUESTION_NOW_RELEASED, ids=range(len(_QUESTION_NOW_RELEASED)))
+def test_a_likely_interview_question_is_not_a_forecast_in_any_language(text):
+    assert lint.scan_text(text, "report.md") == [], text
+
+
+@pytest.mark.parametrize("text", _QUESTION_TWINS_STILL_FIRE,
+                         ids=range(len(_QUESTION_TWINS_STILL_FIRE)))
+def test_the_question_release_does_not_reach_the_outcome(text):
+    assert "PREDICTION_WORD" in codes(_out(lint.scan_text(text, "report.md"))), text
+
+
+_EU_CERTAINTY_FORECASTS = [
+    "Sie bekommen sicher ein Interview.",
+    "Sie werden bestimmt eine Zusage bekommen.",
+    "Sie werden ganz sicher zum Vorstellungsgespräch eingeladen.",
+    "Die Zusage ist Ihnen sicher.",
+    "Je krijgt zeker een gesprek.",
+    "Je krijgt gegarandeerd een gesprek.",
+    "Je wordt ongetwijfeld uitgenodigd voor een gesprek.",
+    "Vous aurez certainement un entretien.",
+    "Vous allez sans aucun doute décrocher un entretien.",
+    "Vous serez assurément convoqué.",
+    "L'entretien est quasiment assuré.",
+    "Otterrai sicuramente un colloquio.",
+    "Avrai di sicuro un colloquio.",
+    "Sarai senza dubbio chiamato per un colloquio.",
+    "Il colloquio è praticamente garantito.",
+]
+# Certainty words in prep and format sentences, a negated certainty, and the
+# predicate that does not close the clause.
+_EU_CERTAINTY_STAYS_QUIET = [
+    "Das Interview ist sicher anspruchsvoll.",
+    "Im Interview werden Sie sicher nach Ihrem Projekt gefragt.",
+    "Sie bekommen nicht sicher ein Interview.",
+    "Es ist nicht sicher, dass Sie eine Einladung bekommen.",
+    "Je krijgt zeker vragen over je project.",
+    "Vous aurez certainement des questions techniques.",
+    "L'entretien sera certainement technique.",
+    "Vous aurez certainement un entretien technique avec l'équipe.",
+    "Rien ne garantit que vous aurez un entretien.",
+    "L'offre est garantie jusqu'au 30 juin.",
+    "Avrai sicuramente domande sul tuo progetto.",
+    "Avrai di sicuro un colloquio tecnico con il team.",
+    "Non è garantito che otterrai un colloquio.",
+]
+
+
+@pytest.mark.parametrize("text", _EU_CERTAINTY_FORECASTS, ids=range(len(_EU_CERTAINTY_FORECASTS)))
+def test_a_certainty_forecast_fires_in_german_dutch_french_and_italian(text):
+    assert "PREDICTION_WORD" in codes(_out(lint.scan_text(text, "report.md"))), text
+
+
+@pytest.mark.parametrize("text", _EU_CERTAINTY_STAYS_QUIET,
+                         ids=range(len(_EU_CERTAINTY_STAYS_QUIET)))
+def test_certainty_in_prep_stays_quiet_in_those_languages(text):
+    assert lint.scan_text(text, "report.md") == [], text
+
+
+_FAR_NEGATION_IS_A_DISCLAIMER = [
+    "没人能肯定你会拿到面试。",
+    "谁也不能保证你一定能拿到面试。",
+    "我们无法保证你一定能进面。",
+    "No one can say for certain that you will get an interview.",
+    "No one can tell you whether you will get an interview.",
+    "Nobody can guarantee that you will get an interview.",
+    "It is impossible to say whether you will get an offer.",
+    "We cannot promise that you will land an interview.",
+]
+_FAR_NEGATION_TWINS_STILL_FIRE = [
+    "没人能肯定你会拿到面试，但你肯定能进面。",
+    "谁也不能否认你肯定能拿到面试。",
+    "No one can deny that you will get an interview.",
+    "No one can say for certain, but you will get an interview.",
+    "Nobody doubts you will get an interview.",
+    "No one can say for certain that you will get an interview; your odds are 80%.",
+]
+
+
+@pytest.mark.parametrize("text", _FAR_NEGATION_IS_A_DISCLAIMER,
+                         ids=range(len(_FAR_NEGATION_IS_A_DISCLAIMER)))
+def test_a_far_negation_of_the_outcome_is_not_a_forecast(text):
+    assert lint.scan_text(text, "report.md") == [], text
+
+
+@pytest.mark.parametrize("text", _FAR_NEGATION_TWINS_STILL_FIRE,
+                         ids=range(len(_FAR_NEGATION_TWINS_STILL_FIRE)))
+def test_the_negation_mask_ends_on_the_outcome_it_denies(text):
+    assert lint.scan_text(text, "report.md"), text

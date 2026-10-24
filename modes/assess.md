@@ -21,19 +21,20 @@ gap. It defines source selection, availability checks and evidence quality.
 These sources supplement formal posting evidence; select only what the current
 question needs.
 
-## 0. Enter the mode — before anything else
+## 0. Enter the mode — as soon as the workspace can exist
+
+The workspace name needs the company and role, and those come from the posting. So
+read the posting text first (§1 decides whether you actually have it), take the
+company and role from it, create `paths.workspace(...)`, and run this before writing
+any artifact into it:
 
 ```
 python3 scripts/enter_mode.py --workspace <ws> --mode assess \
     --because "<why assess, in one line, from what the user asked>"
 ```
 
-This writes a `mode_entry` record to `journal.jsonl` carrying this file's content hash,
-and `check_assessment.py` refuses to pass without it (`NO_MODE_ENTRY`) or with a hash
-that no longer matches the file on disk (`MODE_FILE_CHANGED`). Read this file in full
-after running it. The record is not paperwork: it is the only thing that distinguishes
-"the model loaded this file" from "the model produced something shaped like what this
-file asks for", and without it a layer-1.5 file is an optional reference again.
+`check_assessment.py` refuses to pass without this record (`NO_MODE_ENTRY`) or when this
+file changed afterwards (`MODE_FILE_CHANGED`). Read this file in full after running it.
 
 ## 1. Fetch-integrity gate — a 200 OK is not evidence you have the posting
 
@@ -115,10 +116,7 @@ Three fields carry weight far past their size:
   supporting-statement deliverable in `apply`. Getting it wrong produces a perfectly
   good CV for a process that does not read CVs.
 
-An earlier compression of this list **silently dropped `salary_range` and
-`application_type`**, and that defect shipped. There is no `language` field here: the
-language the CV is calibrated for lives in `meta.language` on the profile, and a second
-copy of it in the posting file is a second thing for the two to disagree about.
+There is no `language` field here: the CV language lives in the profile's `meta.language`.
 
 Non-English cue words map the same way: `Erforderlich` / `Voraussetzungen` /
 `Sie bringen mit` → must_have; `Wünschenswert` / `von Vorteil` → nice_to_have;
@@ -174,13 +172,10 @@ leaves those notices unable to fire at all (`WARN_NO_WORK_STATUS`), and a misspe
 token switches them off silently (`BAD_WORK_STATUS`, `BAD_STATED_CONDITION`). This is a
 second line behind the knockout row below, not a replacement for it.
 
-Write the barrier in your own words, in the reader's language — paraphrase is expected
-and correct. The **id** is the mechanical handle, and it is what `check_assessment.py`
-looks for: `NO_DISQUALIFIER_SECTION` when the section is absent,
-`DISQUALIFIER_NOT_NAMED` when it is there but does not list a blocking row's id, and
-`DISQUALIFIER_AFTER_VERDICT` when it renders below the verdict line. Keying the check on
-the posting's own wording instead would fire on every honest translation, and a check
-that cries wolf on correct output is one people stop reading.
+Write the barrier in your own words, in the reader's language. The **id** is what
+`check_assessment.py` keys on: `NO_DISQUALIFIER_SECTION` (section absent),
+`DISQUALIFIER_NOT_NAMED` (a blocking row's id missing), `DISQUALIFIER_AFTER_VERDICT`
+(section below the verdict line).
 
 ## 5. Cut evidence blocks
 
@@ -197,11 +192,8 @@ claim follows from it. It is a plausibility bound, not a proof.
 
 ## 6. `fit-assessment.yaml` — the complete schema
 
-This schema is defined here and nowhere else; `check_assessment.py` requires it. It has
-two halves and for a while only the second one was written down. The requirement rows
-were here; the **top-level fields** were not, and three scripts read them. A field this
-file never names is a field a faithful run never writes — and `count_coverage.py` then
-had to print two of them anyway.
+This schema is defined here and nowhere else; `check_assessment.py` and three other
+scripts read both halves.
 
 **The top level. `level_direction` and `effort` are PRINTED on the coverage card in §7.**
 
@@ -228,28 +220,14 @@ actions:                        # the single authoritative to-do list
 conventions_rendered: [cn-boss-profile-is-the-screen]
 ```
 
-`effort` appears twice in this file and prices two different things on one scale: at the
-top level, closing the remaining gaps **as a whole**; on a row, closing **that row**.
-Nothing compares the two automatically — set the top-level one by reading your own rows,
-because a `not_closable` above a table of `evening`s is a contradiction only a reader
-will catch. What `consistency.py` does check is the top-level `effort` against the
-**verdict**: `strong_apply` beside `multi_day` or `not_closable` prints
-`NOTICE_VERDICT_EFFORT`. Note what that means for leaving the field out — it reads the
-raw field, so an absent `effort` fired nothing while the card printed 「补不上」 anyway.
-The detector built for exactly that contradiction could not see it, because the
-contradiction existed only on the card.
+Top-level `effort` prices closing the gaps **as a whole**; a row's `effort` prices that
+row. Set the top-level one by reading your rows. `consistency.py` prints
+`NOTICE_VERDICT_EFFORT` for `strong_apply` beside `multi_day` or `not_closable`.
 
-**These two are not optional, and the reason is that the card prints them.**
-`count_coverage.py` used to fill an absent `level_direction` with `unclear` and an absent
-`effort` with `not_closable` — and then again inside its Chinese label lookups, so the
-default `--lang zh` card invented a value even after the obvious defaults were removed.
-The result shipped 「投递建议：强烈建议投」 directly above 「可补缺口所需投入：补不上」 on
-an assessment whose only gapped row said `effort: evening` and carried a `how_to_close`,
-with every gate at exit 0. A card is allowed to say **nobody judged this** — it renders
-「未评估」 / `not assessed` — but it may never invent the most pessimistic value and print
-it in the same column as an assessed one. `check_assessment.py` fails with
-`MISSING_LEVEL_DIRECTION` and `MISSING_EFFORT` when either is absent or out of enum, on
-every verdict except the §8 refusal, where by design there is no card to print.
+**`level_direction` and `effort` are required** because the card prints them:
+`check_assessment.py` fails with `MISSING_LEVEL_DIRECTION` / `MISSING_EFFORT` when either
+is absent or out of enum, on every verdict except the §8 refusal. A missing one renders
+as 「未评估」 / `not assessed`, which is never a value you may write.
 
 `declared_work_status` is the user's **own statement**, from the §4 question — never
 inferred from a name, a university, or a location. `unknown` is a real answer and the
@@ -290,7 +268,8 @@ Row rules, enforced by `check_assessment.py`:
 
 ## 7. Countable facts, no score
 
-Run `python3 scripts/count_coverage.py --workspace <ws>` and paste its block verbatim
+Run `python3 scripts/count_coverage.py --workspace <ws> --lang <user language>` (zh|en|ja|ko|es;
+the default is zh, while `consistency.py` defaults to en, so always pass it) and paste its block verbatim
 into `fit-assessment.md` inside a fence. It is the **only** counting path; a second
 number written by hand will fail the gate.
 
@@ -322,13 +301,8 @@ do not translate the label or recompute the numbers by hand.
 The strongly evidenced count takes `strong` only. `partial` and `gap` are never merged into a covered
 number. Evidence that is only `dated` counts as `partial`.
 
-The middle three lines come from three different places, and mixing them up is how a
-card ends up stating something nobody worked out. The two count lines are computed off
-the §6 rows. 「职级匹配」 and 「可补缺口所需投入」 are read **straight off the top-level
-`level_direction` and `effort`** — nothing derives them from the rows. Leave either unset
-and the line reads 「未评估」 (`not assessed` on the English card) and
-`check_assessment.py` fails: that token means *nobody judged this*, and it is never a
-value you may write into the YAML.
+The two count lines are computed from the §6 rows; 「职级匹配」 and 「可补缺口所需投入」 are
+read straight off the top-level `level_direction` and `effort`.
 
 **Required disclaimer, immediately under the block. Use the matching language's
 template unchanged; Japanese, Korean and Spanish are in the
@@ -370,12 +344,25 @@ input" is not a point on that scale.
 
 ## 9. Market convention cards — verbatim, id-allowlisted
 
-Load `references/market-conventions/<market>.yaml`. Render only entries whose
-`applies_when` is satisfied, and render `text_en` / `text_zh` **character for
-character**. You may not author, strengthen or extend an entry, attach a number to one,
-or invent one.
+Print the table's run-time half instead of opening the YAML:
+
+```
+python3 scripts/convention_cards.py --market <market> --lang <user language>
+```
+
+For every entry in `references/market-conventions/<market>.yaml` it prints, copied
+verbatim from the table, exactly what this step uses: the `id`, `applies_when`,
+`review_by` and the reader text (`text_zh` for zh, `text_en` for en, both for ja/ko/es;
+`--text zh|en` overrides; `--table <file>` reads a table the session names instead of the
+shipped one). The `source`, `why` and `unverified` fields are the
+maintainer's review trail and never reach a card, so do not read the YAML itself. Render
+only entries whose `applies_when` is satisfied, and render `text_en` / `text_zh`
+**character for character**. You may not author, strengthen or extend an entry, attach a
+number to one, or invent one.
 
 **If an entry's `review_by` has passed, still render it, with a 「已过复核期」 banner.**
+`convention_cards.py` flags such an entry on its `review_by` line, with the banner in
+your `--lang`, using the same date check the gate uses.
 A date going by while the code did not change should not stop the skill working. The CI
 lint (`check_conventions.py --ci`) fails on the expired date so a person fixes it; the
 runtime gate downgrades it to `WARN_EXPIRED_REVIEW_BY` and instead requires the banner
@@ -436,8 +423,8 @@ and `consistency.py` compares it against the closable gaps.
 
 ```
 python3 scripts/evidence_blocks.py     --workspace <ws>   # step 5, listed again for order
-python3 scripts/count_coverage.py      --workspace <ws>
-python3 scripts/consistency.py         --workspace <ws>
+python3 scripts/count_coverage.py      --workspace <ws> --lang <user language>
+python3 scripts/consistency.py         --workspace <ws> --lang <user language>
 python3 scripts/check_evidence_refs.py --workspace <ws>
 python3 scripts/lint_no_prediction.py  --workspace <ws>
 python3 scripts/check_assessment.py    --workspace <ws>
@@ -467,46 +454,13 @@ the internal record, raw coverage block, repeated IDs or engineering disclaimer.
 A zero count of fully demonstrated responsibilities must not erase useful partial
 experience from the explanation. Preserve the assessment's facts and uncertainty.
 
-## Hand the artifacts over — `deliver.py`, not a sentence in the final message
+## Hand the artifacts over
 
-A workspace under `~/.claude/job-profiles/` is where the skill works, and it is
-not where a person looks. Nobody browses a dotfile directory, and a path pasted
-into a chat message is gone the moment the session scrolls. So the last step of
-every mode is a command, not a claim:
-
-```bash
-python3 scripts/deliver.py --workspace <ws>
-```
-
-Delivery uses two child folders, whose names `deliver.py` writes in Chinese for every client: `简历/` (application documents) for `简历.docx`, `简历.pdf` and other requested application documents; `报告/` (report) for `求职建议报告.pdf` (the advice report) and its editable text. Filenames never include the employer, role or internal workspace slug.
-
-Author `report.md` for **every full consultation**, respecting explicit chat-only/no-file requests and answering the client's actual
-question in their language: conclusion, supporting evidence, relevant career
-constraints or facts still to confirm, and practical next steps. Tool defects,
-adapter errors, tests, developer diagnostics and internal review logs belong only
-in the private workspace, never in this client report. Do not copy an internal
-`completion.md` into it. A narrow text edit remains in chat; it does not initiate report delivery.
-
-Before drafting, read `references/report-writing.md`; revise the report for clear
-recommendations, specific reasons and actionable advice, then inspect the rendered
-pages. Preserve source facts, required labels and the user's approved formatting.
-
-After authoring `report.md`, run `lint_no_prediction.py --workspace <ws>`.
-Delivery also refuses prediction language in the report.
-
-Run `deliver.py` as the last step. It requires `report.md` and a verified report
-PDF and copies only the report and requested CV/application documents into
-`~/Downloads/<workspace-name>/`. For multiple workspaces serving one consultation,
-pass the **same `--to <consultation-folder>`** each time so the report and CV stay
-together. Quote that folder and its client files in the reply. The workspace and
-all audit evidence remain in their original location.
-
-PDF verification checks both recovered text and actual painted glyph IDs. A
-missing or refused PDF means incomplete delivery (exit 2); repair the cause and
-rerun before declaring completion. `--no-pdf` is only for an explicit user format
-exception. A cover letter is provided on demand; it is not the domestic default.
-Do not automatically start a mock interview or another mode.
-
+Follow SKILL.md "Client deliverables": write `report.md` (read
+`references/report-writing.md` first), render and review it, run
+`lint_no_prediction.py`, then `python3 scripts/deliver.py --workspace <ws>` last (client files go to `~/Downloads/<workspace-name>/`). A
+source CV is not redelivered unless the user asks (`--include-applications`). Do not
+start another mode automatically.
 
 ## 12. Self-check before you hand this over
 
@@ -527,8 +481,9 @@ Do not automatically start a mock interview or another mode.
 - [ ] The disclaimer is present, unchanged, directly under the block.
 - [ ] No percentage, no `n/m` score, no prediction word — except a quoted employer
       rubric with its source named on the next line.
-- [ ] Convention cards are verbatim from `references/market-conventions/<market>.yaml`,
-      `applies_when` was honoured, and `conventions_rendered` lists their ids.
+- [ ] Convention cards are verbatim from `references/market-conventions/<market>.yaml`
+      as `scripts/convention_cards.py` printed them, `applies_when` was honoured, and
+      `conventions_rendered` lists their ids.
 - [ ] Any rendered entry whose `review_by` has passed carries the 「已过复核期」 /
       "past its review date" banner, in the card's own language.
 - [ ] Every consistency notice that fired is attached where it fired.

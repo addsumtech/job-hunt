@@ -11,7 +11,8 @@ description: >-
   this role", "tailor my CV to this job link", "build me a resume", "write a cover
   letter for this posting", "would I get an interview with this CV?", "is this job
   worth applying to?", "find me MRI reconstruction roles in the Netherlands", "run
-  a mock interview for this posting". Outputs Markdown, PDF (LaTeX), and .docx.
+  a mock interview for this posting", "帮我找上海的AI产品经理岗位", "这个岗位值不值得投".
+  Delivers a client report and Word/PDF documents.
   Never fabricates experience — honest reframing only — and never predicts an
   interview or offer probability.
 ---
@@ -107,6 +108,16 @@ dependencies. `doctor.py --install` installs Python packages only; a PATH probe
 does not prove a PDF engine works. Use `scripts/run_tool.py` for a prepared runtime.
 Do not set up discovery tools for an offline assessment or a small text edit.
 
+**How to read every command in this skill.** Run `python3 scripts/<x>.py` from the
+skill root with the prepared interpreter — the `python` path in the runtime's
+`runtime.json` (default `~/.local/share/job-hunt/venv/bin/python`), or
+`python scripts/run_tool.py python scripts/<x>.py …`. The `python3` on PATH is often
+macOS's 3.9 or a Python without the dependencies; never `pip install` into it.
+`<ws>` / `<workspace>` / `<round>` always mean the absolute path of this run's
+workspace, never `.` (that would be the skill directory), and raw captures go under
+`<ws>/raw/`. A script exits 2 with `PYTHON_TOO_OLD` on an interpreter older than 3.10 and with
+`WORKSPACE_IN_SKILL` for a workspace inside the skill; fix the call, don't work around it.
+
 Resolve the workspace through `scripts/paths.py`, look for a prior matching run,
 and create the selected directory before entering:
 
@@ -171,10 +182,17 @@ Run `scripts/lint_no_prediction.py --workspace <ws>` on the final client text.
 
 Run `scripts/deliver.py --workspace <ws>` last. It copies client files to
 `~/Downloads/<workspace-name>/`, with `报告/求职建议报告.pdf` and editable text;
-requested application files go under `简历/`. Use the same `--to` directory for
-workspaces serving one consultation. Keep audit records private. In discover,
+requested application files go under `简历/` and an interview brief under
+`面试准备/`. Use the same `--to` directory for
+workspaces serving one consultation; a second workspace or mode lands in its own
+subfolder there (`NOTICE_SEPARATE_FOLDER`), never over the first. Quote the folder
+named on `deliver.py`'s last line. Keep audit records private. In discover,
 assess and interview, a source CV is not automatically redelivered. The reviewed
 PDF must survive delivery byte-for-byte. `--no-pdf` is an explicit format exception.
+If `deliver.py` refuses, keep the draft in the workspace and say what is missing;
+never copy or rename files into the delivery folder by hand. In the final reply,
+link only the delivery folder and its client files, copying the absolute paths from
+`deliver.py`'s output rather than retyping them.
 If a required output or check cannot be completed, state what remains unverified.
 
 ## Self-check

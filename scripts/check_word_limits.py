@@ -42,14 +42,48 @@ _HEADING = re.compile(r"^###\s+(?P<title>.+?)\s*$", re.M)
 # `(300 mots maximum)` and `(500자 이내)` all parsed as NO limit — and for a
 # posting that is not `structured`, no limit means no finding at all, so a
 # 600-word answer against a stated 300-word cap passed in silence.
+#
+# The number is read WHOLE, thousands separators included. `\d{2,4}` with no
+# left boundary found "000 words" inside "(max 1,000 words)" and "500 words"
+# inside "(2,500 words)": limits of 0 and 500, OVER_LIMIT on a compliant
+# statement, and the instruction to cut a 2,100-word proposal to 500 words.
+# Accepted: 1000, 1,000 (en/zh/ja/ko), 1.000 (de/nl), 1'000 (ch), 1 000 with an
+# ordinary, no-break or narrow no-break space (fr), and the full-width comma a
+# CJK heading may carry. One separator per number, groups of exactly three, so
+# "1,5" and "250.5" are not numbers here. The lookbehinds stop a match from
+# starting inside a longer number, which is how the 0 and the 500 got in.
+# "(250-word limit)" is read too: it is how English often writes the cap.
+_CUES = (r"max\.?|maximal|maximaal|maximum|hoechstens|höchstens|bis zu|tot|"
+         r"jusqu'?à|hasta|fino a|word limit:?|up to|no more than|not exceeding|"
+         r"at most|不超过|不得超过|最多|至多|最大|上限|최대")
 _LIMIT = re.compile(
-    r"\(?\s*(?:max\.?\s*|maximaal\s*|maximum\s*|hoechstens\s*|höchstens\s*|"
-    r"bis zu\s*|tot\s*|jusqu'?à\s*|hasta\s*|fino a\s*|"
-    r"word limit:?\s*|up to\s*)?"
-    r"(?P<n>\d{2,4})\s*"
+    r"\(?\s*(?:(?:" + _CUES + r")\s*)?"
+    r"(?<!\d)(?<!\d[,.'’， \u00a0\u202f])"
+    r"(?P<n>\d{1,3}(?P<sep>[,.'’， \u00a0\u202f])\d{3}(?:(?P=sep)\d{3})*|\d{2,6})\s*(?:-\s*)?"
     r"(?:words?|woorden|w[oö]rter|mots|palabras|parole|字|자|文字)"
-    r"\s*(?:or less|maximum|max\.?|ou moins|o menos|以内|이내|以下)?\s*\)?", re.I)
+    r"\s*(?:or less|maximum|max\.?|ou moins|o menos|以内|이내|以下|程度)?\s*\)?", re.I)
+# A space-grouped number right after a word that is not a cue may be two
+# numbers: "Question 2 250 words" is criterion 2 with a 250-word limit, not a
+# 2,250-word one. "(1 000 mots)", "max 1 000 Wörter" and "Statement: 1 000
+# words" stay one number, and so does any reading whose last group starts with
+# 0 — no standalone count is written "000".
+_SPACES = " \u00a0\u202f"
+_CUE_AT_END = re.compile(r"(?:" + _CUES + r")$", re.I)
 _WORD = re.compile(r"[^\W\d_]+", re.UNICODE)
+
+
+def declared_limit(title: str):
+    """The word limit a criterion heading states, as an int, or None."""
+    m = _LIMIT.search(title)
+    if not m:
+        return None
+    digits = re.findall(r"\d+", m.group("n"))
+    sep = m.group("sep")
+    if sep and sep in _SPACES and not digits[-1].startswith("0"):
+        before = title[:m.start("n")].rstrip()
+        if before and before[-1].isalnum() and not _CUE_AT_END.search(before):
+            return int(digits[-1])
+    return int("".join(digits))
 
 
 def _words(text: str) -> int:
@@ -67,9 +101,8 @@ def sections(text: str) -> list:
     for i, m in enumerate(marks):
         end = marks[i + 1].start() if i + 1 < len(marks) else len(text)
         title = m.group("title")
-        lim = _LIMIT.search(title)
         body = text[m.end():end]
-        out.append((title, int(lim.group("n")) if lim else None, _words(body), body))
+        out.append((title, declared_limit(title), _words(body), body))
     return out
 
 

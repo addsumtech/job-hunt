@@ -160,6 +160,18 @@ def test_verifying_without_a_recorded_fingerprint_is_exit_2(tmp_path, capsys):
     assert "NO_MASTER_FINGERPRINT" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize("body", ["{not json", "[]", '{"sha256": "x"}', '{"path": 5}'])
+def test_a_corrupt_fingerprint_is_exit_2_with_one_receipt(tmp_path, capsys, body):
+    """A fingerprint that cannot be read verified nothing. It used to raise
+    (JSONDecodeError / TypeError / KeyError) and exit 1, the code for findings."""
+    ws = tmp_path / "ws"; ws.mkdir()
+    (ws / "tailored-profile.yaml").write_text("meta: {}\n", encoding="utf-8")
+    (ws / check_claims.FINGERPRINT).write_text(body, encoding="utf-8")
+    assert check_claims.main(["--workspace", str(ws)]) == 2
+    assert "NO_MASTER_FINGERPRINT" in capsys.readouterr().err
+    assert [r["verdict"] for r in journal.read_receipts(ws, "check_claims")] == ["could_not_run"]
+
+
 def test_each_run_leaves_exactly_one_receipt_including_the_exit_2_path(tmp_path):
     ws, _ = _setup(tmp_path, MASTER)
     check_claims.main(["--workspace", str(ws)])
@@ -912,3 +924,545 @@ def test_the_negated_completion_helper_needs_both_halves_and_proximity():
     assert check_claims._negated_completion(["niet"]) is False, "no completion word"
     assert check_claims._negated_completion(
         ["not", "a", "b", "c", "d", "completed"]) is False, "too far apart"
+
+
+# ---------------------------------------------------------------------------
+# Trimmed fields: dropped ranks, truncated names, and the ORDER of the checks.
+#
+# Measured 2026-10-24 against the gate as it then stood: every "fires" case
+# below came back `sourced`. A trimmed field passed whenever it was a whole-span
+# phrase of a same-kind master entry, because the only qualifiers the gate knew
+# were status markers — and even those were checked only after the exact-leaf
+# and prose passes had already cleared the claim. The workspace below is the
+# reproduction verbatim: three fabrications, exit 0.
+# ---------------------------------------------------------------------------
+
+TRIM_MASTER = {
+    "meta": {"name": "Jane Doe", "target_market": "nl", "language": "en"},
+    "contact": {"email": "jane@example.com"},
+    "summary": "MSc Computer Science student at TU Delft.",
+    "experience": [{"title": "Assistant Manager, Data",
+                    "org": "Google Developer Student Club Leiden",
+                    "start": "2022", "end": "2023",
+                    "bullets": ["Organised workshops."]}],
+    "education": [{"degree": "MSc Computer Science (in progress, expected 2027)",
+                   "institution": "TU Delft", "start": "2025", "end": "present"}],
+}
+
+
+def _trimmed(**changes):
+    tailored = copy.deepcopy(TRIM_MASTER)
+    for path, value in changes.items():
+        section, field = path.split("__")
+        tailored[section][0][field] = value
+    return tailored
+
+
+def test_the_reproduced_trimmed_workspace_is_reported_three_times(tmp_path, capsys):
+    """Assistant Manager → Manager, a student club → "Google", an unfinished
+    degree → a held one. Each was a phrase of the real field; all three passed."""
+    tailored = _trimmed(experience__title="Manager, Data",
+                        experience__org="Google",
+                        education__degree="MSc Computer Science")
+    ws, _ = _setup(tmp_path, tailored, master=TRIM_MASTER)
+    capsys.readouterr()
+    assert check_claims.main(["--workspace", str(ws)]) == 1
+    out = capsys.readouterr().out
+    for term, code, where, cited in (
+            ("Manager, Data", "QUALIFIER_STRIPPED", "experience[0].title",
+             "Assistant Manager, Data"),
+            ("Google", "ORG_TRUNCATED", "experience[0].org",
+             "Google Developer Student Club Leiden"),
+            ("MSc Computer Science", "QUALIFIER_STRIPPED", "education[0].degree",
+             "in progress, expected 2027")):
+        line = _finding_for(out, term)
+        assert line and line.startswith(code), (term, line)
+        assert where in line and cited in line, line
+    assert len(out.strip().splitlines()) == 3, out
+
+
+def test_the_untrimmed_workspace_stays_quiet(tmp_path, capsys):
+    ws, _ = _setup(tmp_path, TRIM_MASTER, master=TRIM_MASTER)
+    capsys.readouterr()
+    assert check_claims.main(["--workspace", str(ws)]) == 0
+    assert capsys.readouterr().out.strip() == ""
+
+
+def test_prose_cannot_clear_a_dropped_status_before_it_is_checked(tmp_path, capsys):
+    """The ordering bug on its own. The summary says "MSc Computer Science
+    student", which is a whole-phrase prose hit for the trimmed degree — and the
+    prose pass used to run first, so the qualifier was never looked at."""
+    ws, _ = _setup(tmp_path, _trimmed(education__degree="MSc Computer Science"),
+                   master=TRIM_MASTER)
+    capsys.readouterr()
+    assert check_claims.main(["--workspace", str(ws)]) == 1
+    line = _finding_for(capsys.readouterr().out, "MSc Computer Science")
+    assert line and line.startswith("QUALIFIER_STRIPPED"), line
+
+
+def test_an_exact_leaf_elsewhere_cannot_clear_a_dropped_rank(tmp_path, capsys):
+    """"Manager, Data" is an exact leaf of the master — as a PROJECT role. The
+    job it is written onto was "Assistant Manager, Data", and the exact-leaf pass
+    used to clear it before the job's own title was compared."""
+    master = copy.deepcopy(TRIM_MASTER)
+    master["projects"] = [{"name": "Workshop series", "role": "Manager, Data"}]
+    tailored = copy.deepcopy(master)
+    tailored["experience"][0]["title"] = "Manager, Data"
+    ws, _ = _setup(tmp_path, tailored, master=master)
+    capsys.readouterr()
+    assert check_claims.main(["--workspace", str(ws)]) == 1
+    line = _finding_for(capsys.readouterr().out, "Manager, Data")
+    assert line and line.startswith("QUALIFIER_STRIPPED"), line
+    assert "experience[0].title" in line and "seniority" in line, line
+
+
+PROGRESSION_MASTER = {
+    "meta": {"name": "Test User"},
+    "experience": [
+        {"title": "Data Scientist", "org": "Acme BV", "start": "2021-03",
+         "end": "present", "bullets": ["Shipped the churn model."]},
+        {"title": "Junior Data Scientist", "org": "Acme BV", "start": "2019-03",
+         "end": "2021-02", "bullets": ["Cleaned the event data."]},
+    ],
+}
+
+
+def test_a_promotion_cannot_be_backdated_onto_the_earlier_role(tmp_path, capsys):
+    """The commonest inflation there is: the later, real title written onto the
+    earlier role. Family-wide, "Data Scientist" is an exact title of this master
+    and looks sourced; only the entry it was written on — paired by its dates —
+    says it was "Junior Data Scientist"."""
+    tailored = copy.deepcopy(PROGRESSION_MASTER)
+    tailored["experience"][1]["title"] = "Data Scientist"
+    ws, _ = _setup(tmp_path, tailored, master=PROGRESSION_MASTER)
+    capsys.readouterr()
+    assert check_claims.main(["--workspace", str(ws)]) == 1
+    out = capsys.readouterr().out
+    lines = [line for line in out.splitlines() if '"Data Scientist"' in line]
+    assert len(lines) == 1, out
+    assert lines[0].startswith("QUALIFIER_STRIPPED")
+    assert "experience[1].title" in lines[0]
+    assert "Junior Data Scientist" in lines[0]
+
+
+def test_reordering_and_dropping_entries_does_not_mispair(tmp_path, capsys):
+    """Pairing is by dates and employer, never by position: the honest moves —
+    reverse the order, drop a role — must not pair a title with the wrong job."""
+    tailored = copy.deepcopy(PROGRESSION_MASTER)
+    tailored["experience"] = list(reversed(tailored["experience"]))
+    ws, _ = _setup(tmp_path / "reordered", tailored, master=PROGRESSION_MASTER)
+    capsys.readouterr()
+    assert check_claims.main(["--workspace", str(ws)]) == 0
+    assert capsys.readouterr().out.strip() == ""
+
+    tailored = copy.deepcopy(PROGRESSION_MASTER)
+    del tailored["experience"][0]
+    ws, _ = _setup(tmp_path / "dropped", tailored, master=PROGRESSION_MASTER)
+    capsys.readouterr()
+    assert check_claims.main(["--workspace", str(ws)]) == 0
+    assert capsys.readouterr().out.strip() == ""
+
+
+def test_a_name_kept_exactly_elsewhere_cannot_clear_a_truncated_employer(
+        tmp_path, capsys):
+    """The candidate really did work at "Google" — later. The 2022 role was at a
+    student club, and its paired entry is what says so."""
+    master = copy.deepcopy(TRIM_MASTER)
+    master["experience"].append({"title": "Data Analyst", "org": "Google",
+                                 "start": "2024", "end": "present",
+                                 "bullets": ["Built dashboards."]})
+    tailored = copy.deepcopy(master)
+    tailored["experience"][0]["org"] = "Google"
+    ws, _ = _setup(tmp_path, tailored, master=master)
+    capsys.readouterr()
+    assert check_claims.main(["--workspace", str(ws)]) == 1
+    out = capsys.readouterr().out
+    line = _finding_for(out, "Google")
+    assert line and line.startswith("ORG_TRUNCATED"), out
+    assert "experience[0].org" in line
+
+
+def test_a_client_in_a_bullet_is_not_an_employer(tmp_path, capsys):
+    """Prose sources a skill ("Built a PyTorch pipeline") but never a name: the
+    company a bullet mentions is a client, a partner or a customer."""
+    master = {"meta": {"name": "Test User"},
+              "experience": [{"title": "Consultant", "org": "Northwind BV",
+                              "bullets": ["Built trading dashboards for Shell."]}]}
+    tailored = copy.deepcopy(master)
+    tailored["experience"][0]["org"] = "Shell"
+    ws, _ = _setup(tmp_path, tailored, master=master)
+    capsys.readouterr()
+    assert check_claims.main(["--workspace", str(ws)]) == 1
+    assert 'UNSOURCED: "Shell"' in capsys.readouterr().out
+
+
+def test_a_claims_row_answers_a_dropped_rank_and_a_truncated_name(tmp_path, capsys):
+    """Both findings must be answerable — a promotion since the master was
+    written, a club that really was the employer of record."""
+    tailored = _trimmed(experience__title="Manager, Data", experience__org="Google")
+    claims = [{"term": term, "where": f"tailored-profile.yaml:experience[0].{field}",
+               "source_kind": "session-answer", "source_ref": ref,
+               "session_date": "2026-10-24", "retracted": None}
+              for term, field, ref in (
+                  ("Manager, Data", "title", "user: promoted to manager 2023-01"),
+                  ("Google", "org", "user: contract was with Google directly"))]
+    ws, _ = _setup(tmp_path, tailored, claims, master=TRIM_MASTER)
+    capsys.readouterr()
+    assert check_claims.main(["--workspace", str(ws)]) == 0
+    assert capsys.readouterr().out.strip() == ""
+
+
+def test_the_honest_trims_of_the_same_workspace_stay_quiet(tmp_path, capsys):
+    """Decision, written down: dropping "Senior" is a DE-escalation and stays
+    quiet — the rank vocabulary holds only the subordinate direction. "Vice
+    President" kept whole is quiet, and so is a legal form dropped off an
+    employer, whichever end of the name it was written on. Every trim here was
+    quiet before the fix as well; it is the guard that the fix did not widen."""
+    master = {"meta": {"name": "Test User"},
+              "experience": [
+                  {"title": "Senior Engineer", "org": "Acme B.V.",
+                   "start": "2022-01", "end": "present", "bullets": ["Ran it."]},
+                  {"title": "Vice President", "org": "Initech",
+                   "start": "2019-01", "end": "2021-12", "bullets": ["Ran it."]},
+                  {"title": "Engineer", "org": "株式会社リクルート",
+                   "start": "2017-04", "end": "2018-12", "bullets": ["Ran it."]}]}
+    tailored = copy.deepcopy(master)
+    tailored["experience"][0].update(title="Engineer", org="Acme")
+    tailored["experience"][2].update(org="リクルート")
+    ws, _ = _setup(tmp_path, tailored, master=master)
+    capsys.readouterr()
+    assert check_claims.main(["--workspace", str(ws)]) == 0
+    assert capsys.readouterr().out.strip() == ""
+
+
+# ── the vocabulary, one pair at a time ──────────────────────────────────────
+
+_DROPS_A_RANK = [
+    ("Manager, Data", "Assistant Manager, Data"),
+    ("Manager", "Assistant Manager, Data"),
+    ("Director", "Associate Director"),
+    ("Data Scientist", "Junior Data Scientist"),
+    ("President", "Vice President"),
+    ("Vice President", "Assistant Vice President"),
+    ("Professor", "Assistant Professor"),
+    ("Head of Data", "Deputy Head of Data"),
+    ("Director", "Acting Director"),
+    ("CTO", "Interim CTO"),
+    ("Director", "Director (Interim)"),
+    ("Manager", "Manager, Acting"),
+    ("Accountant", "Trainee Accountant"),
+    ("Software Engineer", "Software Engineer Intern"),
+    ("Software Engineer", "Intern Software Engineer"),
+    ("Electrician", "Apprentice Electrician"),
+    ("CEO", "Personal Assistant to the CEO"),
+    ("Dean", "Professor and Associate Dean"),
+    ("Founder", "Co Founder"),
+    ("Directeur", "Directeur adjoint"),
+    ("Leiter Vertrieb", "Stellvertretender Leiter Vertrieb"),
+    ("经理", "经理助理"),
+    ("总监", "副总监"),
+    ("总裁", "高级副总裁"),
+    ("研究员", "助理研究员"),
+    ("教授", "副教授"),
+    ("律师", "实习律师"),
+    ("部長", "副部長"),
+    ("課長", "課長補佐"),
+    ("部長", "部長代理"),
+    ("エンジニア", "見習いエンジニア"),
+    ("教授", "准教授"),
+    ("사장", "부사장"),
+    ("교수", "부교수"),
+    ("기자", "수습기자"),
+    ("연구원", "인턴 연구원"),
+    ("팀장", "팀장 직무대리"),
+]
+
+_DROPS_A_STATUS = [
+    ("计算机科学硕士", "计算机科学硕士在读"),         # no brackets
+    ("计算机科学硕士", "在读计算机科学硕士"),
+    ("注册会计师", "注册会计师（备考中）"),
+    ("注册会计师", "注册会计师备考中"),
+    ("公認会計士", "公認会計士（勉強中）"),
+    ("공인회계사", "공인회계사 (준비중)"),
+    ("공인회계사", "공인회계사 (시험 준비 중)"),
+    ("CPA", "CPA (in preparation)"),
+    ("CPA", "CPA (exam pending)"),
+    ("CFA", "CFA Level III Candidate"),
+    # the field went with the status, and the status was still dropped
+    ("MSc", "MSc Computer Science (in progress)"),
+    ("硕士", "计算机科学硕士在读"),
+    ("Dutch", "English (native), Dutch (B1)"),
+]
+
+_KEEPS_EVERY_RANK = [
+    ("Vice President", "Vice President"),
+    ("Vice President", "Senior Vice President"),   # Senior is not subordinate
+    ("Vice President", "Vice President, Sales"),
+    ("Engineer", "Senior Engineer"),                # the documented decision
+    ("Engineer", "Lead Engineer"),
+    ("Director", "Managing Director"),
+    ("Associate", "Senior Associate"),
+    # a rank word that qualified the DROPPED post, not the kept one
+    ("Professor", "Professor and Associate Dean"),
+    ("Software Engineer", "Software Engineer, Acting Team Lead"),
+    ("Manager", "Vice President and Manager"),
+    ("Manager", "Manager, Junior Achievement"),
+    ("Producer", "Producer, Vice Media"),
+    # the B1 belongs to Dutch; English dropped nothing that qualified it
+    ("English", "English (native), Dutch (B1)"),
+    ("First Aid", "First Aid - 2024"),
+    ("经理", "总经理"),                              # 总 is not subordinate
+    ("工程师", "标准工程师"),                        # 标准 ends in 准, is not 准
+    ("부장", "영업본부 부장"),                       # 본부 ends in 부, is not 부
+]
+
+
+@pytest.mark.parametrize("term,leaf", _DROPS_A_RANK,
+                         ids=[t[1][:28] for t in _DROPS_A_RANK])
+def test_a_dropped_subordinate_rank_is_a_qualifier(term, leaf):
+    assert check_claims.relation(term, leaf) == check_claims.QUALIFIER
+    assert check_claims.dropped_qualifier(term, leaf)[0] == "seniority"
+
+
+@pytest.mark.parametrize("term,leaf", _DROPS_A_STATUS,
+                         ids=[t[1][:28] for t in _DROPS_A_STATUS])
+def test_a_dropped_status_is_a_qualifier_with_or_without_brackets(term, leaf):
+    assert check_claims.relation(term, leaf) == check_claims.QUALIFIER
+    assert check_claims.dropped_qualifier(term, leaf)[0] == "status"
+
+
+@pytest.mark.parametrize("term,leaf", _KEEPS_EVERY_RANK,
+                         ids=[t[1][:28] for t in _KEEPS_EVERY_RANK])
+def test_a_rank_word_that_was_not_dropped_off_the_kept_title_is_quiet(term, leaf):
+    assert check_claims.relation(term, leaf) == check_claims.SOURCED
+
+
+_LEGAL_FORM_ONLY = [
+    ("Acme", "Acme B.V."),
+    ("Acme", "Acme BV"),
+    # the same entity, so adding the form is as honest as dropping it — this
+    # one was UNSOURCED before the fix and is quiet on purpose now
+    ("Acme BV", "Acme"),
+    ("Acme", "Acme, Inc."),
+    ("Acme", "Acme GmbH & Co. KG"),
+    ("Acme", "Acme S.A. de C.V."),
+    ("Acme Holdings", "Acme Holdings Pty Ltd"),
+    ("Volksbank", "de Volksbank"),
+    ("リクルート", "株式会社リクルート"),
+    ("リクルート", "(株)リクルート"),
+    ("腾讯科技", "腾讯科技有限公司"),
+    ("阿里巴巴", "阿里巴巴股份有限公司"),
+    ("카카오", "주식회사 카카오"),
+    ("카카오", "(주)카카오"),
+]
+
+_TRUNCATED_NAMES = [
+    ("Google", "Google Developer Student Club Leiden"),
+    ("Philips", "Philips Research"),
+    ("TU Delft", "TU Delft (exchange)"),
+    ("Stanford University", "Stanford University (online)"),
+    ("Harvard", "Harvard Extension School"),
+    ("Roma", "AS Roma"),                    # a Western legal form never leads
+    ("字节跳动", "北京字节跳动科技有限公司"),
+]
+
+
+# Spelled out rather than read from the module, so the cases below still collect
+# (and fail one by one) against a gate that has no name rule at all.
+_NAME_FAMILIES = ("experience.org", "education.institution")
+
+
+def test_the_name_families_are_the_employer_and_institution_fields():
+    assert tuple(check_claims.NAME_FAMILIES) == _NAME_FAMILIES
+
+
+@pytest.mark.parametrize("family", _NAME_FAMILIES)
+@pytest.mark.parametrize("term,leaf", _LEGAL_FORM_ONLY,
+                         ids=[t[1][:28] for t in _LEGAL_FORM_ONLY])
+def test_a_name_may_drop_its_legal_form(term, leaf, family):
+    assert check_claims.relation(term, leaf, family) == check_claims.SOURCED
+
+
+@pytest.mark.parametrize("family", _NAME_FAMILIES)
+@pytest.mark.parametrize("term,leaf", _TRUNCATED_NAMES,
+                         ids=[t[1][:28] for t in _TRUNCATED_NAMES])
+def test_a_name_may_not_drop_anything_else(term, leaf, family):
+    assert check_claims.relation(term, leaf, family) == check_claims.TRUNCATED
+
+
+# ── two honest shortenings the strict rule cried wolf on ────────────────────
+#
+# A corporate-group designator is dropped like a legal form, from the end only,
+# and a sub-unit may go when what is kept is exactly the text before the first
+# comma. Both were ORG_TRUNCATED at c450b16, and both are how most CVs write the
+# name. Neither reaches brackets or a bare word cut: the semester abroad and the
+# student club below must still fail.
+
+_GROUP_OR_SUB_UNIT_DROPPED = [
+    ("Alibaba", "Alibaba Group"),
+    ("Alibaba", "Alibaba Group Holding Limited"),
+    ("Tencent", "Tencent Holdings Ltd"),
+    ("Acme", "Acme Holding B.V."),
+    ("腾讯", "腾讯控股"),
+    ("腾讯", "腾讯控股有限公司"),
+    ("阿里巴巴", "阿里巴巴集团"),
+    ("長和", "長和集團"),
+    ("楽天", "楽天グループ株式会社"),
+    ("セブン&アイ", "セブン&アイ・ホールディングス"),
+    ("삼성", "삼성그룹"),
+    ("SK", "SK홀딩스"),
+    ("Leiden University", "Leiden University, Faculty of Science"),
+    ("Philips", "Philips, Healthcare Division"),
+    ("Philips", "Philips N.V., Healthcare Division"),
+    ("Alibaba", "Alibaba Group, Cloud Intelligence"),
+    # the other direction: adding the designator back is the same organisation
+    ("Alibaba Group", "Alibaba"),
+]
+
+_STILL_TRUNCATED = [
+    ("TU Delft", "TU Delft (exchange)"),
+    ("TU Delft", "TU Delft (exchange), Faculty of EEMCS"),   # bracket before comma
+    ("Google", "Google Developer Student Club Leiden"),
+    ("Google", "Google Developer Student Club Leiden, Leiden University"),
+    ("Leiden", "Leiden University, Faculty of Science"),     # not the whole head
+    ("Faculty of Science", "Leiden University, Faculty of Science"),  # not the head
+    ("Volkswagen", "Volkswagen Group of America"),           # Group not at the end
+    ("Lotus", "Group Lotus"),                                # never from the front
+    ("Alibaba", "Alibaba Cloud Group"),                      # Cloud is not a designator
+]
+
+
+@pytest.mark.parametrize("family", _NAME_FAMILIES)
+@pytest.mark.parametrize("term,leaf", _GROUP_OR_SUB_UNIT_DROPPED,
+                         ids=[t[1][:28] for t in _GROUP_OR_SUB_UNIT_DROPPED])
+def test_a_name_may_drop_a_group_designator_or_a_comma_sub_unit(term, leaf, family):
+    assert check_claims.relation(term, leaf, family) == check_claims.SOURCED
+
+
+@pytest.mark.parametrize("family", _NAME_FAMILIES)
+@pytest.mark.parametrize("term,leaf", _STILL_TRUNCATED,
+                         ids=[t[1][:28] for t in _STILL_TRUNCATED])
+def test_the_relaxation_reaches_neither_brackets_nor_a_word_cut(term, leaf, family):
+    assert check_claims.relation(term, leaf, family) == check_claims.TRUNCATED
+
+
+def test_the_relaxed_names_pass_and_the_strict_ones_fail_in_one_workspace(
+        tmp_path, capsys):
+    master = {"meta": {"name": "Test User"},
+              "experience": [
+                  {"title": "Data Engineer", "org": "Alibaba Group Holding Limited",
+                   "start": "2023-01", "end": "present", "bullets": ["Ran it."]},
+                  {"title": "Analyst", "org": "楽天グループ株式会社",
+                   "start": "2021-04", "end": "2022-12", "bullets": ["Ran it."]},
+                  {"title": "Organiser", "org": "Google Developer Student Club Leiden",
+                   "start": "2019-09", "end": "2021-03", "bullets": ["Ran it."]}],
+              "education": [
+                  {"degree": "MSc Computer Science",
+                   "institution": "Leiden University, Faculty of Science",
+                   "start": "2019", "end": "2021"},
+                  {"degree": "Exchange semester", "institution": "TU Delft (exchange)",
+                   "start": "2020", "end": "2020"}]}
+    tailored = copy.deepcopy(master)
+    tailored["experience"][0]["org"] = "Alibaba"
+    tailored["experience"][1]["org"] = "楽天"
+    tailored["education"][0]["institution"] = "Leiden University"
+    ws, _ = _setup(tmp_path / "honest", tailored, master=master)
+    capsys.readouterr()
+    assert check_claims.main(["--workspace", str(ws)]) == 0
+    assert capsys.readouterr().out.strip() == ""
+
+    tailored["experience"][2]["org"] = "Google"
+    tailored["education"][1]["institution"] = "TU Delft"
+    ws, _ = _setup(tmp_path / "truncated", tailored, master=master)
+    capsys.readouterr()
+    assert check_claims.main(["--workspace", str(ws)]) == 1
+    out = capsys.readouterr().out
+    assert _finding_for(out, "Google").startswith("ORG_TRUNCATED")
+    assert _finding_for(out, "TU Delft").startswith("ORG_TRUNCATED")
+    assert len(out.strip().splitlines()) == 2, out
+
+
+# ---------------------------------------------------------------------------
+# A publication's status. "(under review)", "(submitted)", "preprint", 审稿中 …
+# were in no vocabulary, so a tailored CV that dropped one presented a paper
+# nobody has accepted as published, and the gate said sourced. Only the words
+# whose removal upgrades the claim: `in press` and `accepted` already mean
+# accepted.
+# ---------------------------------------------------------------------------
+
+_DROPS_A_PUBLICATION_STATUS = [
+    ("Doe J. Deep cine reconstruction. NeurIPS 2025",
+     "Doe J. Deep cine reconstruction. NeurIPS 2025 (under review)"),
+    ("Deep cine reconstruction, MRM", "Deep cine reconstruction, MRM (submitted)"),
+    ("Motion-resolved reconstruction", "Motion-resolved reconstruction (preprint)"),
+    ("Motion-resolved reconstruction",
+     "Motion-resolved reconstruction (manuscript in preparation)"),
+    ("Motion-resolved reconstruction", "Motion-resolved reconstruction — in review"),
+    ("Motion-resolved reconstruction", "Motion-resolved reconstruction (unpublished)"),
+    ("Bewegungsaufgelöste Rekonstruktion", "Bewegungsaufgelöste Rekonstruktion (eingereicht)"),
+    ("Reconstruction dynamique", "Reconstruction dynamique (en révision)"),
+    ("基于深度学习的心脏磁共振重建", "基于深度学习的心脏磁共振重建（审稿中）"),
+    ("基于深度学习的心脏磁共振重建", "基于深度学习的心脏磁共振重建（投稿中）"),
+    ("基于深度学习的心脏磁共振重建", "基于深度学习的心脏磁共振重建，在审"),
+    ("心臓MRI再構成", "心臓MRI再構成（査読中）"),
+    ("심장 MRI 재구성", "심장 MRI 재구성 (심사 중)"),
+    ("심장 MRI 재구성", "심장 MRI 재구성 (심사중)"),
+    # A status names its venue; dropping both still presents the paper as out.
+    ("Deep cine reconstruction", "Deep cine reconstruction (under review at MRM)"),
+    ("Deep cine reconstruction", "Deep cine reconstruction, submitted to NeurIPS 2025"),
+]
+_KEEPS_A_PUBLICATION_HONEST = [
+    ("Deep cine reconstruction, MRM", "Deep cine reconstruction, MRM (in press)"),
+    ("Deep cine reconstruction, MRM", "Deep cine reconstruction, MRM (accepted)"),
+    ("Deep cine reconstruction, MRM", "Deep cine reconstruction, MRM (2025)"),
+    ("Deep cine reconstruction, MRM", "Deep cine reconstruction, MRM (oral)"),
+    ("Deep cine reconstruction", "Deep cine reconstruction, MRM 2024 (accepted)"),
+]
+
+
+@pytest.mark.parametrize("term,leaf", _DROPS_A_PUBLICATION_STATUS,
+                         ids=[t[1][-24:] for t in _DROPS_A_PUBLICATION_STATUS])
+def test_a_dropped_publication_status_is_a_qualifier(term, leaf):
+    assert check_claims.relation(term, leaf, "publications") == check_claims.QUALIFIER
+    assert check_claims.dropped_qualifier(term, leaf, "publications")[0] == "status"
+
+
+@pytest.mark.parametrize("term,leaf", _KEEPS_A_PUBLICATION_HONEST,
+                         ids=[t[1][-24:] for t in _KEEPS_A_PUBLICATION_HONEST])
+def test_a_publication_trim_that_upgrades_nothing_is_quiet(term, leaf):
+    """`in press` / `accepted` claim acceptance already, and a dropped year,
+    presentation format or venue says nothing about whether it was accepted."""
+    assert check_claims.relation(term, leaf, "publications") == check_claims.SOURCED
+
+
+@pytest.mark.parametrize("term,leaf,family", [
+    ("Code", "Code review", "skills"),
+    ("Editing", "Editing (manuscript)", "skills"),
+    ("Grant writing", "Grant writing (submitted)", "certifications"),
+])
+def test_the_publication_vocabulary_is_scoped_to_publications(term, leaf, family):
+    assert check_claims.relation(term, leaf, family) == check_claims.SOURCED
+
+
+def test_a_publication_that_drops_its_status_fails_the_gate(tmp_path, capsys):
+    master = {"meta": {"name": "Test User"},
+              "publications": [
+                  "Doe J. Deep cine reconstruction. NeurIPS 2025 (under review)",
+                  {"title": "Motion-resolved recon", "venue": "MRM",
+                   "status": "submitted"},
+                  "Doe J. Fast T1 mapping. MRM 2024 (in press)"]}
+    tailored = {"meta": {"name": "Test User"},
+                "publications": [
+                    "Doe J. Deep cine reconstruction. NeurIPS 2025",
+                    {"title": "Motion-resolved recon", "venue": "MRM"},
+                    "Doe J. Fast T1 mapping. MRM 2024"]}
+    ws, _ = _setup(tmp_path, tailored, master=master)
+    capsys.readouterr()
+    assert check_claims.main(["--workspace", str(ws)]) == 1
+    out = capsys.readouterr().out
+    first = _finding_for(out, "Doe J. Deep cine reconstruction. NeurIPS 2025")
+    assert first.startswith("QUALIFIER_STRIPPED") and '"under review"' in first, first
+    assert "an accepted, published paper" in first, first
+    second = _finding_for(out, "Motion-resolved recon MRM")
+    assert second.startswith("QUALIFIER_STRIPPED") and '"submitted"' in second, second
+    assert _finding_for(out, "Doe J. Fast T1 mapping. MRM 2024") is None, out

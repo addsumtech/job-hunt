@@ -12,10 +12,13 @@ prepares a private Python environment, Node and CDP-only OpenCLI; AnySearch and
 the browser reader are bundled. Use `scripts/run_tool.py` for subsequent commands.
 See [agent setup](references/agent-setup.md) for exact paths and conditional tools.
 
-Report PDFs use PyMuPDF and bundled fonts by default. An explicitly selected
-`meta.cjk_font` is honored through the installed Pandoc/TeX path rather than
-silently substituted. Template-based CV/letter PDFs need
-Pandoc and a compatible XeTeX engine; prepare those only when requested. Without
+Report PDFs use PyMuPDF and bundled fonts by default. When Pandoc and
+Tectonic/XeLaTeX are installed, a `meta.cjk_font` in the workspace profile is also
+used for the report, and a font that fails is reported rather than substituted.
+Without that toolchain the report uses the bundled fonts and delivery prints
+`NOTICE_REPORT_FONT_NOT_APPLIED`; the setting still applies to the CV and letter.
+Template-based CV/letter PDFs need a LaTeX engine (Tectonic or XeLaTeX;
+LuaLaTeX/pdfLaTeX for Latin script only), not Pandoc; prepare it only when requested. Without
 that toolchain, Markdown, Word and supported report PDFs still work. CV/letter
 renderers can retain a `.tex` file for later compilation.
 
@@ -89,6 +92,9 @@ job-hunt/
   user-recovery.md         # human login/verification hand-off and linked new round
 │   ├── supplementary-sources.md     # optional career background research
 │   ├── discovery-sources.md         # Per-adapter catalogue for discover
+│   ├── discover/                    # discover-only, read on demand
+│   │   ├── finding-codes.md         #   what each discover gate finding means and how to fix it
+│   │   └── multi-posting-report.md  #   grouping and layout rules for a report comparing postings
 │   ├── candidate-matching.md         # Evidence-backed CV-to-detail matching for discovery
 │   ├── search-coverage.md            # Preregistered search scope and completion evidence
 │   ├── gap-analysis.md              # Gap analysis, tailoring methodology, claim provenance
@@ -123,6 +129,7 @@ job-hunt/
     ├── check_candidate_match.py      # discover gate: evidence-backed CV-to-detail recommendation mapping
     ├── check_claims.py              # claim provenance + master-profile immutability
     ├── check_conventions.py         # CI — market-convention table lint
+    ├── convention_cards.py          # assess: one market table's runtime fields, verbatim (lookup, no receipt)
     ├── check_hidden_chars.py        # CI — invisible / BiDi control characters in source and docs
     ├── check_evidence_refs.py       # evidence refs resolve; no block ids in reader prose
     ├── check_letter.py              # letter body constraints

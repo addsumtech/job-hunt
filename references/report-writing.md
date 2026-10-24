@@ -4,6 +4,11 @@ Read this before drafting or revising client-facing career reports in any mode.
 It applies to `report.md`, explanations in shortlists and assessments, interview
 advice, and the final hand-off. It supplements the language contract; it does not
 rewrite source quotations, schema keys, IDs, required labels or computed counts.
+It covers what the report says and how it reads. Rendering, layout review and
+`deliver.py` follow SKILL.md "Client deliverables" and
+`references/layout-review.md`; the few delivery points they do not repeat are
+under "Delivery" below. A report that compares several postings (discover, or a
+ranking of supplied postings) also reads `references/discover/multi-posting-report.md`.
 
 Before delivery, remove internal test narration from the whole report, including
 the title, body and footer. A fictional-profile test still produces a sample
@@ -20,9 +25,13 @@ whole report for its intended audience remains mandatory.
 `fit-assessment.yaml`, `fit-assessment.md`, `coverage.json` and any before/after
 `fit-snapshot.md` are internal analysis records. Keep their complete evidence rows,
 stable IDs, computed counts and exact required disclaimers for the checks. Do not
-copy those records into `report.md` or use them as the client PDF source.
+copy those records into `report.md` or use them as the client PDF source. Do not
+copy an internal `completion.md` into it either. Tool defects, adapter errors,
+tests, developer diagnostics and internal review logs belong only in the private
+workspace.
 
-Write `report.md` independently from the checked findings. Start with whether the
+Write `report.md` independently from the checked findings, in the client's
+language. Start with whether the
 role is worth applying to, then explain the evidence that supports it, the gaps
 that change the decision, and the next actions in order. Cite useful source facts
 near the claim (for example, the specific CV experience or an original posting
@@ -35,7 +44,10 @@ For example, partial responsibility evidence calls for explaining the relevant
 work and the missing ownership. A bare “0 of 4 demonstrated” can obscure real
 experience; keep that mechanical count internal and say what the client has
 actually done. Never convert a partial into a demonstrated result to improve the
-headline. Do not invent an outcome probability. When the user explicitly asks
+headline. Do not invent an outcome probability, and do not write a numberless
+certainty about the outcome either (肯定能拿到面试, 进面稳了, "you will definitely get
+an interview"); `lint_no_prediction.py` blocks both. Saying which topics an
+interview is likely to cover is preparation, not prediction. When the user explicitly asks
 to see the evidence counts, explain their scope once and link the detailed record.
 
 Full consultations normally include a PDF and editable text. Explicit chat-only,
@@ -87,33 +99,6 @@ For a long report, use a short decision summary and a contents page with useful
 section names and working page links. Put comparable jobs in a table or use
 consistent field labels. Explain each count's unit and exclusions once near the
 count; do not make the reader reconcile postings, grouped roles and closed jobs.
-
-Before calling a consultation complete, read every retained posting in full.
-The initial shortlist and the final report have different completeness standards:
-unattempted summary cards are research leads, not completed report entries.
-Keep an unavailable description only with a captured access failure, its visible
-reason and an unresolved status. An explicitly requested preliminary delivery
-may retain cards. Follow discover mode and `deliver.py` for the checked inputs;
-reading a description does not imply a completed CV-to-requirement mapping.
-
-Deduplicate repeated captures of the same source ID. In the reading directory,
-exact company-and-full-title matches may share one row: list all cities and keep
-every distinct posting link, labeled with its city and posting ID. Keep the source
-records separate underneath so this display grouping does not merge vacancies or
-evidence. Put each posting link on its own line, even when two short labels would
-fit side by side. Different posting IDs with the same title and substantially
-repeated descriptions are distinct official entries, not proof of independent
-vacancies or hiring headcount. Keep their links without inflating the grouped-role
-count. If only one city's full description was read, identify that city; its
-requirements or verification status do not automatically apply to the others.
-Different seniority, product, team or specialization means a different title and
-must remain a separate row. For example, Beijing and Shanghai postings named
-“AI产品经理（垂类场景）-Aime” can share a row with both links; “高级AI产品经理-飞书多维表格”
-and “高级AI产品经理（基础产品方向）-抖音” cannot. State both the grouped-role count and
-the underlying posting count. Exclude confirmed closed postings from the entire
-client report, including historical appendices, links and count explanations.
-Keep those records and their exclusion reasons in the private research log; only
-include them in the report if the client specifically requests historical roles.
 Client usefulness decides what earns space: explain limitations that affect the
 next decision, without turning internal query bookkeeping into report content.
 
@@ -134,8 +119,8 @@ paragraph while showing only “软件与技术产品” in the table.
 In a role-comparison table, identify the company **and specific job title** for
 each role. A column called “岗位” must contain positions, not only company names.
 Keep different specializations at one company on separate rows; a shared company
-name cannot stand in for several jobs. Retain the existing grouping rules for
-exact company-and-full-title matches across locations.
+name cannot stand in for several jobs. Retain the grouping rules for exact
+company-and-full-title matches across locations in `references/discover/multi-posting-report.md`.
 
 For example, a summary discussing “金融软件、知识图谱、APS” in that order can
 map directly to this illustrative table; actual reports use the source titles:
@@ -150,30 +135,19 @@ Check each summary/table pair before rendering and again in the final PDF:
 trace every named direction to the same visible category and its company/title
 rows. Reject missing mappings, unexplained changes of level or order, and
 company-only lists that hide distinct roles. This is a semantic reader review;
-text-presence and layout checks cannot certify it. The separate source directory
-may still group entries by company as described below.
+text-presence and layout checks cannot certify it. A multi-posting report's
+separate source directory may still group entries by company.
 
 ## Make a detailed report easy to navigate
 
-Use the job directory and its original posting links as the report's source
-list. Do not add a separate source/methodology/scope chapter when that directory
-already supplies the links. Keep ownership verification chains, annual-report
+Cite the original posting link near the claim it supports; do not append a
+separate source/methodology/scope chapter that reproduces the internal source
+audit. Keep ownership verification chains, annual-report
 page references, collection windows and commentary about restrictions the
 posting never stated in the private research notes. If a finding affects the
 decision, give its practical conclusion once with the relevant job, such as an
 application deadline or a specific contract question; do not narrate how the
 evidence was checked. This does not remove the need to do and retain that work.
-
-Group the job directory by hiring company, keeping that company's roles
-consecutive. Use separate company, position, location and original-link columns.
-In the PDF, show a shared company name in a visibly merged cell spanning its
-roles: internal row dividers must not cross that company cell. If the renderer
-cannot merge cells, repeat the full company name on each row. Repeat it in plain
-Markdown tables, which have no row spans; do not leave a blank company cell under
-a full-width row divider. When a group crosses a page, repeat the company name
-on the new page. Preserve each role's full title and distinct links, including
-the existing city/ID grouping rules. Company grouping does not merge different
-roles or imply identical vacancies.
 
 Place the table of contents after the report title and brief metadata, before
 the first numbered section. Do not place it after the first section's narrative
@@ -188,13 +162,8 @@ spacing or table padding while retaining the approved font sizes; never add
 empty space or shrink text to meet an arbitrary number of pages.
 
 When following a report example, copy its information structure as well as its
-typography. For the consultation-report pattern, preserve: a priority table;
-numbered key jobs with consistent “匹配依据 / 经验缺口 / 投递准备” fields; a table
-of remaining jobs and tradeoffs; numbered preparation steps; an interview
-preparation list/table; and a job directory with company, full title,
-location, reading status and usable source links. Use a linked contents list
-for a multi-section report. Scale the rows to the actual evidence; never copy
-the example's job count or fabricate entries to fill it.
+typography; matching only fonts and colors is insufficient. Scale the rows to the
+actual evidence; never copy the example's job count or fabricate entries to fill it.
 
 Give adjacent sections different jobs in the reader's workflow. For example,
 application preparation answers what to confirm before applying, which CV/version
@@ -207,21 +176,10 @@ Name the role a tailored CV or interview plan targets, especially when the repor
 compares several roles; distinguish an existing deliverable from a suggested
 future version. These are section purposes, not mandatory headings or counts.
 
-Keep job identities consistent across the priority table, detailed sections
-and directory. Prefer an unnumbered company-grouped directory: company, full
-job title and original link identify the role without an awkward reordered rank
-sequence. If the user requests displayed job numbers, retain each number across
-sections; do not renumber merely because company grouping changes row order.
-If a section promises the key or priority jobs,
-its selection and order must follow the stated priority list; put the remaining
-jobs in the remaining-jobs section. A deliberately different selection needs a
-clear section label and a reason visible to the reader. An internal limit on
-how many jobs were mapped is not a reader-facing reason to call lower-priority
-jobs the priorities. Check the job identities and numbers, not just the counts.
-
 Review structure explicitly after rewriting. Compare the reference and output's
 table columns, field labels, numbering, grouping and links in both Markdown and
-PDF. A single summary table does not replace all of the example's lists. Record
+PDF. A single summary table does not replace all of the example's lists, and a
+rewrite must not flatten the reference's lists and tables into continuous prose. Record
 this comparison in the layout review under `content_order` and
 `headings_and_rules`; missing lists or tables require another formatting pass.
 
@@ -233,16 +191,14 @@ very pale blue table alternation (`#f5f7fd`) and light blue rules (`#c5d2e3`).
 A newer user palette or supplied template takes precedence. A request to borrow
 colors does not authorize copying a reference's fonts, spacing or entire layout.
 
-Use a compact conclusion, a clickable contents page for a long report, clear
-section headings, and a complete directory after the recommendations. Put the
+Use a compact conclusion, a clickable contents page for a long report and clear
+section headings. Put the
 job requirement, the client's relevant experience, what remains uncertain and
 the next action close together. Use stable comparison labels, not unexplained
 “1/2” group names. Preserve the detailed reasoning and useful interview preparation.
 Use space for this information; avoid decorative blank areas, repeated warnings,
 compressed fragments and smaller type merely to fit more on a page. Check page
 balance, table wrapping, link labels, contents targets and all report versions.
-Paginate directories by the rendered height of whole entries, including their
-links, rather than imposing a fixed number of rows that leaves large blank areas.
 
 Default to a conventional written report, not a presentation deck. Use continuous
 sections and ordinary paragraphs; a new section does not automatically need a new
@@ -377,10 +333,12 @@ into drafting or a synonym for layout inspection. Complete it for every report:
 A brief clean-review record should state the actual recommendation/action chain
 checked, not just “全文通读：PASS”. Never invent a full read, an independent
 reviewer or a numerical readability score. Script receipts check their own
-inputs; they do not establish these editorial judgments.
+inputs; they do not establish these editorial judgments. Spot checks, a clean
+lint and layout hashes cannot substitute for this full read.
 
 First fix passages the user has identified. Then read the whole report as its
-intended reader, checking:
+intended reader, checking (a multi-posting report adds the two job-identity
+questions in `references/discover/multi-posting-report.md`):
 
 1. Can I find the recommendation and its reason without reading every page?
 2. Does each important judgment name the relevant job requirement and what the
@@ -391,22 +349,15 @@ intended reader, checking:
    adding information rather than restating another paragraph?
 5. Did the revision preserve facts, uncertainty, sources, consent boundaries and
    distinctions between completed work and suggestions?
-6. Do the priority list, key-job section, remaining-job section and directory
-   refer to the same jobs, keeping any displayed numbers stable? Check identities
-   and order;
-   correct an unexplained mismatch even when all section counts are correct.
-7. Is each role visibly attached to its company? Inspect the rendered group
-   boundaries, including page breaks: merge company cells clearly or repeat
-   the name, and keep every Markdown row's company identifiable.
-8. Do adjacent sections answer different reader questions, with a clear next
+6. Do adjacent sections answer different reader questions, with a clear next
    action? Trace any repeated case across sections: each occurrence must add a
    distinct purpose rather than repeat the same preparation or warning.
-9. Are the target role, CV version, existing work and suggested next steps clear?
+7. Are the target role, CV version, existing work and suggested next steps clear?
    Replace vague “material/evidence” references with the actual object, then check
    that the rewrite preserved what is known, missing or still to be confirmed.
-10. Does each summary use the same category names, level and relative order as
-    its table? Trace each named direction to visible company-and-title rows;
-    correct any mapping the reader would have to infer from another section.
+8. Does each summary use the same category names, level and relative order as
+   its table? Trace each named direction to visible company-and-title rows;
+   correct any mapping the reader would have to infer from another section.
 
 For a long report, compare pages as well as individual sentences. Look for the
 same paragraph opening, rhetorical reversal, overused bolding or repeated
@@ -443,137 +394,26 @@ review ideas. Do not import the originals' social-platform hooks, first-person
 persona quotas, engagement requests, fixed word/frequency budgets, automatic
 style scores or universal punctuation bans. Career reports retain the client's
 formatting choices, necessary questions, exact quotations and source links.
-## Report format acceptance
 
-Before rendering, follow `layout-review.md` and record the latest report
-reference's visual system in `report-layout-requirements.yaml`. Preserve its
-fonts/sizes, margins, heading color/weight, rules, tables, paragraph spacing,
-headers and footers; do not reuse the CV's styling or an unrelated default PDF
-theme. Its page count is not a target for padding or font shrinking. Render to
-workspace `report.pdf`, inspect every page beside the reference, and run
-`check_layout.py --workspace <workspace> --report`. Any unapproved difference
-requires correction, re-render and re-review before delivery. A readable PDF or
-good writing alone does not meet the format requirement. `deliver.py` preserves
-the reviewed PDF; do not replace it at handoff.
+## Delivery
 
-## Client consultation delivery
+Render, review and deliver as SKILL.md "Client deliverables" and
+`references/layout-review.md` describe; they own the commands, the folder layout,
+the format acceptance review and the byte-for-byte PDF rule. Points they do not
+repeat:
 
-**Formatting is an acceptance requirement for both the CV and the report.**
-Read `references/layout-review.md` before rendering. Use the latest user-selected
-reference for each document separately: matching wording, headings or page count
-does not establish a style match. First record its actual fonts, sizes, margins,
-rules, spacing, alignment and hierarchy in `layout-requirements.yaml` (CV) and
-`report-layout-requirements.yaml` (report). Preserve the reference's visual system;
-do not substitute a default renderer, shrink text or pad content to mimic its
-page count. Author `report.pdf` in the workspace before delivery. Inspect every
-final page beside its reference and run `check_layout.py` for the CV and
-`check_layout.py --report` for the report. Any unapproved difference requires
-repair, re-export and a fresh review until all requirements pass. If blocked,
-state the actual unmet requirement; never label that output format-compliant.
-Deliver the reviewed Word export as the CV PDF and preserve the reviewed report
-PDF byte-for-byte. A later edit or export invalidates the review. The eight visual
-checks and measured format checks are separate from content judges.
-
-**Word must contain formatted content, not Markdown or LaTeX source.** Keep
-profile/letter prose fields plain; use Word styles, runs, lists and hyperlinks
-for formatting. Before rendering, rewrite simple inline notation faithfully:
-`$8 \times \text{H200}$` becomes `8 × H200`, preserving the hardware, counts and
-claims. Read `references/word-resume-layout.md` for the repair procedure. On
-`DOCX_MARKUP`, repair the tailored copy, render again and inspect the final Word
-and its PDF export; never waive the finding or deliver an older export. Check
-all Word deliverables, including letters, statements, tables and page furniture.
-
-A report reference also controls how information is organized. Preserve its
-tables, numbered sections, comparable job fields, preparation lists and linked
-directory; matching only fonts and colors is insufficient. Record these blocks
-and their columns/labels under the layout requirements' `content_order`, then
-check that they appear in both Markdown and the rendered PDF. Do not flatten
-the reference's lists and tables into continuous prose during a rewrite.
-
-For a one-page CV, use the page fully: do not accept a largely empty lower third.
-Expand existing, supported content into clear groups and adjust paragraph spacing
-while preserving the selected font sizes and a natural reading rhythm. If the
-user asks to fill the page, record a `minimum_content_bottom_pt` requirement and
-verify it alongside one-page pagination; a large blank bottom requires rework.
-Do not add invented experience, repeated claims or empty paragraphs to fill space.
-
-Delivery uses two child folders, whose names `deliver.py` writes in Chinese for every client: `简历/` (application documents) for `简历.docx`, `简历.pdf` and other requested application documents; `报告/` (report) for `求职建议报告.pdf` (the advice report) and its editable text. Filenames never include the employer, role or internal workspace slug.
-
-In `discover`, `assess` and `interview`, an existing CV is source material, so
-delivery copies only the report by default. Use `--include-applications` only
-when the user explicitly asks to receive the existing application documents too.
-Do not regenerate or deliver a source CV merely because it is in the workspace.
-
-Author `report.md` for **every full consultation**, respecting explicit chat-only/no-file requests and answering the client's actual
-question in their language: conclusion, supporting evidence, relevant career
-constraints or facts still to confirm, and practical next steps. Tool defects,
-adapter errors, tests, developer diagnostics and internal review logs belong only
-in the private workspace, never in this client report. Do not copy an internal
-`completion.md` into it. A narrow text edit remains in chat; it does not initiate report delivery.
-
-Before drafting, read `references/report-writing.md`. After drafting, perform its
-reader-focused revision and rendered-report review: concrete recommendations,
-plain explanations, usable next steps and preserved evidence. This applies to
-all four modes; a clean vocabulary lint alone does not establish readability.
-
-Client reports must not narrate the test harness or fixture provenance. Even
-when testing the skill with a fictional profile, keep statements such as
-“ran 11 questions on the fixed fictional profile” and which test stages ran in
-the private test record. Write the client report directly as role choices, evidence gaps,
-resume advice and next actions. Do not describe generated fixture answers as a
-real user's interview performance. `deliver.py` rejects fixture-profile markers
-only (in Chinese reports, markers such as “固定虚构履历”); practice scope for a
-real client (“this round covered only the technical interview”, “a mock is not a
-real interview”) is normal advice. Still read the whole report for other
-process narration.
-
-The job directory and its original posting links already serve as the report's
-source list. Do not append a separate “Sources and scope” section or reproduce the
-internal source audit, ownership chain, annual-report citations or explanations
-of unstated restrictions. Keep that evidence private. Put only facts that change
-the client's decision or next action beside the relevant job, stated once.
-Group the directory's rows by company, with separate company, position, location
-and original-link columns. Prefer an unnumbered company-grouped directory; use
-company, full job title and original link to identify each role. Keep distinct
-roles and posting links within each group.
-Report review must reconcile priority order, key-job selection and job
-identities across sections; keep any displayed job numbers stable, and verify
-that each role remains visibly attached to
-its company. Use clear merged company cells in PDF or repeat names; repeat names
-in Markdown tables. Follow the concrete checks in `references/report-writing.md`
-and record them in the report layout review before delivery. Read adjacent
-sections as one client workflow: distinguish application tasks from interview
-practice, state the target role/version, and remove duplicated preparation.
-Name the CV or specific experience directly instead of narrating an internal
-assessment of vague “materials”; give the next action while preserving real gaps.
-
-**Full-report reader review is a separate required step before delivery.**
-After drafting, stop editing individual sections and read the entire report in
-order as the client would, including every table, summary and directory. Assess
-reasonableness, logical flow and readability using `references/report-writing.md`.
-Fix the findings, then reread the whole revised report. After rendering, read the
-final PDF from first page to last alongside its visual checks; a later content or
-ordering change reopens this review. Record the reviewed revision, concrete
-findings/corrections and remaining issues privately. Do not deliver while a
-known issue makes a recommendation unsupported, the sequence contradictory or
-an action unclear. Spot checks, a clean lint and layout hashes cannot substitute
-for this full read or justify claiming it happened.
-
-After authoring `report.md`, run `lint_no_prediction.py --workspace <ws>`.
-Delivery also refuses prediction language in the report.
-
-Run `deliver.py` as the last step. It requires `report.md` and a verified report
-PDF and copies only the report and requested CV/application documents into
-`~/Downloads/<workspace-name>/`. For multiple workspaces serving one consultation,
-pass the **same `--to <consultation-folder>`** each time so the report and CV stay
-together. Quote that folder and its client files in the reply. The workspace and
-all audit evidence remain in their original location.
-
-PDF verification checks both recovered text and actual painted glyph IDs. A
-missing or refused PDF means incomplete delivery (exit 2); repair the cause and
-rerun before declaring completion. `--no-pdf` is only for an explicit user format
-exception. A cover letter is provided on demand; it is not the domestic default.
-Do not automatically start a mock interview or another mode.
+- `deliver.py` requires `report.md` and a verified report PDF, refuses prediction
+  language and fixture-profile markers in the report, and checks both the PDF's
+  recovered text and its painted glyph IDs. A missing or refused PDF means
+  incomplete delivery (exit 2); repair the cause and rerun before declaring
+  completion.
+- A redelivery returns to the same place and removes its own files it no longer
+  produces. The hidden `.jobhunt-delivery.json` there records which workspace
+  wrote each file; do not delete or edit it.
+- In `discover`, `assess` and `interview`, an existing CV is source material, so
+  delivery copies only the report by default. Use `--include-applications` only
+  when the user explicitly asks to receive the existing application documents too.
+  Do not regenerate or deliver a source CV merely because it is in the workspace.
 
 ## How this skill writes to the user
 
@@ -584,11 +424,9 @@ The documents this skill writes to the *reader* — `report.md`, `shortlist.md`,
 measured across all eight of them from the iteration-2 runs, the vocabulary check found
 nothing and every structural finding was a false positive on a table or a list.
 So the rules below are rules, not a check, and the artifact is the only place to
-verify them.
-
-Use `references/report-writing.md` for the concrete revision method, examples
-and final reader review. It covers report structure and readability as well as
-formulaic phrasing; it is not a blacklist or an AI-authorship detector.
+verify them. The sections above give the concrete revision method, examples and
+final reader review, covering report structure and readability as well as
+formulaic phrasing; they are not a blacklist or an AI-authorship detector.
 
 - **Address the reader as "you", and say who said what.** "You told me you are on
   a search-year permit with eleven months left" is auditable; "the candidate has

@@ -59,7 +59,10 @@ def inspect(ws: pathlib.Path, report=False):
     if not isinstance(review.get("reviewer"), str) or not review["reviewer"].strip():
         findings.append("BAD_LAYOUT_REVIEW: name the reviewer")
     try:
-        stamp = datetime.datetime.fromisoformat(review.get("reviewed_at", ""))
+        # Python 3.10 fromisoformat does not accept a trailing "Z" (3.11+ does),
+        # and the documented runtime floor is 3.10.
+        raw = str(review.get("reviewed_at", ""))
+        stamp = datetime.datetime.fromisoformat(raw[:-1] + "+00:00" if raw.endswith("Z") else raw)
         if stamp.tzinfo is None:
             raise ValueError("missing timezone")
     except (TypeError, ValueError):
