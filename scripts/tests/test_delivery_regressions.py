@@ -11,12 +11,29 @@ import deliver
 import render_cv
 
 
+# The stale PDF below must be THIS workspace's earlier delivery for the refusal
+# to owe its removal. Since deliver.py stopped treating unrecorded client files
+# as its own, a bare file in a fresh --to folder is somebody else's and is left
+# alone (test_deliver.py covers that). So the earlier delivery is made this
+# workspace's in the two ways one can be: an older deliver.py writing into the
+# default folder named after the workspace, which recorded nothing, and a
+# current one writing to a shared --to, which recorded it in the manifest.
+@pytest.mark.parametrize('owner', ['default-folder', 'manifest'])
 @pytest.mark.parametrize('existing_pdf,no_pdf', [(False, False), (True, False), (True, True)])
 def test_readiness_brief_refuses_overlength_then_delivers_a_readable_one_page(
-        tmp_path, capsys, existing_pdf, no_pdf):
+        tmp_path, capsys, monkeypatch, existing_pdf, no_pdf, owner):
+    import hashlib
+    import json
     import pymupdf
-    ws, dest = tmp_path / 'workspace', tmp_path / 'delivery'
+    ws = tmp_path / 'workspace'
     ws.mkdir()
+    if owner == 'default-folder':
+        monkeypatch.setattr(deliver, 'DEFAULT_ROOT', tmp_path / 'Downloads')
+        dest = tmp_path / 'Downloads' / ws.name
+        args = ['--workspace', str(ws)]
+    else:
+        dest = tmp_path / 'delivery'
+        args = ['--workspace', str(ws), '--to', str(dest)]
     (ws / 'report.md').write_text('# Advice\n\nPrepare your documented examples.\n')
     md, pdf = ws / 'interview-brief.md', ws / 'interview-brief.pdf'
     long_brief = '# Interview readiness\n\n' + '\n\n'.join(
@@ -28,10 +45,16 @@ def test_readiness_brief_refuses_overlength_then_delivers_a_readable_one_page(
                    'Source: the documented engineering role. Explain your code and validation.\n\n'
                    '## Honest gaps\n\nNo clinical registration; do not present engineering as clinical practice.\n\n'
                    '## Reviewer questions\n\nWhat was your personal scope? Confirm availability.\n')
-    args = ['--workspace', str(ws), '--to', str(dest)] + (['--no-pdf'] if no_pdf else [])
+    args += ['--no-pdf'] if no_pdf else []
     target = dest / '面试准备/面试准备.pdf'
     target.parent.mkdir(parents=True)
     target.write_bytes(b'old delivery must not survive a refusal')
+    if owner == 'manifest':
+        (dest / deliver.MANIFEST_NAME).write_text(json.dumps({'format': 1, 'deliveries': [{
+            'workspace': str(ws.resolve()), 'workspace_name': ws.name, 'mode': 'unknown',
+            'folder': '', 'files': {'面试准备/面试准备.pdf':
+                                    hashlib.sha256(target.read_bytes()).hexdigest()}}]}),
+            encoding='utf-8')
     for source, expected in ((long_brief, 2), (short_brief, 0)):
         md.write_text(source, encoding='utf-8')
         if existing_pdf:

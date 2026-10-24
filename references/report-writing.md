@@ -409,7 +409,11 @@ repeat:
   completion.
 - A redelivery returns to the same place and removes its own files it no longer
   produces. The hidden `.jobhunt-delivery.json` there records which workspace
-  wrote each file; do not delete or edit it.
+  wrote each file; do not delete or edit it. Client files with no manifest entry
+  (an older `deliver.py` recorded none) count as another workspace's unless they are
+  byte-identical to this round's copies or the folder is this workspace's default
+  `~/Downloads/<workspace-name>/`; the round then goes to a subfolder with
+  `NOTICE_SEPARATE_FOLDER`. Quote both folders.
 - In `discover`, `assess` and `interview`, an existing CV is source material, so
   delivery copies only the report by default. Use `--include-applications` only
   when the user explicitly asks to receive the existing application documents too.

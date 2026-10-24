@@ -277,17 +277,34 @@ _JA_TENTHS = r"[0-9０-９一二三四五六七八九][\s]*割(?![引り])"
 # `grijp de kans` say what is on offer. `gut`/`goed` are deliberately NOT in the
 # list — `eine gute Chance, das Team kennenzulernen` is an offer, and including
 # them puts the false positive straight back.
+def _not_after(*forms: str) -> str:
+    """One fixed-width lookbehind per form: `re` takes no variable-width one."""
+    return "".join("(?<!" + re.escape(form) + ")" for form in dict.fromkeys(forms))
+
+
+# What is RECEIVED is the object; `im Vorstellungsgespräch` / `in het gesprek` is
+# where it happens. `Sie werden im Vorstellungsgespräch Fragen bekommen` and `Je
+# krijgt in het gesprek zeker vragen over je scriptie` receive QUESTIONS, and both
+# fired through the werden/krijgt shapes below (measured 2026-10-24).
+_DE_NOT_ADVERBIAL = _not_after(*(prep + " " + art for prep in (
+    "im", "beim", "vom", "am", "in", "bei", "nach", "vor", "während", "seit", "aus", "mit")
+    for art in ("", "dem ", "einem ", "des ", "eines ", "der ", "einer ")))
+_NL_NOT_ADVERBIAL = _not_after(*(prep + " " + art for prep in (
+    "in", "tijdens", "bij", "na", "voor", "naar", "op", "met", "over", "vóór")
+    for art in ("", "het ", "een ", "de ", "je ", "jouw ", "uw ")))
 _DE_LIKELIHOOD = r"hoch|gering|gro\u00df|klein|niedrig|steh(?:en|t)|liegt bei|betr\u00e4gt"
 _NL_LIKELIHOOD = r"groot|grote|klein|kleine|hoog|hoge|laag|lage|gering"
 _FORECAST_DE = (r"\bwahrscheinlichkeit\b"
                 r"|\b(?:chance|chancen|aussichten)\b[^.!?]{0,40}\b(?:" + _DE_LIKELIHOOD + r")\b"
                 r"|\b(?:" + _DE_LIKELIHOOD + r")\b[^.!?]{0,25}\b(?:chance|chancen|aussichten)\b"
-                r"|\bwerden\b[^.!?]{0,40}\b(?:einladung|vorstellungsgespr\u00e4ch|"
+                r"|\bwerden\b[^.!?]{0,40}(?=\b(?:einladung|vorstellungsgespr\u00e4ch|zusage|angebot)\b)"
+                + _DE_NOT_ADVERBIAL + r"\b(?:einladung|vorstellungsgespr\u00e4ch|"
                 r"zusage|angebot)\b[^.!?]{0,20}\b(?:bekommen|erhalten)\b")
 _FORECAST_NL = (r"\bwaarschijnlijkheid\b"
                 r"|\b(?:kans|kansen)\b[^.!?]{0,40}\b(?:" + _NL_LIKELIHOOD + r")\b"
                 r"|\b(?:" + _NL_LIKELIHOOD + r")\b[^.!?]{0,25}\b(?:kans|kansen)\b"
-                r"|\bkrijgt\b[^.!?]{0,40}\b(?:gesprek|uitnodiging|aanbod)\b")
+                r"|\bkrijgt\b[^.!?]{0,40}(?=\b(?:gesprek|uitnodiging|aanbod)\b)" + _NL_NOT_ADVERBIAL
+                + r"\b(?:gesprek|uitnodiging|aanbod)\b")
 # The probability NOUN is also the name of a subject in every one of these
 # languages — `probabilités et statistiques`, `probabilidad y estadística`,
 # 確率論, 확률론 — and a posting's own requirement quoted in a report is not a
@@ -304,11 +321,6 @@ _FORECAST_ES_IT = (r"(?<!teoría de la )(?<!teoría de )(?<!distribución de )"
 # 確率的 is "stochastic" (確率的勾配降下法 = SGD), not a chance of anything.
 _JA_PROB = (r"(?:合格|内定|採用|通過|面接|選考)\s*(?:の)?\s*確率"
             r"|確率(?!論|統計|分布|モデル|過程|的|密度|変数)")
-
-
-def _not_after(*forms: str) -> str:
-    """One fixed-width lookbehind per form: `re` takes no variable-width one."""
-    return "".join("(?<!" + re.escape(form) + ")" for form in dict.fromkeys(forms))
 
 
 # Being ASKED, or a topic COMING UP — the release _ZH_ASKED gives 大概率会被问到,
@@ -351,6 +363,113 @@ _ES_ASKED_AHEAD = (r"(?:(?!" + _ES_RECEIVE_VERB + r")[^.!?;\n]){0,40}?"
                    r"(?:pregunt|interrog|ped|pid|plante)\w*\b"
                    r"|\b(?:te|le|les|os)\s+(?:hag|har)\w*\s+preguntas\b"
                    r"|\b(?:salga|salgan|surja|surjan|aparezca|aparezcan)\b)")
+
+
+# The same release in German, Dutch, French and Italian, which had none: measured
+# 2026-10-24, `Nel colloquio ti chiederanno sicuramente del tuo progetto`, `In het
+# gesprek vragen ze zeker naar je scriptie`, `Im Vorstellungsgespräch fragt man Sie
+# sicherlich nach Ihrer Motivation` and `En entretien, on vous demandera
+# probablement votre motivation` each fired as a forecast. In these four the verb
+# of asking may stand on EITHER side of the hedge — `chiederanno sicuramente`
+# (verb first), `wird wahrscheinlich … gefragt` (participle last) — so the release
+# is a lookbehind on the verb right before the hedge, or a question ahead of it
+# that nothing RECEIVED stands in front of. Asking someone to COME to an
+# interview is the invitation itself (`ti chiederanno sicuramente di venire a un
+# colloquio`), the same carve-out `asked to interview` has in English.
+def _ask_release(words: str, asked_before: tuple, asked_ahead: str, invite: str) -> str:
+    """`words`, minus the hedges that govern a question. The leading lookahead
+    only spares every other position the lookbehind sets."""
+    after = "|".join("(?<=" + re.escape(form) + ")" for form in dict.fromkeys(asked_before))
+    return (r"(?=" + words + r")(?:" + _not_after(*asked_before) + r"(?:" + words + r")"
+            r"(?!" + asked_ahead + r")|(?:" + after + r")(?:" + words + r")(?=" + invite + r"))")
+
+
+def _ahead(received: str, asked: str, invite: str, reach: int = 40) -> str:
+    return (r"(?:(?!" + received + r")[^.!?;\n]){0," + str(reach) + r"}?(?:" + asked + r")"
+            r"(?!" + invite + r")")
+
+
+def _outcome_object(prepositions: tuple, articles: str, nouns: str) -> str:
+    """The outcome as a determined noun phrase — `ein Interview`, `un entretien` —
+    and not inside an adverbial: `im Interview`, `lors de l'entretien`, `nel
+    colloquio` are where the questions get asked, not what is received.
+    `Vous obtiendrez probablement un entretien et on vous interrogera` puts the
+    verb of receiving BEFORE the hedge and only its object after it."""
+    phrase = r"\b(?:" + articles + r")(?:" + nouns + r")\b"
+    return r"(?=" + phrase + r")" + _not_after(*(word + " " for word in prepositions)) + phrase
+
+
+_DE_ASKED_BEFORE = tuple(verb + " " + who for verb in (
+    "fragt", "fragen", "befragt", "befragen", "erkundigt", "erkundigen") for who in (
+    "", "man ", "man Sie ", "man dich ", "man euch ", "Sie ", "dich ", "sie Sie ", "sie dich ",
+    "der Interviewer ", "die Interviewer ", "die Interviewerin ")) + ("geht es ",)
+_DE_PREPOSITIONS = ("im", "beim", "zum", "zur", "vom", "am", "ins", "in", "für", "auf", "durch",
+                    "über", "um", "an", "ohne", "gegen", "nach", "vor", "bei", "mit", "aus",
+                    "während", "seit", "zu")
+_DE_RECEIVED = (r"\b(?:bekomm\w*|erhalt\w*|erh[aä]lt\w*|krieg\w*|eingeladen|einlad\w*|eingestellt"
+                r"|einstell\w*|zusage\w*|weiterkomm\w*|angenommen)\b|" + _outcome_object(
+                    _DE_PREPOSITIONS, r"(?:ein|eine|einen|das|die|den|der|ihr|ihre|ihren|dein|deine"
+                    r"|deinen)\s+", r"vorstellungsgespr[aä]ch|einladung|zusage|angebot|jobangebot"
+                    r"|stellenangebot|interview|zweitgespr[aä]ch"))
+_DE_ASKED = (r"\b(?:gefragt|befragt|abgefragt|nachgefragt|fragen|fragt|angesprochen|thematisiert"
+             r"|gepr[uü]ft)\b|\bzur\s+sprache\b")
+_DE_INVITE = (r"[^.!?;]{0,20}?\b(?:zu(?:m)?\s+(?:einem\s+)?(?:vorstellungsgespr[aä]ch|gespr[aä]ch"
+              r"|interview)|eingeladen|einladen|vorbeizukommen)\b")
+_NL_ASKED_BEFORE = tuple(verb + " " + who for verb in (
+    "vragen", "vraagt", "ondervragen", "ondervraagt", "informeren", "informeert") for who in (
+    "", "ze ", "zij ", "men ", "ze je ", "ze u ", "men je ", "men u ", "je ", "u ",
+    "de interviewer ", "de interviewers ")) + ("gaat het ",)
+_NL_PREPOSITIONS = ("in", "tijdens", "bij", "voor", "na", "naar", "op", "met", "over", "om",
+                    "tot", "van", "uit", "door", "zonder", "aan")
+_NL_RECEIVED = (r"\b(?:krijg\w*|ontvang\w*|uitgenodigd|uitnodig\w*|nodig\w*\s+(?:je|u)\s+uit"
+                r"|aangenomen|aannemen|door\s+naar|doorgaan)\b|" + _outcome_object(
+                    _NL_PREPOSITIONS, r"(?:een|het|de|je|jouw|uw)\s+(?:tweede\s+)?",
+                    r"gesprek|sollicitatiegesprek|uitnodiging|aanbod|baanaanbod|interview|contract"))
+_NL_ASKED = (r"\b(?:vragen|vraagt|gevraagd|ondervraagd|ondervragen|bevraagd|doorgevraagd"
+             r"|doorvragen)\b|\bter\s+sprake\b|\baan\s+bod\b|\b(?:gaat|gaan)\s+(?:het\s+)?over\b")
+_NL_INVITE = (r"\s+(?:(?:je|u)\s+)?(?:voor\s+(?:een|het|de)\s+(?:\w+\s+)?(?:gesprek|sollicitatiegesprek"
+              r"|interview)|terug\b|op\s+gesprek|(?:om\s+)?(?:langs|terug)\s+te\s+komen)")
+# French and Italian put the object after the verb, so a verb of receiving only
+# blocks the release with an OUTCOME object: `recevoir des questions` is prep.
+_FR_ASKED_BEFORE = tuple(verb + " " for verb in (
+    "demandera", "demanderont", "posera", "poseront", "interrogera", "interrogeront",
+    "questionnera", "questionneront", "portera", "porteront", "abordera", "aborderont",
+    "testera", "testeront"))
+_FR_OUTCOME_OBJ = (r"(?:un|une|l['’]|le|la|votre|ton|ta)\s*(?:entretien|offre|proposition"
+                   r"|convocation|poste)\b")
+_FR_RECEIVED = (r"\b(?:(?:obten|obtiendr|recev|recevr|d[ée]croch|aur)\w*\s+" + _FR_OUTCOME_OBJ +
+                r"|convoqu[ée]e?s?|invit[ée]e?s?|retenue?s?|embauch[ée]e?s?|recrut[ée]e?s?"
+                r"|s[ée]lectionn[ée]e?s?)|" + _outcome_object(
+                    ("à", "a", "de", "du", "des", "pendant", "durant", "lors", "pour", "dans",
+                     "après", "avant", "en", "par", "sur", "avec", "sans", "chez", "au"),
+                    r"(?:un|une|le|la|votre|ton|ta|cet|cette)\s+|l['’]",
+                    r"entretien|offre|proposition|convocation"))
+_FR_ASKED = (r"\b(?:interrog\w*|questionn\w*|demander\w*|demand[ée]e?s?|questions|abord[ée]e?s?"
+             r"|aborder\w*|test[ée]e?s?|[ée]voqu\w*|port\w*\s+sur)\b"
+             r"|\bquestion\s+(?:de|du|des|sur)\s+(?!temps\b|jours\b|semaines\b|mois\b)")
+_FR_INVITE = (r"[^.!?;]{0,12}?\b(?:venir|revenir|passer\s+(?:un|une|l['’]|le)|participer"
+              r"|vous\s+pr[ée]senter\s+(?:[àa]|au|pour))")
+_IT_ASKED_BEFORE = tuple(verb + " " for verb in (
+    "chiederanno", "chiederà", "chiederebbero", "domanderanno", "domanderà", "interrogheranno",
+    "interrogherà", "verterà", "verteranno", "riguarderà", "riguarderanno", "approfondiranno",
+    "approfondirà", "toccherà", "toccheranno", "parlerà", "parleranno"))
+_IT_OUTCOME_OBJ = (r"(?:un['’]|un\s+|una\s+|il\s+|lo\s+|la\s+|l['’])?(?:colloquio|offerta|proposta"
+                   r"|assunzione|convocazione)\b")
+_IT_RECEIVED = (r"\b(?:(?:otterr|ottene|ottien|ricever|riceve|avr)\w*\s+" + _IT_OUTCOME_OBJ +
+                r"|(?:ti|vi)\s+(?:chiamer|richiamer|convocher|inviter|assumer|selezioner|offrir)\w*"
+                r"|(?:chiamat|richiamat|convocat|invitat|assunt|selezionat)[oaie]\b)|" + _outcome_object(
+                    ("a", "al", "allo", "alla", "all", "nel", "nello", "nella", "nell", "del", "dello",
+                     "della", "dell", "dal", "dalla", "dall", "sul", "sulla", "per", "di", "in", "con",
+                     "durante", "dopo", "prima", "tra", "fra", "su", "da"),
+                    r"(?:un|una|il|lo|la)\s+|un['’]|l['’]",
+                    r"colloquio|offerta|proposta|assunzione|convocazione"))
+_IT_ASKED = (r"\b(?:(?:ti|vi|le|gli)\s+)?(?:chied\w*|domander\w*|domandino|interrog\w*|chiest[oaie]"
+             r"|verter\w*|riguarder\w*|approfondir\w*"
+             r"|parler\w*\s+(?:di|del|della|dei|delle|dello)|far\w*\s+(?:\w+\s+)?domande"
+             r"|domande\s+(?:su|sul|sull|sulla|sui|sugli|sulle|di|tecniche|riguard\w*|relative"
+             r"|specifiche))\b")
+_IT_INVITE = (r"\s+(?:di\s+)?(?:venire|tornare|partecipare|presentarti|presentarvi|sostenere"
+              r"|fare\s+un\s+colloquio|un\s+colloquio|un\s+secondo)")
 
 # ---------------------------------------------------------------------------
 # The ADVERB and ADJECTIVE forms. Measured 2026-09-08: the patterns above cover
@@ -432,18 +551,24 @@ _OUTCOME_EN = (r"interview|offer|callback|call back|short-?list(?:ed|ing)?|hired
 _HEDGE_ZH = (r"(?:很可能|多半|大概率|八成|十有八九|极有可能|极可能|应该能|多半会)"
              r"(?!" + _ZH_ASKED + r")")
 _OUTCOME_ZH = r"面试|录取|入围|offer|通过初筛|拿到|进面"
-_HEDGE_DE = r"h[o\u00f6]chstwahrscheinlich|wahrscheinlich|vermutlich|sicherlich"
+# The DE / NL / FR / IT hedges carry the question release defined beside
+# _ask_release.
+_HEDGE_DE = _ask_release(r"h[o\u00f6]chstwahrscheinlich|wahrscheinlich|vermutlich|sicherlich",
+                         _DE_ASKED_BEFORE, _ahead(_DE_RECEIVED, _DE_ASKED, _DE_INVITE), _DE_INVITE)
 _OUTCOME_DE = (r"vorstellungsgespr[a\u00e4]ch|einladung|eingeladen|zusage|angebot"
                r"|interview")
-_HEDGE_NL = r"hoogstwaarschijnlijk|waarschijnlijk|vermoedelijk|zeker"
+_HEDGE_NL = _ask_release(r"hoogstwaarschijnlijk|waarschijnlijk|vermoedelijk|zeker",
+                         _NL_ASKED_BEFORE, _ahead(_NL_RECEIVED, _NL_ASKED, _NL_INVITE), _NL_INVITE)
 _OUTCOME_NL = r"gesprek|uitnodiging|uitgenodigd|aanbod|interview"
-_HEDGE_FR = r"tr[e\u00e8]s probablement|probablement|vraisemblablement|s[u\u00fb]rement"
+_HEDGE_FR = _ask_release(r"tr[e\u00e8]s probablement|probablement|vraisemblablement|s[u\u00fb]rement",
+                         _FR_ASKED_BEFORE, _ahead(_FR_RECEIVED, _FR_ASKED, _FR_INVITE), _FR_INVITE)
 _OUTCOME_FR = r"entretien|offre|invit[e\u00e9]|retenu|convoqu[e\u00e9]"
 # The JA / KO / ES hedges carry the question release defined beside _FORECAST_JA.
 _HEDGE_ES = (r"(?:muy probable|probablemente|probable|seguramente|casi seguro)"
              r"(?!" + _ES_ASKED_AHEAD + r")")
 _OUTCOME_ES = r"entrevista|oferta|inviten|invitar[a\u00e1]n|contraten|seleccionen|admitan"
-_HEDGE_IT = r"molto probabilmente|probabilmente|probabile|sicuramente"
+_HEDGE_IT = _ask_release(r"molto probabilmente|probabilmente|probabile|sicuramente",
+                         _IT_ASKED_BEFORE, _ahead(_IT_RECEIVED, _IT_ASKED, _IT_INVITE), _IT_INVITE)
 _OUTCOME_IT = r"colloquio|offerta|invitato|assunto|selezionato"
 _HEDGE_JA = r"(?:おそらく|恐らく|十中八九|まず間違いなく|ほぼ確実)(?!" + _JA_ASKED_AHEAD + r")"
 _OUTCOME_JA = r"面接|内定|採用|合格|選考通過"
@@ -545,10 +670,20 @@ _CERTAIN_EN = (r"definitely|certainly|surely|undoubtedly|absolutely|unquestionab
 # honest disclaimer, not the forecast.
 _NOT_NEGATED_EN = (r"(?<!not )(?<!never )(?<!n't )(?<!n’t )(?<!no )"
                    r"(?<!one is )(?<!body is )(?<!one's )(?<!one’s )")
+# A short aside between the certainty and the verb it governs does not change
+# what it governs. `You will definitely, with this CV, get an interview` exited 0
+# (measured 2026-10-24) because the receiving verb had to follow at once. One
+# comma-delimited aside of at most 40 characters, or one filler adverb, may sit
+# there; a longer gap is a second clause, not the same verb phrase.
+_EN_ASIDE = r"(?:\s*,\s*[^,.;:!?]{1,40}?,\s*|\s+)"
+_EN_FILLER = (r"(?:(?:also|then|still|soon|easily|quickly|eventually|surely"
+              r"|be\s+able\s+to)\s+)?")
 _CERTAIN_FORECAST_EN = (
-    # will definitely get an interview / are going to definitely be shortlisted
-    r"(?:\b(?:will|would)\b|'ll|’ll|\b(?:are|is|am|'re|’re)\s+going\s+to\b)\s*"
-    r"(?:" + _CERTAIN_EN + r")\s+(?:" + _RECEIVE_EN + r")"
+    # will definitely get an interview / are going to definitely be shortlisted /
+    # will, with this CV, definitely get an interview
+    r"(?:\b(?:will|would)\b|'ll|’ll|\b(?:are|is|am|'re|’re)\s+going\s+to\b)"
+    r"(?:\s*,\s*[^,.;:!?]{1,40}?,)?\s*"
+    r"(?:" + _CERTAIN_EN + r")" + _EN_ASIDE + _EN_FILLER + r"(?:" + _RECEIVE_EN + r")"
     # definitely will be shortlisted
     r"|\b(?:" + _CERTAIN_EN + r")\s+(?:will|would)\s+(?:" + _RECEIVE_EN + r")"
     # bound / sure / certain / guaranteed to get an interview — but not the
@@ -606,6 +741,8 @@ _ZH_RECEIVED_NOUN = (r"(?:拿到|拿下|获得|收到)\s*" + _ZH_CLAUSE + r"{0,4
 # is an assessment of ability, not of the outcome.
 _ZH_SURE_PREDICATE = (r"稳了|稳稳的|稳的|没跑了?|跑不了|十拿九稳|板上钉钉|妥了|毫无悬念|有戏"
                       r"|肯定的|必然的|铁定的|胜券在握|指日可待")
+_ZH_MEANS = (r"(?:通过|经过|经由|靠着?|凭着?|凭借|借助|依靠|依托|利用|借着?|在|于|趁着?)"
+             r"[^，,。！？；;!?\n、]{1,8}?")
 _CERTAIN_FORECAST_ZH = (
     # 肯定能拿到面试 / 一定可以顺利通过初筛 / 有望拿到 offer. The outcome verb must
     # follow at once (a pronoun and a modal of ABILITY at most), which is what
@@ -613,6 +750,15 @@ _CERTAIN_FORECAST_ZH = (
     _ZH_NEGATOR_BEFORE + r"(?:" + _CERTAIN_ZH + r")(?:地)?"
     r"(?:你|您|他|她|也|都|还|就)?(?:能够|能|会|可以|可|将|就能|就会)?"
     r"(?:顺利|直接|轻松|成功)?(?:地)?(?:" + _RECEIVE_ZH + r")"
+    # 肯定能通过内推拿到面试 / 一定可以靠这段经历拿到offer: one short phrase of
+    # MEANS or time between them, opened by its coverb, still governs the same
+    # verb (measured 2026-10-24, both exit 0). Only a coverb opens it, so 一定要准备
+    # 好…再去面试 stays necessity; and the outcome may not be a time frame —
+    # 肯定会在你拿到offer前做背调 is about the background check.
+    r"|" + _ZH_NEGATOR_BEFORE + r"(?:" + _CERTAIN_ZH + r")(?:地)?"
+    r"(?:你|您|他|她|也|都|还|就)?(?:能够|能|会|可以|可|将|就能|就会)?" + _ZH_MEANS +
+    r"(?:顺利|直接|轻松|成功)?(?:地)?(?:" + _RECEIVE_ZH + r")"
+    r"(?!\s*(?:之?前|之?后|以前|以后|的时候|时|再|才))"
     # 进面基本稳了 / 拿到offer是板上钉钉的事 / 录用基本没跑了
     r"|(?:" + _ZH_RECEIVED_NOUN + r")\s*(?:的事|这件事|这事)?"
     r"(?:已经|基本上|基本|应该|肯定|绝对|完全|几乎|算是|就)?(?:是)?"
@@ -649,6 +795,25 @@ _CERTAIN_FORECAST_KO = (
     r"(?:" + _RECEIVE_KO + r")" + _KO_NECESSITY +
     r"|(?:합격|채용|면접\s*기회|오퍼|서류\s*통과)\s*(?:은|는|이|가)?\s*(?:거의\s*)?"
     r"(?:확실(?!하지\s*않|치\s*않|하지\s*못)|따\s*놓은\s*당상|틀림없)")
+
+# The question release never covers an outcome clause that comes FIRST in the
+# same sentence. `面接に呼ばれて志望動機を聞かれる可能性が高いです` exited 0
+# (measured 2026-10-24): 可能性が高い sat right after 聞かれる, so the release
+# took it as a question's likelihood, while the te-chain puts 面接に呼ばれ — the
+# invitation — under the same predicate. Korean chains the same way
+# (`면접에 초대되어 경력을 질문받을 가능성이 높습니다`), and an adverb placed after
+# the chain (`面接に呼ばれ、おそらく…聞かれます`) borrows the release the same way.
+# A CONDITIONAL outcome is preparation, not a forecast — `面接に進んだ場合、…聞かれ
+# る可能性が高い`, `면접에 초대되면 …질문받을 가능성이 높습니다` — and so is one
+# framed by before/after (前 / 後 / 전 / 후).
+_JA_CONDITIONAL = (r"(?![^。！？、\n]{0,5}?(?:たら|だら|[めれえけてねげせべ]ば|ば[、,]|なら|場合|際"
+                   r"|時|とき|前|後|あと|ても|でも))")
+_KO_CONDITIONAL = (r"(?![^.!?,。\n]{0,4}?(?:면(?!접)|경우|때|후|뒤|전|더라도))")
+_RECEIVED_THEN_LIKELY = (
+    r"(?:" + _RECEIVE_JA + r")" + _JA_CONDITIONAL + r"[^。！？\n]{0,20}?"
+    r"(?:(?:可能性|見込み)が[^。！？]{0,10}高い|おそらく|恐らく|十中八九|まず間違いなく|ほぼ確実)"
+    r"|(?:" + _RECEIVE_KO + r")" + _KO_CONDITIONAL + r"[^.!?。\n]{0,20}?"
+    r"(?:가능성이\s*[^.!?]{0,10}?(?:높|큽)|아마|십중팔구|거의 확실|틀림없이)")
 _RECEIVE_ES = (r"(?:conseguir|obtener|recibir|lograr)\w*\s+(?:una?\s+|la\s+|el\s+)?"
                r"(?:entrevista|oferta|plaza|puesto)\b"
                r"|\b(?:te|le|les|os)\s+(?:llam(?:ar[aá]n?|en|an)|invit(?:ar[aá]n?|en|an)"
@@ -677,6 +842,20 @@ _CERTAIN_FORECAST_ES = (
 # fires only next to a verb of RECEIVING whose object is the outcome — or as the
 # outcome's own predicate, closing the clause (`die Zusage ist Ihnen sicher.`).
 _CLAUSE_END = r"(?=\s*[.!?,;:]|\s*$)"
+
+
+def _then_outcome(articled: str, received: str, means: str) -> str:
+    """After the certainty word: one comma-delimited aside or one short phrase of
+    means or time, then the outcome — `sicher über Ihr Netzwerk ein Interview`,
+    `certainement, grâce à ce CV, un entretien` exited 0 (measured 2026-10-24)
+    because the outcome had to follow at once. Here the outcome must carry its
+    determiner and the phrase may not contain it, so a preposition's own object
+    cannot pose as what is received: `nach dem Interview eine Rückmeldung`."""
+    words = r"(?:(?!(?:l['’]|d['’])?(?:" + received + r")\b)[^\s,.;:!?]+\s+){1,3}?"
+    return (r"(?:\s*,\s*[^,.;:!?]{1,40}?,\s*|\s+(?:" + means + r")\s+" + words + r")"
+            + articled)
+
+
 _CERTAIN_DE = (r"sicher|sicherlich|bestimmt|garantiert|zweifellos|definitiv|gewiss"
                r"|ganz\s+sicher|mit\s+sicherheit|ohne\s+zweifel|auf\s+jeden\s+fall|todsicher")
 _RECEIVED_DE = (r"einladung|vorstellungsgespr[aä]ch|interview|zusage|jobangebot"
@@ -687,8 +866,10 @@ _RECEIVE_VERB_DE = r"bekommen|bekommst|bekommt|erhalten|erh[aä]ltst|erh[aä]lt|
 _NOT_NEGATED_DE = r"(?<!nicht )(?<!kein )(?<!keine )(?<!nie )(?<!niemals )"
 _CERTAIN_FORECAST_DE = (
     # Sie bekommen sicher ein Interview
-    r"\b(?:" + _RECEIVE_VERB_DE + r")\s+(?:(?:sie|du|ihr)\s+)?(?:" + _CERTAIN_DE + r")\s+"
-    + _OUTCOME_OBJ_DE +
+    r"\b(?:" + _RECEIVE_VERB_DE + r")\s+(?:(?:sie|du|ihr)\s+)?(?:" + _CERTAIN_DE + r")"
+    r"(?:\s+" + _OUTCOME_OBJ_DE + r"|" + _then_outcome(
+        r"(?:ein|eine|einen|die|das|den|ihre|ihr|deine|dein)\s+(?:" + _RECEIVED_DE + r")\b",
+        _RECEIVED_DE, r"über|durch|dank|mit|wegen|aufgrund|nach|innerhalb|binnen|bis") + r")" +
     # Sie werden sicher eine Zusage bekommen
     r"|" + _NOT_NEGATED_DE + r"\b(?:" + _CERTAIN_DE + r")\s+" + _OUTCOME_OBJ_DE
     + r"\s+(?:" + _RECEIVE_VERB_DE + r")\b"
@@ -707,7 +888,9 @@ _RECEIVE_VERB_NL = r"krijgt|krijg|krijgen|ontvangt|ontvang|ontvangen"
 _NOT_NEGATED_NL = r"(?<!niet )(?<!geen )(?<!nooit )"
 _CERTAIN_FORECAST_NL = (
     r"\b(?:" + _RECEIVE_VERB_NL + r")\s+(?:(?:je|u|jij|jullie)\s+)?(?:" + _CERTAIN_NL
-    + r")\s+" + _OUTCOME_OBJ_NL +
+    + r")(?:\s+" + _OUTCOME_OBJ_NL + r"|" + _then_outcome(
+        r"(?:een|het|de|je|jouw|uw)\s+(?:tweede\s+)?(?:" + _RECEIVED_NL + r")\b",
+        _RECEIVED_NL, r"via|met|door|dankzij|na|binnen|vanwege") + r")" +
     r"|" + _NOT_NEGATED_NL + r"\b(?:" + _CERTAIN_NL + r")\s+" + _OUTCOME_OBJ_NL
     + r"\s+(?:" + _RECEIVE_VERB_NL + r")\b"
     r"|" + _NOT_NEGATED_NL + r"\b(?:" + _CERTAIN_NL + r")\s+(?:(?:voor\s+(?:een|het)\s+"
@@ -729,7 +912,11 @@ _RECEIVE_VERB_FR = (r"aurez|auras|aura|obtiendrez|obtiendras|obtiendra|recevrez|
 _NOT_NEGATED_FR = r"(?<!pas )(?<!jamais )(?<!non )"
 _CERTAIN_FORECAST_FR = (
     # vous aurez certainement un entretien
-    r"\b(?:" + _RECEIVE_VERB_FR + r")\s+(?:" + _CERTAIN_FR + r")\s+" + _OUTCOME_OBJ_FR +
+    r"\b(?:" + _RECEIVE_VERB_FR + r")\s+(?:" + _CERTAIN_FR + r")(?:\s+" + _OUTCOME_OBJ_FR
+    + r"|" + _then_outcome(
+        r"(?:(?:un|une|le|la|votre|ton|ta|cet|cette)\s+|l['’])(?:" + _RECEIVED_FR + r")\b"
+        + _FORMAT_TAIL_FR, _RECEIVED_FR,
+        r"gr[aâ]ce\s+[àa]|avec|par|via|apr[eè]s|d[eè]s|d['’]ici|sous") + r")" +
     # vous allez certainement décrocher un entretien
     r"|" + _NOT_NEGATED_FR + r"\b(?:" + _CERTAIN_FR + r")\s+(?:avoir|obtenir|recevoir"
     r"|d[ée]crocher)\s+" + _OUTCOME_OBJ_FR +
@@ -750,7 +937,11 @@ _RECEIVE_VERB_IT = (r"otterrai|otterr[aà]|otterrete|avrai|avr[aà]|avrete|ricev
                     r"|ricever[aà]|riceverete")
 _CERTAIN_FORECAST_IT = (
     # otterrai sicuramente un colloquio / avrai di sicuro un colloquio
-    r"\b(?:" + _RECEIVE_VERB_IT + r")\s+(?:" + _CERTAIN_IT + r")\s+" + _OUTCOME_OBJ_IT +
+    r"\b(?:" + _RECEIVE_VERB_IT + r")\s+(?:" + _CERTAIN_IT + r")(?:\s+" + _OUTCOME_OBJ_IT
+    + r"|" + _then_outcome(
+        r"(?:(?:un|una|il|lo|la)\s+|un['’]|l['’])(?:" + _RECEIVED_IT + r")\b" + _FORMAT_TAIL_IT,
+        _RECEIVED_IT, r"grazie\s+a(?:l|lla|i|gli|lle)?|con|tramite|attraverso|dopo|entro|in")
+    + r")" +
     # sicuramente otterrai un colloquio
     r"|(?<!non )\b(?:" + _CERTAIN_IT + r")\s+(?:" + _RECEIVE_VERB_IT
     + r"|ottenere|avere|ricevere)\s+" + _OUTCOME_OBJ_IT +
@@ -853,7 +1044,8 @@ _WORDS = re.compile(
     + r"|" + _FORECAST_ES_IT + r"|" + _FORECAST_JA + r"|" + _FORECAST_KO
     + r"|" + _JA_TENTHS
     + r"|" + _HEDGED_FORECAST
-    + r"|" + _CERTAIN_FORECAST,
+    + r"|" + _CERTAIN_FORECAST
+    + r"|" + _RECEIVED_THEN_LIKELY,
     re.IGNORECASE)
 _ATTRIBUTION = re.compile(r"^\s*>?\s*(?:—|--|-|Source:|来源[:：])\s+.*https?://\S+")
 

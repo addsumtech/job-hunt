@@ -1,4 +1,5 @@
 import copy
+import datetime
 import pathlib
 import sys
 
@@ -1175,6 +1176,16 @@ _DROPS_A_RANK = [
     ("기자", "수습기자"),
     ("연구원", "인턴 연구원"),
     ("팀장", "팀장 직무대리"),
+    # a postpositive rank with more dropped after it: the rank still qualified
+    # the kept title, though the dropped span as a whole is not a rank
+    ("Software Engineer", "Software Engineer Intern, Platform Team"),
+    ("经理", "经理助理（市场部）"),
+    # a rank-only qualifier written in the kept title's own segment, no bracket:
+    # the ordinary Spanish for an intern post
+    ("Ingeniero de software", "Ingeniero de software en prácticas"),
+    # a term with a spaced hyphen: tokenised plainly it kept the hyphen as a
+    # token, never matched the leaf's, and the dropped rank passed
+    ("Engineer - Data", "Assistant Engineer - Data"),
 ]
 
 _DROPS_A_STATUS = [
@@ -1214,6 +1225,7 @@ _KEEPS_EVERY_RANK = [
     ("经理", "总经理"),                              # 总 is not subordinate
     ("工程师", "标准工程师"),                        # 标准 ends in 准, is not 准
     ("부장", "영업본부 부장"),                       # 본부 ends in 부, is not 부
+    ("Engineer - Data", "Senior Engineer - Data"),
 ]
 
 
@@ -1466,3 +1478,360 @@ def test_a_publication_that_drops_its_status_fails_the_gate(tmp_path, capsys):
     second = _finding_for(out, "Motion-resolved recon MRM")
     assert second.startswith("QUALIFIER_STRIPPED") and '"submitted"' in second, second
     assert _finding_for(out, "Doe J. Fast T1 mapping. MRM 2024") is None, out
+
+
+# ---------------------------------------------------------------------------
+# A title taken from ANOTHER entry: TITLE_FROM_OTHER_ENTRY.
+#
+# The gap v1.3.0 shipped with: the earlier "Analyst" role relabelled with the
+# later role's "Data Scientist" came back sourced. The title is an exact title of
+# the master, so every family-wide source accepted it; the pairing was consulted
+# only for qualifiers and truncation, and its entry plainly says "Analyst".
+# Each "is reported" test below exited 0 against the gate as it then stood.
+# ---------------------------------------------------------------------------
+
+SWAP_MASTER = {
+    "meta": {"name": "Test User"},
+    "experience": [
+        {"title": "Data Scientist", "org": "Acme BV", "start": "2021-03",
+         "end": "present", "bullets": ["Shipped the churn model."]},
+        {"title": "Analyst", "org": "Initech", "start": "2018-01",
+         "end": "2021-02", "bullets": ["Built the weekly sales report."]},
+    ],
+}
+
+
+def _run_gate(tmp_path, capsys, tailored, master, claims=None):
+    ws, _ = _setup(tmp_path, tailored, claims, master=master)
+    capsys.readouterr()
+    code = check_claims.main(["--workspace", str(ws)])
+    return code, capsys.readouterr().out
+
+
+def test_a_title_taken_from_another_entry_is_reported(tmp_path, capsys):
+    tailored = copy.deepcopy(SWAP_MASTER)
+    tailored["experience"][1]["title"] = "Data Scientist"
+    code, out = _run_gate(tmp_path / "swapped", capsys, tailored, SWAP_MASTER)
+    assert code == 1, out
+    line = _finding_for(out, "Data Scientist")
+    assert line and line.startswith("TITLE_FROM_OTHER_ENTRY"), out
+    assert "experience[1].title" in line and '"Analyst"' in line, line
+    assert len(out.strip().splitlines()) == 1, out
+
+    # answerable like every other finding: the employer really retitled the post
+    claims = [{"term": "Data Scientist",
+               "where": "tailored-profile.yaml:experience[1].title",
+               "source_kind": "session-answer",
+               "source_ref": "user: Initech renamed the analyst grade in 2019",
+               "session_date": "2026-10-24", "retracted": None}]
+    code, out = _run_gate(tmp_path / "answered", capsys, tailored, SWAP_MASTER,
+                          claims)
+    assert (code, out.strip()) == (0, "")
+
+
+def test_a_later_title_at_the_same_employer_is_reported(tmp_path, capsys):
+    """The backdated promotion again, with titles that are not a qualifier pair.
+    The employer gives the later role 2 points; the dates give the real one 5."""
+    master = copy.deepcopy(SWAP_MASTER)
+    master["experience"][1]["org"] = "Acme BV"
+    tailored = copy.deepcopy(master)
+    tailored["experience"][1]["title"] = "Data Scientist"
+    code, out = _run_gate(tmp_path, capsys, tailored, master)
+    assert code == 1, out
+    line = _finding_for(out, "Data Scientist")
+    assert line and line.startswith("TITLE_FROM_OTHER_ENTRY"), out
+
+
+def test_two_current_roles_both_ending_present_are_not_a_merge(tmp_path, capsys):
+    """Both roles end "present". A date the paired entry shares explains nothing
+    about a merge, so the concurrent role's title is still reported."""
+    master = copy.deepcopy(SWAP_MASTER)
+    master["experience"][0]["start"] = "2022-05"
+    master["experience"][1]["end"] = "present"
+    tailored = copy.deepcopy(master)
+    tailored["experience"][1]["title"] = "Data Scientist"
+    code, out = _run_gate(tmp_path, capsys, tailored, master)
+    assert code == 1, out
+    line = _finding_for(out, "Data Scientist")
+    assert line and line.startswith("TITLE_FROM_OTHER_ENTRY"), out
+
+
+def test_a_degree_taken_from_another_entry_is_reported(tmp_path, capsys):
+    """Same rule for degrees, paired on dates and institution."""
+    master = {"meta": {"name": "Test User"},
+              "education": [
+                  {"degree": "MSc Computer Science", "institution": "TU Delft",
+                   "start": "2019", "end": "2021"},
+                  {"degree": "BSc Physics", "institution": "Leiden University",
+                   "start": "2016", "end": "2019"}]}
+    tailored = copy.deepcopy(master)
+    tailored["education"][1]["degree"] = "MSc Computer Science"
+    code, out = _run_gate(tmp_path, capsys, tailored, master)
+    assert code == 1, out
+    line = _finding_for(out, "MSc Computer Science")
+    assert line and line.startswith("TITLE_FROM_OTHER_ENTRY"), out
+    assert "education[1].degree" in line and '"BSc Physics"' in line, line
+
+
+def test_reordered_merged_or_unpaired_titles_stay_quiet(tmp_path, capsys):
+    """The honest half. Reordering keeps every title on its own entry. A line
+    "Data Scientist, 2018-01 – present" pairs with the Analyst role on its start
+    date, but its end date is the Data Scientist role's: two roles merged onto
+    one line, which this gate cannot tell fair from unfair by dates, so it stays
+    quiet and leaves that to the recruiter judge. And with the dates gone, both
+    roles at one employer score the same — no pairing, nothing to compare."""
+    master = copy.deepcopy(SWAP_MASTER)
+    master["experience"][1]["org"] = "Acme BV"
+
+    reordered = copy.deepcopy(master)
+    reordered["experience"].reverse()
+    merged = copy.deepcopy(master)
+    merged["experience"] = [{"title": "Data Scientist", "org": "Acme BV",
+                             "start": "2018-01", "end": "present",
+                             "bullets": ["Built the weekly sales report.",
+                                         "Shipped the churn model."]}]
+    undated = copy.deepcopy(master)
+    for entry in undated["experience"]:
+        del entry["start"], entry["end"]
+    undated["experience"][1]["title"] = "Data Scientist"
+
+    for name, tailored in (("reordered", reordered), ("merged", merged),
+                           ("undated", undated)):
+        code, out = _run_gate(tmp_path / name, capsys, tailored, master)
+        assert (code, out.strip()) == (0, ""), name
+
+
+def test_an_employer_renamed_to_the_next_entry_s_name_stays_quiet(tmp_path, capsys):
+    """Why employers and institutions are not checked this way: the entry at
+    "Facebook" relabelled "Meta" takes the next entry's name for the same
+    company, and that is honest."""
+    master = {"meta": {"name": "Test User"},
+              "experience": [
+                  {"title": "Engineer", "org": "Meta", "start": "2021-11",
+                   "end": "present", "bullets": ["Ran it."]},
+                  {"title": "Engineer", "org": "Facebook", "start": "2018-01",
+                   "end": "2021-10", "bullets": ["Ran it."]}]}
+    tailored = copy.deepcopy(master)
+    tailored["experience"][1]["org"] = "Meta"
+    code, out = _run_gate(tmp_path, capsys, tailored, master)
+    assert (code, out.strip()) == (0, "")
+
+
+# ---------------------------------------------------------------------------
+# Pinned by mutation. After v1.3.0, scripts/mutants.py broke each behaviour below
+# on purpose and the whole suite stayed green. Every test here fails on the
+# mutant it was written against and passes on the real code.
+# ---------------------------------------------------------------------------
+
+def test_a_whole_leaf_of_another_section_is_sourced_on_its_own(tmp_path, capsys):
+    """The exact-leaf pass with nothing else to lean on. A certification listed
+    again under Skills is not a phrase of any skill, not in any prose, and not of
+    its own family — only the whole-leaf index sources it. Every earlier test
+    that reaches a whole leaf also had a same-kind or prose match, so the index
+    could be emptied (links-only walk, no mapping or list recursion, the lookup
+    skipped) with the suite green."""
+    master = {"meta": {"name": "Test User"},
+              "skills": {"languages": ["Python"]},
+              "certifications": ["AWS Certified Cloud Practitioner",
+                                 "Certified Scrum Master"]}
+    tailored = copy.deepcopy(master)
+    tailored["skills"]["agile"] = ["Certified Scrum Master"]
+    code, out = _run_gate(tmp_path, capsys, tailored, master)
+    assert (code, out.strip()) == (0, "")
+
+
+def test_a_field_that_normalizes_to_nothing_claims_nothing(tmp_path, capsys):
+    """A placeholder dash or an empty item is not a term. Checked anyway it is
+    reported as UNSOURCED: "—", a finding nobody can act on."""
+    tailored = copy.deepcopy(MASTER)
+    tailored["skills"] = {"languages": ["Python", "C++", "—", ""],
+                          "infra": ["Docker"]}
+    code, out = _run_gate(tmp_path, capsys, tailored, MASTER)
+    assert (code, out.strip()) == (0, "")
+
+
+def test_each_missing_input_is_named_by_its_own_code(tmp_path, capsys):
+    """An absent tailored profile is MISSING_INPUT; an absent fingerprint is
+    NO_MASTER_FINGERPRINT, with the step that writes it. Left to the readers
+    further down, the first comes out as UNREADABLE_INPUT — a file that is not
+    there reported as a file that is broken."""
+    ws, _ = _setup(tmp_path, MASTER)
+    (ws / "tailored-profile.yaml").unlink()
+    capsys.readouterr()
+    assert check_claims.main(["--workspace", str(ws)]) == 2
+    last = journal.read_receipts(ws, "check_claims")[-1]
+    assert last["verdict"] == "could_not_run"
+    assert last["findings"] == [f"MISSING_INPUT: {ws / 'tailored-profile.yaml'}"]
+
+    (ws / check_claims.FINGERPRINT).unlink()
+    assert check_claims.main(["--workspace", str(ws)]) == 2
+    assert journal.read_receipts(ws, "check_claims")[-1]["findings"] == [
+        f"NO_MASTER_FINGERPRINT: {ws / check_claims.FINGERPRINT}"]
+    assert "--record --master" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("term,leaf", [
+    ("Java", "JavaScript (basic)"),        # inside a word
+    ("Kubernetes", "Docker (basic)"),      # nowhere
+    ("硕士", "学士（在读）"),                # a CJK term the leaf does not contain
+    ("", "(in progress)"),                 # no term at all
+])
+def test_a_term_that_is_not_a_phrase_of_the_leaf_drops_nothing_off_it(term, leaf):
+    """`dropped_*` answer "what did the term drop off THIS leaf", and a term that
+    is not a whole-token phrase of it dropped nothing. Broken, each invents a
+    qualifier or dies: containment finds "Java" in "JavaScript" and reports the
+    "(basic)" after it, an empty term matches at position 0 and "drops" the
+    whole leaf, a failed CJK search slices the leaf at -1."""
+    assert check_claims.phrase_in(term, leaf) is False
+    assert check_claims.dropped_status(term, leaf) is None
+    assert check_claims.dropped_seniority(term, leaf) is None
+    assert check_claims.dropped_qualifier(term, leaf) is None
+
+
+@pytest.mark.parametrize("term,leaf,family", [
+    ("Fast T1 mapping. MRM (submitted)",
+     "Doe J. Fast T1 mapping. MRM (submitted; preprint on arXiv)", "publications"),
+    ("Dutch (B1)", "Business Dutch (B1), C1 expected 2027", "skills"),
+])
+def test_a_term_that_keeps_its_own_status_is_not_stripped(term, leaf, family):
+    """The term still says "submitted" / "B1", so it claims no more than the
+    master does. What it dropped besides — an author list, a second status, the
+    level being worked towards — upgrades nothing. The after-the-span rules apply
+    only to a term that carries no status of its own."""
+    assert check_claims.relation(term, leaf, family) == check_claims.SOURCED
+
+
+def test_a_dropped_publication_status_is_quoted_without_what_follows():
+    """The finding quotes the status that was dropped. The run stops at the first
+    word that is neither status nor connective, so "under review at MRM; preprint
+    on arXiv" is quoted as "under review", not with the venue and a second status
+    glued on."""
+    leaf = "Deep cine reconstruction (under review at MRM; preprint on arXiv)"
+    assert check_claims.dropped_status("Deep cine reconstruction", leaf,
+                                       "publications") == "under review"
+
+
+CONCURRENT_MASTER = {
+    "meta": {"name": "Test User"},
+    "experience": [
+        {"title": "Junior Data Scientist", "org": "Acme BV", "start": "2019-03",
+         "end": "2021-02", "bullets": ["Cleaned the event data."]},
+        {"title": "Data Scientist", "org": "Initech", "start": "2019-03",
+         "end": "2021-02", "bullets": ["Built the churn model."]},
+    ],
+}
+
+
+def test_the_employer_decides_a_pairing_the_dates_cannot(tmp_path, capsys):
+    """Two concurrent roles with the same dates. Only the employer tells them
+    apart — compared by its legal core, so "Acme" still pairs with "Acme BV" — and
+    the title written on the Acme role is checked against the Acme role's own.
+    Without the employer's 2 points it is a tie, no pairing, and the Initech
+    title sources the claim."""
+    tailored = copy.deepcopy(CONCURRENT_MASTER)
+    tailored["experience"][0].update(title="Data Scientist", org="Acme")
+    code, out = _run_gate(tmp_path, capsys, tailored, CONCURRENT_MASTER)
+    assert code == 1, out
+    line = _finding_for(out, "Data Scientist")
+    assert line and line.startswith("QUALIFIER_STRIPPED"), out
+    assert "experience[0].title" in line and "Junior Data Scientist" in line, line
+
+
+def test_the_field_being_checked_does_not_choose_its_own_pair(tmp_path, capsys):
+    """Scored by its own employer, "Google" would pair with the real Google role
+    that started the same year, and the student club it was written on would
+    never be compared. An employer is paired on its dates alone."""
+    master = {"meta": {"name": "Test User"},
+              "experience": [
+                  {"title": "Organiser", "org": "Google Developer Student Club Leiden",
+                   "start": "2022", "end": "2023", "bullets": ["Ran workshops."]},
+                  {"title": "Data Analyst", "org": "Google", "start": "2022",
+                   "end": "present", "bullets": ["Built dashboards."]}]}
+    tailored = copy.deepcopy(master)
+    tailored["experience"][0]["org"] = "Google"
+    code, out = _run_gate(tmp_path, capsys, tailored, master)
+    assert code == 1, out
+    line = _finding_for(out, "Google")
+    assert line and line.startswith("ORG_TRUNCATED"), out
+    assert "experience[0].org" in line, line
+
+
+def test_a_pairing_needs_a_score_of_two_and_a_unique_best():
+    master = {"experience": [
+        {"title": "Junior Data Scientist", "org": "Acme BV", "end": "2021-02"},
+        {"title": "Data Scientist", "org": "Acme BV"}]}
+
+    def pair(entry):
+        return check_claims.pairing("experience[0].title",
+                                    {"experience": [entry]}, master)
+
+    # the employer alone, which both share: a tie
+    assert pair({"title": "Data Scientist", "org": "Acme"}) == (None, ())
+    # one shared end date and nothing else: 1 point
+    assert pair({"title": "Data Scientist", "org": "Globex",
+                 "end": "2021-02"}) == (None, ())
+    # the employer and the end date: 3 against 2
+    assert pair({"title": "Data Scientist", "org": "Acme", "end": "2021-02"}) == (
+        "Junior Data Scientist", [("Data Scientist", False)])
+
+
+def test_an_entry_that_is_not_a_mapping_is_skipped_not_fatal(tmp_path, capsys):
+    """Hand-written YAML has bare-string entries. A tailored path that names no
+    mapping does not pair, and a bare string in the master is passed over while
+    the entries around it still pair — the backdated promotion is still caught
+    rather than the gate dying on `str.get`."""
+    assert check_claims.pairing("experience[5].title", PROGRESSION_MASTER,
+                                PROGRESSION_MASTER) == (None, ())
+    assert check_claims.pairing("experience[0].title",
+                                {"experience": ["Data Scientist at Acme"]},
+                                PROGRESSION_MASTER) == (None, ())
+
+    master = copy.deepcopy(PROGRESSION_MASTER)
+    master["experience"].insert(1, "Freelance analytics work, 2018")
+    tailored = copy.deepcopy(master)
+    tailored["experience"][2]["title"] = "Data Scientist"
+    code, out = _run_gate(tmp_path, capsys, tailored, master)
+    assert code == 1, out
+    line = _finding_for(out, "Data Scientist")
+    assert line and line.startswith("QUALIFIER_STRIPPED"), out
+    assert "experience[2].title" in line and "Junior Data Scientist" in line, line
+
+
+@pytest.mark.parametrize("section,name_key,field", [
+    ("experience", "org", "title"),
+    ("education", "institution", "degree"),
+    ("projects", "name", "role"),
+])
+def test_a_yaml_boolean_is_no_name_to_pair_on(section, name_key, field):
+    """`On` and `Yes` are two different names, and YAML loads both as True.
+    Equal booleans are not equal names, so they earn no pairing credit."""
+    master = yaml.safe_load(f"{section}:\n  - {{{name_key}: On, {field}: Lead}}\n")
+    tailored = yaml.safe_load(f"{section}:\n  - {{{name_key}: Yes, {field}: Lead}}\n")
+    assert master[section][0][name_key] is True is tailored[section][0][name_key]
+    assert check_claims.pairing(f"{section}[0].{field}", tailored, master) == (None, ())
+
+
+def test_a_master_written_with_full_yaml_dates_still_pairs(tmp_path, capsys):
+    """`start: 2019-03-01` unquoted is a date object, not a string, and render_cv
+    prints it. Read as nothing, both roles at Acme BV scored on the employer
+    alone — a tie, so no pairing — and the later title backdated onto the junior
+    role passed."""
+    master_text = (
+        "meta:\n  name: Test User\n"
+        "experience:\n"
+        "  - title: Data Scientist\n    org: Acme BV\n"
+        "    start: 2021-03-01\n    end: present\n"
+        "    bullets: [Shipped the churn model.]\n"
+        "  - title: Junior Data Scientist\n    org: Acme BV\n"
+        "    start: 2019-03-01\n    end: 2021-02-28\n"
+        "    bullets: [Cleaned the event data.]\n")
+    master = yaml.safe_load(master_text)
+    assert isinstance(master["experience"][1]["start"], datetime.date)
+    tailored = copy.deepcopy(master)
+    tailored["experience"][1]["title"] = "Data Scientist"
+    ws, _ = _setup_master_text(tmp_path, master_text, tailored)
+    capsys.readouterr()
+    assert check_claims.main(["--workspace", str(ws)]) == 1
+    line = _finding_for(capsys.readouterr().out, "Data Scientist")
+    assert line and line.startswith("QUALIFIER_STRIPPED"), line
+    assert "experience[1].title" in line and "Junior Data Scientist" in line, line

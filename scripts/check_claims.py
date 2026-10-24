@@ -67,6 +67,15 @@ last, "MSc Computer Science" off "MSc Computer Science (in progress, expected
 2027)" came back sourced, because the summary said "MSc Computer Science student"
 and the prose pass cleared the claim before the qualifier was ever looked at.
 
+The pairing also catches a title taken from a DIFFERENT entry. An earlier
+"Analyst" role relabelled with a later role's "Data Scientist" is an exact title
+of the master, so every looser source calls it sourced; only the entry it was
+written on says otherwise. That is TITLE_FROM_OTHER_ENTRY, for titles, degrees
+and project roles. It stays quiet when the pairing is ambiguous, and when the
+dates say the tailored entry may be two master entries merged into one line.
+Employers and institutions are left out of it on purpose: an entry at "Facebook"
+relabelled "Meta" — the next entry's name for the same company — is honest.
+
 Also fails if profile.yaml changed during the run. Overwriting the master is
 destructive and unrecoverable, and the damage only surfaces on the NEXT
 application, when the "master" has already been narrowed to the previous job.
@@ -76,6 +85,7 @@ Exit 0 = clean. Exit 1 = findings. Exit 2 = nothing recorded to check against.
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import pathlib
 import re
@@ -392,8 +402,8 @@ _UNSEGMENTED_RE = re.compile(r"[฀-๿　-鿿가-힯豈-﫿]")
 # them changes no token; a spaced hyphen is one too.
 _SEGMENT_BREAK = re.compile(r"[()\[\]{}<>,;:|·、【】《》〈〉「」『』—–]|\s-+\s")
 
-SOURCED, QUALIFIER, TRUNCATED, UNSOURCED = (
-    "sourced", "qualifier", "truncated", "unsourced")
+SOURCED, QUALIFIER, TRUNCATED, UNSOURCED, BORROWED = (
+    "sourced", "qualifier", "truncated", "unsourced", "borrowed")
 
 # Employer and institution names: matched by `_legal_core`, never by phrase, and
 # against each other — a PhD candidate's university is both.
@@ -522,7 +532,7 @@ def dropped_status(term, leaf, family=None):
     "English (native), Dutch (B1)" the B1 belongs to Dutch, and "English" drops
     nothing that qualified it.
 
-    `family == "publications"` adds the publication statuses (under review,
+    The `publications` family adds the publication statuses (under review,
     submitted, preprint, 投稿中 …) to the vocabulary, for that family only.
     """
     split = _split(term, leaf)
@@ -621,8 +631,13 @@ def _split(term, leaf):
     brackets. For a term in those scripts the occurrence is found by containment
     instead, the same fallback `phrase_in` uses, and the residue either side is
     what was dropped.
+
+    The term is tokenised the way the leaf is, a spaced hyphen being a segment
+    break on both sides. Tokenised plainly, "Engineer - Data" kept its hyphen as
+    a token, never matched the leaf's tokens, and the "Assistant" dropped off
+    "Assistant Engineer - Data" went unreported.
     """
-    wanted = _token_list(term)
+    wanted = [tok for tok, _seg in _segment_tokens(term)]
     tagged = _segment_tokens(leaf)
     have = [tok for tok, _seg in tagged]
     n = len(wanted)
@@ -812,13 +827,22 @@ _ENTRY_NAME = {"experience": "org", "education": "institution", "projects": "nam
 
 
 def _scalar(value) -> str:
+    # A YAML date (`start: 2021-03-15`, unquoted) is a date object, and render_cv
+    # prints it. Read as "", it gave no pairing credit, so a master written with
+    # full dates paired two roles at one employer on the employer alone — a tie,
+    # i.e. no pairing, and the backdated promotion went through.
+    if isinstance(value, datetime.date):
+        return value.isoformat()[:10]
+    # A YAML boolean is no name and no date: `On`, `Yes` and `true` all load as
+    # True, so two equal booleans say nothing about two equal values.
     if isinstance(value, bool) or not isinstance(value, (str, int, float)):
         return ""
     return normalize_term(value)
 
 
-def paired_value(where, tailored, master):
-    """The master's value of this field ON THE SAME ENTRY, or None.
+def _pair(where, tailored, master):
+    """(field, the tailored entry, its master pair, the other master entries),
+    or None when the entry does not pair.
 
     The tailored entry is matched to a master entry by its dates (start counts
     2, end 1) and its organisation (2) — never by position, because reordering
@@ -861,9 +885,55 @@ def paired_value(where, tailored, master):
         return None
     best = max(score for score, _entry in scored)
     winners = [entry for score, entry in scored if score == best]
-    if best < 2 or len(winners) != 1 or not winners[0].get(field):
+    if best < 2 or len(winners) != 1:
         return None
-    return _flat(winners[0][field])
+    return field, mine, winners[0], [e for _s, e in scored if e is not winners[0]]
+
+
+def _merge_partner(mine, paired, other) -> bool:
+    """Could `mine` be `paired` and `other` written as one line? Yes when
+    `other` accounts for one of mine's dates that `paired` does not — the
+    merged "2019-03 – present" takes its start from one role and its end from
+    the next. A date both share explains nothing: two current roles both end
+    "present"."""
+    for key in ("start", "end"):
+        date = _scalar(mine.get(key))
+        if date and date != _scalar(paired.get(key)) and date == _scalar(other.get(key)):
+            return True
+    return False
+
+
+def pairing(where, tailored, master):
+    """(the master's value of this field ON THE SAME ENTRY, the other entries).
+
+    (None, ()) when the entry does not pair, and the value is None as well when
+    the paired entry has no such field. The other entries come as (their value
+    of the field, whether they could be merged into this one), for
+    `_borrowed`.
+    """
+    pair = _pair(where, tailored, master)
+    if pair is None:
+        return None, ()
+    field, mine, paired, rest = pair
+    others = [(_flat(e[field]), _merge_partner(mine, paired, e))
+              for e in rest if e.get(field)]
+    return (_flat(paired[field]) if paired.get(field) else None), others
+
+
+def _borrowed(term, family, others):
+    """The other entry's value `term` was taken from, or None.
+
+    None as well when an entry it could have come from could also have been
+    merged into this one: "Data Scientist, 2019-03 – present" over a master
+    "Analyst, 2019-03 – 2021-02" and "Data Scientist, 2021-03 – present" is two
+    roles on one line, and whether that line is fair is the recruiter judge's
+    question, not one this gate can settle from dates.
+    """
+    donors = [(value, merged) for value, merged in others
+              if _relate(term, value, family)[0] == SOURCED]
+    if not donors or any(merged for _value, merged in donors):
+        return None
+    return donors[0][0]
 
 
 def _as_list(v):
@@ -1011,10 +1081,13 @@ def _claim_index(claims):
     return live, retracted, findings
 
 
-def trace(term, family, paired, exact, prose, families):
-    """None when `term` is sourced, else (relation, master leaf, dropped words).
+def trace(term, family, paired, exact, prose, families, others=()):
+    """None when `term` is sourced, else (relation, master leaf, detail).
 
-    The relation is QUALIFIER, TRUNCATED or UNSOURCED (leaf and dropped None).
+    The relation is QUALIFIER (detail: the dropped words), TRUNCATED, BORROWED
+    (leaf: the paired entry's own value; detail: the other entry's value the
+    term matches) or UNSOURCED (leaf and detail None). `others` is
+    `pairing`'s second half.
 
     The order is the substance of the rule. A trimmed term is compared first with
     the master entry it came from (`paired`), then with every master entry of its
@@ -1028,7 +1101,7 @@ def trace(term, family, paired, exact, prose, families):
     always did: a holder of both "AWS … Architect – Associate" and "AWS …
     Architect – Professional" may write "AWS … Architect". The pairing is what
     stops that precedence from excusing the one entry the term actually came
-    from.
+    from — and from excusing a title that is another entry's outright.
     """
     names = family in NAME_FAMILIES
     if paired is not None:
@@ -1037,6 +1110,10 @@ def trace(term, family, paired, exact, prose, families):
             return None
         if rel is not None:
             return rel, paired, dropped
+        if not names:
+            donor = _borrowed(term, family, others)
+            if donor is not None:
+                return BORROWED, paired, donor
     kinds = NAME_FAMILIES if names else (family,)
     kin = [(leaf, *_relate(term, leaf, family))
            for kind in kinds for leaf in families.get(kind, ())]
@@ -1172,18 +1249,18 @@ def main(argv=None) -> int:
         key = normalize_term(term)
         if not key:
             continue
-        verdict = trace(term, family, paired_value(where, tailored, master_profile),
-                        exact, prose, families)
+        paired, others = pairing(where, tailored, master_profile)
+        verdict = trace(term, family, paired, exact, prose, families, others)
         if verdict is None or key in live:
             continue
-        rel, leaf, dropped = verdict
+        rel, leaf, detail = verdict
         # The master's real name, not the literal 'profile.yaml', in every line
         # below: one candidate can have several masters now, and a finding that
         # names the wrong file sends the reader to a document the gate never read.
-        if rel == QUALIFIER and dropped[0] == "seniority":
+        if rel == QUALIFIER and detail[0] == "seniority":
             findings.append(f'QUALIFIER_STRIPPED: "{term}" at '
                             f'tailored-profile.yaml:{where} drops the seniority '
-                            f'qualifier "{dropped[1]}" off {master.name}\'s '
+                            f'qualifier "{detail[1]}" off {master.name}\'s '
                             f'"{leaf}" — without it the title claims a more senior '
                             f'post than the one held. Keep the qualifier, or add a '
                             f'claims.yaml row for the fact that it no longer '
@@ -1194,7 +1271,7 @@ def main(argv=None) -> int:
                         else "a completed, current credential")
             findings.append(f'QUALIFIER_STRIPPED: "{term}" at '
                             f'tailored-profile.yaml:{where} drops the status '
-                            f'qualifier "{dropped[1]}" off {master.name}\'s '
+                            f'qualifier "{detail[1]}" off {master.name}\'s '
                             f'"{leaf}" — the unqualified form reads as {reads_as}. '
                             f'Keep the qualifier, or add a '
                             f'claims.yaml row for the fact that it no longer applies')
@@ -1209,6 +1286,18 @@ def main(argv=None) -> int:
                             f'can name a different, larger organisation than the '
                             f'one the candidate belonged to. Use the full name, or '
                             f'add a claims.yaml row')
+            continue
+        if rel == BORROWED:
+            findings.append(f'TITLE_FROM_OTHER_ENTRY: "{term}" at '
+                            f'tailored-profile.yaml:{where} is what {master.name} '
+                            f'records for a different entry ("{detail}"); the entry '
+                            f'it is written on, paired by its dates and its '
+                            f'employer, institution or project name, is "{leaf}" '
+                            f'— a title, degree or role '
+                            f'belongs to the entry it was held on, and moved onto '
+                            f'another it claims a post at a time or place the '
+                            f'candidate did not hold it. Restore "{leaf}", or add a '
+                            f'claims.yaml row (a retitled post, for instance)')
             continue
         if key in retracted:
             findings.append(f'RETRACTED_CLAIM: "{term}" at '
