@@ -39,6 +39,8 @@ about nobody. This is the same named exception check_skill_lossless.py and
 check_conventions.py --ci carry. The exit codes are the shared ones, so CI and a
 local run cannot disagree about a file.
 """
+from __future__ import annotations
+
 import argparse
 import os
 import pathlib

@@ -142,3 +142,67 @@ def test_a_heading_with_no_stated_limit_does_not_acquire_one(heading):
     """The cry-wolf half: inventing a limit is worse than missing one, because
     OVER_LIMIT then fires on an answer nobody capped."""
     assert cwl._LIMIT.search(heading) is None, heading
+
+
+# ---------------------------------------------------------------------------
+# A thousands separator is part of the number. `\d{2,4}` with no left boundary
+# read "(max 1,000 words)" as a limit of 0 and "(2,500 words)" as 500, so a
+# compliant statement got OVER_LIMIT and the agent was told to cut a
+# 2,100-word research proposal to 500 words.
+# ---------------------------------------------------------------------------
+
+def _limit(heading):
+    return cwl.sections(f"### {heading}\nI led the redesign.\n")[0][1]
+
+
+@pytest.mark.parametrize("heading,expected", [
+    ("Personal statement (max 1,000 words)", 1000),
+    ("Research proposal (2,500 words)", 2500),
+    ("Motivation (max. 1.000 Wörter)", 1000),
+    ("Motivatie (maximaal 1.500 woorden)", 1500),
+    ("Motivation (1 000 mots maximum)", 1000),
+    ("Motivation (1\N{NO-BREAK SPACE}000 mots)", 1000),
+    ("Motivation (1\N{NARROW NO-BREAK SPACE}000 mots)", 1000),
+    ("Motivation (1'000 Wörter)", 1000),
+    ("Statement (1000 words)", 1000),
+    ("Thesis summary (10000 words)", 10000),
+    ("Statement: 1 000 words", 1000),
+    ("Essay (1,000-1,500 words)", 1500),
+    ("Essay (500-700 words)", 700),
+    ("Leadership (250-word limit)", 250),
+])
+def test_a_limit_with_thousands_separators_is_read_whole(heading, expected):
+    assert _limit(heading) == expected
+
+
+def test_a_space_after_a_criterion_number_does_not_glue_two_numbers():
+    """'Question 2 250 words' is criterion 2 with a 250-word cap. Reading the
+    space as a thousands separator would raise the cap to 2,250 and silence
+    OVER_LIMIT for every answer under it."""
+    assert _limit("Question 2 250 words") == 250
+    assert _limit("max 1 000 Wörter") == 1000
+
+
+@pytest.mark.parametrize("heading", ["Rate (1,5 words)", "Score (250.5 words)",
+                                     "Q3 — 2019 to 2024"])
+def test_a_decimal_or_a_date_range_is_not_a_limit(heading):
+    assert _limit(heading) is None
+
+
+def test_compliant_long_statements_pass_and_an_over_limit_one_names_the_real_limit(
+        tmp_path, capsys):
+    """The measured case: 700 words under a 1,000 cap and 2,100 under 2,500
+    both exited 1, against limits of 0 and 500."""
+    para = ("I led the redesign of the intake process for our clinic network, "
+            "working with nurses and managers to map every step. ")       # 21 words
+    text = ("### Personal statement (max 1,000 words)\n\n" + para * 35 + "\n\n"
+            "### Research proposal (2,500 words)\n\n" + para * 105 + "\n")
+    ws = _ws(tmp_path, text)
+    assert cwl.main(["--workspace", str(ws)]) == 0, capsys.readouterr().out
+    assert capsys.readouterr().out.strip() == ""
+
+    over = _ws(tmp_path / "over", "### Personal statement (max 1,000 words)\n\n"
+               + para * 55 + "\n")
+    assert cwl.main(["--workspace", str(over)]) == 1
+    out = capsys.readouterr().out
+    assert "OVER_LIMIT" in out and "1155 words against its stated limit of 1000 " in out
