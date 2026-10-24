@@ -150,7 +150,9 @@ not let the package be delivered over it. A title that lost a subordinate-rank w
 (`Assistant Manager` → `Manager`), a status marker (`(in progress)`) or a publication
 status (`(under review)`, `(submitted)`, `preprint`, 审稿中) is
 `QUALIFIER_STRIPPED`, and an employer or institution shortened into a different name
-is `ORG_TRUNCATED`; both block delivery the same way. Restore the real wording; a
+is `ORG_TRUNCATED`, and a title, degree or project role copied from a different entry of
+the master (an earlier `Analyst` role relabelled with a later role's `Data Scientist`) is
+`TITLE_FROM_OTHER_ENTRY`; all three block delivery the same way. Restore the real wording; a
 claims row is only for a genuine, sourced equivalence.
 
 
