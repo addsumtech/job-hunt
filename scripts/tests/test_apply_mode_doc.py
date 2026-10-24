@@ -86,3 +86,62 @@ def test_the_claim_about_the_interlock_matches_the_renderer():
     assert render_cv._suppress_personal_data({"meta": {"target_market": "nl"}}) is False
     # and the conservative default the mode file relies on
     assert render_cv._suppress_personal_data({"meta": {}}) is True
+
+
+# ---- judges get file paths, not pasted file contents --------------------------
+#
+# Pasting the three persona files (about 11K tokens) and the package into every
+# judge prompt sent them through the orchestrator's context again in every round.
+# The judges now open the files themselves. What must not change with that is the
+# isolation and the fail-closed parse, so those are what is pinned here.
+
+def _dispatch_block():
+    t = text()
+    start = t.index("**Dispatch all three in parallel**")
+    block = t[start:t.index("**Japan rirekisho fork:**", start)]
+    assert len(block) > 1000, "the dispatch block markers moved; this slice is empty"
+    return block
+
+
+def test_judges_are_dispatched_by_absolute_path_with_a_fallback():
+    block = _dispatch_block()
+    assert "absolute file paths the judge opens itself" in block
+    for persona in ("agents/ats-screener.md", "agents/recruiter-screener.md",
+                    "agents/hiring-manager.md"):
+        assert persona in block, f"the dispatch block no longer names {persona}"
+    assert "<workspace>/posting.yaml" in block and "<workspace>/cv.md" in block
+    assert "**Fallback — a judge that cannot read files**" in block
+    assert "paste the full text of every file above" in block
+
+
+def test_a_judge_that_can_open_files_is_told_to_open_only_these():
+    """With a file tool the judge could read profile.yaml — the source profile the
+    whole review design keeps from it — unless the prompt forbids it."""
+    block = _dispatch_block()
+    assert "Read exactly these files, in full, and nothing else" in block
+    assert "Name files, never the workspace directory" in block
+    assert "`profile.yaml`" in block
+
+
+def test_an_unreadable_file_fails_closed_through_the_real_parser():
+    """The sentinel the doc prescribes must be one parse_verdicts treats as
+    AMBIGUOUS (re-dispatch), never as a verdict."""
+    import parse_verdicts
+    block = _dispatch_block()
+    assert "VERDICT: UNREADABLE <path>" in block
+    parsed = parse_verdicts.parse_judge("VERDICT: UNREADABLE /skill/agents/ats-screener.md")
+    assert parsed["verdict"] == "AMBIGUOUS"
+
+
+def test_replies_are_still_saved_verbatim_and_persona_files_stay_out_of_record():
+    block = _dispatch_block()
+    assert "reply **verbatim**" in block
+    for name in ("judge-<n>-ats.txt", "judge-<n>-recruiter.txt",
+                 "judge-<n>-hiring-manager.txt"):
+        assert name in block
+    # check_apply rejects a receipt bound to a file outside the workspace, so a run
+    # that "helpfully" hashed the persona files would fail at the very end.
+    import check_apply
+    assert "RECEIPT_INPUT_OUTSIDE_WORKSPACE" in block
+    assert "RECEIPT_INPUT_OUTSIDE_WORKSPACE" in pathlib.Path(check_apply.__file__).read_text(
+        encoding="utf-8")
