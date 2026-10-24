@@ -38,11 +38,14 @@ one URL is one token — so what the exclusion still buys is the `{label, url}`
 form, whose label is a leaf like any other.)
 
 Employers and institutions are the exception to "a phrase of its own kind". A
-name may lose a legal-form suffix ("Acme BV" → "Acme", "株式会社リクルート" →
-"リクルート") and nothing else: "Google" is a phrase of "Google Developer Student
-Club Leiden" and names a different, far larger organisation, which is the
-fabricated-employer class itself. A shortened name is ORG_TRUNCATED, and prose
-does not source a name either — a client in a bullet is not an employer.
+name may lose a legal-form or group suffix ("Acme BV" → "Acme", "Alibaba Group"
+→ "Alibaba", "株式会社リクルート" → "リクルート") or the sub-unit after its first
+comma ("Leiden University, Faculty of Science" → "Leiden University"), and
+nothing else: "Google" is a phrase of "Google Developer Student Club Leiden" and
+names a different, far larger organisation, which is the fabricated-employer
+class itself, and "TU Delft" off "TU Delft (exchange)" turns a semester into a
+degree. A shortened name is ORG_TRUNCATED, and prose does not source a name
+either — a client in a bullet is not an employer.
 
 QUALIFIER_STRIPPED is deliberately narrow. It fires on two closed vocabularies
 and nothing else: a dropped STATUS marker ("(in progress)", "(expired 2023)",
@@ -302,8 +305,9 @@ _RANK_CJK_AFTER = (
 _RANK_CJK_WHOLE = ("准", "부")
 _RANK_CJK = frozenset(_RANK_CJK_BEFORE + _RANK_CJK_AFTER + _RANK_CJK_WHOLE)
 
-# Legal-form designators: the ONLY thing an employer or institution name may
-# lose. Stripped from the end; the few that are written FIRST — Japanese and
+# Legal-form designators, which an employer or institution name may lose (the
+# group designators below and a sub-unit after the first comma are the only
+# other things it may). Stripped from the end; the few written FIRST — Japanese and
 # Korean forms (株式会社リクルート, (주)카카오 → tokens `株`, `주`) and the Dutch
 # foundation — are stripped from the front as well. A Western form is never
 # stripped from the front: "AS Roma" is not "Roma".
@@ -324,6 +328,15 @@ _LEGAL_FORMS = frozenset("""
 # The same CJK forms written glued to the name (腾讯科技有限公司).
 _LEGAL_FORMS_GLUED = ("股份有限公司", "有限责任公司", "有限責任公司", "有限公司",
                       "株式会社", "有限会社", "合同会社", "주식회사", "유한회사")
+# Corporate-group designators, dropped like a legal form but from the END only:
+# "Alibaba Group" → "Alibaba", "Tencent Holdings Ltd" → "Tencent", "腾讯控股" →
+# "腾讯", "楽天グループ株式会社" → "楽天". A group and its operating company are
+# the same employer for a CV's purposes; "Group Lotus" is not "Lotus".
+_GROUP_FORMS = frozenset("""
+    group holdings holding 集团 集團 控股 グループ ホールディングス 그룹 홀딩스
+""".split())
+_GROUP_FORMS_GLUED = ("集团", "集團", "控股", "グループ", "ホールディングス",
+                      "그룹", "홀딩스")
 # Between two legal forms only: "GmbH & Co. KG", "S.A. de C.V.".
 _LEGAL_JOINERS = frozenset("and und en et y e de".split())
 # A leading article: "de Volksbank", "The Boston Consulting Group".
@@ -642,12 +655,14 @@ def dropped_qualifier(term, leaf):
 
 
 def _legal_core(name) -> str:
-    """`name` normalized, with legal-form designators and a leading article off.
+    """`name` normalized, with legal-form and group designators and a leading
+    article off.
 
     "Acme B.V." / "Acme BV" / "Acme" → "acme"; "Acme S.A. de C.V." → "acme";
-    "株式会社リクルート" / "(株)リクルート" → "リクルート"; "腾讯科技有限公司" →
-    "腾讯科技". Nothing else is removed: "Google Developer Student Club Leiden"
-    stays itself, so it cannot be shortened to "Google".
+    "Tencent Holdings Ltd" → "tencent"; "株式会社リクルート" / "(株)リクルート" →
+    "リクルート"; "腾讯控股有限公司" → "腾讯"; "楽天グループ株式会社" → "楽天".
+    Nothing else is removed: "Google Developer Student Club Leiden" stays
+    itself, so it cannot be shortened to "Google".
     """
     if not isinstance(name, (str, int, float)) or isinstance(name, bool):
         return ""
@@ -660,7 +675,8 @@ def _legal_core(name) -> str:
             toks.pop(0)
             changed = True
         tail = False
-        while len(toks) > 1 and toks[-1] in _LEGAL_FORMS:
+        while len(toks) > 1 and (toks[-1] in _LEGAL_FORMS
+                                 or toks[-1] in _GROUP_FORMS):
             toks.pop()
             tail = changed = True
         if tail and len(toks) > 1 and toks[-1] in _LEGAL_JOINERS:
@@ -669,19 +685,32 @@ def _legal_core(name) -> str:
     changed = True
     while changed:
         changed = False
-        for form in _LEGAL_FORMS_GLUED:
+        for form in _LEGAL_FORMS_GLUED + _GROUP_FORMS_GLUED:
             if core.endswith(form) and len(core) > len(form):
                 core, changed = core[:-len(form)].strip(), True
+        for form in _LEGAL_FORMS_GLUED:
             if core.startswith(form) and len(core) > len(form):
                 core, changed = core[len(form):].strip(), True
     return core
+
+
+def _before_first_comma(name) -> str:
+    """Everything before the first comma of `name`, or "" when it has none.
+
+    "Leiden University, Faculty of Science" → "Leiden University". Only a comma
+    marks a sub-unit: "TU Delft (exchange)" has no comma, so the bracket stays
+    part of the name and dropping it is still a truncation.
+    """
+    text = unicodedata.normalize("NFKC", str(name or ""))
+    return text.split(",", 1)[0] if "," in text else ""
 
 
 def _relate(term, leaf, family=None):
     """(relation, detail) of `term` to one master leaf of the same kind."""
     if family in NAME_FAMILIES:
         core = _legal_core(term)
-        if core and core == _legal_core(leaf):
+        if core and core in (_legal_core(leaf),
+                             _legal_core(_before_first_comma(leaf))):
             return SOURCED, None
         return (TRUNCATED, None) if phrase_in(term, leaf) else (None, None)
     if normalize_term(term) == normalize_term(leaf):
@@ -1086,11 +1115,12 @@ def main(argv=None) -> int:
             findings.append(f'ORG_TRUNCATED: "{term}" at '
                             f'tailored-profile.yaml:{where} shortens {master.name}\'s '
                             f'"{leaf}" — an employer or institution name may drop a '
-                            f'legal-form suffix (BV, GmbH, Inc., 有限公司, 株式会社 …) '
-                            f'and nothing else, because a shorter name can name a '
-                            f'different, larger organisation than the one the '
-                            f'candidate belonged to. Use the full name, or add a '
-                            f'claims.yaml row')
+                            f'legal-form or group suffix (BV, GmbH, Inc., Group, '
+                            f'Holdings, 有限公司, 株式会社 …) or the sub-unit after its '
+                            f'first comma, and nothing else, because a shorter name '
+                            f'can name a different, larger organisation than the '
+                            f'one the candidate belonged to. Use the full name, or '
+                            f'add a claims.yaml row')
             continue
         if key in retracted:
             findings.append(f'RETRACTED_CLAIM: "{term}" at '

@@ -1276,3 +1276,95 @@ def test_a_name_may_drop_its_legal_form(term, leaf, family):
                          ids=[t[1][:28] for t in _TRUNCATED_NAMES])
 def test_a_name_may_not_drop_anything_else(term, leaf, family):
     assert check_claims.relation(term, leaf, family) == check_claims.TRUNCATED
+
+
+# ── two honest shortenings the strict rule cried wolf on ────────────────────
+#
+# A corporate-group designator is dropped like a legal form, from the end only,
+# and a sub-unit may go when what is kept is exactly the text before the first
+# comma. Both were ORG_TRUNCATED at c450b16, and both are how most CVs write the
+# name. Neither reaches brackets or a bare word cut: the semester abroad and the
+# student club below must still fail.
+
+_GROUP_OR_SUB_UNIT_DROPPED = [
+    ("Alibaba", "Alibaba Group"),
+    ("Alibaba", "Alibaba Group Holding Limited"),
+    ("Tencent", "Tencent Holdings Ltd"),
+    ("Acme", "Acme Holding B.V."),
+    ("腾讯", "腾讯控股"),
+    ("腾讯", "腾讯控股有限公司"),
+    ("阿里巴巴", "阿里巴巴集团"),
+    ("長和", "長和集團"),
+    ("楽天", "楽天グループ株式会社"),
+    ("セブン&アイ", "セブン&アイ・ホールディングス"),
+    ("삼성", "삼성그룹"),
+    ("SK", "SK홀딩스"),
+    ("Leiden University", "Leiden University, Faculty of Science"),
+    ("Philips", "Philips, Healthcare Division"),
+    ("Philips", "Philips N.V., Healthcare Division"),
+    ("Alibaba", "Alibaba Group, Cloud Intelligence"),
+    # the other direction: adding the designator back is the same organisation
+    ("Alibaba Group", "Alibaba"),
+]
+
+_STILL_TRUNCATED = [
+    ("TU Delft", "TU Delft (exchange)"),
+    ("TU Delft", "TU Delft (exchange), Faculty of EEMCS"),   # bracket before comma
+    ("Google", "Google Developer Student Club Leiden"),
+    ("Google", "Google Developer Student Club Leiden, Leiden University"),
+    ("Leiden", "Leiden University, Faculty of Science"),     # not the whole head
+    ("Faculty of Science", "Leiden University, Faculty of Science"),  # not the head
+    ("Volkswagen", "Volkswagen Group of America"),           # Group not at the end
+    ("Lotus", "Group Lotus"),                                # never from the front
+    ("Alibaba", "Alibaba Cloud Group"),                      # Cloud is not a designator
+]
+
+
+@pytest.mark.parametrize("family", _NAME_FAMILIES)
+@pytest.mark.parametrize("term,leaf", _GROUP_OR_SUB_UNIT_DROPPED,
+                         ids=[t[1][:28] for t in _GROUP_OR_SUB_UNIT_DROPPED])
+def test_a_name_may_drop_a_group_designator_or_a_comma_sub_unit(term, leaf, family):
+    assert check_claims.relation(term, leaf, family) == check_claims.SOURCED
+
+
+@pytest.mark.parametrize("family", _NAME_FAMILIES)
+@pytest.mark.parametrize("term,leaf", _STILL_TRUNCATED,
+                         ids=[t[1][:28] for t in _STILL_TRUNCATED])
+def test_the_relaxation_reaches_neither_brackets_nor_a_word_cut(term, leaf, family):
+    assert check_claims.relation(term, leaf, family) == check_claims.TRUNCATED
+
+
+def test_the_relaxed_names_pass_and_the_strict_ones_fail_in_one_workspace(
+        tmp_path, capsys):
+    master = {"meta": {"name": "Test User"},
+              "experience": [
+                  {"title": "Data Engineer", "org": "Alibaba Group Holding Limited",
+                   "start": "2023-01", "end": "present", "bullets": ["Ran it."]},
+                  {"title": "Analyst", "org": "楽天グループ株式会社",
+                   "start": "2021-04", "end": "2022-12", "bullets": ["Ran it."]},
+                  {"title": "Organiser", "org": "Google Developer Student Club Leiden",
+                   "start": "2019-09", "end": "2021-03", "bullets": ["Ran it."]}],
+              "education": [
+                  {"degree": "MSc Computer Science",
+                   "institution": "Leiden University, Faculty of Science",
+                   "start": "2019", "end": "2021"},
+                  {"degree": "Exchange semester", "institution": "TU Delft (exchange)",
+                   "start": "2020", "end": "2020"}]}
+    tailored = copy.deepcopy(master)
+    tailored["experience"][0]["org"] = "Alibaba"
+    tailored["experience"][1]["org"] = "楽天"
+    tailored["education"][0]["institution"] = "Leiden University"
+    ws, _ = _setup(tmp_path / "honest", tailored, master=master)
+    capsys.readouterr()
+    assert check_claims.main(["--workspace", str(ws)]) == 0
+    assert capsys.readouterr().out.strip() == ""
+
+    tailored["experience"][2]["org"] = "Google"
+    tailored["education"][1]["institution"] = "TU Delft"
+    ws, _ = _setup(tmp_path / "truncated", tailored, master=master)
+    capsys.readouterr()
+    assert check_claims.main(["--workspace", str(ws)]) == 1
+    out = capsys.readouterr().out
+    assert _finding_for(out, "Google").startswith("ORG_TRUNCATED")
+    assert _finding_for(out, "TU Delft").startswith("ORG_TRUNCATED")
+    assert len(out.strip().splitlines()) == 2, out
