@@ -127,6 +127,7 @@ These actions constitute misrepresentation. Do not do them, do not suggest them,
 |---|---|
 | Inventing a skill or tool the user has never used | Creates a falsehood the candidate cannot defend in an interview |
 | Inflating a title ("Senior Engineer" when the contract says "Engineer II") | Verifiable via background check; also dishonest |
+| Dropping a subordinate-rank word ("Assistant Manager" → "Manager", "副总监" → "总监") or shortening an employer or institution into a different one ("Google Developer Student Club" → "Google") | Same inflation; `check_claims.py` reports `QUALIFIER_STRIPPED` / `ORG_TRUNCATED` |
 | Changing employment dates to hide a gap or shorten a short tenure | Employment dates are checked; altering them is fraud |
 | Claiming sole credit for team accomplishments | Use "Co-led", "contributed to", "part of the team that" |
 | Adding a posting keyword the candidate has no genuine experience with | Keyword stuffing that the interview will immediately expose |

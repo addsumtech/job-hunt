@@ -146,7 +146,11 @@ The checkpoint in Step 3 is enforced by `scripts/check_claims.py`, and the ledge
 it reads is `<workspace>/claims.yaml`. **Append a row at the moment you write each
 REFRAME or KEYWORD-INSERT.** A term in the tailored CV that is neither in the
 master profile nor sourced by a row here is `UNSOURCED`, and `check_apply.py` will
-not let the package be delivered over it.
+not let the package be delivered over it. A title that lost a subordinate-rank word
+(`Assistant Manager` → `Manager`) or a status marker (`(in progress)`) is
+`QUALIFIER_STRIPPED`, and an employer or institution shortened into a different name
+is `ORG_TRUNCATED`; both block delivery the same way. Restore the real wording; a
+claims row is only for a genuine, sourced equivalence.
 
 
 ```yaml
