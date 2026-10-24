@@ -22,6 +22,7 @@ how a CV reads:
    tune typography or recompile later without rerunning this tool.
 """
 import argparse
+import datetime
 import pathlib
 import re
 import shutil
@@ -347,9 +348,35 @@ _ONGOING_RE = re.compile(
     r"재직|재직중|현재")
 
 
+def _field_text(value) -> str:
+    """One single-value field (a `start`/`end` date, a phone number) as the text a
+    reader should see.
+
+    Profiles are hand-written YAML, and YAML types a bare `end: 2023` as an int and
+    `end: 2023-06-30` as a date. Both are ordinary ways to write a date, and both
+    crashed every format with `AttributeError: ... has no attribute 'strip'` (exit
+    1, which this script reserves for "the PDF step failed") while check_claims,
+    check_personal_data and check_pages accepted the same file. A date object comes
+    back as the ISO text the user typed, not as Python's repr.
+
+    Anything that is not one value (a list, a mapping, a YAML boolean) is a shape
+    problem, and `profile_shape_problems` refuses it before rendering starts; this
+    function only has to stay total for direct callers.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, datetime.datetime):
+        if value.time() == datetime.time(0, 0):
+            return value.date().isoformat()
+        return value.isoformat(sep=" ")
+    if isinstance(value, datetime.date):
+        return value.isoformat()
+    return str(value).strip()
+
+
 def _is_current(entry):
     """True if an experience/education entry is ongoing (no real end date)."""
-    end = (entry.get("end") or "").strip().lower()
+    end = _field_text(journal.as_mapping(entry).get("end")).lower()
     return end == "" or bool(_ONGOING_RE.search(end))
 
 
@@ -362,18 +389,28 @@ def is_academic_profile(profile):
     professional experience yet. Anything finer, the profile sets
     `meta.section_order` explicitly.
     """
-    for ex in (profile.get("experience") or []):
-        title = (ex.get("title") or "").lower()
+    experience = _entries(profile, "experience")
+    for ex in experience:
+        title = str(ex.get("title") or "").lower()
         if _is_current(ex) and any(sig in title for sig in _ACADEMIC_TITLE_SIGNALS):
             return True
-    currently_studying = any(_is_current(ed) for ed in (profile.get("education") or []))
-    has_pro_experience = any((ex.get("bullets") or []) for ex in (profile.get("experience") or []))
+    currently_studying = any(_is_current(ed) for ed in _entries(profile, "education"))
+    has_pro_experience = any((ex.get("bullets") or []) for ex in experience)
     return currently_studying and not has_pro_experience
+
+
+def _entries(profile, section):
+    """The mapping entries of a list section; `profile_shape_problems` has already
+    refused any other shape on the CLI path, this keeps direct callers total."""
+    entries = journal.as_mapping(profile).get(section)
+    if not isinstance(entries, list):
+        return []
+    return [entry for entry in entries if isinstance(entry, dict)]
 
 
 def experience_entries(profile, section):
     # Keep the evidence schema intact: only the display group changes.
-    return [entry for entry in profile.get("experience", []) or []
+    return [entry for entry in _entries(profile, "experience")
             if entry.get("section", "experience") == section]
 
 
@@ -438,6 +475,86 @@ def missing_required_fields(profile) -> list:
     return missing
 
 
+# A field that must hold ONE value. int/float/date are accepted because YAML types
+# `end: 2023` and `end: 2023-06-30` that way and the gates accept them; a bool is
+# not, because `end: no` meaning a date is never what the writer meant.
+_ONE_VALUE = (str, int, float, datetime.date)
+
+# Per list section: the fields printed as one piece of text. `location` is left
+# out on purpose — the legacy `{city, country}` mapping has its own documented
+# warn-and-omit path in `scalar_field`.
+_ENTRY_FIELDS = {
+    "experience": ("title", "org", "start", "end"),
+    "education": ("degree", "institution", "start", "end"),
+    "projects": ("name", "role", "description"),
+}
+_DATE_HINT = 'one value such as "2023-06", 2023 or "present"'
+
+
+def _shape_name(value) -> str:
+    """'a list', 'a mapping', 'a true/false value' … — for "X is <this>"."""
+    if isinstance(value, bool):
+        return "a true/false value"
+    return {dict: "a mapping", list: "a list", tuple: "a list", str: "a string",
+            int: "a number", float: "a number"}.get(type(value),
+                                                    f"a {type(value).__name__}")
+
+
+def _one_value(value) -> bool:
+    return value is None or (isinstance(value, _ONE_VALUE)
+                             and not isinstance(value, bool))
+
+
+def profile_shape_problems(profile) -> list:
+    """Every place this profile has a shape the renderers cannot print, as text.
+
+    The renderer used to find these by crashing: `skills: [Python, SQL]` raised
+    `'list' object has no attribute 'values'` and an entry written as a bare string
+    raised inside a builder, both as a traceback at exit 1 — the code main() keeps
+    for "rendered, and the PDF step failed". What can be read sensibly is read
+    (an int or a YAML date, a plain list of skills, a list `details`); this lists
+    only what has no sensible reading, so main() can refuse once, at exit 2, with
+    a sentence that names the field.
+    """
+    profile = journal.as_mapping(profile)
+    problems = []
+    meta = journal.as_mapping(profile.get("meta"))
+    contact = journal.as_mapping(profile.get("contact"))
+    for where, value in (("meta.name", meta.get("name")),
+                         ("meta.headline", meta.get("headline")),
+                         ("contact.email", contact.get("email")),
+                         ("contact.phone", contact.get("phone"))):
+        if not _one_value(value):
+            problems.append(f"{where} is {_shape_name(value)}; it must be one value")
+    summary = profile.get("summary")
+    if isinstance(summary, dict) or isinstance(summary, bool):
+        problems.append(f"summary is {_shape_name(summary)}; it must be text")
+    for section, fields in _ENTRY_FIELDS.items():
+        entries = profile.get(section)
+        if entries in (None, "", [], {}):
+            continue
+        if not isinstance(entries, list):
+            problems.append(f"{section} is {_shape_name(entries)}; it must be a "
+                            f"list of entries, each one starting with `- `")
+            continue
+        for i, entry in enumerate(entries):
+            if not isinstance(entry, dict):
+                problems.append(f"{section}[{i}] is {_shape_name(entry)}, not a "
+                                f"mapping of fields such as `{fields[0]}:`")
+                continue
+            for field in fields:
+                value = entry.get(field)
+                if not _one_value(value):
+                    hint = _DATE_HINT if field in ("start", "end") else "one value"
+                    problems.append(f"{section}[{i}].{field} is "
+                                    f"{_shape_name(value)}; it must be {hint}")
+    skills = profile.get("skills")
+    if skills not in (None, "") and not isinstance(skills, (dict, list, str)):
+        problems.append(f"skills is {_shape_name(skills)}; it must be a mapping "
+                        f"of group: [items], or a list of items")
+    return problems
+
+
 def load_profile(path):
     """The profile as a mapping. Raises journal.YamlUnreadable on an unusable file.
 
@@ -457,15 +574,37 @@ def load_profile(path):
             f"and rendering without them produces a CV with a blank name or no way to "
             f"reply to it. Add them to the profile; do not work around this by editing "
             f"the rendered output, which the next re-render discards.")
+    problems = profile_shape_problems(profile)
+    if problems:
+        raise ValueError(f"{path}: the profile has a shape the renderer cannot "
+                         f"print: {'; '.join(problems)}.")
     return profile
 
 
 def _contact_links(profile):
-    """Yield (label, url) for each non-empty contact link, in profile order."""
-    for key, item in ((profile.get("contact") or {}).get("links") or {}).items():
-        label, url = resolve_link(item, key=key)
+    """Yield (label, url) for each non-empty contact link, in profile order.
+
+    `links` is documented as a mapping, but a plain list of URLs is the other
+    obvious way to write it and used to raise AttributeError; each item is then
+    labelled by its host, exactly as a project link is."""
+    links = journal.as_mapping(
+        journal.as_mapping(profile).get("contact")).get("links") or {}
+    pairs = links.items() if isinstance(links, dict) else (
+        (None, item) for item in as_list(links))
+    for key, item in pairs:
+        label, url = resolve_link(item, key=None if key is None else str(key))
         if url:
             yield label, url
+
+
+def _contact_bits(profile):
+    """email, phone, location — as display text, in that order, empties dropped.
+
+    `phone: 31612345678` is an int in YAML, and `" · ".join` raised TypeError on it."""
+    c = journal.as_mapping(journal.as_mapping(profile).get("contact"))
+    bits = [_field_text(c.get("email")), _field_text(c.get("phone")),
+            scalar_field(c.get("location"), "contact.location")]
+    return [b for b in bits if b]
 
 
 # Which regional CV convention a `meta.target_market` string belongs to.
@@ -1069,6 +1208,60 @@ def group_label(group):
     return g[:1].upper() + g[1:] if g else g
 
 
+def _is_group_list(skills) -> bool:
+    """`[{Languages: [Python]}, {Tools: [Docker]}]` — groups written as a list of
+    one-key mappings, each holding a list. `[{name: Python}]` is NOT this: its
+    value is one item, and item_str already reads that as "Python"."""
+    return bool(skills) and all(
+        isinstance(x, dict) and len(x) == 1
+        and isinstance(next(iter(x.values())), (list, tuple)) for x in skills)
+
+
+def skill_groups(profile):
+    """The skills section as `(label, items)` pairs; `label` is None for a group
+    the profile did not name. One reader, three renderers.
+
+    The documented shape is a mapping of group → list. A plain list —
+    `skills: [Python, SQL, PyTorch]` — is the other obvious way to write it, and it
+    crashed all three formats on `.values()` while every gate accepted the file.
+    It is one unnamed group: a "Skills:" label under a "Skills" heading would say
+    the same word twice.
+    """
+    skills = journal.as_mapping(profile).get("skills")
+    if skills in (None, "", [], {}):
+        return []
+    if isinstance(skills, dict):
+        groups = list(skills.items())
+    elif isinstance(skills, (list, tuple)) and _is_group_list(skills):
+        groups = [pair for group in skills for pair in group.items()]
+    else:
+        groups = [(None, skills)]
+    out = []
+    for label, items in groups:
+        items = [normalize_text(item_str(i)) for i in as_list(items)
+                 if i not in (None, "")]
+        if items:
+            out.append((None if label is None else group_label(label), items))
+    return out
+
+
+def detail_items(entry):
+    """`education[].details` as display lines. A list is several lines — printing
+    it whole put Python's `['Thesis on graph databases', 'Grade 1.3']` on the CV
+    in all three formats."""
+    return [normalize_text(item_str(d)).strip()
+            for d in as_list(journal.as_mapping(entry).get("details"))
+            if d not in (None, "") and normalize_text(item_str(d)).strip()]
+
+
+def summary_text(profile) -> str:
+    """The summary as one paragraph; a list of lines is joined, not repr'd."""
+    summary = journal.as_mapping(profile).get("summary")
+    if isinstance(summary, (list, tuple)):
+        summary = " ".join(item_str(s) for s in summary if s not in (None, ""))
+    return normalize_text(summary).strip()
+
+
 # ── Markdown renderer ─────────────────────────────────────────────────────────
 
 def render_markdown(profile):
@@ -1080,8 +1273,7 @@ def render_markdown(profile):
         lines.append(f"*{meta['headline']}*")
 
     # Contact line — links render as [Label](url)
-    c = profile.get("contact", {}) or {}
-    contact_parts = [c.get("email"), c.get("phone"), c.get("location")]
+    contact_parts = _contact_bits(profile)
     contact_parts += [f"[{label}]({url})" for label, url in _contact_links(profile)]
     contact_str = " · ".join([p for p in contact_parts if p])
     if contact_str:
@@ -1094,8 +1286,8 @@ def render_markdown(profile):
         lines.append(f"![Photo]({ph})")
 
     def summary():
-        if profile.get("summary"):
-            return ["", f"## {h['summary']}", normalize_text(profile["summary"]).strip()]
+        if summary_text(profile):
+            return ["", f"## {h['summary']}", summary_text(profile)]
         return []
 
     def experience(section="experience"):
@@ -1103,7 +1295,7 @@ def render_markdown(profile):
         for e in experience_entries(profile, section):
             if not out:
                 out += ["", f"## {experience_heading(profile, section)}"]
-            header = f"**{e.get('title','')}**, {e.get('org','')}"
+            header = f"**{_field_text(e.get('title'))}**, {_field_text(e.get('org'))}"
             dates = _dates(e, meta.get("language", "en"))
             meta_bits = " · ".join(
                 b for b in [scalar_field(e.get("location"), "experience[].location"), dates] if b)
@@ -1116,12 +1308,12 @@ def render_markdown(profile):
                 # Blank line again: a `- item` straight after the metadata line
                 # continues that paragraph instead of opening a list, so the
                 # whole role reads as one run-on sentence to a parser.
-                out += [""] + [f"- {normalize_text(b)}" for b in bullets]
+                out += [""] + [f"- {normalize_text(item_str(b))}" for b in bullets]
         return out
 
     def education():
         out = []
-        for ed in (profile.get("education") or []):
+        for ed in _entries(profile, "education"):
             if not out:
                 out += ["", f"## {h['education']}"]
             dates = _dates(ed, meta.get("language", "en"))
@@ -1130,39 +1322,39 @@ def render_markdown(profile):
             # product silently discarded.
             meta_bits = " · ".join(b for b in
                                    [scalar_field(ed.get("location"), "education[].location"), dates] if b)
-            line = f"**{ed.get('degree','')}**, {ed.get('institution','')}"
+            line = f"**{_field_text(ed.get('degree'))}**, {_field_text(ed.get('institution'))}"
             if meta_bits:
                 line += f"  \n_{meta_bits}_"
             out += ["", line]          # see the note in experience()
-            if ed.get("details"):
-                out += ["", f"- {ed['details']}"]
+            details = detail_items(ed)
+            if details:
+                out += [""] + [f"- {d}" for d in details]
         return out
 
     def skills():
-        sk = profile.get("skills") or {}
-        if not any(sk.values()):
+        groups = skill_groups(profile)
+        if not groups:
             return []
         out = ["", f"## {h['skills']}"]
-        for group, items in sk.items():
-            items = as_list(items)
-            if items:
-                out.append(f"- **{group_label(group)}:** {', '.join(normalize_text(item_str(i)) for i in items)}")
+        for label, items in groups:
+            lead = f"**{label}:** " if label is not None else ""
+            out.append(f"- {lead}{', '.join(items)}")
         return out
 
     def projects():
-        prs = profile.get("projects") or []
+        prs = _entries(profile, "projects")
         if not prs:
             return []
         out = ["", f"## {h['projects']}"]
         for pr in prs:
-            header_parts = [f"**{pr.get('name', '')}**"]
+            header_parts = [f"**{_field_text(pr.get('name'))}**"]
             if pr.get("role"):
-                header_parts.append(pr["role"])
+                header_parts.append(_field_text(pr["role"]))
             if pr.get("description"):
-                header_parts.append(pr["description"])
+                header_parts.append(_field_text(pr["description"]))
             proj_line = " — ".join(header_parts)
             link_strs = [f"[{label}]({url})"
-                         for label, url in (resolve_link(x) for x in (pr.get("links") or []))
+                         for label, url in (resolve_link(x) for x in as_list(pr.get("links")))
                          if url]
             if link_strs:
                 proj_line += " — " + ", ".join(link_strs)
@@ -1279,16 +1471,16 @@ def render_docx(profile, out_path):
     doc.core_properties.author = ""
     doc.core_properties.last_modified_by = ""
     doc.core_properties.comments = ""
-    doc.add_heading(meta.get("name", ""), level=0)
+    doc.add_heading(_field_text(meta.get("name")), level=0)
     if meta.get("headline"):
-        doc.add_paragraph(meta["headline"]).alignment = WD_ALIGN_PARAGRAPH.CENTER
+        doc.add_paragraph(_field_text(meta["headline"])).alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     def entry_row(left, right="", right_bold=False):
         paragraph = doc.add_paragraph()
         paragraph.paragraph_format.tab_stops.add_tab_stop(width, WD_TAB_ALIGNMENT.RIGHT)
-        paragraph.add_run(left).bold = True
+        paragraph.add_run(_field_text(left)).bold = True
         if right:
-            paragraph.add_run("\t" + right).bold = right_bold
+            paragraph.add_run("\t" + _field_text(right)).bold = right_bold
         return paragraph
 
     def bullet(text, emphasize=True):
@@ -1305,8 +1497,7 @@ def render_docx(profile, out_path):
 
     # Contact line — plain runs for email/phone/location, real hyperlinks (with
     # the friendly label as visible text) for the rest.
-    c = profile.get("contact", {}) or {}
-    plain_bits = [b for b in (c.get("email"), c.get("phone"), c.get("location")) if b]
+    plain_bits = _contact_bits(profile)
     links = list(_contact_links(profile))
     if plain_bits or links:
         p = doc.add_paragraph()
@@ -1342,9 +1533,9 @@ def render_docx(profile, out_path):
                             f"written WITHOUT it")
 
     def summary():
-        if profile.get("summary"):
+        if summary_text(profile):
             doc.add_heading(h["summary"], level=1)
-            doc.add_paragraph(normalize_text(profile["summary"]).strip())
+            doc.add_paragraph(summary_text(profile))
 
     def experience(section="experience"):
         exp = experience_entries(profile, section)
@@ -1359,10 +1550,10 @@ def render_docx(profile, out_path):
             if title or location:
                 entry_row(title, location)
             for b in as_list(e.get("bullets")):
-                bullet(b)
+                bullet(item_str(b))
 
     def education():
-        edu = profile.get("education") or []
+        edu = _entries(profile, "education")
         if not edu:
             return
         doc.add_heading(h["education"], level=1)
@@ -1372,34 +1563,33 @@ def render_docx(profile, out_path):
             degree, dates = ed.get("degree", ""), _dates(ed, language)
             if degree or dates:
                 entry_row(degree, dates)
-            if ed.get("details"):
-                bullet(ed["details"], emphasize=False)
+            for detail in detail_items(ed):
+                bullet(detail, emphasize=False)
 
     def skills():
-        sk = profile.get("skills") or {}
-        if not any(sk.values()):
+        groups = skill_groups(profile)
+        if not groups:
             return
         doc.add_heading(h["skills"], level=1)
-        for group, items in sk.items():
-            items = as_list(items)
-            if items:
-                p = doc.add_paragraph(style="List Bullet")
-                p.add_run(f"{group_label(group)}: ").bold = True
-                p.add_run(", ".join(normalize_text(item_str(i)) for i in items))
+        for label, items in groups:
+            p = doc.add_paragraph(style="List Bullet")
+            if label is not None:
+                p.add_run(f"{label}: ").bold = True
+            p.add_run(", ".join(items))
 
     def projects():
-        prs = profile.get("projects") or []
+        prs = _entries(profile, "projects")
         if not prs:
             return
         doc.add_heading(h["projects"], level=1)
         for pr in prs:
             p = doc.add_paragraph(style="List Bullet")
-            p.add_run(pr.get("name", "")).bold = True
-            text_parts = [x for x in [pr.get("role", ""), pr.get("description", "")] if x]
+            p.add_run(_field_text(pr.get("name"))).bold = True
+            text_parts = [_field_text(x) for x in [pr.get("role"), pr.get("description")] if x]
             if text_parts:
                 p.add_run(": " + " — ".join(text_parts))
             resolved = [(label, url) for label, url in
-                        (resolve_link(x) for x in (pr.get("links") or [])) if url]
+                        (resolve_link(x) for x in as_list(pr.get("links"))) if url]
             for i, (label, url) in enumerate(resolved):
                 p.add_run(" — " if i == 0 else ", ")
                 _add_hyperlink(p, label, url)
@@ -1516,7 +1706,7 @@ _PRESENT = {"en": "Present", "zh": "至今", "ja": "現在", "ko": "현재",
 
 
 def _date_end(item, language):
-    end = str(item.get("end") or "").strip()
+    end = _field_text(item.get("end"))
     if end.casefold() in {"present", "current", "now", "ongoing"}:
         return _PRESENT.get(str(language).lower().replace("_", "-").split("-")[0], end)
     return end
@@ -1531,14 +1721,14 @@ def _dates(item, language="en") -> str:
     key; a key present and null still yields None, and profiles are
     model-authored YAML where `end: null` is the natural way to write "current".
     """
-    start = str(item.get("start") or "").strip()
+    start = _field_text(item.get("start"))
     end = _date_end(item, language)
     return " – ".join(b for b in (start, end) if b)
 
 
 def _dates_tex(item, language="en") -> str:
     """The same, with LaTeX's en dash."""
-    start = str(item.get("start") or "").strip()
+    start = _field_text(item.get("start"))
     end = _date_end(item, language)
     return " -- ".join(b for b in (start, end) if b)
 
@@ -1587,11 +1777,21 @@ def _allow_breaks(escaped):
     return "".join(parts)
 
 
-def latex_escape(text):
+def latex_escape(text, keep_cjk_spaces=False):
+    """`text` as LaTeX source.
+
+    `keep_cjk_spaces` is for a person's NAME. `normalize_text` strips a space
+    between two Han/kana characters because a folded YAML scalar puts one there,
+    and a name is never a folded scalar: `山田 太郎` is how a Japanese name is
+    written, the .md and .docx kept it, and only the PDF — the copy the employer
+    opens — printed `山田太郎`. A Chinese name normally has no space, so nothing
+    changes for one that does not; one written with a space keeps it in all three
+    formats instead of in two.
+    """
     if text is None:
         return ""
     out = []
-    for ch in normalize_text(text):
+    for ch in (str(text) if keep_cjk_spaces else normalize_text(text)):
         out.append(_LATEX_REPLACEMENTS.get(ch, ch))
     return _allow_breaks("".join(out))
 
@@ -1795,6 +1995,20 @@ def overfull_boxes(log):
     50 and 79pt, and one of 86pt that put four digits of a DOI off the sheet.
     """
     return sorted((float(pt) for pt in _OVERFULL_RE.findall(log or "")), reverse=True)
+
+
+_OVERFULL_AT_RE = re.compile(
+    r"Overfull \\hbox \(([0-9]+(?:\.[0-9]+)?)pt too wide\) in \w+ at lines? (\d+)")
+
+
+def overfull_source_lines(log, min_pt=0.0):
+    """The `.tex` line numbers of the overfull boxes at least `min_pt` wide.
+
+    The engine names them ("in paragraph at lines 22--22"), and naming them is
+    the difference between "shorten something" and "shorten this": the offending
+    line is the entry-header row as often as a DOI."""
+    return sorted({int(line) for pt, line in _OVERFULL_AT_RE.findall(log or "")
+                   if float(pt) >= min_pt})
 
 
 # Cross-platform CJK font fallback. xeCJK needs a real installed CJK font, and
@@ -2011,22 +2225,36 @@ def latex_preamble(engine=None, cjk=False, meta=None, margin="2cm"):
 # single box, so it cannot wrap or be split from its heading. `\smallskip` is
 # what separates one entry from the next: entries used to be joined by a bare
 # `\\`, which is a line break, not a gap, so four jobs read as one block.
+#
+# When the metadata is too wide to share the row — the title would get less than
+# `_ENTRY_MIN_LEFT` of the line — it moves to a line of its own under the title,
+# still flush right, and may wrap there. This used to CLAMP the title column to
+# the floor instead and set the unbreakable metadata box beside it anyway, so the
+# row ran past the margin: "Amsterdam, North Holland, Netherlands (Hybrid)" put
+# "Present" 4mm from the paper edge (a WARNING, exit 0), and a longer German
+# location ran off the sheet entirely (TEXT_OFF_PAGE, no PDF). Rows that fit are
+# laid out exactly as before; only the rows that used to overflow change.
 _ENTRY_GAP = "1em"          # minimum space between the two columns
-_ENTRY_MIN_LEFT = "0.45"    # floor, so a freak-width right column cannot starve the title
+_ENTRY_MIN_LEFT = "0.45"    # below this share of the line, the metadata gets its own line
 
 
 def _tex_entry_heading(left, right):
     """One entry heading: `left` wraps into the room that is actually left over,
-    `right` keeps its natural width at the margin and never breaks."""
+    `right` keeps its natural width at the margin — or, when that would leave the
+    title less than `_ENTRY_MIN_LEFT` of the line, goes on the next line."""
     if not right:
         return r"\smallskip\noindent %s\par" % left
     return (
         r"\smallskip\noindent"
         r"\setbox0=\hbox{%(right)s}"
         r"\dimen0=\dimexpr\linewidth-\wd0-%(gap)s\relax"
-        r"\ifdim\dimen0<%(min)s\linewidth \dimen0=%(min)s\linewidth \fi"
+        r"\ifdim\dimen0<%(min)s\linewidth "
+        r"\parbox[t]{\linewidth}{\raggedright %(left)s}\par\nobreak"
+        r"{\raggedleft %(right)s\par}"
+        r"\else "
         r"\parbox[t]{\dimen0}{\raggedright %(left)s}"
         r"\hfill\box0\par"
+        r"\fi"
         % {"left": left, "right": right, "gap": _ENTRY_GAP, "min": _ENTRY_MIN_LEFT})
 
 
@@ -2070,13 +2298,13 @@ def build_latex(profile, cjk=None, engine=None, asset_dir=None, asset_stem="cv")
     if ph:
         parts.append(r"\includegraphics[height=3cm]{%s}\\[6pt]"
                      % _photo_include_name(ph, asset_dir, asset_stem))
-    parts.append(r"{\LARGE \textbf{%s}}\\[2pt]" % e(meta.get("name", "")))
+    parts.append(r"{\LARGE \textbf{%s}}\\[2pt]"
+                 % e(meta.get("name", ""), keep_cjk_spaces=True))
     if meta.get("headline"):
         parts.append(r"{\large %s}\\[2pt]" % e(meta["headline"]))
 
     # Contact line — \textbullet{} separators; links via \href{url}{Label}.
-    c = profile.get("contact", {}) or {}
-    contact_parts = [e(c.get(f)) for f in ("email", "phone", "location") if c.get(f)]
+    contact_parts = [e(b) for b in _contact_bits(profile)]
     contact_parts += [r"\href{%s}{%s}" % (url, e(label))
                       for label, url in _contact_links(profile)]
     if contact_parts:
@@ -2087,8 +2315,8 @@ def build_latex(profile, cjk=None, engine=None, asset_dir=None, asset_stem="cv")
     parts.append(r"\end{center}")
 
     def summary():
-        if profile.get("summary"):
-            parts.extend([r"\section*{%s}" % h["summary"], e(profile["summary"].strip())])
+        if summary_text(profile):
+            parts.extend([r"\section*{%s}" % h["summary"], e(summary_text(profile))])
 
     def experience(section="experience"):
         exp = experience_entries(profile, section)
@@ -2114,11 +2342,11 @@ def build_latex(profile, cjk=None, engine=None, asset_dir=None, asset_stem="cv")
             bullets = as_list(ex.get("bullets"))
             if bullets:
                 parts.append(r"\begin{itemize}")
-                parts.extend(r"\item %s" % e(b) for b in bullets)
+                parts.extend(r"\item %s" % e(item_str(b)) for b in bullets)
                 parts.append(r"\end{itemize}")
 
     def education():
-        edu = profile.get("education") or []
+        edu = _entries(profile, "education")
         if not edu:
             return
         parts.append(r"\section*{%s}" % h["education"])
@@ -2129,22 +2357,25 @@ def build_latex(profile, cjk=None, engine=None, asset_dir=None, asset_stem="cv")
             parts.append(_tex_entry_heading(
                 r"\textbf{%s}, %s" % (e(ed.get("degree", "")), e(ed.get("institution", ""))),
                 right))
-            if ed.get("details"):
-                parts.append(e(ed["details"]) + r"\\")
+            details = detail_items(ed)
+            if len(details) == 1:
+                parts.append(e(details[0]) + r"\\")
+            elif details:
+                parts.append(r"\begin{itemize}")
+                parts.extend(r"\item %s" % e(d) for d in details)
+                parts.append(r"\end{itemize}")
 
     def skills():
-        sk = profile.get("skills") or {}
-        if not any(sk.values()):
+        groups = skill_groups(profile)
+        if not groups:
             return
         parts.append(r"\section*{%s}" % h["skills"])
-        for group, items in sk.items():
-            items = as_list(items)
-            if items:
-                parts.append(r"\textbf{%s:} %s\\" % (
-                    e(group_label(group)), e(", ".join(item_str(i) for i in items))))
+        for label, items in groups:
+            lead = r"\textbf{%s:} " % e(label) if label is not None else ""
+            parts.append(r"%s%s\\" % (lead, e(", ".join(items))))
 
     def projects():
-        prs = profile.get("projects") or []
+        prs = _entries(profile, "projects")
         if not prs:
             return
         parts.append(r"\section*{%s}" % h["projects"])
@@ -2156,7 +2387,7 @@ def build_latex(profile, cjk=None, engine=None, asset_dir=None, asset_stem="cv")
                 line_parts.append(e(pr["description"]))
             proj_line = ", ".join(line_parts)
             link_strs = [r"\href{%s}{%s}" % (url, e(label))
-                         for label, url in (resolve_link(x) for x in (pr.get("links") or []))
+                         for label, url in (resolve_link(x) for x in as_list(pr.get("links")))
                          if url]
             if link_strs:
                 proj_line += " --- " + ", ".join(link_strs)
@@ -2340,9 +2571,19 @@ def compile_latex(engine, tex_path, out_path, reasons=None):
               f"margin — so the characters beyond the edge are missing from the "
               f"PDF. The engine reported this and exited 0. No PDF was written; "
               f"the LaTeX source is at {tex_path}.", file=sys.stderr)
-        print("This is almost always one unbreakable token: a bare DOI, a repo "
-              "URL, a long file path, or a compound word. Shorten it, or add a "
-              "space, or (for a URL) let it wrap.", file=sys.stderr)
+        # The hint used to say "almost always one unbreakable token: a bare DOI…",
+        # and the case that actually reached it was an entry header — a long
+        # location beside the dates — so it sent the reader hunting for a URL
+        # that was not there. It names both, and the lines the engine named.
+        where = overfull_source_lines(_engine_log(proc), margin_pt)
+        print("Two things cause this. One unbreakable token — a bare DOI, a repo "
+              "URL, a long file path, a compound word — anywhere on the page; or a "
+              "very long field in an entry header (title, organisation, location), "
+              "which shares one row with the dates. Shorten it, add a space, or "
+              "(for a URL) let it wrap."
+              + (f" The engine places it at {tex_path.name} line(s) "
+                 f"{', '.join(str(n) for n in where)}." if where else ""),
+              file=sys.stderr)
         return _note(reasons, TEXT_OFF_PAGE)
     if overfull:
         # On the paper but into the margin. Loud, because nothing downstream
@@ -2553,16 +2794,31 @@ def main(argv=None):
         return 2
 
     out = pathlib.Path(args.out)
+    try:
+        return _render_format(args.format, profile, out)
+    except (AttributeError, TypeError) as exc:
+        # `profile_shape_problems` names every shape known to be unprintable. This
+        # is the net under it: a field shape nobody listed must still end as
+        # "could not run" with one readable line, not as a traceback at exit 1 —
+        # the code this script keeps for "rendered, and the PDF step failed".
+        print(f"cannot render: {args.profile}: the renderer could not read this "
+              f"profile ({type(exc).__name__}: {exc}). This is usually a field of "
+              f"the wrong shape: sections such as experience must be lists of "
+              f"mappings, and each date one value.", file=sys.stderr)
+        return 2
 
-    if args.format == "md":
+
+def _render_format(fmt, profile, out):
+    """Write `profile` as `fmt` to `out`; the exit code main() returns."""
+    if fmt == "md":
         out.write_text(render_markdown(profile), encoding="utf-8")
-    elif args.format == "docx":
+    elif fmt == "docx":
         try:
             render_docx(profile, out)
         except DocxMarkupError as exc:
             print(f"cannot render Word: {exc}", file=sys.stderr)
             return 1
-    elif args.format == "pdf":
+    elif fmt == "pdf":
         reasons = []
         ok = render_pdf(profile, out, reasons=reasons)
         tex = out.with_suffix(".tex")
@@ -2586,7 +2842,7 @@ def main(argv=None):
         print(f"PDF could not be built — see the warning above. {where}",
               file=sys.stderr)
         return 0 if pdf_failure_is_tolerated(reasons) else 1
-    if not confirm_written(out, args.format):
+    if not confirm_written(out, fmt):
         return 1
     print(f"Wrote {out}")
     return 0

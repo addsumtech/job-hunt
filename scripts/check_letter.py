@@ -52,8 +52,139 @@ def _norm(s) -> str:
     return " ".join(_PUNCT.sub(" ", s).split())
 
 
-def findings_for(letter: dict, posting: dict) -> list:
+# The gender marker a German, Austrian, Swiss, French or Dutch posting appends to
+# its title by law or custom: "Data Scientist (m/w/d)", "(f/m/x)", "(H/F)",
+# "(m/v)", "(all genders)". It is part of the advert, never of the role, and no
+# letter repeats it — so ROLE_NOT_NAMED fired on a letter that named
+# "Data Scientist" exactly as it should.
+_GENDER_TOKEN = r"(?:m|w|f|d|x|h|v|div\.?|divers|diverse)"
+_GENDER_MARKER = re.compile(
+    r"[(\[]\s*" + _GENDER_TOKEN + r"(?:\s*[/|,]\s*" + _GENDER_TOKEN + r"){1,3}\s*[)\]]"
+    r"|[(\[]\s*(?:all genders|alle geschlechter|gn|genderneutral)\s*[)\]]"
+    r"|(?:^|\s)[-–—|,]?\s*" + _GENDER_TOKEN + r"(?:\s*/\s*" + _GENDER_TOKEN
+    + r"){1,3}\s*$",
+    re.IGNORECASE)
+
+
+def role_without_gender_marker(role) -> str:
+    return " ".join(_GENDER_MARKER.sub(" ", str(role or "")).split())
+
+
+# `——` is ONE punctuation mark in Chinese (破折号), typed as two U+2014. Counted
+# per character it doubled the em-dash density of every Chinese letter, so two
+# ordinary uses read as four and tripped EM_DASH_DENSITY's floor of three.
+_DOUBLE_EM_DASH = re.compile("\u2014{2,}")
+
+
+def _dash_marks_as_written(text: str) -> str:
+    return _DOUBLE_EM_DASH.sub("\u2014", text)
+
+
+# Salutation and sign-off forms whose language is unambiguous, for the languages
+# render_letter has sourced lines for (references/motivation-letter.md §4) plus
+# Portuguese, which the body detector also names. A line that matches none of
+# these is not judged: an unrecognised greeting is not evidence of a mismatch.
+_LINE_MARKERS = {
+    "en": re.compile(r"^(dear|hi|hello)\b|^to whom it may concern|\b(sincerely|"
+                     r"(kind|best|warm) regards|regards|yours (sincerely|faithfully|"
+                     r"truly)|best wishes|respectfully)\b", re.I),
+    "de": re.compile(r"^(sehr geehrte[rs]?|liebe[rs]?|guten tag)\b|\b(mit "
+                     r"freundlichen grü(ß|ss)en|freundliche grü(ß|ss)e|beste "
+                     r"grü(ß|ss)e|viele grü(ß|ss)e|hochachtungsvoll)\b", re.I),
+    "nl": re.compile(r"^(geachte|beste)\b(?!\s+grü)|\b(met vriendelijke groet(en)?|"
+                     r"vriendelijke groet(en)?|met hartelijke groet(en)?|"
+                     r"hoogachtend)\b", re.I),
+    "fr": re.compile(r"^(madame|monsieur|bonjour|chère|cher)\b|\b(cordialement|"
+                     r"bien à vous|veuillez agréer|salutations distinguées)\b", re.I),
+    "es": re.compile(r"^(estimad[oa]s?|apreciad[oa]s?|señor[ae]s?)\b|\b(atentamente|"
+                     r"un saludo|saludos cordiales|cordialmente)\b", re.I),
+    "it": re.compile(r"^(gentil[ei]|egregi[oa]|spettabile|caro|cara)\b|\b(cordiali "
+                     r"saluti|distinti saluti|cordialmente)\b", re.I),
+    "pt": re.compile(r"^(prezad[oa]s?|caro|cara)\b|\b(atenciosamente|cordialmente|"
+                     r"com os melhores cumprimentos)\b", re.I),
+}
+_CJK_LANGUAGES_SET = frozenset({"zh", "ja", "ko"})
+_LANGUAGE_NAMES = {"en": "English", "de": "German", "nl": "Dutch", "fr": "French",
+                   "es": "Spanish", "it": "Italian", "pt": "Portuguese",
+                   "zh": "Chinese", "ja": "Japanese", "ko": "Korean"}
+# A CJK greeting on a letter whose body is a few per cent CJK (a company name)
+# is a mismatch; on a body that is a sixth CJK it is a mixed Chinese letter.
+_CJK_SHARE_FOR_MIXED = 0.10
+
+
+def _named(lang) -> str:
+    return f"{_LANGUAGE_NAMES.get(lang, lang)} ({lang})"
+
+
+def _line_language(line: str):
+    """A set of Latin-script language codes when the line carries a known form
+    ("Dear 张伟," is English), else 'cjk' for a line in CJK script, else None."""
+    found = {lang for lang, rx in _LINE_MARKERS.items() if rx.search(line.strip())}
+    if found:
+        return found
+    if render_letter.cjk_count(render_letter.script_counts(line)):
+        return "cjk"
+    return None
+
+
+def language_mismatches(resolved: dict) -> list:
+    """SALUTATION_/CLOSING_LANGUAGE_MISMATCH for a rendered line in another language.
+
+    The reference is the body's own language when the body settles it, and the
+    declared `meta.language` (or the workspace profile's) when it does not.
+    `motivation-letter.md`: never mix languages in one letter — and the commonest
+    way to mix them was the renderer's own English default on a letter whose
+    language it had not been told.
+    """
+    body = render_letter.body_text(resolved)
+    reference = render_letter.infer_language(body)
+    source = "the body reads as"
+    if reference is None:
+        reference = render_letter.declared_language(resolved) or None
+        source = "meta.language is"
+    if reference is None:
+        return []
+    counts = render_letter.script_counts(body)
+    cjk = render_letter.cjk_count(counts)
+    body_cjk_share = cjk / max(1, cjk + counts["latin"])
     out = []
+    for field, line in (("salutation", render_letter.salutation_for(resolved)),
+                        ("closing", render_letter.closing_for(resolved))):
+        line = str(line or "").strip()
+        if not line:
+            continue
+        found = _line_language(line)
+        if isinstance(found, set):
+            line_is = "is " + " or ".join(_named(x) for x in sorted(found))
+        elif found == "cjk":
+            line_is = "is in CJK script"
+        else:
+            line_is = "is not in CJK script"
+        if reference in _CJK_LANGUAGES_SET:
+            wrong = found != "cjk"
+        elif found == "cjk":
+            wrong = body_cjk_share < _CJK_SHARE_FOR_MIXED
+        else:
+            wrong = isinstance(found, set) and reference not in found
+        if not wrong:
+            continue
+        written = bool(str(resolved.get(field) or "").strip())
+        fix = ("Rewrite it in the letter's own language" if written else
+               f"It is render_letter's default for language "
+               f"{render_letter._language(resolved)!r}; set meta.language to the "
+               f"letter's language, or write the {field} yourself")
+        out.append(f"{field.upper()}_LANGUAGE_MISMATCH: the {field} {line!r} "
+                   f"{line_is}, but {source} {_named(reference)} — "
+                   f"motivation-letter.md: never mix languages in one letter. {fix}")
+    return out
+
+
+def findings_for(letter: dict, posting: dict, workspace=None) -> list:
+    """`workspace` is the application directory: the letter's meta is completed
+    from it exactly as render_letter completes it, so the gate judges the letter
+    that is actually rendered."""
+    out = []
+    resolved, _ = render_letter.resolved_letter(letter, workspace)
     body = letter.get("body") or []
     if isinstance(body, str):
         body = [body]
@@ -66,7 +197,7 @@ def findings_for(letter: dict, posting: dict) -> list:
     # dashes passed this gate reporting only its word count.
     joined = "\n".join(str(p) for p in body)
     out += prose_tells.vocabulary_findings(joined, "letter.yaml body")
-    out += prose_tells.prose_findings(joined, "letter.yaml body")
+    out += prose_tells.prose_findings(_dash_marks_as_written(joined), "letter.yaml body")
 
     for i, para in enumerate(body):
         hits = [label for label, rx in MARKUP if rx.search(str(para))]
@@ -81,17 +212,22 @@ def findings_for(letter: dict, posting: dict) -> list:
     # "Dear Hiring Manager," / "Sincerely," on every letter regardless of
     # language — against motivation-letter.md:272, "Never mix languages in one
     # letter" — and nothing said so.
-    language = str(((letter.get("meta") or {}) if isinstance(letter.get("meta"), dict)
-                    else {}).get("language") or "en").strip().lower()[:2]
+    # `resolved`, not `letter`: with no meta.language the renderer now takes the
+    # language from the body, and the gate has to judge that same choice. It used
+    # to read meta.language alone with "en" as the default, so a Chinese letter
+    # written to the documented schema — no meta — was told it was covered by
+    # "Dear Hiring Team," and passed.
+    language = render_letter._language(resolved)
     for field, code in (("salutation", "NO_SALUTATION"), ("closing", "NO_CLOSING")):
         if str(letter.get(field) or "").strip():
             continue
-        if getattr(render_letter, f"{field}_for")(letter):
+        if getattr(render_letter, f"{field}_for")(resolved):
             continue          # a sourced default covers this language
         out.append(f"{code}: letter.yaml has no {field} and this skill has no "
                    f"sourced {field} for language {language!r}, so the rendered "
                    f"letter has none. Write one in the letter's own language "
                    f"(motivation-letter.md: never mix languages in one letter)")
+    out += language_mismatches(resolved)
 
     joined = " ".join(str(p) for p in body)
     if not cjk_dominant(joined, _letter_language(letter)):
@@ -126,7 +262,8 @@ def findings_for(letter: dict, posting: dict) -> list:
                        f"not match the posting's company {posted_company!r}")
 
     role = str(posting.get("role_title") or "").strip()
-    if role and _norm(role) not in _norm(" ".join(str(p) for p in body)):
+    needle = _norm(role_without_gender_marker(role)) or _norm(role)
+    if role and needle not in _norm(" ".join(str(p) for p in body)):
         out.append(f"ROLE_NOT_NAMED: the body never names the role {role!r} as the "
                    f"posting writes it — name it exactly once, early")
     return out
@@ -225,7 +362,7 @@ def main(argv=None) -> int:
         journal.receipt(ws, GATE, {}, "could_not_run", [exc.finding])
         print(f"cannot run {GATE}: {exc}", file=sys.stderr)
         return 2
-    findings = findings_for(letter, posting)
+    findings = findings_for(letter, posting, workspace=ws)
     for f in findings:
         print(f)
     for notice in notices_for(letter):

@@ -141,6 +141,45 @@ def test_the_engine_log_scan_reads_this_engines_dialect(tmp_path):
     assert any("Ł" in d for d in dropped), dropped[:5]
 
 
+# An entry header whose location and dates are too wide to share the row with the
+# title. Both profiles are the reproductions from the review: the first put
+# "Present" 4mm from the paper edge (an overflow WARNING, exit 0); the second ran
+# off the sheet (TEXT_OFF_PAGE, no PDF at all) and the hint blamed a DOI.
+_LONG_HEADER_PROFILES = {
+    "amsterdam": ({"meta": {"name": "Jane Doe", "target_market": "nl", "language": "en"},
+                   "contact": {"email": "jane@example.com"},
+                   "experience": [{
+                       "title": "Senior Machine Learning Engineer, Recommendations",
+                       "org": "Booking.com",
+                       "location": "Amsterdam, North Holland, Netherlands (Hybrid)",
+                       "start": "Jan 2019", "end": "present",
+                       "bullets": ["Built things."]}]},
+                  ("Amsterdam, North Holland, Netherlands (Hybrid)", "Present")),
+    "munich": ({"meta": {"name": "Jan Novak", "target_market": "Germany", "language": "de"},
+                "contact": {"email": "jan@example.com"},
+                "experience": [{
+                    "title": "Senior Data Engineer – Plattform & Infrastruktur",
+                    "org": "Bayerische Motoren Werke Aktiengesellschaft (BMW AG)",
+                    "location": "München, Bayern, Deutschland (hybrid, 3 Tage/Woche vor Ort)",
+                    "start": "2019-01", "end": None,
+                    "bullets": ["Built the data platform."]}]},
+               ("München, Bayern, Deutschland (hybrid, 3 Tage/Woche vor Ort)", "2019-01")),
+}
+
+
+@pytest.mark.parametrize("case", sorted(_LONG_HEADER_PROFILES))
+def test_a_long_entry_header_stays_on_the_page(tmp_path, capsys, case):
+    _require_engine()
+    profile, needles = _LONG_HEADER_PROFILES[case]
+    out = tmp_path / "cv.pdf"
+    reasons = []
+    assert render_cv.render_pdf(profile, out, reasons=reasons) is True, \
+        capsys.readouterr().err
+    assert reasons == []
+    assert "overflow" not in capsys.readouterr().err
+    _pdf_says(out, *needles)
+
+
 def test_a_letter_with_diacritics_survives_a_real_compile(tmp_path):
     """render_letter carried its own copy of the preamble and its own copy of the
     bug: measured before the fix, a letter to Ștefan Ionescu at Politechnika

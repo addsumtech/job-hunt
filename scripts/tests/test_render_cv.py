@@ -1416,3 +1416,226 @@ def test_a_line_into_the_margin_warns_and_keeps_the_pdf(tmp_path, monkeypatch, c
     assert reasons == []
     assert out.exists()
     assert "WARNING" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# Ordinary YAML that crashed every format. `end: 2023` is an int and
+# `end: 2023-06-30` is a date once YAML has read them, and `skills: [a, b]` is a
+# list; all three raised AttributeError — a traceback at exit 1, the code this
+# script keeps for "rendered, and the PDF step failed" — while check_claims,
+# check_personal_data and check_pages accepted the same file.
+# ---------------------------------------------------------------------------
+
+_BASE_YAML = ('meta: {name: "Jane Doe", target_market: "nl", language: "en"}\n'
+              'contact: {email: "jane@example.com"}\n')
+
+
+def _cli(tmp_path, monkeypatch, yaml_text, fmt):
+    """Run the CLI on `yaml_text`; the PDF path stops at the .tex (no engine)."""
+    monkeypatch.setattr(render_cv, "find_latex_engine", lambda cjk=False: None)
+    src = tmp_path / "profile.yaml"
+    src.write_text(_BASE_YAML + yaml_text, encoding="utf-8")
+    out = tmp_path / f"cv.{fmt}"
+    code = render_cv.main([str(src), "--format", fmt, "--out", str(out)])
+    if fmt == "docx" and out.exists():
+        from docx import Document
+        text = "\n".join(p.text for p in Document(str(out)).paragraphs)
+    elif fmt == "pdf":
+        tex = out.with_suffix(".tex")
+        text = tex.read_text(encoding="utf-8") if tex.exists() else ""
+    else:
+        text = out.read_text(encoding="utf-8") if out.exists() else ""
+    return code, text
+
+
+_DATES_YAML = {
+    "int": ("experience:\n  - {title: ML Engineer, org: Acme BV, start: 2019, end: 2023,"
+            " bullets: [Built things.]}\n", ("2019", "2023")),
+    "iso-date": ("experience:\n  - {title: ML Engineer, org: Acme BV, start: 2019-07-01,"
+                 " end: 2023-06-30, bullets: [Built things.]}\n",
+                 ("2019-07-01", "2023-06-30")),
+}
+
+
+@pytest.mark.parametrize("fmt", ["md", "docx", "pdf"])
+@pytest.mark.parametrize("shape", sorted(_DATES_YAML))
+def test_a_yaml_int_or_date_end_renders_in_every_format(tmp_path, monkeypatch, capsys,
+                                                       shape, fmt):
+    yaml_text, (start, end) = _DATES_YAML[shape]
+    code, text = _cli(tmp_path, monkeypatch, yaml_text, fmt)
+    assert code == 0, capsys.readouterr().err
+    assert start in text and end in text, text
+    # A YAML date comes back as the ISO text that was typed, never a repr.
+    assert "datetime" not in text
+
+
+def test_an_int_or_date_end_is_a_finished_role_not_a_current_one():
+    import datetime
+    assert render_cv._is_current({"end": 2023}) is False
+    assert render_cv._is_current({"end": datetime.date(2023, 6, 30)}) is False
+    assert render_cv._is_current({"end": None}) is True
+    assert render_cv._field_text(datetime.date(2023, 6, 30)) == "2023-06-30"
+    assert render_cv._field_text(datetime.datetime(2023, 6, 30)) == "2023-06-30"
+
+
+@pytest.mark.parametrize("fmt", ["md", "docx", "pdf"])
+def test_a_plain_list_of_skills_is_one_unlabelled_group(tmp_path, monkeypatch, capsys, fmt):
+    code, text = _cli(tmp_path, monkeypatch, 'skills: ["Python", "SQL", "PyTorch"]\n', fmt)
+    assert code == 0, capsys.readouterr().err
+    assert "Python, SQL, PyTorch" in text, text
+
+
+def test_skill_groups_reads_every_shape_the_same_way():
+    """One reader for the three renderers: the documented mapping, a plain list
+    (one unnamed group — "Skills:" under a "Skills" heading says the word twice),
+    groups written as a list of one-key mappings, and a bare string."""
+    sg = render_cv.skill_groups
+    assert sg({"skills": {"ml_ops": ["Docker"], "empty": []}}) == [("Ml ops", ["Docker"])]
+    assert sg({"skills": ["Python", "SQL"]}) == [(None, ["Python", "SQL"])]
+    assert sg({"skills": [{"Languages": ["Python"]}, {"Tools": ["Git"]}]}) == [
+        ("Languages", ["Python"]), ("Tools", ["Git"])]
+    assert sg({"skills": [{"name": "Python", "level": "expert"}]}) == [
+        (None, ["Python — expert"])]
+    assert sg({"skills": "Python, SQL"}) == [(None, ["Python, SQL"])]
+    assert sg({"skills": []}) == [] and sg({}) == []
+
+
+@pytest.mark.parametrize("yaml_text,field", [
+    ('experience: "ML Engineer at Acme, 2019-2023"\n', "experience is a string"),
+    ('experience: ["ML Engineer at Acme"]\n', "experience[0] is a string"),
+    ("experience:\n  - {title: Eng, org: X, end: [2023]}\n", "experience[0].end is a list"),
+    ("experience:\n  - {title: Eng, org: X, end: yes}\n",
+     "experience[0].end is a true/false value"),
+    ('education: {degree: "MSc", institution: "Leiden"}\n', "education is a mapping"),
+    ("skills: 5\n", "skills is a number"),
+    ('contact: {email: "jane@example.com", phone: ["+31 6", "+49 1"]}\n',
+     "contact.phone is a list"),
+])
+@pytest.mark.parametrize("fmt", ["md", "pdf"])
+def test_an_unprintable_shape_is_exit_2_with_one_line_naming_the_field(
+        tmp_path, monkeypatch, capsys, yaml_text, field, fmt):
+    """Exit 2 is "could not run" in every script here, and the line names the
+    field — not a traceback whose last frame is inside a builder."""
+    code, _ = _cli(tmp_path, monkeypatch, yaml_text, fmt)
+    err = capsys.readouterr().err
+    assert code == 2, err
+    assert "Traceback" not in err
+    assert err.startswith("cannot render: ") and field in err, err
+    assert err.strip().count("\n") == 0, err
+    assert not (tmp_path / f"cv.{fmt}").exists()
+
+
+def test_a_shape_nobody_listed_is_still_exit_2_not_a_traceback(tmp_path, monkeypatch,
+                                                              capsys):
+    """The net under profile_shape_problems: whatever the list misses must still
+    end as "could not run" with one readable line."""
+    def boom(profile):
+        raise TypeError("unsupported operand")
+    monkeypatch.setattr(render_cv, "render_markdown", boom)
+    code, _ = _cli(tmp_path, monkeypatch, "", "md")
+    err = capsys.readouterr().err
+    assert code == 2 and "Traceback" not in err
+    assert "TypeError: unsupported operand" in err and err.strip().count("\n") == 0
+
+
+def test_numbers_and_list_links_in_contact_render(tmp_path, monkeypatch, capsys):
+    """`phone: 31612345678` is an int to YAML; `" · ".join` raised on it."""
+    yaml_text = ('contact: {email: "jane@example.com", phone: 31612345678,'
+                 ' links: ["github.com/jane"]}\n')
+    for fmt in ("md", "docx"):
+        code, text = _cli(tmp_path, monkeypatch, yaml_text, fmt)
+        assert code == 0, capsys.readouterr().err
+        assert "31612345678" in text and "GitHub" in text, text
+
+
+# ---------------------------------------------------------------------------
+# education[].details as a list printed Python's ['…', '…'] in all three formats.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("fmt", ["md", "docx", "pdf"])
+def test_a_list_of_education_details_is_several_lines_not_a_repr(tmp_path, monkeypatch,
+                                                                 capsys, fmt):
+    yaml_text = ("education:\n  - degree: M.Sc. Informatik\n"
+                 "    institution: TU München\n"
+                 '    details: ["Thesis on graph databases", "Grade 1.3"]\n')
+    code, text = _cli(tmp_path, monkeypatch, yaml_text, fmt)
+    assert code == 0, capsys.readouterr().err
+    assert "Thesis on graph databases" in text and "Grade 1.3" in text
+    assert "['" not in text and "', '" not in text, text
+    if fmt == "pdf":
+        assert r"\item Thesis on graph databases" in text and r"\item Grade 1.3" in text
+
+
+def test_a_single_details_string_still_renders_as_before():
+    p = {"meta": {"name": "X"}, "education": [{"degree": "MSc", "institution": "U",
+                                               "details": "Thesis on X; GPA 8.5/10."}]}
+    assert "- Thesis on X; GPA 8.5/10." in render_cv.render_markdown(p)
+    assert "Thesis on X; GPA 8.5/10.\\\\" in render_cv.build_latex(p)
+
+
+# ---------------------------------------------------------------------------
+# A Japanese name lost its space in the PDF only: `normalize_text` strips a space
+# between two Han/kana characters (a folded-scalar artifact), and a name is never
+# a folded scalar. md and docx kept "山田 太郎"; the PDF printed "山田太郎".
+# ---------------------------------------------------------------------------
+
+def test_a_japanese_name_keeps_its_space_in_the_latex_source():
+    p = {"meta": {"name": "山田 太郎", "language": "ja", "target_market": "jp"},
+         "summary": "決済基盤 担当"}
+    tex = render_cv.build_latex(p)
+    assert r"\textbf{山田 太郎}" in tex
+    # Body text is still a folded scalar, and still has its artifact removed.
+    assert "決済基盤担当" in tex
+
+
+def test_a_chinese_name_without_a_space_is_unchanged():
+    tex = render_cv.build_latex({"meta": {"name": "张伟", "language": "zh"}})
+    assert r"\textbf{张伟}" in tex
+
+
+def test_the_name_reads_the_same_in_all_three_formats(tmp_path):
+    from docx import Document
+    p = {"meta": {"name": "山田 太郎", "language": "ja", "target_market": "jp"},
+         "contact": {"email": "t@example.com"}}
+    render_cv.render_docx(p, tmp_path / "cv.docx")
+    assert render_cv.render_markdown(p).startswith("# 山田 太郎")
+    assert Document(str(tmp_path / "cv.docx")).paragraphs[0].text == "山田 太郎"
+    assert r"\textbf{山田 太郎}" in render_cv.build_latex(p)
+
+
+# ---------------------------------------------------------------------------
+# An entry header whose metadata (location · dates) is too wide to share the row.
+# The old heading clamped the title to 45% of the line and set the unbreakable
+# metadata box beside it anyway, so the row ran past the margin. The compile
+# tests in test_render_pdf_compile.py measure the real PDF; these pin the source.
+# ---------------------------------------------------------------------------
+
+def test_metadata_too_wide_for_the_row_goes_on_its_own_line():
+    h = render_cv._tex_entry_heading(r"\textbf{Title}, Org", r"Amsterdam \textbullet{} 2019")
+    assert r"\else" in h
+    narrow, wide = h.split(r"\else")
+    # Too wide: the title gets the whole line and the metadata a paragraph of its
+    # own under it, flush right and free to wrap — never the clamped floor.
+    assert r"\parbox[t]{\linewidth}{\raggedright \textbf{Title}, Org}" in narrow
+    assert r"{\raggedleft Amsterdam \textbullet{} 2019\par}" in narrow
+    assert r"\dimen0=0.45\linewidth" not in h
+    # Fits: exactly the layout every ordinary row already had.
+    assert r"\parbox[t]{\dimen0}{\raggedright \textbf{Title}, Org}\hfill\box0\par" in wide
+
+
+def test_the_off_page_hint_names_header_fields_and_the_source_line(tmp_path, monkeypatch,
+                                                                   capsys):
+    """It said "almost always one unbreakable token: a bare DOI…", and the case
+    that reached it was a long location in an entry header."""
+    tex, out = tmp_path / "cv.tex", tmp_path / "cv.pdf"
+    tex.write_text("x", encoding="utf-8")
+    monkeypatch.setattr(render_cv.subprocess, "run", _engine_that_reports(
+        out, "warning: cv.tex:22: Overfull \\hbox (59.7pt too wide) in paragraph "
+             "at lines 22--22\n"))
+    assert render_cv.compile_latex("tectonic", tex, out, reasons=[]) is False
+    err = capsys.readouterr().err
+    assert "entry header" in err and "location" in err
+    assert "cv.tex line(s) 22" in err
+    assert render_cv.overfull_source_lines(
+        "Overfull \\hbox (3.0pt too wide) in paragraph at lines 4--5\n"
+        "Overfull \\hbox (80.0pt too wide) in paragraph at lines 9--9\n", 57.0) == [9]
