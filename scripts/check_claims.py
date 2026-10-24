@@ -220,6 +220,48 @@ _STATUS_CJK = (
     "재학", "재학중", "예정", "졸업예정", "수료", "중퇴", "이수중", "만료",
     "초급", "기초", "준비",
 )
+# A publication's status, whose removal turns a paper nobody has accepted into a
+# published one: "Deep cine recon. NeurIPS 2025 (under review)" → "Deep cine
+# recon. NeurIPS 2025" came back `sourced`. Only the words pointing that way —
+# `in press`, `accepted` and `forthcoming` mean accepted, and dropping them
+# claims nothing. Scoped to `publications` alone: "Code review" off a skill
+# list, a "manuscript" award, "Physical Review Letters" are not statuses.
+# `review` and `revision` are statuses only after `under` / `in`, so the pair is
+# merged into one token before the test (`_publication_tokens`).
+_PUBLICATION_STATUS_TOKENS = frozenset("""
+    submitted preprint manuscript unpublished under_review in_review under_revision
+    in_revision under_consideration
+    eingereicht unveröffentlicht in_begutachtung ingediend ongepubliceerd in_beoordeling
+    soumis soumise en_révision en_revision enviado enviada en_revisión sottomesso
+    sottomessa in_revisione
+""".split())
+_PUBLICATION_STATUS_PAIRS = {
+    "under": ("review", "revision", "consideration"),
+    "in": ("review", "revision", "begutachtung", "beoordeling", "revisione"),
+    "en": ("révision", "revision", "revisión"),
+}
+# Containment, like _STATUS_CJK. 심사 is "review" and stands alone in "심사 중".
+_PUBLICATION_STATUS_CJK = (
+    "投稿中", "已投稿", "审稿中", "審稿中", "在审", "在審", "返修", "査読中", "審査中",
+    "投稿済", "심사중", "심사", "투고",
+)
+
+
+def _publication_tokens(tokens) -> list:
+    """`tokens` with each `under review` / `in review` / `en révision` … pair
+    merged into the one status token it is in `_PUBLICATION_STATUS_TOKENS`."""
+    out, i = [], 0
+    while i < len(tokens):
+        if (i + 1 < len(tokens)
+                and tokens[i + 1] in _PUBLICATION_STATUS_PAIRS.get(tokens[i], ())):
+            out.append(f"{tokens[i]}_{tokens[i + 1]}")
+            i += 2
+            continue
+        out.append(tokens[i])
+        i += 1
+    return out
+
+
 # Tokens that carry no claim either way, so their presence in the dropped material
 # neither triggers the finding nor blocks it. Anything with a digit is here (a year,
 # a date) — checked AFTER the status test, so the CEFR levels above still win.
@@ -394,7 +436,10 @@ def phrase_in(term, text) -> bool:
     return bool(n) and any(have[i:i + n] == wanted for i in range(len(have) - n + 1))
 
 
-def _is_status(token) -> bool:
+def _is_status(token, publication=False) -> bool:
+    if publication and (token in _PUBLICATION_STATUS_TOKENS
+                        or any(w in token for w in _PUBLICATION_STATUS_CJK)):
+        return True
     return token in _STATUS_TOKENS or any(w in token for w in _STATUS_CJK)
 
 
@@ -447,7 +492,7 @@ def _negated_completion(tokens) -> bool:
     return False
 
 
-def dropped_status(term, leaf):
+def dropped_status(term, leaf, family=None):
     """The status marker `term` drops off `leaf`, or None.
 
     What the term dropped must be a status and NOTHING BUT a status (plus dates
@@ -476,21 +521,50 @@ def dropped_status(term, leaf):
     status was still dropped). The segment must be the one directly after: in
     "English (native), Dutch (B1)" the B1 belongs to Dutch, and "English" drops
     nothing that qualified it.
+
+    `family == "publications"` adds the publication statuses (under review,
+    submitted, preprint, 投稿中 …) to the vocabulary, for that family only.
     """
     split = _split(term, leaf)
     if split is None:
         return None
+    pub = family == "publications"
     before, after, later = split
+    term_tokens = _token_list(term)
+    if pub:
+        before, after, term_tokens = (_publication_tokens(before),
+                                      _publication_tokens(after),
+                                      _publication_tokens(term_tokens))
+        later = [_publication_tokens(seg) for seg in later]
+
+    def status_only(tokens):
+        return _status_only(tokens, pub)
+
+    def shown(tokens):
+        return " ".join(tokens).replace("_", " ")
+
     dropped = before + after
     if not dropped:
         return None
-    if _status_only(dropped):
-        return " ".join(dropped)
-    if _carries_status(_token_list(term)):
+    if status_only(dropped):
+        return shown(dropped)
+    if _carries_status(term_tokens, pub):
         return None
-    if _status_only(after):
-        return " ".join(after)
-    return " ".join(_leading_run(later, _status_only)) or None
+    if status_only(after):
+        return shown(after)
+    # "(under review at MRM)" / "submitted to NeurIPS": a publication status
+    # names its venue, so the dropped span is never status alone — and dropping
+    # all of it still presents the paper as published.
+    if pub and after and _is_status(after[0], True):
+        lead = []
+        for token in after:
+            if not _accounted(token, True):
+                break
+            lead.append(token)
+        while lead and not _is_status(lead[-1], True):
+            lead.pop()
+        return shown(lead)
+    return shown(_leading_run(later, status_only)) or None
 
 
 # The negator and the completion word are the qualifier in "nog niet afgerond",
@@ -498,19 +572,20 @@ def dropped_status(term, leaf):
 # `_IGNORABLE_TOKENS` globally instead would make `completed` invisible
 # everywhere, and "MSc A" off "MSc A completed 2024" must stay silent — it drops
 # no status and reads as an honest trim.
-def _accounted(token) -> bool:
-    return (_is_status(token) or _is_ignorable(token)
+def _accounted(token, publication=False) -> bool:
+    return (_is_status(token, publication) or _is_ignorable(token)
             or token in _NEGATORS or token in _COMPLETION_WORDS)
 
 
-def _carries_status(tokens) -> bool:
-    return any(_is_status(t) for t in tokens) or _negated_completion(tokens)
+def _carries_status(tokens, publication=False) -> bool:
+    return (any(_is_status(t, publication) for t in tokens)
+            or _negated_completion(tokens))
 
 
-def _status_only(tokens) -> bool:
+def _status_only(tokens, publication=False) -> bool:
     """A status marker and nothing else: at least one status, no content."""
-    return (bool(tokens) and _carries_status(tokens)
-            and all(_accounted(t) for t in tokens))
+    return (bool(tokens) and _carries_status(tokens, publication)
+            and all(_accounted(t, publication) for t in tokens))
 
 
 def _leading_run(segments, test) -> list:
@@ -643,9 +718,9 @@ def dropped_seniority(term, leaf):
     return " ".join(_leading_run(later, _rank_only)) or None
 
 
-def dropped_qualifier(term, leaf):
+def dropped_qualifier(term, leaf, family=None):
     """("status" | "seniority", the dropped words), or None."""
-    status = dropped_status(term, leaf)
+    status = dropped_status(term, leaf, family)
     if status:
         return "status", status
     rank = dropped_seniority(term, leaf)
@@ -717,7 +792,7 @@ def _relate(term, leaf, family=None):
         return SOURCED, None
     if not phrase_in(term, leaf):
         return None, None
-    dropped = dropped_qualifier(term, leaf)
+    dropped = dropped_qualifier(term, leaf, family)
     return (QUALIFIER, dropped) if dropped else (SOURCED, None)
 
 
@@ -1115,11 +1190,13 @@ def main(argv=None) -> int:
                             f'applies (a promotion, for instance)')
             continue
         if rel == QUALIFIER:
+            reads_as = ("an accepted, published paper" if family == "publications"
+                        else "a completed, current credential")
             findings.append(f'QUALIFIER_STRIPPED: "{term}" at '
                             f'tailored-profile.yaml:{where} drops the status '
                             f'qualifier "{dropped[1]}" off {master.name}\'s '
-                            f'"{leaf}" — the unqualified form reads as a completed, '
-                            f'current credential. Keep the qualifier, or add a '
+                            f'"{leaf}" — the unqualified form reads as {reads_as}. '
+                            f'Keep the qualifier, or add a '
                             f'claims.yaml row for the fact that it no longer applies')
             continue
         if rel == TRUNCATED:

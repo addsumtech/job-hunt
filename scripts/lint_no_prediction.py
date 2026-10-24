@@ -236,7 +236,13 @@ _REFUSED_PREDICTION_EN = re.compile(
 # the ordinary compounds a Chinese numeral can legitimately sit in front of.
 # Arabic digits too. `八成` fired and `8 成` did not — a pre-existing gap this
 # audit walked into, and the two spellings are the same claim.
-_ZH_TENTHS = r"[一二三四五六七八九0-9０-９]\s*成(?![功长员果本熟为立就分交交])"
+# 八成 is also the idiom for "most probably", the same word as 大概率, and
+# `八成会问到系统设计` predicts a QUESTION — it blocked delivery through this rule
+# while _HEDGE_ZH had already released it. So 八成 takes 大概率's allowance and
+# nothing wider: only the idiom, only before _ZH_ASKED. 七成会问到 / 8成会问到
+# are a figure, and still fire.
+_ZH_TENTHS = (r"(?!八\s*成" + _ZH_ASKED + r")"
+              r"[一二三四五六七八九0-9０-９]\s*成(?![功长员果本熟为立就分交交])")
 _ZH_PERCENT_SPELLED = r"百分之[零一二三四五六七八九十百]+"
 # Japanese tenths. `_ZH_TENTHS` gave Chinese 七成 its own rule and Japanese has
 # the exact parallel in 割 — `可能性は7割です` is the same invented probability
@@ -298,11 +304,53 @@ _FORECAST_ES_IT = (r"(?<!teoría de la )(?<!teoría de )(?<!distribución de )"
 # 確率的 is "stochastic" (確率的勾配降下法 = SGD), not a chance of anything.
 _JA_PROB = (r"(?:合格|内定|採用|通過|面接|選考)\s*(?:の)?\s*確率"
             r"|確率(?!論|統計|分布|モデル|過程|的|密度|変数)")
-_FORECAST_JA = (r"可能性が[^。！？]{0,10}高い|見込みが[^。！？]{0,10}高い|" + _JA_PROB +
+
+
+def _not_after(*forms: str) -> str:
+    """One fixed-width lookbehind per form: `re` takes no variable-width one."""
+    return "".join("(?<!" + re.escape(form) + ")" for form in dict.fromkeys(forms))
+
+
+# Being ASKED, or a topic COMING UP — the release _ZH_ASKED gives 大概率会被问到,
+# in Japanese, Korean and Spanish. Measured 2026-10-24, each blocked delivery as
+# a forecast: `面接では志望動機を聞かれる可能性が高いです`, `면접에서 프로젝트 경험에
+# 대해 질문받을 가능성이 높습니다`, `En la entrevista es probable que te pregunten
+# por Kafka`. A likelihood NOUN follows the verb it governs, so its release is a
+# set of lookbehinds on that verb; an ADVERB comes first, so its release looks
+# ahead to the verb — and never across a verb of RECEIVING the outcome:
+# `おそらく面接に呼ばれて志望動機を聞かれます` and `Es muy probable que te inviten a
+# una entrevista y te pregunten por Kafka` still forecast the invitation.
+_JA_ASKED_STEMS = ("聞かれ", "訊かれ", "問われ", "質問され", "尋ねられ", "出題され",
+                   "深掘りされ", "掘り下げられ", "突っ込まれ", "触れられ", "話題にな",
+                   "話題に上", "質問が出", "質問が来")
+_JA_ASKED_BEFORE = _not_after(*(stem + "る" for stem in _JA_ASKED_STEMS))
+_JA_RECEIVE_VERB = (r"呼ばれ|進め|進ん|進む|進み|もらえ|貰え|獲得|通過|通り|通る|通れ|受か"
+                    r"|招かれ|案内され|採用され|合格")
+_JA_ASKED_AHEAD = (r"(?:(?!" + _JA_RECEIVE_VERB + r")[^。！？、\n]){0,15}?(?:"
+                   + "|".join(_JA_ASKED_STEMS) + r")")
+_FORECAST_JA = (_JA_ASKED_BEFORE + r"可能性が[^。！？]{0,10}高い|"
+                + _JA_ASKED_BEFORE + r"見込みが[^。！？]{0,10}高い|" + _JA_PROB +
                 r"|受かる見込み|通る見込み")
 _KO_PROB = (r"(?:합격|채용|면접|서류)\s*확률"
             r"|확률(?!\s*(?:론|통계|분포|모델|적|과정|변수|밀도))")
-_FORECAST_KO = _KO_PROB + r"|가능성이\s*[^.!?]{0,10}?(?:높|큽)|합격할 것"
+_KO_ASKED_BEFORE = _not_after(*(verb + gap for verb in (
+    "질문받을", "질문을 받을", "질문 받을", "질문받게 될", "질문을 받게 될", "질문이 나올",
+    "물어볼", "물을", "질문할", "다뤄질", "다루어질", "출제될", "언급될") for gap in ("", " ")))
+_KO_RECEIVE_VERB = r"붙|통과|합격|채용되|채용될|초대|불려|제안|오퍼"
+_KO_ASKED_AHEAD = (r"(?:(?!" + _KO_RECEIVE_VERB + r")[^.!?,。\n]){0,20}?"
+                   r"(?:질문\s*(?:을|이|도|은)?\s*(?:받|나오|나올|나온|들어오|들어올)"
+                   r"|물어보|물어볼|물어봅|물으|물을|묻|질문하|질문할|다뤄|다루어|다룰|출제"
+                   r"|언급되|언급될|꼬리\s*질문)")
+_FORECAST_KO = (_KO_PROB + r"|" + _KO_ASKED_BEFORE + r"가능성이\s*[^.!?]{0,10}?(?:높|큽)"
+                r"|합격할 것")
+_ES_RECEIVE_VERB = (r"\b(?:te|le|les|os)\s+(?:llam|invit|contrat|seleccion|ofrec|ofrezc"
+                    r"|entrevist|admit)|\b(?:consig|consegu|obten|obtien|recib|logr)\w*"
+                    r"|\bpas(?:ar|es|en|ar[aá]s|ar[aá]n)\b")
+_ES_ASKED_AHEAD = (r"(?:(?!" + _ES_RECEIVE_VERB + r")[^.!?;\n]){0,40}?"
+                   r"(?:\b(?:te|le|les|os)\s+(?:(?:van|vayan|iban)\s+a\s+)?"
+                   r"(?:pregunt|interrog|ped|pid|plante)\w*\b"
+                   r"|\b(?:te|le|les|os)\s+(?:hag|har)\w*\s+preguntas\b"
+                   r"|\b(?:salga|salgan|surja|surjan|aparezca|aparezcan)\b)")
 
 # ---------------------------------------------------------------------------
 # The ADVERB and ADJECTIVE forms. Measured 2026-09-08: the patterns above cover
@@ -391,13 +439,15 @@ _HEDGE_NL = r"hoogstwaarschijnlijk|waarschijnlijk|vermoedelijk|zeker"
 _OUTCOME_NL = r"gesprek|uitnodiging|uitgenodigd|aanbod|interview"
 _HEDGE_FR = r"tr[e\u00e8]s probablement|probablement|vraisemblablement|s[u\u00fb]rement"
 _OUTCOME_FR = r"entretien|offre|invit[e\u00e9]|retenu|convoqu[e\u00e9]"
-_HEDGE_ES = r"muy probable|probablemente|probable|seguramente|casi seguro"
+# The JA / KO / ES hedges carry the question release defined beside _FORECAST_JA.
+_HEDGE_ES = (r"(?:muy probable|probablemente|probable|seguramente|casi seguro)"
+             r"(?!" + _ES_ASKED_AHEAD + r")")
 _OUTCOME_ES = r"entrevista|oferta|inviten|invitar[a\u00e1]n|contraten|seleccionen|admitan"
 _HEDGE_IT = r"molto probabilmente|probabilmente|probabile|sicuramente"
 _OUTCOME_IT = r"colloquio|offerta|invitato|assunto|selezionato"
-_HEDGE_JA = r"おそらく|恐らく|十中八九|まず間違いなく|ほぼ確実"
+_HEDGE_JA = r"(?:おそらく|恐らく|十中八九|まず間違いなく|ほぼ確実)(?!" + _JA_ASKED_AHEAD + r")"
 _OUTCOME_JA = r"面接|内定|採用|合格|選考通過"
-_HEDGE_KO = r"아마|십중팔구|거의 확실|틀림없이"
+_HEDGE_KO = r"(?:아마|십중팔구|거의 확실|틀림없이)(?!" + _KO_ASKED_AHEAD + r")"
 _OUTCOME_KO = r"면접|합격|채용|제안|서류 통과"
 
 
@@ -616,9 +666,134 @@ _CERTAIN_FORECAST_ES = (
     r"(?:(?:pr[aá]cticamente|casi)\s+)?(?:garantizad[oa]|asegurad[oa])\b"
     r"|\b(?:tienes|tendr[aá]s)\s+(?:la|una|el)\s+(?:entrevista|oferta|plaza|puesto)\s+"
     r"(?:(?:pr[aá]cticamente|casi)\s+)?(?:garantizad[oa]|asegurad[oa])\b")
+
+# German, Dutch, French, Italian: the same two shapes, which these four lacked
+# while their hedge tables existed. Measured 2026-10-24, exit 0: `Sie bekommen
+# sicher ein Interview`, `vous aurez certainement un entretien`, `Je krijgt
+# gegarandeerd een gesprek`, `Avrai di sicuro un colloquio`. `sicher`,
+# `certainement`, `gegarandeerd` and `di sicuro` are in no hedge list, and must
+# not be: `Das Interview ist sicher anspruchsvoll` and `vous aurez certainement
+# des questions techniques` are the format and the prep. So the certainty word
+# fires only next to a verb of RECEIVING whose object is the outcome — or as the
+# outcome's own predicate, closing the clause (`die Zusage ist Ihnen sicher.`).
+_CLAUSE_END = r"(?=\s*[.!?,;:]|\s*$)"
+_CERTAIN_DE = (r"sicher|sicherlich|bestimmt|garantiert|zweifellos|definitiv|gewiss"
+               r"|ganz\s+sicher|mit\s+sicherheit|ohne\s+zweifel|auf\s+jeden\s+fall|todsicher")
+_RECEIVED_DE = (r"einladung|vorstellungsgespr[aä]ch|interview|zusage|jobangebot"
+               r"|stellenangebot|angebot|zweitgespr[aä]ch")
+_OUTCOME_OBJ_DE = (r"(?:(?:ein|eine|einen|die|das|den|der|ihre|ihr|deine|dein)\s+)?"
+                   r"(?:" + _RECEIVED_DE + r")\b")
+_RECEIVE_VERB_DE = r"bekommen|bekommst|bekommt|erhalten|erh[aä]ltst|erh[aä]lt|kriegen|kriegst|kriegt"
+_NOT_NEGATED_DE = r"(?<!nicht )(?<!kein )(?<!keine )(?<!nie )(?<!niemals )"
+_CERTAIN_FORECAST_DE = (
+    # Sie bekommen sicher ein Interview
+    r"\b(?:" + _RECEIVE_VERB_DE + r")\s+(?:(?:sie|du|ihr)\s+)?(?:" + _CERTAIN_DE + r")\s+"
+    + _OUTCOME_OBJ_DE +
+    # Sie werden sicher eine Zusage bekommen
+    r"|" + _NOT_NEGATED_DE + r"\b(?:" + _CERTAIN_DE + r")\s+" + _OUTCOME_OBJ_DE
+    + r"\s+(?:" + _RECEIVE_VERB_DE + r")\b"
+    # Sie werden bestimmt (zum Vorstellungsgespräch) eingeladen
+    r"|" + _NOT_NEGATED_DE + r"\b(?:" + _CERTAIN_DE + r")\s+(?:(?:zum|zu\s+einem)\s+"
+    r"(?:vorstellungsgespr[aä]ch|gespr[aä]ch|interview)\s+)?(?:eingeladen|eingestellt)\b"
+    # Die Zusage ist Ihnen sicher. / Ein Interview ist so gut wie garantiert.
+    r"|\b(?:" + _RECEIVED_DE + r")\s+(?:ist|sind)\s+(?:(?:ihnen|dir|euch)\s+)?"
+    r"(?:(?:so\s+gut\s+wie|praktisch|quasi|fast)\s+)?(?:sicher|garantiert|gewiss)\b"
+    + _CLAUSE_END)
+_CERTAIN_NL = (r"zeker|gegarandeerd|ongetwijfeld|beslist|absoluut|stellig|sowieso"
+               r"|vast\s+en\s+zeker|zeker\s+weten|met\s+zekerheid")
+_RECEIVED_NL = r"sollicitatiegesprek|gesprek|uitnodiging|baanaanbod|aanbod|interview|contract"
+_OUTCOME_OBJ_NL = r"(?:(?:een|het|de|je|jouw|uw|een\s+tweede)\s+)?(?:" + _RECEIVED_NL + r")\b"
+_RECEIVE_VERB_NL = r"krijgt|krijg|krijgen|ontvangt|ontvang|ontvangen"
+_NOT_NEGATED_NL = r"(?<!niet )(?<!geen )(?<!nooit )"
+_CERTAIN_FORECAST_NL = (
+    r"\b(?:" + _RECEIVE_VERB_NL + r")\s+(?:(?:je|u|jij|jullie)\s+)?(?:" + _CERTAIN_NL
+    + r")\s+" + _OUTCOME_OBJ_NL +
+    r"|" + _NOT_NEGATED_NL + r"\b(?:" + _CERTAIN_NL + r")\s+" + _OUTCOME_OBJ_NL
+    + r"\s+(?:" + _RECEIVE_VERB_NL + r")\b"
+    r"|" + _NOT_NEGATED_NL + r"\b(?:" + _CERTAIN_NL + r")\s+(?:(?:voor\s+(?:een|het)\s+"
+    r"(?:sollicitatiegesprek|gesprek|interview))\s+)?(?:uitgenodigd|aangenomen)\b"
+    r"|\b(?:" + _RECEIVED_NL + r")\s+(?:is|lijkt)\s+(?:(?:zo\s+goed\s+als|vrijwel|praktisch"
+    r"|bijna)\s+)?(?:zeker|gegarandeerd|binnen)\b" + _CLAUSE_END)
+_CERTAIN_FR = (r"certainement|s[uû]rement|assur[ée]ment|forc[ée]ment|ind[ée]niablement"
+               r"|d[ée]finitivement|sans\s+(?:aucun\s+)?doute|[aà]\s+coup\s+s[uû]r")
+_RECEIVED_FR = r"entretien|offre|proposition|convocation|embauche"
+# French and Italian put the adjective after the noun, and an interview named by
+# its FORMAT is the process, not the outcome: `vous aurez certainement un
+# entretien technique avec l'équipe`. Same role as _PREP_TAIL_EN.
+_FORMAT_TAIL_FR = (r"(?!\s+(?:technique|t[ée]l[ée]phonique|vid[ée]o|rh|avec|en\s+anglais"
+                   r"|de\s+motivation|comportemental|individuel|collectif)\b)")
+_OUTCOME_OBJ_FR = (r"(?:(?:un|une|le|la|votre|ton|ta|cet|cette)\s+|l['’])?"
+                   r"(?:" + _RECEIVED_FR + r")\b" + _FORMAT_TAIL_FR)
+_RECEIVE_VERB_FR = (r"aurez|auras|aura|obtiendrez|obtiendras|obtiendra|recevrez|recevras"
+                    r"|recevra|d[ée]crocherez|d[ée]crocheras|d[ée]crochera")
+_NOT_NEGATED_FR = r"(?<!pas )(?<!jamais )(?<!non )"
+_CERTAIN_FORECAST_FR = (
+    # vous aurez certainement un entretien
+    r"\b(?:" + _RECEIVE_VERB_FR + r")\s+(?:" + _CERTAIN_FR + r")\s+" + _OUTCOME_OBJ_FR +
+    # vous allez certainement décrocher un entretien
+    r"|" + _NOT_NEGATED_FR + r"\b(?:" + _CERTAIN_FR + r")\s+(?:avoir|obtenir|recevoir"
+    r"|d[ée]crocher)\s+" + _OUTCOME_OBJ_FR +
+    # vous serez certainement convoqué / retenu
+    r"|\b(?:serez|seras|sera)\s+(?:" + _CERTAIN_FR + r")\s+(?:convoqu[ée]|retenu|embauch[ée]"
+    r"|recrut[ée]|s[ée]lectionn[ée])"
+    # l'entretien est quasiment assuré.
+    r"|\b(?:" + _RECEIVED_FR + r")\s+est\s+(?:(?:quasiment|presque|pratiquement)\s+)?"
+    r"(?:assur[ée]e?|garantie?|acquise?|dans\s+la\s+poche)" + _CLAUSE_END)
+_CERTAIN_IT = (r"sicuramente|certamente|indubbiamente|di\s+sicuro|di\s+certo|senz['’]altro"
+               r"|senza\s+(?:alcun\s+)?dubbio")
+_RECEIVED_IT = r"colloquio|offerta|proposta|assunzione|convocazione"
+_FORMAT_TAIL_IT = (r"(?!\s+(?:tecnico|telefonico|conoscitivo|con|in\s+inglese"
+                   r"|motivazionale|di\s+gruppo|individuale)\b)")
+_OUTCOME_OBJ_IT = (r"(?:(?:un|una|il|lo|la)\s+|un['’]|l['’])?(?:" + _RECEIVED_IT + r")\b"
+                   + _FORMAT_TAIL_IT)
+_RECEIVE_VERB_IT = (r"otterrai|otterr[aà]|otterrete|avrai|avr[aà]|avrete|riceverai"
+                    r"|ricever[aà]|riceverete")
+_CERTAIN_FORECAST_IT = (
+    # otterrai sicuramente un colloquio / avrai di sicuro un colloquio
+    r"\b(?:" + _RECEIVE_VERB_IT + r")\s+(?:" + _CERTAIN_IT + r")\s+" + _OUTCOME_OBJ_IT +
+    # sicuramente otterrai un colloquio
+    r"|(?<!non )\b(?:" + _CERTAIN_IT + r")\s+(?:" + _RECEIVE_VERB_IT
+    + r"|ottenere|avere|ricevere)\s+" + _OUTCOME_OBJ_IT +
+    # sarai sicuramente chiamato / convocato
+    r"|\b(?:sarai|sar[aà]|sarete)\s+(?:" + _CERTAIN_IT + r")\s+(?:chiamat|convocat"
+    r"|selezionat|assunt)[oaie]\b"
+    # il colloquio è praticamente garantito.
+    r"|\b(?:colloquio|offerta|assunzione)\s+[eè]\s+(?:(?:praticamente|quasi|ormai)\s+)?"
+    r"(?:garantit[oa]|assicurat[oa]|sicur[oa]|cosa\s+fatta)" + _CLAUSE_END)
 _CERTAIN_FORECAST = "|".join([_CERTAIN_FORECAST_EN, _CERTAIN_FORECAST_ZH,
                               _CERTAIN_FORECAST_JA, _CERTAIN_FORECAST_KO,
-                              _CERTAIN_FORECAST_ES])
+                              _CERTAIN_FORECAST_ES, _CERTAIN_FORECAST_DE,
+                              _CERTAIN_FORECAST_NL, _CERTAIN_FORECAST_FR,
+                              _CERTAIN_FORECAST_IT])
+
+# A NEGATED certainty is the honest disclaimer, but its negator sits too far back
+# for a lookbehind: `没人能肯定你会拿到面试`, `谁也不能保证你一定能拿到面试` and
+# `No one can say for certain that you will get an interview` all fired on the
+# outcome clause. Masked like a refusal (mask_exempt_spans): a negated subject or
+# modal, a verb of asserting, and the outcome clause it denies — ending ON the
+# outcome, so anything after it is still scanned, and no number fits inside.
+# `谁也不能否认你肯定能拿到面试` / `No one can deny that you will get an interview`
+# assert the outcome and are not covered: deny is not a verb of asserting.
+_NEGATED_CERTAINTY_ZH = re.compile(
+    r"(?:(?:没人|没有人|无人|没有谁|谁也|谁都|任何人都|没有任何(?:人|方法|工具|办法))"
+    r"(?:不|没)?(?:能够|能|可以|敢)?|不能|无法|没法|没办法|不敢|难以|不可能)"
+    r"\s*(?:肯定|确定|保证|担保|断定|断言|预测|打包票|说准|确保)(?:地)?(?:说)?\s*"
+    r"(?:你|您|他|她|候选人)?(?:也|都|就)?"
+    r"(?:" + _CERTAIN_ZH + r")?(?:地)?(?:能够|能|会|可以|可|将|就能|就会)?"
+    r"(?:顺利|直接|轻松|成功)?(?:地)?(?:" + _RECEIVE_ZH + r")")
+_NEGATED_FORECAST_EN = re.compile(
+    r"\b(?:(?:no\s*one|no-one|nobody|nothing|no\s+(?:recruiter|tool|model|test|score))\s+"
+    r"(?:(?:can|could|will|would|is\s+able\s+to)\s+)?"
+    r"|(?:i|we|this\s+(?:report|skill|tool|assessment))\s+" + _NEGATED_EN + r"\s+"
+    r"|(?:it\s+is|it's|it’s)\s+(?:impossible|not\s+possible)\s+to\s+"
+    r"|there\s+is\s+no\s+way\s+to\s+)"
+    r"(?:say|tell|know|knows|guarantee|guarantees|promise|promises|predict|predicts"
+    r"|determine|confirm|be\s+(?:sure|certain))(?:\s+(?:you|them|him|her|anyone))?"
+    r"(?:\s+(?:for\s+(?:certain|sure)|with\s+(?:certainty|confidence)|in\s+advance))?"
+    r"(?:\s+(?:that|whether|if))?\s+(?:you|the\s+candidate|they|he|she)"
+    r"(?:\s+(?:will|would|are\s+going\s+to)|'ll|’ll)?(?:\s+(?:" + _CERTAIN_EN + r"))?\s+"
+    r"(?:(?:get|land|receive|secure)\s+(?:an?\s+|the\s+)?(?:interview|offer|job|role"
+    r"|position)\b|" + _RECEIVE_EN + r")", re.IGNORECASE)
 
 # The probability NOUNS, minus the subject that shares their name. `probability
 # and statistics`, `maximum likelihood estimation`, `odds ratio` are posting
@@ -889,7 +1064,65 @@ def master_profile_strings(workspace: pathlib.Path) -> list:
     return out
 
 
-def capture_corpus(workspace: pathlib.Path) -> str:
+# What a run WRITES for a reader, which therefore cannot also be the candidate's
+# CV. evidence_blocks.py's default source is `<ws>/cv-source.txt`, so unlike the
+# master profile the evidence CV may live inside the workspace — but never as one
+# of these, or the text under scan authorises its own numbers: report.md bound as
+# "the CV" exited 0 on any figure it contained.
+_DELIVERABLE_SUFFIXES = frozenset((".md", ".markdown", ".pdf", ".docx", ".html", ".htm",
+                                   ".tex", ".yaml", ".yml", ".json", ".jsonl"))
+# User-supplied originals, the same two folders check_apply accepts as an
+# original input. `raw/` is not among them: an unjournaled raw file is a note.
+_ORIGINAL_INPUT_DIRS = ("inputs", "source")
+
+
+def _authored_by_the_run(workspace: pathlib.Path, path: pathlib.Path,
+                         scanned=()) -> bool:
+    """Is `path` (resolved) a file under scan, or a deliverable/artifact the run
+    itself writes inside this workspace? Either one is refused as a CV source."""
+    if path in {pathlib.Path(p).resolve() for p in scanned}:
+        return True
+    if path in {p.resolve() for p in target_files(workspace)}:
+        return True
+    root = workspace.resolve()
+    if path == root:
+        return True
+    try:
+        relative = path.relative_to(root)
+    except ValueError:
+        return False
+    if relative.parts[0] in _ORIGINAL_INPUT_DIRS:
+        return False
+    return (relative.parts[0] == "mock" or relative.name.startswith("judge-")
+            or relative.suffix.lower() in _DELIVERABLE_SUFFIXES)
+
+
+def evidence_cv_text(workspace: pathlib.Path, scanned=()) -> str:
+    """The CV evidence-blocks.json binds, or "" — on the master profile's terms.
+
+    The bytes must still hash to the recorded value, and hash and decode read the
+    SAME bytes. The path must not be a file under scan or one the run authors
+    (`_authored_by_the_run`); a symlink is judged by what it points at.
+    """
+    try:
+        record = json.loads((workspace / "evidence-blocks.json").read_text(
+            encoding="utf-8"))["sources"]["cv"]
+        expected = record["sha256"]
+        if not isinstance(expected, str) or not isinstance(record["path"], str):
+            return ""
+        cv = pathlib.Path(record["path"])
+        cv = (cv if cv.is_absolute() else workspace / cv).resolve()
+        if _authored_by_the_run(workspace, cv, scanned):
+            return ""
+        data = cv.read_bytes()
+        if hashlib.sha256(data).hexdigest() != expected:
+            return ""
+        return data.decode("utf-8")
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError):
+        return ""
+
+
+def capture_corpus(workspace: pathlib.Path, scanned=()) -> str:
     """Everything this round actually CAPTURED, normalised for membership tests.
 
     Only true captures go in: `raw/*.json` as written by the adapter wrapper, and
@@ -915,17 +1148,11 @@ def capture_corpus(workspace: pathlib.Path) -> str:
             pieces.append(source.read_text(encoding="utf-8", errors="replace"))
         except OSError:
             pass
-    # Candidate facts are trusted only while the evidence source hash matches.
-    try:
-        evidence = json.loads((workspace / "evidence-blocks.json").read_text())
-        record = evidence["sources"]["cv"]
-        cv = pathlib.Path(record["path"])
-        if not cv.is_absolute():
-            cv = workspace / cv
-        if journal.sha256_file(cv) == record["sha256"]:
-            pieces.append(cv.read_text(encoding="utf-8"))
-    except (OSError, ValueError, KeyError, TypeError):
-        pass
+    # Candidate facts are trusted only while the evidence source hash matches,
+    # and only from a file the run did not write itself.
+    cv_text = evidence_cv_text(workspace, scanned)
+    if cv_text:
+        pieces.append(cv_text)
     pieces += master_profile_strings(workspace)
     for path in journaled_captures(workspace):
         try:
@@ -1050,6 +1277,8 @@ def mask_exempt_spans(line: str) -> str:
     masked = ROUND_THE_CLOCK.sub(lambda m: " " * len(m.group(0)), masked)
     masked = _REFUSED_PREDICTION_ZH.sub(lambda m: " " * len(m.group(0)), masked)
     masked = _REFUSED_PREDICTION_EN.sub(lambda m: " " * len(m.group(0)), masked)
+    masked = _NEGATED_CERTAINTY_ZH.sub(lambda m: " " * len(m.group(0)), masked)
+    masked = _NEGATED_FORECAST_EN.sub(lambda m: " " * len(m.group(0)), masked)
     for label in VERDICT_LABELS:
         if label in masked:
             masked = masked.replace(label, " " * len(label))
@@ -1171,7 +1400,7 @@ def main(argv: list[str] | None = None) -> int:
         if not path.is_file():
             return cannot_run(workspace, f"{path} not found")
 
-    corpus = capture_corpus(workspace)
+    corpus = capture_corpus(workspace, files)
     findings: list[str] = []
     hashes: dict[str, str] = {}
     for path in files:

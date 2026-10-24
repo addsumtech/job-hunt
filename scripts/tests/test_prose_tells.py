@@ -349,3 +349,47 @@ def test_the_past_tense_pivot_is_caught():
     unreported with the whole construction sitting there."""
     assert prose_tells.NOT_JUST_PIVOT.search(
         "This was not just an audit — it was a chance to rebuild trust.")
+
+
+# ---- the denominator in a script with no spaces --------------------------
+#
+# Han and kana carry no spaces, so every run of them between two punctuation
+# marks counted as ONE word: a 260-character Chinese answer measured 20 "words",
+# and two ordinary 破折号 — typed `——`, two U+2014 — counted as four dashes in
+# it, 20 per 100 against a line of 1.5.
+
+ZH_ANSWER = ("我在推荐系统方向工作了五年——主要负责召回和排序模块。"
+             + "在上一份工作中，我主导了分布式训练框架的迁移，训练时长从十二小时缩短到七小时，"
+               "同时保证了线上效果稳定。" * 3
+             + "我希望把这些经验带到贵司的推荐团队——尤其是冷启动方向。"
+             + "期待有机会进一步交流，也愿意在面试中详细介绍相关项目。" * 2)
+
+
+def test_a_cjk_character_is_a_unit_of_length():
+    assert prose_tells._words("我在推荐系统方向工作") == 10
+    assert prose_tells._words("在Google Cloud的存储团队") == 8    # 6 Han + 2 words
+    assert prose_tells._words("면접에서 프로젝트 경험을") == 3      # Hangul has spaces
+
+
+def test_english_length_is_unchanged():
+    """The old denominator, verbatim, on every English sample in this file."""
+    import re
+    old = lambda t: max(1, len(re.findall(r"[^\W\d_][\w'-]*", t, re.UNICODE)))
+    for text in MACHINE_LETTER + HUMAN_LETTER + [HUMAN_STATEMENT]:
+        assert prose_tells._words(text) == old(text), text[:40]
+
+
+def test_two_chinese_dashes_in_a_real_answer_are_ordinary():
+    assert prose_tells.prose_findings(ZH_ANSWER, "zh") == []
+
+
+def test_a_dash_heavy_chinese_answer_still_fires():
+    """The twin: per character, not switched off. Six marks in a short answer."""
+    heavy = "我负责召回——也负责排序——还负责特征——以及评估——和上线——还有监控——。" * 2
+    out = prose_tells.prose_findings(heavy, "zh")
+    assert any(f.startswith("EM_DASH_DENSITY: zh: 12 em dashes") for f in out), out
+
+
+def test_the_supporting_statement_gate_counts_a_chinese_dash_once(tmp_path):
+    out = _statement_gate("### 沟通与影响（500字）\n\n" + ZH_ANSWER + "\n", tmp_path)
+    assert "EM_DASH_DENSITY" not in out, out
