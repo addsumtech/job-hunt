@@ -39,26 +39,32 @@ def test_the_install_name_and_the_import_name_are_not_assumed_equal():
     assert parsed.get("python-docx") == "docx"
 
 
-def test_the_pdf_check_renders_a_pdf_rather_than_looking_for_xelatex(monkeypatch):
-    """Pinned against the measured regression: a machine with tectonic and no
-    xelatex must come back able to render."""
+def test_the_pdf_check_renders_a_cv_through_render_cv_without_pandoc(monkeypatch):
+    """Pinned against two measured regressions. A machine with tectonic and no
+    xelatex must come back able to render — and so must one with tectonic and
+    NO pandoc: render_cv compiles its own LaTeX and never calls pandoc, and the
+    pandoc requirement reported a false MISS here and on every mode entry."""
     calls = []
+    monkeypatch.setattr(doctor, "ENGINE_DIRS", [], raising=False)
     monkeypatch.setattr(doctor.shutil, "which",
-                        lambda b: "/x/" + b if b in ("pandoc", "tectonic") else None)
+                        lambda b: "/x/tectonic" if b == "tectonic" else None)
 
     def fake_run(cmd, **kw):
         calls.append(cmd)
-        pathlib.Path(cmd[cmd.index("-o") + 1]).write_bytes(b"%PDF-1.4\n")
-        return subprocess.CompletedProcess(cmd, 0, "", "")
+        pathlib.Path(cmd[cmd.index("--out") + 1]).write_bytes(b"%PDF-1.4\n")
+        return subprocess.CompletedProcess(cmd, 0, b"", b"")
 
     monkeypatch.setattr(doctor.subprocess, "run", fake_run)
     ok, detail = doctor.can_render_pdf()
-    assert ok is True
+    assert ok is True, detail
     assert "tectonic" in detail
-    assert any("--pdf-engine=tectonic" in c for c in calls[0]), calls
+    assert pathlib.Path(calls[0][1]).name == "render_cv.py", calls
+    assert calls[0][calls[0].index("--format") + 1] == "pdf"
+    assert not any("pandoc" in str(part) for part in calls[0]), calls
 
 
 def test_no_engine_at_all_is_reported_as_missing(monkeypatch):
+    monkeypatch.setattr(doctor, "ENGINE_DIRS", [], raising=False)
     monkeypatch.setattr(doctor.shutil, "which",
                         lambda b: "/x/pandoc" if b == "pandoc" else None)
     ok, detail = doctor.can_render_pdf()
@@ -68,6 +74,7 @@ def test_no_engine_at_all_is_reported_as_missing(monkeypatch):
 
 def test_an_engine_that_produces_no_pdf_is_not_a_capability(monkeypatch):
     """Exit code 0 with no file is the shape this whole script exists to catch."""
+    monkeypatch.setattr(doctor, "ENGINE_DIRS", [], raising=False)
     monkeypatch.setattr(doctor.shutil, "which",
                         lambda b: "/x/" + b if b in ("pandoc", "tectonic") else None)
     monkeypatch.setattr(doctor.subprocess, "run",
@@ -203,9 +210,61 @@ def test_the_fast_check_is_sound_about_missing(monkeypatch):
     """It may only warn when it is sure. A warning that fires on a working
     machine is the line everyone filters out."""
     monkeypatch.setattr(doctor.shutil, "which", lambda b: None)
+    monkeypatch.setattr(doctor, "ENGINE_DIRS", [], raising=False)
     missing = doctor.fast_capabilities()
-    assert "Template CV PDF rendering (pandoc + a LaTeX engine; optional for reports)" in missing
+    assert ("CV/letter PDF rendering (tectonic or another LaTeX engine; "
+            "optional for reports)") in missing
     assert "pdftotext" in missing and "opencli" in missing
+    assert "LibreOffice (soffice) to measure Word page counts" in missing
+
+
+def test_the_fast_check_accepts_tectonic_without_pandoc(monkeypatch):
+    """render_cv needs an engine, not pandoc. A tectonic-only machine was told
+    on every mode entry that it could not render a CV PDF."""
+    monkeypatch.setattr(doctor.shutil, "which",
+                        lambda b: None if b == "pandoc" else "/x/" + b)
+    monkeypatch.setattr(doctor, "requirements", lambda: [])
+    assert doctor.fast_capabilities() == []
+
+
+def test_the_fast_check_finds_an_engine_where_render_cv_finds_it(monkeypatch, tmp_path):
+    """render_cv also looks in fixed install folders off PATH; so must the check."""
+    (tmp_path / "tectonic").write_text("")
+    monkeypatch.setattr(doctor, "ENGINE_DIRS", [str(tmp_path)], raising=False)
+    monkeypatch.setattr(doctor.shutil, "which", lambda b: None if b in ("tectonic", "xelatex", "lualatex", "pdflatex") else "/x/" + b)
+    monkeypatch.setattr(doctor, "requirements", lambda: [])
+    assert doctor.fast_capabilities() == []
+
+
+def test_the_fast_check_names_the_cjk_limit_of_pdflatex(monkeypatch):
+    monkeypatch.setattr(doctor, "ENGINE_DIRS", [], raising=False)
+    monkeypatch.setattr(doctor.shutil, "which",
+                        lambda b: None if b in ("tectonic", "xelatex", "lualatex") else "/x/" + b)
+    monkeypatch.setattr(doctor, "requirements", lambda: [])
+    assert doctor.fast_capabilities() == [
+        "CJK CV/letter PDF rendering (xelatex or tectonic; lualatex/pdflatex cannot typeset CJK)"]
+
+
+def test_the_fast_check_reports_missing_libreoffice(monkeypatch):
+    """check_pages needs it to measure cv.docx; without it DOCX_NOT_MEASURED
+    blocks check_apply, and nothing said so before the gate failed."""
+    monkeypatch.setattr(doctor.shutil, "which",
+                        lambda b: None if b in ("soffice", "libreoffice") else "/x/" + b)
+    monkeypatch.setattr(doctor, "requirements", lambda: [])
+    assert doctor.fast_capabilities() == ["LibreOffice (soffice) to measure Word page counts"]
+
+
+@pytest.mark.parametrize("found", ["soffice", "libreoffice", None])
+def test_checks_report_libreoffice_as_check_pages_finds_it(monkeypatch, found):
+    monkeypatch.setattr(doctor, "requirements", lambda: [])
+    monkeypatch.setattr(doctor, "can_render_report", lambda: (True, "ok"))
+    monkeypatch.setattr(doctor, "can_render_pdf", lambda: (True, "ok"))
+    monkeypatch.setattr(doctor.shutil, "which",
+                        lambda b: "/x/" + b if b == found or b not in ("soffice", "libreoffice") else None)
+    office = next(c for c in doctor.checks() if "LibreOffice" in c["what"])
+    assert office["ok"] is (found is not None)
+    assert "DOCX_NOT_MEASURED" in office["cost"]
+    assert "libreoffice" in office["fix"].casefold()
 
 
 def test_the_fast_check_stays_quiet_when_the_tools_are_on_path(monkeypatch):
@@ -288,9 +347,19 @@ def test_python_install_preserves_interpreter_path_with_spaces(monkeypatch):
     assert calls == [[executable, "-m", "pip", "install", "PyYAML"]]
 
 
-def test_pdflatex_only_does_not_pass_report_capability(monkeypatch):
+def test_pdflatex_only_renders_latin_cvs_and_names_the_cjk_limit(monkeypatch):
+    """render_cv accepts pdflatex for a Latin CV but needs XeTeX for CJK."""
+    monkeypatch.setattr(doctor, 'ENGINE_DIRS', [], raising=False)
     monkeypatch.setattr(doctor.shutil, 'which', lambda name: '/bin/' + name if name in {'pandoc', 'pdflatex'} else None)
-    assert doctor.can_render_pdf()[0] is False
+
+    def fake_run(cmd, **kw):
+        pathlib.Path(cmd[cmd.index('--out') + 1]).write_bytes(b'%PDF-1.4\n')
+        return subprocess.CompletedProcess(cmd, 0, b'', b'')
+
+    monkeypatch.setattr(doctor.subprocess, 'run', fake_run)
+    ok, detail = doctor.can_render_pdf()
+    assert ok is True
+    assert 'pdflatex' in detail and 'CJK' in detail and 'xelatex or tectonic' in detail
 
 
 def test_opencli_setup_hint_preserves_custom_adapters(monkeypatch):
@@ -300,9 +369,20 @@ def test_opencli_setup_hint_preserves_custom_adapters(monkeypatch):
         assert 'references/agent-setup.md' in hint and 'npm install -g' not in hint
 
 
-def test_report_engine_contract_agrees_without_bootstrap_import():
-    import deliver
-    assert doctor.REPORT_ENGINES == deliver.REPORT_ENGINES
+@pytest.mark.parametrize('available', [set(), {'pdflatex'}, {'lualatex', 'pdflatex'},
+                                       {'tectonic'}, {'xelatex'}, {'xelatex', 'tectonic'},
+                                       {'pdflatex', 'xelatex'}])
+def test_cv_engine_search_agrees_with_render_cv_without_bootstrap_import(monkeypatch, available):
+    """doctor copies render_cv's engine search because render_cv needs PyYAML
+    and python-docx, which a fresh machine does not have yet. A copy is only
+    safe while it gives the same answer."""
+    import render_cv
+    assert doctor.ENGINE_DIRS == render_cv._ENGINE_DIRS
+    monkeypatch.setattr(doctor, 'ENGINE_DIRS', [])
+    monkeypatch.setattr(render_cv, '_ENGINE_DIRS', [])
+    monkeypatch.setattr(doctor.shutil, 'which', lambda b: '/bin/' + b if b in available else None)
+    for cjk in (False, True):
+        assert doctor.find_cv_engine(cjk) == render_cv.find_latex_engine(cjk=cjk)
     result = subprocess.run([sys.executable, '-S', str(REPO / 'scripts/doctor.py'), '--help'], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
 

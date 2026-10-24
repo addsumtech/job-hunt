@@ -2,9 +2,15 @@
 """Deliver a client consultation report and requested application documents.
 
 Default destination: ~/Downloads/<workspace-name>/. Use the same explicit --to
-folder for all workspaces answering one consultation. Internal audit artifacts
-stay in the workspace. A report PDF is required unless --no-pdf is explicitly
-requested. Exit 2 means incomplete delivery; never call that complete.
+folder for all workspaces answering one consultation: a manifest in that folder
+records which workspace and mode wrote each file, so a second workspace (or a
+second mode of the same workspace) goes to its own subfolder instead of
+overwriting the first, and a redelivery removes its own files that it no longer
+produces. Internal audit artifacts stay in the workspace. A report PDF is
+required unless --no-pdf is explicitly requested; CV and letter PDFs are copied
+from their renderers' output, never converted from Markdown here. Exit 2 means
+incomplete delivery; never call that complete. The last line names the folder
+the files actually went to.
 """
 from __future__ import annotations
 
@@ -19,6 +25,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import unicodedata
 from urllib.parse import unquote, urlsplit, urlunsplit
 
 import journal
@@ -53,6 +60,26 @@ _MD_CODE = re.compile(r"`([^`]+)`")
 _ANGLE_URL = re.compile(r"&lt;(https?://[^\s]+?)&gt;")
 _RAW_ANGLE_URL = re.compile(r"<(https?://[^\s>]+)>")
 _PDF_WARNING = "\u26a0"
+
+# Which workspace and mode wrote each file in a client folder. Hidden, so the
+# folder still shows the client only their documents.
+MANIFEST_NAME = ".jobhunt-delivery.json"
+# Documents the bundled report renderer was built for. Application documents
+# (cv, letter, rirekisho, supporting statement) are never converted from
+# Markdown here: the report renderer puts a "Career consultation report"
+# footer on them, prints Markdown markers and bypasses render_cv's own refusals
+# (NO_ENGINE, TEXT_OFF_PAGE) and check_pages; measured on a delivered CV.
+REPORT_RENDERED = frozenset({"report", "interview-brief"})
+# Where each application PDF has to come from, said in the note when it is absent.
+APPLICATION_PDF_SOURCES = {
+    "cv": ("render it with `render_cv.py <profile> --format pdf --out <ws>/cv.pdf`, "
+           "or export the final cv.docx to cv.pdf, and run check_pages.py"),
+    "letter": ("render it with `render_letter.py <letter.yaml> --format pdf --out "
+               "<ws>/letter.pdf`, or export the final letter.docx to letter.pdf"),
+}
+# A second mode of the same workspace delivers beside the first, never over it.
+MODE_FOLDERS = {"discover": "岗位搜索", "assess": "岗位评估", "apply": "投递材料",
+                "interview": "模拟面试"}
 
 
 def report_audience_findings(source: str) -> list[str]:
@@ -293,13 +320,24 @@ def flat_name(slug: str, rel: pathlib.Path) -> str:
     return f"{slug}-" + "__".join(rel.parts)
 
 
+CLIENT_NAMES = {"report": "求职建议报告", "cv": "简历", "letter": "求职信",
+                "rirekisho": "履历书", "supporting-statement": "申请陈述",
+                "interview-brief": "面试准备"}
+CLIENT_FOLDERS = {"report": "报告", "interview-brief": "面试准备"}
+
+
 def client_path(rel: pathlib.Path) -> pathlib.Path:
     """Client names never expose the company/role workspace slug."""
-    names = {"report": "求职建议报告", "cv": "简历", "letter": "求职信",
-             "rirekisho": "履历书", "supporting-statement": "申请陈述",
-             "interview-brief": "面试准备"}
-    folder = {"report": "报告", "interview-brief": "面试准备"}.get(rel.stem, "简历")
-    return pathlib.Path(folder) / (names[rel.stem] + rel.suffix)
+    folder = CLIENT_FOLDERS.get(rel.stem, "简历")
+    return pathlib.Path(folder) / (CLIENT_NAMES[rel.stem] + rel.suffix)
+
+
+# Every relative path deliver.py itself can write inside one delivery folder.
+# The manifest may only name these, so a damaged or hand-edited manifest can
+# never steer the stale-file cleanup at anything else.
+_CLIENT_TAILS = frozenset(client_path(pathlib.Path(stem + suffix)).as_posix()
+                          for stem in CLIENT_NAMES for suffix in (".md", ".pdf", ".docx"))
+_RESERVED_FOLDERS = frozenset({"报告", "简历", "面试准备"})
 
 
 def is_deliverable(path: pathlib.Path, workspace: pathlib.Path,
@@ -328,6 +366,183 @@ def writable(directory: pathlib.Path) -> tuple[bool, str]:
         return True, ""
     except OSError as exc:
         return False, str(exc)
+
+
+# ---- one client folder, several workspaces --------------------------------
+#
+# MEASURED before this existed: two workspaces delivered to one `--to` both
+# exited 0 while the second report replaced the first, and 简历/ ended up holding
+# Acme's 简历.docx beside Beta's 简历.md and 简历.pdf — a mixed application the
+# client could have sent. The same happened to one workspace delivering apply
+# and then interview into its default folder: the debrief replaced the apply
+# report. Client file names are fixed by design, so ownership has to be
+# recorded somewhere; it is recorded beside the files.
+#
+# A clash goes to a SUBFOLDER rather than being refused. A refusal sends the
+# agent to pick another --to (splitting the consultation it was told to keep
+# together) or to clear the folder to make the command pass, which destroys the
+# earlier delivery. A subfolder overwrites nothing, keeps each workspace's
+# report and CV together, and the manifest sends every later redelivery of the
+# same workspace and mode back to the same place.
+
+class ManifestError(Exception):
+    """The destination's manifest cannot be trusted, so ownership is unknown."""
+
+
+def _manifest_rel_ok(folder: str, rel) -> bool:
+    if not isinstance(rel, str):
+        return False
+    path = pathlib.PurePosixPath(rel)
+    if path.is_absolute() or ".." in path.parts or "\\" in rel:
+        return False
+    parts = path.parts
+    if len(parts) < 2 or "/".join(parts[-2:]) not in _CLIENT_TAILS:
+        return False
+    return "/".join(parts[:-2]) == folder
+
+
+def _manifest_folder_ok(folder) -> bool:
+    if not isinstance(folder, str):
+        return False
+    if folder == "":
+        return True
+    path = pathlib.PurePosixPath(folder)
+    return (not path.is_absolute() and len(path.parts) == 1 and folder not in ("..", ".")
+            and "\\" not in folder and folder not in _RESERVED_FOLDERS)
+
+
+def read_manifest(root: pathlib.Path) -> list[dict]:
+    """The recorded deliveries in `root`, oldest first. Raises ManifestError."""
+    path = root / MANIFEST_NAME
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise ManifestError(f"{path} cannot be read: {exc}") from None
+    deliveries = data.get("deliveries") if isinstance(data, dict) else None
+    if not isinstance(deliveries, list):
+        raise ManifestError(f"{path} is not a delivery manifest written by deliver.py")
+    for entry in deliveries:
+        if not (isinstance(entry, dict) and isinstance(entry.get("workspace"), str)
+                and isinstance(entry.get("mode"), str)
+                and _manifest_folder_ok(entry.get("folder"))
+                and isinstance(entry.get("files"), dict)
+                and all(_manifest_rel_ok(entry["folder"], rel) and isinstance(sha, str)
+                        for rel, sha in entry["files"].items())):
+            raise ManifestError(f"{path} holds an entry deliver.py did not write: "
+                                f"{json.dumps(entry, ensure_ascii=False)[:200]}")
+    return deliveries
+
+
+def _alive(root: pathlib.Path, entry: dict) -> bool:
+    """An entry whose files the user has all removed no longer holds its folder."""
+    return any((root / rel).is_file() for rel in entry["files"])
+
+
+def _safe_folder_name(text: str) -> str:
+    text = re.sub(r'[\x00-\x1f<>:"/\\|?*]+', " ", text)
+    text = re.sub(r"\s+", " ", text).strip().strip(".").strip()
+    return text[:80].strip()
+
+
+def _posting_label(workspace: pathlib.Path) -> str:
+    """`<company> <role>` from posting.yaml: what the client knows the posting by."""
+    try:
+        posting = journal.load_yaml(workspace / "posting.yaml", dict)
+    except (OSError, journal.YamlUnreadable):
+        return ""
+    words = [posting.get(key) for key in ("company", "role_title")]
+    if not isinstance(words[1], str):
+        words[1] = posting.get("title")
+    return _safe_folder_name(" ".join(w.strip() for w in words if isinstance(w, str) and w.strip()))
+
+
+def choose_folder(root: pathlib.Path, deliveries: list[dict], workspace: pathlib.Path,
+                  mode: str) -> tuple[str, dict | None, dict | None]:
+    """(folder, this owner's previous entry, the entry it had to step around).
+
+    `folder` is "" for the destination itself, otherwise one subfolder name.
+    """
+    live = [entry for entry in deliveries if _alive(root, entry)]
+    own = next((entry for entry in live if entry["workspace"] == str(workspace)
+                and entry["mode"] == mode), None)
+    if own is not None:
+        return own["folder"], own, None
+    taken = {entry["folder"]: entry for entry in live}
+    if "" not in taken:
+        return "", None, None
+    mode_label = MODE_FOLDERS.get(mode, "其他交付")
+    same_workspace = any(entry["workspace"] == str(workspace) for entry in live)
+    # Without posting.yaml (a discover or collection workspace), the workspace
+    # name minus its date is the closest thing to what the client calls it.
+    base = mode_label if same_workspace else (
+        _posting_label(workspace)
+        or _safe_folder_name(re.sub(r"[-_ ]?\d{4}-\d{2}-\d{2}$", "", workspace.name))
+        or _safe_folder_name(workspace.name))
+    candidates = [base]
+    if not same_workspace:
+        candidates.append(f"{base} {mode_label}")
+    candidates += [f"{base} ({n})" for n in range(2, 100)]
+    for candidate in candidates:
+        candidate = _safe_folder_name(candidate)
+        if not candidate or candidate in _RESERVED_FOLDERS or candidate in taken:
+            continue
+        place = root / candidate
+        try:
+            if place.exists() and (not place.is_dir() or any(place.iterdir())):
+                continue  # somebody else's folder, or files no manifest accounts for
+        except OSError:
+            continue
+        return candidate, None, taken[""]
+    raise ManifestError(f"no free subfolder name for {workspace.name} in {root}")
+
+
+def finish_manifest(root: pathlib.Path, deliveries: list[dict], workspace: pathlib.Path,
+                    mode: str, folder: str, previous: dict | None,
+                    written: list[pathlib.Path]) -> list[str]:
+    """Remove this owner's stale files, then record what it wrote. Returns notices."""
+    notices = []
+    produced = {}
+    for path in written:
+        try:
+            produced[path.relative_to(root).as_posix()] = journal.sha256_file(path)
+        except (OSError, ValueError):
+            continue
+    for rel, sha in (previous or {}).get("files", {}).items():
+        if rel in produced:
+            continue
+        path = root / rel
+        try:
+            if not path.is_file():
+                continue
+            if journal.sha256_file(path) != sha:
+                notices.append(
+                    f"NOTICE_STALE_FILE_KEPT: {rel} came from an earlier delivery of this "
+                    "workspace and this run did not produce it, but it was edited after "
+                    "that delivery, so it was left in place; remove it if it is obsolete.")
+                continue
+            path.unlink()
+            if not any(path.parent.iterdir()):
+                path.parent.rmdir()
+        except OSError as exc:
+            notices.append(f"NOTICE_STALE_FILE_KEPT: {rel} could not be removed: {exc}")
+    kept = [entry for entry in deliveries if _alive(root, entry)
+            and not (entry["workspace"] == str(workspace) and entry["mode"] == mode)]
+    kept.append({"workspace": str(workspace), "workspace_name": workspace.name,
+                 "mode": mode, "folder": folder, "files": produced,
+                 "delivered_at": datetime.datetime.now().astimezone().isoformat()})
+    path = root / MANIFEST_NAME
+    temporary = root / (MANIFEST_NAME + ".tmp")
+    try:
+        temporary.write_text(json.dumps({"format": 1, "deliveries": kept},
+                                        ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        temporary.replace(path)
+    except OSError as exc:
+        temporary.unlink(missing_ok=True)
+        notices.append(f"NOTICE_MANIFEST_NOT_WRITTEN: {path}: {exc}; a later delivery "
+                       "to this folder cannot tell these files apart from its own")
+    return notices
 
 
 def _checked_discover_round(workspace: pathlib.Path) -> tuple[dict, str]:
@@ -1047,12 +1262,30 @@ def pick_cjk_font(source: str = "测试中文渲染") -> str | dict | None:
     return None
 
 
+def _notdef_hint(source: str) -> str:
+    """Name the source characters most likely behind a U+FFFF finding.
+
+    XeTeX records every glyph its font lacks as U+FFFF, so the finding alone
+    does not say which character to replace. Symbols are the usual cause.
+    """
+    suspects = sorted({char for char in source if ord(char) > 0x7f and not _CJK.match(char)
+                       and (unicodedata.category(char)[0] == "S"
+                            or unicodedata.category(char) in ("Co", "Cn", "Cf")
+                            or ord(char) > 0xffff)})
+    named = ", ".join(f"U+{ord(char):04X} {char}" for char in suspects[:12])
+    return ("U+FFFF marks a character the PDF font could not draw (it shows as a box)"
+            + (f"; likely source characters: {named}" if named else "")
+            + ". Replace them with words or a covered character, then deliver again")
+
+
 def _verify_pdf(pdf: pathlib.Path, source: str, needs_cjk: bool,
                 link_source: str | None = None) -> tuple[bool, str]:
     """Reject a rendered PDF that lost text or painted broken glyphs."""
     problems = glyph_findings(pdf)
     if problems:
         pdf.unlink(missing_ok=True)
+        if any("U+FFFF" in problem for problem in problems):
+            problems.append(_notdef_hint(source))
         return False, "; ".join(problems)
     # A document with an authored URL must identify a missing PDF annotation
     # even if the deliberately minimal regression fixture has no body text.
@@ -1173,8 +1406,14 @@ def _brief_page_problem(pdf: pathlib.Path) -> str:
 
 
 def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
-            make_pdf: bool = True, include_applications: bool | None = None
+            make_pdf: bool = True, include_applications: bool | None = None,
+            notices: list[str] | None = None
             ) -> tuple[list[pathlib.Path], list[str]]:
+    """Copy and render into `dest`. Returns (written, notes).
+
+    `notes` make the delivery incomplete. `notices`, when a list is passed,
+    collects things the client should be told that do not.
+    """
     written, notes = [], []
     problem = _discover_handoff_problem(workspace)
     if problem:
@@ -1195,8 +1434,9 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
         problems, _ = check_layout.inspect(workspace, report=True)
         if problems:
             return [], problems
+    notices = [] if notices is None else notices
     fonts = {}
-    report_font = None
+    report_font, font_origin = None, ""
     if make_pdf:
         for name in ("tailored-profile.yaml", "profile.yaml"):
             profile_path = workspace / name
@@ -1208,11 +1448,14 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
                 return [], [f"cannot read report typography from {name}: {exc.reason}"]
             meta = profile.get("meta") or {}
             if isinstance(meta, dict) and meta.get("cjk_font"):
-                report_font = meta["cjk_font"]
+                report_font, font_origin = meta["cjk_font"], name
                 break
+    # In apply the application documents are the product, so a missing CV or
+    # letter PDF leaves the delivery incomplete. Elsewhere they are existing
+    # source documents copied on explicit request: say what is missing, no more.
+    applying = journal.current_mode(workspace) not in {"discover", "assess", "interview"}
     if include_applications is None:
-        include_applications = journal.current_mode(workspace) not in {
-            "discover", "assess", "interview"}
+        include_applications = applying
     sources = [p for p in sorted(workspace.rglob("*"))
                if p.is_file() and is_deliverable(p, workspace, include_applications)
                and not (make_pdf and p.name == "report.pdf")]
@@ -1225,6 +1468,8 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
         return [], word_problems
 
     claimed: dict = {}
+    pdf_landed: set[str] = set()       # stems whose PDF reached the client folder
+    text_copies: dict[str, list[pathlib.Path]] = {}  # application stem -> .md/.docx copies
     for src in sources:
         target = dest / client_path(src.relative_to(workspace))
         # A REDELIVERY must land on the same name. The previous version renamed
@@ -1258,7 +1503,12 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
             notes.append(f"{src.relative_to(workspace)}: not delivered — {exc}")
             continue
         written.append(target)
-        if make_pdf and src.suffix == ".md" and (src.name == "report.md" or not src.with_suffix(".pdf").exists()):
+        if src.suffix == ".pdf":
+            pdf_landed.add(src.stem)
+        elif src.stem not in REPORT_RENDERED:
+            text_copies.setdefault(src.stem, []).append(target)
+        if (make_pdf and src.suffix == ".md" and src.stem in REPORT_RENDERED
+                and (src.name == "report.md" or not src.with_suffix(".pdf").exists())):
             pdf = target.with_suffix(".pdf")
             try:
                 source = visible_markdown(src)
@@ -1274,13 +1524,25 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
                         notes.append(f"{pdf.name}: {why}")
                     continue
                 glyphs = frozenset(_CJK.findall(source))
-                # A user-selected font wins; otherwise covered bundled glyphs
-                # keep delivery independent of a Tectonic font probe.
-                if glyphs and report_font is not None:
-                    fonts[glyphs] = report_font
-                elif glyphs and not _portable_report_style(source) and glyphs not in fonts:
-                    fonts[glyphs] = pick_cjk_font(source)
-                ok, why = render_pdf(src, pdf, fonts.get(glyphs))
+                font = None
+                if glyphs:
+                    # `meta.cjk_font` lives in the CV's profile. The report
+                    # honours it where it can — through pandoc + XeTeX — but a
+                    # CV typography setting must not make the report depend on
+                    # a toolchain it otherwise does not need. Without that
+                    # toolchain the bundled renderer runs, and says so.
+                    if isinstance(report_font, str) and _tex_report_path_available():
+                        font = report_font
+                    else:
+                        if report_font is not None:
+                            notices.append(_font_not_applied(pdf.name, report_font, font_origin))
+                        # Covered bundled glyphs keep delivery independent of a
+                        # Tectonic font probe.
+                        if not _portable_report_style(source):
+                            if glyphs not in fonts:
+                                fonts[glyphs] = pick_cjk_font(source)
+                            font = fonts[glyphs]
+                ok, why = render_pdf(src, pdf, font)
                 if ok and src.stem == "interview-brief" and (why := _brief_page_problem(pdf)):
                     pdf.unlink(missing_ok=True)
                     ok = False
@@ -1288,9 +1550,54 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
                 ok, why = False, str(exc)
             if ok:
                 written.append(pdf)
+                pdf_landed.add(src.stem)
             else:
                 notes.append(f"{pdf.name}: {why}")
+
+    # An application document whose own renderer produced no PDF ships as
+    # Markdown/Word, and the reason is said instead of a report-styled stand-in.
+    if make_pdf:
+        for stem, copies in text_copies.items():
+            if stem in pdf_landed or (workspace / f"{stem}.pdf").is_file():
+                continue  # delivered, or refused above with its own reason
+            pdf = copies[0].with_suffix(".pdf")
+            # No PDF from an earlier round may stay beside this round's text.
+            pdf.unlink(missing_ok=True)
+            pdf.with_suffix(".tex").unlink(missing_ok=True)
+            shipped = " and ".join(path.name for path in copies)
+            how = APPLICATION_PDF_SOURCES.get(stem)
+            if how and applying:
+                notes.append(
+                    f"{pdf.name}: not produced — the workspace has no {stem}.pdf, and "
+                    f"deliver.py never converts {stem}.md to PDF (that would bypass the "
+                    f"renderer's layout and page checks). {shipped} delivered. To add "
+                    f"the PDF, {how}, then deliver again; use --no-pdf only when the "
+                    "client asked for no PDF.")
+            else:
+                notices.append(
+                    f"NOTICE_PDF_NOT_PRODUCED: {pdf.name}: the workspace has no {stem}.pdf, "
+                    f"so only {shipped} was delivered; deliver.py does not convert "
+                    "application documents to PDF. If a PDF is needed, "
+                    + (how if how else "export it from the Word version") + ".")
     return written, notes
+
+
+def _tex_report_path_available() -> bool:
+    """Whether the pandoc + XeTeX report path is installed at all."""
+    return bool(shutil.which("pandoc")) and any(shutil.which(e) for e in REPORT_ENGINES)
+
+
+def _font_not_applied(pdf_name: str, font, origin: str) -> str:
+    if not isinstance(font, str):
+        return (f"NOTICE_REPORT_FONT_NOT_APPLIED: {pdf_name}: meta.cjk_font in {origin} "
+                f"is {type(font).__name__}, not a font name; the report PDF uses the "
+                "bundled fonts.")
+    return (f"NOTICE_REPORT_FONT_NOT_APPLIED: {pdf_name}: meta.cjk_font {font!r} in "
+            f"{origin} reaches a report only through pandoc + tectonic/xelatex, which "
+            "this machine lacks, so the report PDF uses the bundled fonts; CV and "
+            "letter renderers still use that font. If the client asked for this font "
+            "in the report itself, prepare that toolchain (references/agent-setup.md) "
+            "and deliver again, or tell the client which font the report uses.")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1321,12 +1628,17 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     try:
-        findings = lint_no_prediction.scan_text(
-            (ws / "report.md").read_text(encoding="utf-8"), "report.md",
-            lint_no_prediction.capture_corpus(ws))
+        report_text = (ws / "report.md").read_text(encoding="utf-8")
     except (OSError, UnicodeError) as exc:
         print(f"DELIVER_REPORT_UNREADABLE: {exc}", file=sys.stderr)
         return 2
+    try:
+        corpus = lint_no_prediction.capture_corpus(ws)
+        mode = journal.current_mode(ws)
+    except (OSError, UnicodeError) as exc:
+        print(f"DELIVER_WORKSPACE_UNREADABLE: {exc}; nothing was copied", file=sys.stderr)
+        return 2
+    findings = lint_no_prediction.scan_text(report_text, "report.md", corpus)
     if findings:
         print("DELIVER_REPORT_PREDICTION: " + "\n".join(findings), file=sys.stderr)
         return 2
@@ -1344,41 +1656,76 @@ def main(argv: list[str] | None = None) -> int:
               "copied and the workspace is untouched.", file=sys.stderr)
         return 2
 
-    written, notes = deliver(ws, dest, ws.name, make_pdf=not args.no_pdf,
-                             include_applications=True if args.include_applications else None)
+    try:
+        deliveries = read_manifest(dest)
+        folder, previous, displaced = choose_folder(dest, deliveries, ws, mode)
+    except ManifestError as exc:
+        print(f"DELIVER_MANIFEST_UNREADABLE: {exc}. It records which workspace wrote "
+              "each file here, so nothing was copied rather than risk overwriting "
+              "another workspace's documents. Move that file aside after checking "
+              "the folder, or pass a new --to.", file=sys.stderr)
+        return 2
+    out = dest / folder if folder else dest
+
+    notices: list[str] = []
+    written, notes = deliver(ws, out, ws.name, make_pdf=not args.no_pdf,
+                             include_applications=True if args.include_applications else None,
+                             notices=notices)
     if not written:
         for note in notes:
             print(f"DELIVER_LAYOUT_OR_INPUT_REFUSED: {note}", file=sys.stderr)
         print(f"DELIVER_NOTHING_TO_COPY: {ws} holds no deliverable files",
               file=sys.stderr)
         return 2
+    if displaced is not None:
+        notices.insert(0, (
+            f"NOTICE_SEPARATE_FOLDER: {dest} already holds the documents delivered from "
+            f"workspace {displaced.get('workspace_name') or displaced['workspace']} "
+            f"({displaced['mode']} mode), so this delivery went to the subfolder "
+            f"{folder}/ instead of overwriting them. Quote both folders to the user."))
+    notices.extend(finish_manifest(dest, deliveries, ws, mode, folder, previous, written))
 
     # A record, not a gate receipt: delivery decides nothing and has no verdict.
     # It exists because a hand-off that left no trace was indistinguishable from
     # one that never happened, so a composer could not tell a run that skipped
     # the last step from a run that took it.
+    record = {
+        "action": "delivery",
+        "destination": str(out),
+        "files": [q.relative_to(out).as_posix() for q in written],
+        "pdf_refused": notes,
+    }
+    if notices:
+        record["notices"] = notices
     try:
-        journal.append(ws, {
-            "action": "delivery",
-            "destination": str(dest),
-            "files": [q.relative_to(dest).as_posix() for q in written],
-            "pdf_refused": notes,
-        })
+        journal.append(ws, record)
     except OSError:
         pass  # a workspace we can read but not write is not a delivery failure
 
-    complete = not notes and (args.no_pdf or dest / client_path(pathlib.Path("report.pdf")) in written)
-    print(f"{'Delivered' if complete else 'Incomplete delivery:'} {len(written)} file(s) to {dest}")
+    complete = not notes and (args.no_pdf or out / client_path(pathlib.Path("report.pdf")) in written)
+    print(f"{'Delivered' if complete else 'Incomplete delivery:'} {len(written)} file(s) to {out}")
     for p in written:
-        print(f"  {p.relative_to(dest)}")
+        print(f"  {p.relative_to(out)}")
     for n in notes:
-        # The prefix has to name what happened: this list holds refused PDFs AND
-        # files that could not be copied at all, and calling a permission error a
-        # PDF refusal sends the reader to the renderer.
-        code = "NOTICE_NOT_DELIVERED" if "not delivered" in n else "NOTICE_PDF_REFUSED"
-        print(f"{code}: {n}", file=sys.stderr)
-    print(f"\nTell the user these files are in: {dest}")
+        print(f"{_note_code(n)}: {n}", file=sys.stderr)
+    for n in notices:
+        print(n, file=sys.stderr)
+    print(f"\nTell the user these files are in: {out}")
     return 0 if complete else 2
+
+
+def _note_code(note: str) -> str:
+    """The prefix has to name what happened.
+
+    The list holds refused PDFs, application PDFs nobody produced, AND files
+    that could not be copied at all; calling a permission error a PDF refusal
+    sends the reader to the renderer.
+    """
+    if "not delivered" in note:
+        return "NOTICE_NOT_DELIVERED"
+    if "not produced" in note:
+        return "NOTICE_PDF_MISSING"
+    return "NOTICE_PDF_REFUSED"
 
 
 if __name__ == "__main__":

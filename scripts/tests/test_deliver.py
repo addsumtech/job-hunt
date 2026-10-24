@@ -44,15 +44,25 @@ def run(ws, dest, *extra):
     return deliver.main(["--workspace", str(ws), "--to", str(dest), *extra])
 
 
+# Spelled out as well as imported, so these tests still run (and fail for the
+# real reason) against a deliver.py that predates the manifest.
+MANIFEST = getattr(deliver, "MANIFEST_NAME", ".jobhunt-delivery.json")
+
+
+def client_files(dest):
+    """What the client sees: every file except the hidden delivery manifest."""
+    return {p.relative_to(dest).as_posix() for p in dest.rglob("*")
+            if p.is_file() and p.name != MANIFEST}
+
+
 # ---- what lands, and where ------------------------------------------------
 
 def test_client_documents_share_one_explicit_folder(tmp_path):
     ws = build(tmp_path)
     dest = tmp_path / "consultation"
     assert run(ws, dest, "--no-pdf") == 0
-    assert {p.name for p in dest.iterdir()} == {"简历", "报告"}
-    assert {p.relative_to(dest).as_posix() for p in dest.rglob("*") if p.is_file()} == {
-        "报告/求职建议报告.md", "简历/简历.pdf"}
+    assert {p.name for p in dest.iterdir()} == {"简历", "报告", MANIFEST}
+    assert client_files(dest) == {"报告/求职建议报告.md", "简历/简历.pdf"}
 
 
 def test_default_destination_is_a_consultation_folder(tmp_path, monkeypatch):
@@ -83,8 +93,7 @@ def test_read_only_consultations_do_not_redeliver_or_render_the_source_cv(tmp_pa
     deliver.journal.append(ws, {"action": "mode_entry", "mode": mode})
     dest = tmp_path / "consultation"
     assert run(ws, dest) == 0
-    assert {p.relative_to(dest).as_posix() for p in dest.rglob("*") if p.is_file()} == {
-        "报告/求职建议报告.md", "报告/求职建议报告.pdf"}
+    assert client_files(dest) == {"报告/求职建议报告.md", "报告/求职建议报告.pdf"}
     assert (ws / "cv.md").is_file() and (ws / "cv.pdf").is_file()
 
 
@@ -428,7 +437,7 @@ def test_the_reported_count_matches_what_actually_landed(tmp_path, capsys):
     (ws / "mock" / "notes.md").write_text("NESTED\n", encoding="utf-8")
     assert run(ws, tmp_path / "out", "--no-pdf") == 0
     said = capsys.readouterr().out
-    landed = len([p for p in (tmp_path / "out").rglob("*") if p.is_file()])
+    landed = len(client_files(tmp_path / "out"))
     assert f"Delivered {landed} file(s)" in said
 
 
@@ -643,3 +652,223 @@ def test_site_stop_does_not_require_retrying_every_retained_posting(tmp_path):
     assert deliver._unavailable_detail_supported(ws, row, exception, exception["reason"])
     row["source_site"] = "another-employer"
     assert not deliver._unavailable_detail_supported(ws, row, exception, exception["reason"])
+
+
+# ---- several workspaces, one client folder ---------------------------------
+#
+# MEASURED (review, 2026-10-24): workspace acme (cv.md + cv.docx + report) and
+# then workspace beta delivered to one --to both exited 0; the first report was
+# gone and 简历/ held Acme's 简历.docx beside Beta's 简历.md and 简历.pdf — a mixed
+# application the client could have sent. One workspace delivering apply and
+# then interview into its default folder lost the apply report the same way.
+
+def _pdf(path, text):
+    import pymupdf
+    with pymupdf.open() as doc:
+        doc.new_page().insert_text((72, 72), text)
+        doc.save(path)
+
+
+def posting_workspace(root, name, company, role, marker, *, mode="apply", docx=False):
+    ws = root / name
+    ws.mkdir(parents=True)
+    (ws / "report.md").write_text(f"# Advice\n\n{marker} report: confirm the scope first.\n",
+                                  encoding="utf-8")
+    (ws / "cv.md").write_text(f"# CV\n\n{marker} curriculum\n", encoding="utf-8")
+    _pdf(ws / "cv.pdf", f"{marker} curriculum")
+    if docx:
+        from docx import Document
+        document = Document()
+        document.add_paragraph(f"{marker} curriculum")
+        document.save(ws / "cv.docx")
+    (ws / "posting.yaml").write_text(f'company: "{company}"\nrole_title: "{role}"\n',
+                                     encoding="utf-8")
+    deliver.journal.append(ws, {"action": "mode_entry", "mode": mode})
+    return ws
+
+
+def snapshot(dest):
+    return {rel: (dest / rel).read_bytes() for rel in client_files(dest)}
+
+
+def test_a_second_workspace_never_overwrites_the_first_in_a_shared_folder(tmp_path, capsys):
+    acme = posting_workspace(tmp_path, "acme-ml-engineer-2026-10-24", "Acme BV",
+                             "ML Engineer", "ACME", docx=True)
+    beta = posting_workspace(tmp_path, "beta-data-scientist-2026-10-24", "Beta Corp",
+                             "Data Scientist", "BETA")
+    dest = tmp_path / "consultation"
+    assert run(acme, dest) == 0
+    first = snapshot(dest)
+    assert set(first) == {"报告/求职建议报告.md", "报告/求职建议报告.pdf",
+                          "简历/简历.md", "简历/简历.pdf", "简历/简历.docx"}
+    capsys.readouterr()
+
+    assert run(beta, dest) == 0
+    output = capsys.readouterr()
+    sub = "Beta Corp Data Scientist"
+    assert {rel: data for rel, data in snapshot(dest).items() if not rel.startswith(sub)} == first
+    assert client_files(dest / sub) == {"报告/求职建议报告.md", "报告/求职建议报告.pdf",
+                                        "简历/简历.md", "简历/简历.pdf"}
+    assert "BETA" in (dest / sub / "报告/求职建议报告.md").read_text(encoding="utf-8")
+    assert (dest / sub / "简历/简历.pdf").read_bytes() == (beta / "cv.pdf").read_bytes()
+    assert "NOTICE_SEPARATE_FOLDER" in output.err and sub in output.err
+    assert output.out.rstrip().endswith(str(dest / sub)), "the folder to quote is the real one"
+
+
+def test_the_second_workspace_redelivers_into_its_own_subfolder(tmp_path):
+    acme = posting_workspace(tmp_path, "acme", "Acme BV", "ML Engineer", "ACME")
+    beta = posting_workspace(tmp_path, "beta", "Beta Corp", "Data Scientist", "BETA")
+    dest = tmp_path / "consultation"
+    assert run(acme, dest, "--no-pdf") == 0
+    assert run(beta, dest, "--no-pdf") == 0
+    (beta / "report.md").write_text("# Advice\n\nBETA round two.\n", encoding="utf-8")
+    assert run(beta, dest, "--no-pdf") == 0
+    folders = {p.name for p in dest.iterdir() if p.is_dir()} - {"报告", "简历"}
+    assert folders == {"Beta Corp Data Scientist"}
+    sub = dest / "Beta Corp Data Scientist"
+    assert "round two" in (sub / "报告/求职建议报告.md").read_text(encoding="utf-8")
+    assert "ACME" in (dest / "报告/求职建议报告.md").read_text(encoding="utf-8")
+
+
+def test_one_workspace_in_a_second_mode_keeps_the_first_modes_report(tmp_path, monkeypatch):
+    monkeypatch.setattr(deliver, "DEFAULT_ROOT", tmp_path / "Downloads")
+    ws = posting_workspace(tmp_path, "acme", "Acme BV", "ML Engineer", "APPLY")
+    assert deliver.main(["--workspace", str(ws), "--no-pdf"]) == 0
+    deliver.journal.append(ws, {"action": "mode_entry", "mode": "interview"})
+    (ws / "report.md").write_text("# Debrief\n\nINTERVIEW debrief.\n", encoding="utf-8")
+    assert deliver.main(["--workspace", str(ws), "--no-pdf"]) == 0
+    folder = tmp_path / "Downloads" / ws.name
+    assert "APPLY" in (folder / "报告/求职建议报告.md").read_text(encoding="utf-8")
+    assert "INTERVIEW" in (folder / "模拟面试/报告/求职建议报告.md").read_text(encoding="utf-8")
+    assert client_files(folder / "模拟面试") == {"报告/求职建议报告.md"}
+
+
+def test_a_redelivery_removes_only_its_own_stale_files(tmp_path):
+    ws = posting_workspace(tmp_path, "acme", "Acme BV", "ML Engineer", "ACME")
+    (ws / "letter.md").write_text("Dear Acme,\n", encoding="utf-8")
+    dest = tmp_path / "consultation"
+    assert run(ws, dest, "--no-pdf") == 0
+    assert (dest / "简历/求职信.md").is_file()
+    (dest / "简历/notes.txt").write_text("the client's own note", encoding="utf-8")
+    (ws / "letter.md").unlink()
+    assert run(ws, dest, "--no-pdf") == 0
+    assert not (dest / "简历/求职信.md").exists(), "a letter this round no longer has"
+    assert (dest / "简历/notes.txt").read_text(encoding="utf-8") == "the client's own note"
+    assert client_files(dest) == {"报告/求职建议报告.md", "简历/简历.md", "简历/简历.pdf",
+                                  "简历/notes.txt"}
+
+
+def test_a_stale_file_the_client_edited_is_kept_and_named(tmp_path, capsys):
+    ws = posting_workspace(tmp_path, "acme", "Acme BV", "ML Engineer", "ACME")
+    (ws / "letter.md").write_text("Dear Acme,\n", encoding="utf-8")
+    dest = tmp_path / "consultation"
+    assert run(ws, dest, "--no-pdf") == 0
+    (dest / "简历/求职信.md").write_text("Dear Acme, (edited by the client)\n", encoding="utf-8")
+    (ws / "letter.md").unlink()
+    capsys.readouterr()
+    assert run(ws, dest, "--no-pdf") == 0
+    assert "edited by the client" in (dest / "简历/求职信.md").read_text(encoding="utf-8")
+    assert "NOTICE_STALE_FILE_KEPT" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("manifest", [
+    "{broken",
+    '{"deliveries": "not a list"}',
+    # A manifest must never steer the stale-file cleanup outside client files.
+    '{"deliveries": [{"workspace": "WS", "mode": "unknown", "folder": "", '
+    '"files": {"../victim.txt": "0"}}]}',
+    '{"deliveries": [{"workspace": "WS", "mode": "unknown", "folder": "", '
+    '"files": {"简历/../../victim.txt": "0"}}]}',
+])
+def test_an_untrustworthy_manifest_stops_delivery_before_copying(tmp_path, capsys, manifest):
+    ws = build(tmp_path)
+    dest = tmp_path / "consultation"
+    dest.mkdir()
+    (dest / MANIFEST).write_text(manifest.replace("WS", str(ws.resolve())),
+                                              encoding="utf-8")
+    (tmp_path / "victim.txt").write_text("keep", encoding="utf-8")
+    assert run(ws, dest, "--no-pdf") == 2
+    err = capsys.readouterr().err
+    assert "DELIVER_MANIFEST_UNREADABLE" in err and "Traceback" not in err
+    assert client_files(dest) == set()
+    assert (tmp_path / "victim.txt").read_text(encoding="utf-8") == "keep"
+
+
+# ---- CV and letter PDFs come from their renderers, never from the report one --
+#
+# MEASURED: with no cv.pdf, cv.md went through the REPORT renderer into 简历.pdf
+# — footer "Career consultation report / Page 1", raw Markdown markers, extra
+# "Link:" lines — bypassing render_cv's NO_ENGINE/TEXT_OFF_PAGE refusals and
+# check_pages, and the delivery reported itself complete.
+
+def test_a_cv_without_its_own_pdf_ships_as_text_and_says_why(tmp_path, capsys):
+    from docx import Document
+    ws = tmp_path / "acme"
+    ws.mkdir()
+    deliver.journal.append(ws, {"action": "mode_entry", "mode": "apply"})
+    (ws / "report.md").write_text("# Advice\n\nSend the tailored CV.\n", encoding="utf-8")
+    (ws / "cv.md").write_text("# Jane Doe\n\n**Engineer** at [Acme](https://acme.example)\n",
+                              encoding="utf-8")
+    document = Document()
+    document.add_paragraph("Jane Doe")
+    document.save(ws / "cv.docx")
+    (ws / "letter.md").write_text("Dear Acme,\n", encoding="utf-8")
+    before = {p.name for p in ws.iterdir()}
+    dest = tmp_path / "out"
+    assert run(ws, dest) == 2, "a missing CV PDF is an incomplete apply delivery"
+    err = capsys.readouterr().err
+    assert client_files(dest) == {"报告/求职建议报告.md", "报告/求职建议报告.pdf",
+                                  "简历/简历.md", "简历/简历.docx", "简历/求职信.md"}
+    assert "NOTICE_PDF_MISSING: 简历.pdf" in err and "cv.pdf" in err and "render_cv.py" in err
+    assert "NOTICE_PDF_MISSING: 求职信.pdf" in err and "render_letter.py" in err
+    # Only the report's own render record may appear; none may claim a CV PDF.
+    assert {p.name for p in ws.iterdir()} == before | {"report-render.json"}
+
+
+def test_a_supporting_statement_ships_as_text_with_a_notice(tmp_path, capsys):
+    ws = tmp_path / "uni"
+    ws.mkdir()
+    deliver.journal.append(ws, {"action": "mode_entry", "mode": "apply"})
+    (ws / "report.md").write_text("# Advice\n\nSubmit the statement in the portal.\n",
+                                  encoding="utf-8")
+    (ws / "supporting-statement.md").write_text("I meet criterion 1 because ...\n",
+                                                encoding="utf-8")
+    dest = tmp_path / "out"
+    assert run(ws, dest) == 0
+    assert client_files(dest) == {"报告/求职建议报告.md", "报告/求职建议报告.pdf",
+                                  "简历/申请陈述.md"}
+    assert "NOTICE_PDF_NOT_PRODUCED: 申请陈述.pdf" in capsys.readouterr().err
+
+
+def test_an_explicit_copy_outside_apply_names_a_missing_cv_pdf_without_failing(tmp_path, capsys):
+    ws = tmp_path / "interview"
+    ws.mkdir()
+    deliver.journal.append(ws, {"action": "mode_entry", "mode": "interview"})
+    (ws / "report.md").write_text("# Debrief\n\nPractise the system design answer.\n",
+                                  encoding="utf-8")
+    (ws / "cv.md").write_text("# Jane Doe\n", encoding="utf-8")
+    dest = tmp_path / "out"
+    assert run(ws, dest, "--include-applications") == 0
+    assert client_files(dest) == {"报告/求职建议报告.md", "报告/求职建议报告.pdf",
+                                  "简历/简历.md"}
+    assert "NOTICE_PDF_NOT_PRODUCED: 简历.pdf" in capsys.readouterr().err
+
+
+# ---- could not run is exit 2 with one line, never a traceback ---------------
+
+def test_an_unreadable_journal_is_named_as_such(tmp_path, capsys):
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    (ws / "report.md").write_text("# Advice\n", encoding="utf-8")
+    (ws / "journal.jsonl").mkdir()
+    assert run(ws, tmp_path / "out", "--no-pdf") == 2
+    err = capsys.readouterr().err
+    assert err.startswith("DELIVER_WORKSPACE_UNREADABLE:") and "Traceback" not in err
+
+
+def test_an_unknown_option_is_a_usage_error_not_a_traceback(tmp_path):
+    ws = build(tmp_path)
+    r = subprocess.run([sys.executable, str(REPO / "scripts" / "deliver.py"),
+                        "--workspace", str(ws), "--files", str(tmp_path / "missing.md")],
+                       capture_output=True, text=True, encoding="utf-8")
+    assert r.returncode == 2 and "Traceback" not in r.stderr and "--files" in r.stderr
