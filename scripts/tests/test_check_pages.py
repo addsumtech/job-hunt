@@ -342,6 +342,51 @@ def test_a_readable_start_date_does_not_fire_it(tmp_path):
     assert not any(f.startswith("START_DATE_UNREAD") for f in found), found
 
 
+# START_DATE_UNREAD ends "Write the Gregorian year, or set meta.max_pages", and
+# setting meta.max_pages did not clear it: the user followed the finding's own
+# remedy and the gate still exited 1. The date only matters to the page budget,
+# and neither an explicit meta.max_pages nor an academic CV reads it.
+
+@pytest.mark.parametrize("meta", [{"max_pages": 2}, {"max_pages": 1},
+                                  {"cv_type": "academic"}])
+def test_an_unread_date_is_not_reported_when_the_budget_does_not_use_it(tmp_path, meta):
+    pdf = tmp_path / "cv.pdf"
+    pdf.write_bytes(b"%PDF-1.7\n")
+    profile = {"meta": {"name": "x", **meta}, "experience": [{"start": "平成31年4月"}]}
+    found = check_pages.findings_for(str(pdf), profile, 2026)
+    assert not any(f.startswith("START_DATE_UNREAD") for f in found), found
+
+
+@pytest.mark.parametrize("bad", ["2", 0, -1, True, None])
+def test_a_max_pages_that_is_not_a_page_count_does_not_clear_it(tmp_path, bad):
+    pdf = tmp_path / "cv.pdf"
+    pdf.write_bytes(b"%PDF-1.7\n")
+    profile = {"meta": {"name": "x", "max_pages": bad}, "experience": [{"start": "平成31年4月"}]}
+    found = check_pages.findings_for(str(pdf), profile, 2026)
+    assert any(f.startswith("START_DATE_UNREAD") for f in found), found
+
+
+def test_following_the_advice_makes_the_gate_pass(tmp_path, capsys):
+    """The measured case end to end: a two-page CV, a Japanese-era start date,
+    and meta.max_pages: 2 set exactly as the finding said."""
+    profile = {"meta": {"name": "Taro Yamada", "max_pages": 2},
+               "experience": [{"org": "Acme KK", "start": "平成31年4月"}]}
+    ws = _ws(tmp_path, profile, cv_pages=2)
+    assert check_pages.main(["--workspace", str(ws), "--today", "2026-10-24"]) == 0
+    assert capsys.readouterr().out.strip() == ""
+
+
+def test_a_cv_over_an_explicit_budget_names_meta_max_pages_not_the_table(tmp_path, capsys):
+    """Under an override the length table and the years were not consulted, so
+    "the length table allows 1 for 8 years of experience" was false twice."""
+    profile = {**MID, "meta": {"name": "Zoë Nowak", "max_pages": 1}}
+    ws = _ws(tmp_path, profile, cv_pages=2)
+    assert check_pages.main(["--workspace", str(ws), "--today", "2026-08-09"]) == 1
+    out = capsys.readouterr().out
+    assert "CV_TOO_LONG" in out and "meta.max_pages allows 1" in out
+    assert "length table" not in out and "years of experience" not in out
+
+
 @pytest.mark.parametrize("market", ["us", "USA", "United States", "Canada", "San Francisco, US"])
 def test_the_us_resume_budget_is_one_page_until_ten_years(market):
     """cv-craft.md:130 — "US & Canada … 1 page (US strict; a 2nd page only at

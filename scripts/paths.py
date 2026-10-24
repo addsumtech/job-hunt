@@ -346,6 +346,53 @@ def answer_bank_of(workspace) -> pathlib.Path:
     return profile_dir_of(workspace) / ANSWER_BANK_NAME
 
 
+def _same_directory(a: pathlib.Path, b: pathlib.Path) -> bool:
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return False
+
+
+def skill_workspace_refusal(workspace, root=None) -> str:
+    """Why `workspace` must not hold a run, as one line, or "" when it may.
+
+    A run never lives inside the skill. `modes/discover.md` told agents to run
+    `python3 scripts/<gate>.py --workspace .`, and `scripts/` only resolves from
+    the skill root, so `.` WAS the skill root: snapshot_profile wrote the
+    candidate's private candidate-profile.yaml into the skill directory, which
+    git does not ignore, and four discover gates appended journal.jsonl beside
+    SKILL.md. Nothing failed, so nothing said so.
+
+    The whole repository is refused, not only its root, because nothing
+    legitimately takes a workspace inside it. The in-repo fixtures
+    (evals/fixtures/workspaces, scripts/tests/fixtures/mock-dryrun) are copied to
+    a temporary directory before anything runs against them, and running a gate
+    on the originals would append a receipt to a tracked fixture journal that a
+    test pins line for line.
+
+    Resolved the way the calling script resolves it: relative to the current
+    directory, symlinks followed, no `~` expansion. `.`, `scripts/..` and a
+    symlinked install path are all the same directory, and `samefile` on each
+    existing ancestor also catches another spelling of it on a case-insensitive
+    disk. Reads the filesystem; never writes to it.
+    """
+    skill = pathlib.Path(root).resolve() if root else SKILL_ROOT
+    try:
+        target = pathlib.Path(workspace).resolve()
+    except (OSError, RuntimeError, ValueError):
+        return ""          # the script reports an unusable path in its own words
+    for candidate in (target, *target.parents):
+        if candidate == skill or _same_directory(candidate, skill):
+            where = "is" if candidate == target else "is inside"
+            return (f"WORKSPACE_IN_SKILL: --workspace {str(workspace)!r} {where} the "
+                    f"job-hunt skill directory {skill}, so this run's journal, profile "
+                    f"snapshot and documents would be written into the skill itself. "
+                    f"Pass the run's own directory by absolute path (under "
+                    f"{PROFILES_ROOT}/<name>/applications/ or .../searches/), not '.' "
+                    f"from the skill root.")
+    return ""
+
+
 def mode_file(mode: str, root=None) -> pathlib.Path:
     """<skill root>/modes/<mode>.md — the layer-1.5 file for a mode."""
     return (pathlib.Path(root) if root else SKILL_ROOT) / "modes" / f"{mode}.md"

@@ -161,3 +161,142 @@ def test_varied_non_ascii_bullets_stay_quiet():
     repeats)."""
     cv = "\n".join(["- 构建了训练流水线", "- 优化了推理延迟", "- 撰写了技术文档"])
     assert not any(f.startswith("REPEATED_VERB") for f in lint_cv.findings_for(cv))
+
+
+# ---------------------------------------------------------------------------
+# A name is not phrasing. AI_VOCABULARY fired on a skill ("Pivotal Cloud
+# Foundry") and a paper title ("Robust Motion-Corrected MRI Reconstruction"),
+# exited 1 and blocked check_apply, and the only way to clear it was to falsify
+# a product name or a citation. Measured 2026-10-24 on render_cv's own layout.
+# ---------------------------------------------------------------------------
+
+NAMES_CV = """# Jane Doe
+jane@example.com
+
+## Experience
+
+**Research Engineer**, Acme BV
+_2023-01 – Present_
+
+- Cut MRI reconstruction time from 40 s to 6 s by porting the solver to CUDA.
+
+## Skills
+- **Tools:** Pivotal Cloud Foundry, Docker, MongoDB Realm
+
+## Certifications
+- Pivotal Certified Spring Professional (2021)
+
+## Publications
+- J. Doe, A. Smith. Robust Motion-Corrected MRI Reconstruction. MRM 2024.
+"""
+
+
+def test_skills_certifications_and_publication_titles_are_not_ai_vocabulary(tmp_path, capsys):
+    assert lint_cv.findings_for(NAMES_CV) == []
+    ws = _cv(tmp_path, NAMES_CV)
+    assert lint_cv.main(["--workspace", str(ws)]) == 0
+    assert capsys.readouterr().out.strip() == ""
+
+
+def test_the_summary_and_the_bullets_are_still_scanned():
+    cv = NAMES_CV.replace(
+        "## Experience",
+        "Robust engineer who spearheaded imaging work.\n\n## Experience").replace(
+        "- Cut MRI", "- Spearheaded a pivotal rewrite that cut MRI")
+    found = lint_cv.findings_for(cv)
+    assert any("'robust'" in f and "cv.md:4:" in f for f in found), found
+    assert any("'spearheaded'" in f and "cv.md:11:" in f for f in found), found
+    assert any("'pivotal'" in f and "cv.md:11:" in f for f in found), found
+    assert len(found) == 4, found      # the summary's two, the bullet's two
+
+
+def test_a_section_after_the_publications_is_scanned_again():
+    cv = NAMES_CV + "\n## Volunteer\n- Ran a robust outreach programme.\n"
+    assert [f for f in lint_cv.findings_for(cv) if "'robust'" in f] != []
+
+
+def test_a_subheading_inside_the_publications_stays_a_publication():
+    cv = ("# X\n\n## Publications\n\n### Journal articles\n"
+          "- Doe J. Leveraging robust priors for MRI. MRM 2024.\n")
+    assert lint_cv.findings_for(cv) == []
+
+
+def test_a_cliche_in_the_skills_list_is_still_a_cliche():
+    """Only the AI-vocabulary list is lifted there: "team player" is the
+    candidate describing themselves, not the name of a product."""
+    cv = "# X\n\n## Skills\n- **Soft skills:** team player, excellent communicator\n"
+    assert any(f.startswith("CLICHE:") for f in lint_cv.findings_for(cv))
+
+
+def test_three_first_author_papers_are_not_a_repeated_verb():
+    cv = ("# X\n\n## Publications\n"
+          "- Nowak Z, Smith A. Leveraging sparsity in MRI. MRM 2024.\n"
+          "- Nowak Z, Lee B. Robust coil compression. ISMRM 2023.\n"
+          "- Nowak Z. Seamless motion correction. MICCAI 2022.\n")
+    assert lint_cv.findings_for(cv) == []
+
+
+@pytest.mark.parametrize("heading", ["## 专业技能", "## Kenntnisse", "## スキル",
+                                     "## Technical Skills", "## Skills & Tools", "## 技能"])
+def test_a_localized_or_hand_written_skills_heading_is_recognised(heading):
+    assert lint_cv.findings_for(f"# X\n\n{heading}\n- Pivotal Cloud Foundry\n") == []
+
+
+def test_meta_headings_names_the_skills_section_of_an_untabled_language(tmp_path, capsys):
+    cv = "# X\n\n## Umiejętności\n- Pivotal Cloud Foundry\n"
+    assert lint_cv.findings_for(cv)          # nothing says this heading is the skills list
+    profile = {"meta": {"language": "pl", "headings": {"skills": "Umiejętności"}}}
+    assert lint_cv.findings_for(cv, profile=profile) == []
+    ws = _cv(tmp_path, cv)
+    (ws / "tailored-profile.yaml").write_text(
+        "meta:\n  language: pl\n  headings:\n    skills: Umiejętności\n", encoding="utf-8")
+    assert lint_cv.main(["--workspace", str(ws)]) == 0
+    capsys.readouterr()
+
+
+def test_an_employer_named_in_the_entry_header_is_not_ai_vocabulary():
+    """`**title**, org` is render_cv's entry header: the line that merely names
+    the company, which is the case the _NOT_PROSE comment already promised."""
+    cv = ("# X\n\n## Experience\n\n**Software Engineer**, Pivotal Software  \n"
+          "_2015-06 – 2019-12_\n\n- Shipped the buildpack cache.\n")
+    assert lint_cv.findings_for(cv) == []
+
+
+def test_a_project_description_is_prose_and_still_scanned():
+    cv = "# X\n\n## Projects\n\n**SegKit** — lead — a robust segmentation toolkit\n"
+    assert any("'robust'" in f for f in lint_cv.findings_for(cv))
+
+
+# ---------------------------------------------------------------------------
+# Japanese and Korean are verb-final. Three bullets that open with the same
+# object noun (データ…) were reported as one verb repeated three times on a CV
+# whose verbs (移行 / 削減 / 主導) all differ.
+# ---------------------------------------------------------------------------
+
+def test_japanese_bullets_opening_with_the_same_noun_are_not_a_repeated_verb():
+    cv = ("# 山田 太郎\n\n## 職務経歴\n\n"
+          "- データ基盤をBigQueryへ移行し、月次集計を6時間から40分に短縮\n"
+          "- データ品質チェックを自動化し、手戻りを月20件から3件に削減\n"
+          "- データ分析チーム5名の採用と育成を主導\n")
+    assert lint_cv.findings_for(cv) == []
+
+
+@pytest.mark.parametrize("bullets", [
+    ["데이터 파이프라인을 구축하여 집계 시간을 6시간에서 40분으로 단축",
+     "데이터 품질 검사를 자동화하여 재작업을 월 20건에서 3건으로 감소",
+     "데이터 분석팀 5명을 채용하고 육성"],
+    ["Kubernetes 클러스터를 구축하여 배포 시간을 단축",
+     "Kubernetes 비용을 월 30% 절감",
+     "Kubernetes 모니터링 체계를 도입"],
+])
+def test_korean_bullets_opening_with_the_same_noun_are_not_a_repeated_verb(bullets):
+    cv = "# X\n\n## 경력\n\n" + "".join(f"- {b}\n" for b in bullets)
+    assert not any(f.startswith("REPEATED_VERB") for f in lint_cv.findings_for(cv))
+
+
+def test_a_katakana_name_does_not_exempt_an_english_bullet():
+    """Katakana alone is a name inside another language's bullet; the English
+    verb still opens it, so the repetition still counts."""
+    cv = ("# X\n- Spearheaded the ソニー migration.\n- Spearheaded the vendor work.\n"
+          "- Spearheaded the clinical rollout.\n")
+    assert any(f.startswith("REPEATED_VERB") for f in lint_cv.findings_for(cv))
