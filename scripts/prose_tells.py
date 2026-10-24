@@ -104,7 +104,10 @@ NOT_JUST_PIVOT = re.compile(
 # the gate saw nothing, because a criterion answer is written about work already
 # done and a letter is not.
 
-_EM_DASH = re.compile(r"[—–]|(?<=\s)--(?=\s)")
+# `——` is ONE mark in Chinese (破折号), typed as two U+2014, so a run counts once.
+# check_letter collapsed it before calling; check_word_limits did not, and two
+# ordinary uses in a Chinese criterion answer read as four.
+_EM_DASH = re.compile(r"—{2,}|[—–]|(?<=\s)--(?=\s)")
 _SENTENCE = re.compile(r"[^.!?？。！]+[.!?？。！]?")
 # "A, B, and C" / "A、B 和 C" inside one sentence.
 _TRICOLON = re.compile(
@@ -131,8 +134,21 @@ EM_DASH_PER_100_WORDS = 1.5
 MAX_TRICOLONS = 3
 
 
+# Han and kana are written without spaces, so the word pattern below read every
+# run of them between two punctuation marks as ONE word: a 260-character Chinese
+# letter measured 20 "words", and two ordinary 破折号 came out at 10 per 100
+# against a line of 1.5. Each of those characters is counted as one unit
+# instead. A character carries less than an English word, so the density this
+# gives a CJK text is, if anything, LOW — the direction this file errs in. Hangul
+# is not in the class: Korean puts spaces between words, and the word pattern
+# already counts them as an English reader would.
+_UNSPACED_CJK = re.compile("[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+
+
 def _words(text: str) -> int:
-    return max(1, len(re.findall(r"[^\W\d_][\w'-]*", text, re.UNICODE)))
+    unspaced = len(_UNSPACED_CJK.findall(text))
+    rest = _UNSPACED_CJK.sub(" ", text)
+    return max(1, unspaced + len(re.findall(r"[^\W\d_][\w'-]*", rest, re.UNICODE)))
 
 
 def vocabulary_findings(text: str, where: str) -> list:

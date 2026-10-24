@@ -336,6 +336,39 @@ def notices_for(letter: dict) -> list:
     ]
 
 
+def profile_inputs(letter: dict, workspace) -> list:
+    """The workspace profiles this verdict depends on, in render_letter's order.
+
+    `findings_for` reads the letter as render_letter resolves it, and the one
+    resolved key that changes a finding is `language`: it picks the sourced
+    salutation and closing (NO_SALUTATION / NO_CLOSING) and is the reference for
+    the *_LANGUAGE_MISMATCH lines. It comes from the workspace profile only when
+    letter.yaml states no `meta.language` and the body does not settle it — then
+    a tailored-profile.yaml edit alone can turn this gate's pass into a fail, and
+    a receipt that hashed only letter.yaml and posting.yaml went on vouching for
+    a letter whose verdict had changed (check_apply's STALE_RECEIPT re-hashes
+    exactly the files a receipt names, nothing else).
+
+    Each profile up to and including the first one with a `meta` mapping counts:
+    the earlier ones decide by HAVING no meta which file is read. When the letter
+    settles its own language the list is empty, so a CV edit does not stale the
+    letter's receipt.
+    """
+    if (render_letter.declared_language(letter)
+            or render_letter.infer_language(render_letter.body_text(letter))):
+        return []
+    ws = pathlib.Path(workspace)
+    out = []
+    for name in render_letter._WORKSPACE_PROFILES:
+        path = ws / name
+        if not path.is_file():
+            continue
+        out.append(path)
+        if journal.as_mapping(render_letter._read_mapping(path).get("meta")):
+            break
+    return out
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--workspace", required=True)
@@ -367,9 +400,9 @@ def main(argv=None) -> int:
         print(f)
     for notice in notices_for(letter):
         print(notice, file=sys.stderr)
-    journal.receipt(ws, GATE,
-                    {lp.name: journal.sha256_file(lp), pp.name: journal.sha256_file(pp)},
-                    "fail" if findings else "pass", findings)
+    hashes = {lp.name: journal.sha256_file(lp), pp.name: journal.sha256_file(pp)}
+    hashes.update({p.name: journal.sha256_file(p) for p in profile_inputs(letter, ws)})
+    journal.receipt(ws, GATE, hashes, "fail" if findings else "pass", findings)
     return 1 if findings else 0
 
 

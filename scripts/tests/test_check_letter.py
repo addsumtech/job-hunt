@@ -438,3 +438,89 @@ def test_three_chinese_dashes_are_still_three():
     """The twin: the mark is counted once, not ignored."""
     out = check_letter.findings_for(_zh_with_dashes(3), _ZH_DOCUMENTED_POSTING)
     assert any(f.startswith("EM_DASH_DENSITY") and ": 3 em dashes" in f for f in out), out
+
+
+# A real-length Chinese letter: about 300 characters and three ordinary 破折号.
+# Counted as words, each run of Han between two punctuation marks was ONE word,
+# so the body measured 22 "words" and three marks read as 13.6 per 100 — the
+# same three dashes in a 300-word English letter are 1.0 and pass.
+_ZH_REAL_LENGTH = {
+    "meta": {"language": "zh"}, "salutation": "尊敬的招聘团队：", "closing": "此致敬礼",
+    "recipient": {"company": "阿里巴巴"},
+    "body": ["您好，我希望应聘推荐算法工程师一职——这是我过去五年一直在做的方向。"
+             "我在推荐系统方向负责过召回模块的重构，也参与过排序模型的迭代。",
+             "在上一份工作中，我主导了分布式训练框架的迁移——训练时长从十二小时缩短到七小时，"
+             "同时保证了线上效果稳定。之后我又负责了特征平台的建设，把新特征上线的周期"
+             "从两周缩短到三天，并和数据团队一起建立了离线评估与线上实验的对照流程。",
+             "我希望把这些经验带到贵司的推荐团队——尤其是冷启动和长尾内容分发这两个方向。"
+             "期待有机会进一步交流，也愿意在面试中详细介绍相关项目的设计与取舍。"]}
+
+
+def test_three_dashes_in_a_real_length_chinese_letter_are_ordinary():
+    out = check_letter.findings_for(_ZH_REAL_LENGTH, _ZH_DOCUMENTED_POSTING)
+    assert not [f for f in out if f.startswith("EM_DASH_DENSITY")], out
+
+
+# ---------------------------------------------------------------------------
+# The receipt names what the verdict read. With no meta.language and a body the
+# detector cannot place, the language — and with it NO_SALUTATION / NO_CLOSING —
+# comes from tailored-profile.yaml. The receipt hashed letter.yaml and
+# posting.yaml only, so check_apply's STALE_RECEIPT could not see a profile edit
+# that turned this gate's pass into a fail.
+# ---------------------------------------------------------------------------
+
+# 288 words in three paragraphs, so the English word band is met when the
+# profile says `en`; the body detector does not know Polish.
+_PL_LETTER = {"recipient": {"company": "Acme"},
+              "body": ["Przez cztery lata budowałem potoki danych dla firmy. " * 12] * 3}
+_PL_POSTING = {"company": "Acme", "role_title": "danych"}
+
+
+def _profile(ws, language):
+    (ws / "tailored-profile.yaml").write_text(
+        yaml.safe_dump({"meta": {"language": language, "target_market": "pl"}}),
+        encoding="utf-8")
+
+
+def test_a_profile_that_decides_the_language_is_in_the_receipt(tmp_path):
+    import check_apply
+    ws = _ws(tmp_path, _PL_LETTER, posting=_PL_POSTING)
+    _profile(ws, "en")      # English defaults cover the letter: the gate passes
+    assert check_letter.main(["--workspace", str(ws)]) == 0
+    receipt = journal.read_receipts(ws, "check_letter")[-1]
+    assert receipt["input_hashes"].get("tailored-profile.yaml") == \
+        journal.sha256_file(ws / "tailored-profile.yaml"), receipt["input_hashes"]
+    _profile(ws, "pl")      # the same letter now has no sourced salutation
+    stale = check_apply._stale_inputs(ws, "check_letter", receipt)
+    assert any(f.startswith("STALE_RECEIPT") and "tailored-profile.yaml" in f
+               for f in stale), stale
+    assert check_letter.main(["--workspace", str(ws)]) == 1
+
+
+def test_a_profile_the_letter_never_consults_stays_out_of_the_receipt(tmp_path):
+    """The twin: a letter that settles its own language does not read the
+    profile, so a CV edit must not stale the letter's pass."""
+    ws = _ws(tmp_path, _letter())
+    _profile(ws, "de")
+    assert check_letter.main(["--workspace", str(ws)]) == 0
+    hashes = journal.read_receipts(ws, "check_letter")[-1]["input_hashes"]
+    assert set(hashes) == {"letter.yaml", "posting.yaml"}, hashes
+    declared = dict(_PL_LETTER, meta={"language": "pl"})
+    ws = _ws(tmp_path / "declared", declared, posting=_PL_POSTING)
+    _profile(ws, "en")
+    check_letter.main(["--workspace", str(ws)])
+    hashes = journal.read_receipts(ws, "check_letter")[-1]["input_hashes"]
+    assert "tailored-profile.yaml" not in hashes, hashes
+
+
+def test_a_profile_without_meta_is_bound_with_the_one_that_decided(tmp_path):
+    """render_letter falls through tailored-profile.yaml to profile.yaml when the
+    first has no meta, so giving the first a meta later changes the language:
+    both are inputs."""
+    ws = _ws(tmp_path, _PL_LETTER, posting=_PL_POSTING)
+    (ws / "tailored-profile.yaml").write_text("skills: [Python]\n", encoding="utf-8")
+    (ws / "profile.yaml").write_text(yaml.safe_dump({"meta": {"language": "pl"}}),
+                                     encoding="utf-8")
+    assert check_letter.main(["--workspace", str(ws)]) == 1
+    hashes = journal.read_receipts(ws, "check_letter")[-1]["input_hashes"]
+    assert {"tailored-profile.yaml", "profile.yaml"} <= set(hashes), hashes

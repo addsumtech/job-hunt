@@ -1380,3 +1380,89 @@ def test_the_relaxed_names_pass_and_the_strict_ones_fail_in_one_workspace(
     assert _finding_for(out, "Google").startswith("ORG_TRUNCATED")
     assert _finding_for(out, "TU Delft").startswith("ORG_TRUNCATED")
     assert len(out.strip().splitlines()) == 2, out
+
+
+# ---------------------------------------------------------------------------
+# A publication's status. "(under review)", "(submitted)", "preprint", 审稿中 …
+# were in no vocabulary, so a tailored CV that dropped one presented a paper
+# nobody has accepted as published, and the gate said sourced. Only the words
+# whose removal upgrades the claim: `in press` and `accepted` already mean
+# accepted.
+# ---------------------------------------------------------------------------
+
+_DROPS_A_PUBLICATION_STATUS = [
+    ("Doe J. Deep cine reconstruction. NeurIPS 2025",
+     "Doe J. Deep cine reconstruction. NeurIPS 2025 (under review)"),
+    ("Deep cine reconstruction, MRM", "Deep cine reconstruction, MRM (submitted)"),
+    ("Motion-resolved reconstruction", "Motion-resolved reconstruction (preprint)"),
+    ("Motion-resolved reconstruction",
+     "Motion-resolved reconstruction (manuscript in preparation)"),
+    ("Motion-resolved reconstruction", "Motion-resolved reconstruction — in review"),
+    ("Motion-resolved reconstruction", "Motion-resolved reconstruction (unpublished)"),
+    ("Bewegungsaufgelöste Rekonstruktion", "Bewegungsaufgelöste Rekonstruktion (eingereicht)"),
+    ("Reconstruction dynamique", "Reconstruction dynamique (en révision)"),
+    ("基于深度学习的心脏磁共振重建", "基于深度学习的心脏磁共振重建（审稿中）"),
+    ("基于深度学习的心脏磁共振重建", "基于深度学习的心脏磁共振重建（投稿中）"),
+    ("基于深度学习的心脏磁共振重建", "基于深度学习的心脏磁共振重建，在审"),
+    ("心臓MRI再構成", "心臓MRI再構成（査読中）"),
+    ("심장 MRI 재구성", "심장 MRI 재구성 (심사 중)"),
+    ("심장 MRI 재구성", "심장 MRI 재구성 (심사중)"),
+    # A status names its venue; dropping both still presents the paper as out.
+    ("Deep cine reconstruction", "Deep cine reconstruction (under review at MRM)"),
+    ("Deep cine reconstruction", "Deep cine reconstruction, submitted to NeurIPS 2025"),
+]
+_KEEPS_A_PUBLICATION_HONEST = [
+    ("Deep cine reconstruction, MRM", "Deep cine reconstruction, MRM (in press)"),
+    ("Deep cine reconstruction, MRM", "Deep cine reconstruction, MRM (accepted)"),
+    ("Deep cine reconstruction, MRM", "Deep cine reconstruction, MRM (2025)"),
+    ("Deep cine reconstruction, MRM", "Deep cine reconstruction, MRM (oral)"),
+    ("Deep cine reconstruction", "Deep cine reconstruction, MRM 2024 (accepted)"),
+]
+
+
+@pytest.mark.parametrize("term,leaf", _DROPS_A_PUBLICATION_STATUS,
+                         ids=[t[1][-24:] for t in _DROPS_A_PUBLICATION_STATUS])
+def test_a_dropped_publication_status_is_a_qualifier(term, leaf):
+    assert check_claims.relation(term, leaf, "publications") == check_claims.QUALIFIER
+    assert check_claims.dropped_qualifier(term, leaf, "publications")[0] == "status"
+
+
+@pytest.mark.parametrize("term,leaf", _KEEPS_A_PUBLICATION_HONEST,
+                         ids=[t[1][-24:] for t in _KEEPS_A_PUBLICATION_HONEST])
+def test_a_publication_trim_that_upgrades_nothing_is_quiet(term, leaf):
+    """`in press` / `accepted` claim acceptance already, and a dropped year,
+    presentation format or venue says nothing about whether it was accepted."""
+    assert check_claims.relation(term, leaf, "publications") == check_claims.SOURCED
+
+
+@pytest.mark.parametrize("term,leaf,family", [
+    ("Code", "Code review", "skills"),
+    ("Editing", "Editing (manuscript)", "skills"),
+    ("Grant writing", "Grant writing (submitted)", "certifications"),
+])
+def test_the_publication_vocabulary_is_scoped_to_publications(term, leaf, family):
+    assert check_claims.relation(term, leaf, family) == check_claims.SOURCED
+
+
+def test_a_publication_that_drops_its_status_fails_the_gate(tmp_path, capsys):
+    master = {"meta": {"name": "Test User"},
+              "publications": [
+                  "Doe J. Deep cine reconstruction. NeurIPS 2025 (under review)",
+                  {"title": "Motion-resolved recon", "venue": "MRM",
+                   "status": "submitted"},
+                  "Doe J. Fast T1 mapping. MRM 2024 (in press)"]}
+    tailored = {"meta": {"name": "Test User"},
+                "publications": [
+                    "Doe J. Deep cine reconstruction. NeurIPS 2025",
+                    {"title": "Motion-resolved recon", "venue": "MRM"},
+                    "Doe J. Fast T1 mapping. MRM 2024"]}
+    ws, _ = _setup(tmp_path, tailored, master=master)
+    capsys.readouterr()
+    assert check_claims.main(["--workspace", str(ws)]) == 1
+    out = capsys.readouterr().out
+    first = _finding_for(out, "Doe J. Deep cine reconstruction. NeurIPS 2025")
+    assert first.startswith("QUALIFIER_STRIPPED") and '"under review"' in first, first
+    assert "an accepted, published paper" in first, first
+    second = _finding_for(out, "Motion-resolved recon MRM")
+    assert second.startswith("QUALIFIER_STRIPPED") and '"submitted"' in second, second
+    assert _finding_for(out, "Doe J. Fast T1 mapping. MRM 2024") is None, out
