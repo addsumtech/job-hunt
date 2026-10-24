@@ -220,6 +220,7 @@ Read `references/motivation-letter.md` and follow it.
 
 - **Skip gate (apply before drafting):** Per `references/motivation-letter.md §0`, check whether a letter is actually needed. If the portal has no field for it, the posting says to skip it, it is a high-volume/quick-apply role where letters are not standard, or a strong referral has effectively replaced it — say so and skip rather than forcing a letter. Only proceed if a letter is genuinely warranted.
 - Draft the letter into `<workspace>/letter.yaml` with this exact schema:
+  - `meta`: `{language, target_market}` — copied from `tailored-profile.yaml`'s `meta`, so the letter is in the CV's language and on the CV's paper size
   - `sender`: `{name, email, location}`
   - `recipient`: `{name, company, location}`
   - `date`
