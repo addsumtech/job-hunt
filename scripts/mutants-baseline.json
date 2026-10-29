@@ -25,7 +25,11 @@
   "check_claims.py RE-MEASURED 2026-10-24 after v1.3.0 and the tests that pinned its",
   "new survivors: 141 mutants, 15 survived, 126/141 (89%) caught. Its entries below",
   "are that run's survivors: the two marked EQUIVALENT carry their reasoning, the",
-  "rest are the older debt, still at the line numbers they were recorded at."
+  "rest are the older debt, still at the line numbers they were recorded at.",
+  "",
+  "render_cv.py MEASURED 2026-10-29 in three CI shards (run 40847949269): 229",
+  "mutants, 47 survived, 9 of them new since the baseline. Seven are now pinned by",
+  "tests; the two marked EQUIVALENT carry their reasoning."
  ],
  "known_survivors": {
   "8dd4b18ac4b6d3bd": "scripts/check_apply.py:116 [guard->False] if pathlib.Path(label).name == \"journal.jsonl\": — recorded, not explained",
@@ -92,6 +96,8 @@
   "24037ac83f9370ff": "scripts/render_cv.py:1937 [guard->False] if ok: — recorded, not explained",
   "c3444c1386db8c87": "scripts/render_cv.py:1938 [guard->False] if not confirm_written(out, \"pdf\"): — recorded, not explained",
   "48ea67653981a146": "scripts/render_cv.py:1951 [guard->False] if not confirm_written(out, args.format): — recorded, not explained",
-  "c7a84667c657d5dd": "scripts/render_cv.py:1957 [guard->False] if __name__ == \"__main__\": — recorded, not explained"
+  "c7a84667c657d5dd": "scripts/render_cv.py:1957 [guard->False] if __name__ == \"__main__\": — recorded, not explained",
+  "e73e1d4a9500f24f": "scripts/render_cv.py:372 [guard->False] if isinstance(value, datetime.date): — EQUIVALENT, not blindness. Recorded 2026-10-29. datetime.datetime returns two lines above, so only a plain date reaches this test, and str() of a date IS date.isoformat(): the fall-through `str(value).strip()` gives the same text.",
+  "f95441e3e07498c6": "scripts/render_cv.py:1231 [guard->False] if skills in (None, \"\", [], {}): — EQUIVALENT, not blindness. Recorded 2026-10-29. Each empty shape still comes out []: None and \"\" become the group (None, value), whose as_list is [] or [\"\"] and is filtered empty; [] fails _is_group_list (bool([]) is False) and becomes (None, []); {} has no items. A group with no items is never appended."
  }
 }

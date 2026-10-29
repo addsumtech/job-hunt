@@ -1500,6 +1500,31 @@ def test_skill_groups_reads_every_shape_the_same_way():
     assert sg({"skills": []}) == [] and sg({}) == []
 
 
+@pytest.mark.parametrize("fmt", ["md", "docx", "pdf"])
+@pytest.mark.parametrize("yaml_text", ["", "skills: []\n"])
+def test_no_skills_means_no_skills_heading(tmp_path, monkeypatch, capsys, yaml_text, fmt):
+    """A heading with nothing under it reads as a section the candidate left blank."""
+    code, text = _cli(tmp_path, monkeypatch, yaml_text, fmt)
+    assert code == 0, capsys.readouterr().err
+    assert "Skills" not in text, text
+
+
+def test_a_list_summary_is_one_paragraph_not_a_repr():
+    st = render_cv.summary_text
+    assert st({"summary": ["Builds search.", None, "", "Ships ranking."]}) == (
+        "Builds search. Ships ranking.")
+    assert st({"summary": ("One line.",)}) == "One line."
+
+
+def test_a_render_that_wrote_nothing_is_not_announced(tmp_path, monkeypatch, capsys):
+    """`Wrote cv.md` after an empty file is the success line the user would trust."""
+    monkeypatch.setattr(render_cv, "render_markdown", lambda profile: "")
+    code, _ = _cli(tmp_path, monkeypatch, "", "md")
+    out = capsys.readouterr()
+    assert code == 1, out.err
+    assert "Wrote" not in out.out and "is empty" in out.err
+
+
 @pytest.mark.parametrize("yaml_text,field", [
     ('experience: "ML Engineer at Acme, 2019-2023"\n', "experience is a string"),
     ('experience: ["ML Engineer at Acme"]\n', "experience[0] is a string"),
@@ -1508,6 +1533,8 @@ def test_skill_groups_reads_every_shape_the_same_way():
      "experience[0].end is a true/false value"),
     ('education: {degree: "MSc", institution: "Leiden"}\n', "education is a mapping"),
     ("skills: 5\n", "skills is a number"),
+    ('summary: {short: "ML engineer"}\n', "summary is a mapping"),
+    ("summary: yes\n", "summary is a true/false value"),
     ('contact: {email: "jane@example.com", phone: ["+31 6", "+49 1"]}\n',
      "contact.phone is a list"),
 ])

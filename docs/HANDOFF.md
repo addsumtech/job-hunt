@@ -57,11 +57,13 @@ NO_HIDDEN_CHARS
 
 ## 还没做完的
 
-- **变异测试**：1.3.0 合并后在 CI 跑了一次（run 40056907221）。check_apply.py 通过；check_claims.py 的
-  29 个新存活体已在 1.3.1 补齐（本地全量：141 个变异体，存活 15，其中 13 条旧债、2 条等价，均记入基线）；
-  **render_cv.py 的结果在 1.3.1 发布时还没出来**，出来后按同样方法处理。基线文件是
-  `scripts/mutants-baseline.json`，只有本地 `make mutants-record` 能改它（它会重写整个文件，记得把其他
-  目标的条目合并回来），每条都要写理由。
+- **变异测试的旧债**：三个目标在 2026-10-29 都已对齐基线。check_claims.py 的 29 个新存活体在 1.3.1
+  补齐；render_cv.py 原先单任务跑满 300 分钟被取消，现在 CI 每个目标拆成三个分片（`--shard K/N`），
+  分片跑出 229 个变异体、存活 47、新增 9，其中 7 个已补测试，2 个等价已写理由进基线。剩下的是
+  标着「recorded, not explained」的旧债（render_cv 40 条左右、check_claims 13 条），慢慢补测试或写等价理由。
+  基线文件是 `scripts/mutants-baseline.json`。`make mutants-record` 会重写整个文件，而且不能分片
+  （render_cv 本地全量要几个小时），记得把其他目标的条目合并回来；只加几条时，用 `mutants.generate()`
+  算出 key 手工写进去更省事。每条都要写理由。
 - **真实模拟测试**：材料已备好，在 `~/code_project/job-hunt-workspace/sim-1.3.x-20261024/`
   （`SIM-PLAN.md`、`CODEX-DISCOVER-PROMPT.md`，只用虚构候选人），尚未开跑。
 - **行为评估**：见上一节，1.3.0 之后没有重跑。
