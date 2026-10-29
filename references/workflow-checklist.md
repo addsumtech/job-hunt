@@ -299,4 +299,5 @@ and aim for a well-filled page; any added gap before a section heading is at
 most one blank line. Never invent content or shrink fonts just to fill a page.
 
 - [ ] Rendering a report? Run `scripts/render_report.py`, then the page review and report layout gate in `references/layout-review.md`.
+- [ ] No report template? Write the report's layout requirements with `scripts/report_requirements.py` once `report.md` exists, before rendering.
 - [ ] Need this resource index? Read only the relevant checks in `references/workflow-checklist.md`.

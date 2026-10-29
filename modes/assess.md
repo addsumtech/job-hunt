@@ -29,6 +29,7 @@ company and role from it, create `paths.workspace(...)`, and run this before wri
 any artifact into it:
 
 ```
+python3 scripts/paths.py --name "<meta.name>" --company "<company>" --role "<role>"   # prints <ws>, absolute
 python3 scripts/enter_mode.py --workspace <ws> --mode assess \
     --because "<why assess, in one line, from what the user asked>"
 ```

@@ -15,6 +15,13 @@ with documented defaults), and concrete expected values for all eight `CHECKS`
 below. Only an explicit user change may relax these requirements; record it in
 `user_overrides`. Do not rewrite requirements to make a failed output pass.
 
+**No report template, bundled renderer** (the usual assess and interview report): once
+`report.md` exists, run `python3 scripts/report_requirements.py --workspace <ws>`. It
+writes `report-layout-requirements.yaml` with `reference: null`, the renderer's
+documented defaults for all eight checks, and text samples taken from the report. Do not
+rebuild these values from the renderer's source. It exits 2 for a report the bundled
+renderer does not draw. In that case, write the file by hand as below.
+
 The requirements file also carries measured checks. Example for a fictional CV
 (replace text samples with literal text from this candidate and retain the
 reference's expected sizes/fonts):
