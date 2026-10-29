@@ -33,6 +33,10 @@ jobs:
           - scripts/check_apply.py
           - scripts/check_claims.py
           - scripts/render_cv.py
+        # Each file is split into three interleaved shards. On 2026-10-24
+        # render_cv.py alone reached mutant 225 of 229 when the 300-minute limit
+        # cancelled it, so a single job per file no longer finishes.
+        shard: ["1/3", "2/3", "3/3"]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,4 +51,4 @@ jobs:
           node-version: '22'
       - run: pip install -r requirements.txt pytest
       - name: mutation testing against the recorded baseline
-        run: python3 scripts/mutants.py --ci --targets ${{ matrix.target }}
+        run: python3 scripts/mutants.py --ci --targets ${{ matrix.target }} --shard ${{ matrix.shard }}

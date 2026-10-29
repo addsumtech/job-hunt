@@ -115,6 +115,32 @@ def test_the_mutation_matrix_covers_exactly_the_default_targets():
     assert "--targets ${{ matrix.target }}" in MUTANTS_WORKFLOW.read_text(encoding="utf-8")
 
 
+def test_the_mutation_shards_cover_every_mutant_exactly_once():
+    """The matrix splits each file into K/N shards. A shard list that skips a K, or
+    a selection that overlaps, would leave mutants untested with every job green."""
+    import yaml
+
+    import mutants
+
+    job = yaml.safe_load(MUTANTS_WORKFLOW.read_text(encoding="utf-8"))["jobs"]["mutants"]
+    shards = [mutants.parse_shard(s) for s in job["strategy"]["matrix"]["shard"]]
+    n = shards[0][1]
+    assert sorted(shards) == [(k, n) for k in range(1, n + 1)]
+    assert "--shard ${{ matrix.shard }}" in MUTANTS_WORKFLOW.read_text(encoding="utf-8")
+    items = list(range(229))
+    picked = [x for k, _ in shards for x in mutants.select_shard(items, (k, n))]
+    assert sorted(picked) == items
+
+
+def test_a_shard_cannot_rewrite_the_baseline(capsys):
+    import mutants
+
+    assert mutants.main(["--record", "--shard", "1/3"]) == 2
+    assert "whole target" in capsys.readouterr().err
+    for bad in ("0/3", "4/3", "x", "1/0"):
+        assert mutants.parse_shard(bad) is None
+
+
 def test_ci_cannot_rewrite_the_mutation_baseline():
     """`--record` in CI would let the harness update its own baseline, which
     reports success by forgetting what it used to catch."""

@@ -23,6 +23,7 @@ Usage:
     python3 scripts/mutants.py --ci                 # the three highest-damage files
     python3 scripts/mutants.py --targets scripts/check_apply.py
     python3 scripts/mutants.py --targets ... --record   # rewrite the baseline
+    python3 scripts/mutants.py --ci --targets scripts/render_cv.py --shard 2/3
 
 `--record` is deliberately not something CI can do: a harness that updates its own
 baseline reports success by forgetting.
@@ -287,6 +288,23 @@ def survives(work: pathlib.Path, mutation: Mutation) -> bool:
         target.write_text(source, encoding="utf-8")
 
 
+def parse_shard(text):
+    """"K/N" -> (K, N) with 1 <= K <= N, or None when it is not that."""
+    try:
+        k, n = (int(part) for part in str(text).split("/"))
+    except ValueError:
+        return None
+    return (k, n) if 1 <= k <= n else None
+
+
+def select_shard(mutations, shard):
+    """The K-th of N interleaved slices. Interleaved rather than contiguous so each
+    shard gets a similar mix of cheap and expensive regions of the file; the N
+    slices are disjoint and together are exactly the input."""
+    k, n = shard
+    return [m for i, m in enumerate(mutations) if i % n == k - 1]
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--targets", nargs="*", default=list(DEFAULT_TARGETS))
@@ -296,7 +314,21 @@ def main(argv=None) -> int:
                     help="rewrite the baseline (never available to --ci)")
     ap.add_argument("--limit", type=int, default=0,
                     help="stop after N mutants per file, for a quick local check")
+    ap.add_argument("--shard", default="1/1", metavar="K/N",
+                    help="test only every Nth mutant starting at the Kth, so one file can "
+                         "run as N parallel CI jobs (render_cv.py alone outgrew a 300-minute job)")
     args = ap.parse_args(argv)
+
+    shard = parse_shard(args.shard)
+    if shard is None:
+        print(f"cannot run: --shard must be K/N with 1 <= K <= N, got {args.shard!r}",
+              file=sys.stderr)
+        return 2
+    if args.record and shard != (1, 1):
+        # A shard sees a third of the survivors; rewriting the baseline from it
+        # would silently forget the other two thirds.
+        print("cannot run: --record needs the whole target, not a shard", file=sys.stderr)
+        return 2
 
     if args.record and args.ci:
         print("cannot run: --record and --ci together would let the harness "
@@ -352,6 +384,7 @@ def main(argv=None) -> int:
             mutations = generate(work / relative, relative)
             if args.limit:
                 mutations = mutations[:args.limit]
+            mutations = select_shard(mutations, shard)
             total += len(mutations)
             print(f"{relative}: {len(mutations)} mutants", file=sys.stderr)
             for n, mutation in enumerate(mutations, 1):
