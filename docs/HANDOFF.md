@@ -8,7 +8,7 @@
 ## 当前状态
 
 - 四个模式（apply、assess、discover、interview）都已上线；`evals/` 已建成。
-- 版本：1.3.1（2026-10-24）。1.3.0 见 PR #34；1.2.1 到 1.2.3 没有单独打 tag，修复并入 1.3.0。
+- 版本：1.3.2（2026-10-30）。1.3.0 见 PR #34；1.2.1 到 1.2.3 没有单独打 tag，修复并入 1.3.0。
 - `make check`（2026-10-24，Python 3.11 venv）：
 
 ```
@@ -64,8 +64,10 @@ NO_HIDDEN_CHARS
   基线文件是 `scripts/mutants-baseline.json`。`make mutants-record` 会重写整个文件，而且不能分片
   （render_cv 本地全量要几个小时），记得把其他目标的条目合并回来；只加几条时，用 `mutants.generate()`
   算出 key 手工写进去更省事。每条都要写理由。
-- **真实模拟测试**：材料已备好，在 `~/code_project/job-hunt-workspace/sim-1.3.x-20261024/`
-  （`SIM-PLAN.md`、`CODEX-DISCOVER-PROMPT.md`，只用虚构候选人），尚未开跑。
+- **真实模拟测试**：在 `~/code_project/job-hunt-workspace/sim-1.3.x-20261024/`，只用虚构候选人。
+  A 部分（assess → apply → interview，三个案例）2026-10-29/30 跑完，结论和问题清单在 `findings/SUMMARY-A.md`，
+  1.3.2 修了其中四项。B 部分（discover，改由 Grok CLI 跑）停在 BOSS 直聘登录，等 Martin 登录后继续。
+  驱动脚本 `turn.sh` 用无界面 Claude Code 会话按插件方式加载 skill，一条用户消息一轮。
 - **行为评估**：见上一节，1.3.0 之后没有重跑。
 - **安装体积**：仓库根目录就是 skill，`npx skills add` 会把整个仓库（含 docs、evals、tests，约 10MB）
   拷进用户目录，且不支持排除文件。要彻底解决只能把 skill 挪进子目录，会牵动两条安装路径和一批测试。

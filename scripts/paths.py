@@ -401,3 +401,42 @@ def mode_file(mode: str, root=None) -> pathlib.Path:
 def lossless_allowlist(root=None) -> pathlib.Path:
     return (pathlib.Path(root) if root else SKILL_ROOT) / "scripts" / \
         "lossless-allowlist.json"
+
+
+def main(argv=None) -> int:
+    """`paths.py --name … --company … --role …` creates one application workspace
+    and prints its absolute path.
+
+    The mode files used to say only "create `paths.workspace(...)`". Every agent
+    in the 2026-10-29 simulation then read this file to write its own `python -c`
+    call — three runs, three slightly different invocations of the same function.
+    """
+    import argparse
+    import datetime
+    import sys
+
+    parser = argparse.ArgumentParser(
+        description="Create the application workspace for one posting and print its path.")
+    parser.add_argument("--name", required=True, help="the candidate's name as in profile meta.name")
+    parser.add_argument("--company", required=True, help="the exact public employer name")
+    parser.add_argument("--role", required=True, help="the posting's role title")
+    parser.add_argument("--date", help="YYYY-MM-DD; default: today's local date")
+    args = parser.parse_args(argv)
+    try:
+        path = workspace(args.name, args.company, args.role,
+                         args.date or datetime.date.today().isoformat())
+    except ValueError as exc:
+        print(f"cannot run: {exc}", file=sys.stderr)
+        return 2
+    path.mkdir(parents=True, exist_ok=True)
+    print(path.resolve())
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+
+    from cli_io import configure_output
+
+    configure_output()
+    sys.exit(main())

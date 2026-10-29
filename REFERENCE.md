@@ -172,7 +172,7 @@ job-hunt/
     ├── mock_vocab.py                # the interview mode's closed vocabularies (library)
     ├── opencli_meta.py              # resolves an adapter command's published access: (library)
     ├── parse_verdicts.py            # PASS/REJECT parsing, fail-closed on AMBIGUOUS
-    ├── paths.py                     # the one definition of the workspace shape (library)
+    ├── paths.py                     # the one definition of the workspace shape; its CLI creates a workspace
     ├── prose_tells.py               # what makes a CV, letter or supporting statement
     │                                #   read as machine-written (library)
     ├── save_profile.py              # guarded master save: one CV per language
@@ -180,6 +180,7 @@ job-hunt/
     ├── candidate_match.py           # shared discovery matching policy and localized summaries (library)
     ├── render_cv.py                 # CV → md / docx / pdf(LaTeX)
     ├── render_report.py              # bind report source and newly rendered PDF before review
+    ├── report_requirements.py        # default report-layout-requirements.yaml for the bundled renderer
     ├── render_letter.py             # motivation letter → md / docx / pdf
     ├── render_rirekisho.py          # Japanese 履歴書 form renderer
     ├── report_locales.py            # shared native report labels and gate anchors

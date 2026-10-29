@@ -343,10 +343,11 @@ _RESERVED_FOLDERS = frozenset({"报告", "简历", "面试准备"})
 
 
 def is_deliverable(path: pathlib.Path, workspace: pathlib.Path,
-                   include_applications: bool = True) -> bool:
+                   include_applications: bool = True,
+                   also: frozenset = frozenset()) -> bool:
     rel = path.relative_to(workspace)
     # Explicit client artifacts only. completion.md can contain tool diagnostics.
-    return ((include_applications or rel.stem == "report")
+    return ((include_applications or rel.stem == "report" or rel.stem in also)
             and len(rel.parts) == 1 and rel.stem in {
         "report", "cv", "letter", "rirekisho", "supporting-statement", "interview-brief"
     } and rel.suffix in {".md", ".pdf", ".docx"})
@@ -1466,11 +1467,17 @@ def _delivery_sources(workspace: pathlib.Path, make_pdf: bool,
     # In apply the application documents are the product, so a missing CV or
     # letter PDF leaves the delivery incomplete. Elsewhere they are existing
     # source documents copied on explicit request: say what is missing, no more.
-    applying = journal.current_mode(workspace) not in {"discover", "assess", "interview"}
+    mode = journal.current_mode(workspace)
+    applying = mode not in {"discover", "assess", "interview"}
     if include_applications is None:
         include_applications = applying
+    # Interview mode appends its walk-back list to the brief, so the copy apply
+    # delivered is out of date the moment the round closes. Measured in the
+    # 2026-10-29 simulation: all three debriefs went out while 面试准备/ still
+    # held the brief without the walk-backs the candidate had just agreed to.
+    also = frozenset({"interview-brief"}) if mode == "interview" else frozenset()
     return applying, [p for p in sorted(workspace.rglob("*"))
-                      if p.is_file() and is_deliverable(p, workspace, include_applications)
+                      if p.is_file() and is_deliverable(p, workspace, include_applications, also)
                       and not (make_pdf and p.name == "report.pdf")]
 
 

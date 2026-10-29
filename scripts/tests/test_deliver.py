@@ -89,12 +89,33 @@ def test_apply_delivers_its_readiness_brief_without_private_review_records(tmp_p
 def test_read_only_consultations_do_not_redeliver_or_render_the_source_cv(tmp_path, mode):
     ws = build(tmp_path, "# Career report\n\nDiscuss the documented experience.\n")
     (ws / "cv.md").write_text("# Source CV\n\nAn existing source document.", encoding="utf-8")
-    (ws / "interview-brief.md").write_text("An internal preparation source", encoding="utf-8")
+    (ws / "interview-brief.md").write_text("# 面试准备\n\n说明你本人负责的部分。\n",
+                                           encoding="utf-8")
     deliver.journal.append(ws, {"action": "mode_entry", "mode": mode})
     dest = tmp_path / "consultation"
     assert run(ws, dest) == 0
-    assert client_files(dest) == {"报告/求职建议报告.md", "报告/求职建议报告.pdf"}
+    brief = {"面试准备/面试准备.md", "面试准备/面试准备.pdf"} if mode == "interview" else set()
+    assert client_files(dest) == {"报告/求职建议报告.md", "报告/求职建议报告.pdf"} | brief
+    assert not (dest / "简历").exists()
     assert (ws / "cv.md").is_file() and (ws / "cv.pdf").is_file()
+
+
+def test_an_interview_redelivers_the_brief_with_its_walk_back_list(tmp_path):
+    """The walk-backs are agreed in the interview round; the copy apply delivered
+    does not have them, so the debrief folder must carry the current brief."""
+    ws = build(tmp_path)
+    deliver.journal.append(ws, {"action": "mode_entry", "mode": "apply"})
+    (ws / "interview-brief.md").write_text("# 面试准备\n\n说明你本人负责的部分。\n",
+                                           encoding="utf-8")
+    dest = tmp_path / "consultation"
+    assert run(ws, dest, "--no-pdf") == 0
+    deliver.journal.append(ws, {"action": "mode_entry", "mode": "interview"})
+    updated = "# 面试准备\n\n说明你本人负责的部分。\n\n## Walk-back list\n\n- 数据室不是我全权负责。\n"
+    (ws / "interview-brief.md").write_text(updated, encoding="utf-8")
+    assert run(ws, dest, "--no-pdf") == 0
+    delivered = [p for p in dest.rglob("面试准备.md")
+                 if p.read_text(encoding="utf-8") == updated]
+    assert delivered, sorted(str(p.relative_to(dest)) for p in dest.rglob("*.md"))
 
 
 def test_explicit_application_copy_remains_available_after_an_interview(tmp_path):

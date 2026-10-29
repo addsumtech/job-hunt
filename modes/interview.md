@@ -23,6 +23,7 @@ question needs.
 **Without an application package** (the user brought a posting and a CV but no apply run):
 create the workspace with `paths.workspace(...)` as assess does, extract the posting into
 `posting.yaml` per `modes/assess.md` §3, and save the CV the user gave you as `cv.md`.
+`python3 scripts/paths.py --name … --company … --role …` creates it and prints its absolute path.
 `check_mock.py` requires `posting.yaml` (`NO_POSTING` otherwise), and the first assessment
 pass reads `cv.md`.
 
@@ -475,6 +476,12 @@ as a verdict is fabrication. Everywhere else, no score, no percentage, no probab
 Deliver the debrief report. The CV used by the assessors remains source material;
 `deliver.py` does not copy or render it in this mode unless the user explicitly
 requests the existing application documents and you pass `--include-applications`.
+
+`deliver.py` also delivers the current `interview-brief.md` in this mode, because the
+walk-back list was just appended to it and the copy apply delivered does not have it.
+The brief must still render to one page (`INTERVIEW_BRIEF_TOO_LONG`). In the final
+message, point the candidate at the new `面试准备/` copy and say the earlier one is
+superseded.
 
 Then follow SKILL.md "Client deliverables": write `report.md` (read
 `references/report-writing.md` first), render and review it, run

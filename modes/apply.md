@@ -29,6 +29,7 @@ entry, before writing any artifact into it — `check_apply.py` requires the rec
 the hash is what proves the file you read is the file on disk:
 
 ```bash
+python3 scripts/paths.py --name "<meta.name>" --company "<company>" --role "<role>"   # prints <workspace>, absolute
 python3 scripts/enter_mode.py --workspace <workspace> --mode apply \
     --because "<why apply, in one line, from what the user asked>"
 ```
@@ -275,6 +276,11 @@ Each judge's prompt is only its file paths (persona file first), the facts that 
 "Nothing else" is the isolation once a judge can open files: the workspace also holds the source profile (`profile.yaml`), `tailored-profile.yaml`, `claims.yaml` and `fit-snapshot.md`, and a judge that reads them has watched the tailoring. Name files, never the workspace directory. The workspace files you name are the ones `check_render_freshness.py --record` hashed, so its check after the verdicts covers what each judge opened. Do not add the persona files to `--record`: `check_apply.py` rejects a receipt bound to a file outside the workspace (`RECEIPT_INPUT_OUTSIDE_WORKSPACE`).
 
 Save each judge's reply **verbatim**, whole and unedited, to `<workspace>/judge-<n>-ats.txt`, `judge-<n>-recruiter.txt` and `judge-<n>-hiring-manager.txt`; `parse_verdicts.py` reads those files, never your summary.
+Have the judge write that file itself: add its output path and one more line to its prompt,
+*Write your complete reply, unchanged, to `<path>`, then return the same text.* Then check
+the file exists and ends with the output block. Retyping a long reply drifts: in the
+2026-10-29 simulation a copied ATS reply turned `Q&A` into `Q&amp;A`. Copy the reply
+yourself only when the judge cannot write files.
 
 **Fallback — a judge that cannot read files** (no file tool, or a sandbox that cannot see the workspace or the skill directory): paste the full text of every file above instead of its path, with the same facts. A judge that never saw its persona file still answers, as a generic reviewer with a plausible VERDICT block.
 

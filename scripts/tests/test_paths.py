@@ -226,3 +226,23 @@ def test_another_spelling_on_a_case_insensitive_disk_is_still_the_skill(tmp_path
         pytest.skip("case-sensitive filesystem: the two spellings are two directories")
     assert paths.skill_workspace_refusal(other, root=skill) != ""
     assert paths.skill_workspace_refusal(other / "round", root=skill) != ""
+
+
+def test_the_workspace_command_creates_and_prints_the_documented_path(tmp_path, monkeypatch,
+                                                                    capsys):
+    """Mode files point at this command; before it existed every agent read
+    paths.py and wrote its own `python -c`."""
+    monkeypatch.setattr(paths, "PROFILES_ROOT", tmp_path)
+    args = ["--name", "Jane Doe", "--company", "Acme BV",
+            "--role", "ML Engineer", "--date", "2026-10-30"]
+    assert paths.main(args) == 0
+    printed = pathlib.Path(capsys.readouterr().out.strip())
+    assert printed == paths.workspace("Jane Doe", "Acme BV", "ML Engineer", "2026-10-30").resolve()
+    assert printed.is_dir() and printed.is_absolute()
+
+
+def test_the_workspace_command_refuses_a_name_that_would_collapse(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(paths, "PROFILES_ROOT", tmp_path)
+    assert paths.main(["--name", "x", "--company", "!!", "--role", "r"]) == 2
+    assert capsys.readouterr().err.startswith("cannot run: ")
+    assert not any(tmp_path.rglob("applications"))
