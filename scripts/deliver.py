@@ -328,18 +328,37 @@ CLIENT_NAMES = {"report": "求职建议报告", "cv": "简历", "letter": "求�
 CLIENT_FOLDERS = {"report": "报告", "interview-brief": "面试准备"}
 
 
-def client_path(rel: pathlib.Path) -> pathlib.Path:
-    """Client names never expose the company/role workspace slug."""
+def client_path(rel: pathlib.Path, workspace: pathlib.Path | None = None) -> pathlib.Path:
+    """Use real candidate/target labels for reports; keep canonical source names."""
     folder = CLIENT_FOLDERS.get(rel.stem, "简历")
-    return pathlib.Path(folder) / (CLIENT_NAMES[rel.stem] + rel.suffix)
+    name = CLIENT_NAMES[rel.stem]
+    if rel.stem == "report" and workspace is not None:
+        from report_names import report_stem
+        name = report_stem(workspace, journal.current_mode(workspace))
+    return pathlib.Path(folder) / (name + rel.suffix)
 
 
-# Every relative path deliver.py itself can write inside one delivery folder.
-# The manifest may only name these, so a damaged or hand-edited manifest can
-# never steer the stale-file cleanup at anything else.
+# Legacy paths remain valid alongside the bounded report namespace checked by
+# _client_tail_ok; neither permits cleanup of arbitrary client files.
 _CLIENT_TAILS = frozenset(client_path(pathlib.Path(stem + suffix)).as_posix()
                           for stem in CLIENT_NAMES for suffix in (".md", ".pdf", ".docx"))
 _RESERVED_FOLDERS = frozenset({"报告", "简历", "面试准备"})
+
+
+def _client_tail_ok(tail: str) -> bool:
+    import unicodedata
+    if tail in _CLIENT_TAILS:
+        return True
+    path = pathlib.PurePosixPath(tail)
+    suffixes = ("岗位推荐报告", "岗位评估报告", "投递建议报告", "面试复盘报告", "求职建议报告")
+    return (len(path.parts) == 2 and path.parts[0] == "报告"
+            and path.suffix in {".md", ".pdf", ".docx"}
+            and not any(unicodedata.category(char) in {"Cc", "Cf", "Cs"} for char in path.name)
+            and len(path.stem.encode("utf-8")) <= 200
+            and path.stem == path.stem.strip().strip(".")
+            and not re.search(r'[\x00-\x1f\x7f<>:"/\\|?*]', path.name)
+            and any(path.stem.endswith("－" + suffix) and len(path.stem) > len(suffix) + 1
+                    for suffix in suffixes))
 
 
 def is_deliverable(path: pathlib.Path, workspace: pathlib.Path,
@@ -378,8 +397,8 @@ def writable(directory: pathlib.Path) -> tuple[bool, str]:
 # Acme's 简历.docx beside Beta's 简历.md and 简历.pdf — a mixed application the
 # client could have sent. The same happened to one workspace delivering apply
 # and then interview into its default folder: the debrief replaced the apply
-# report. Client file names are fixed by design, so ownership has to be
-# recorded somewhere; it is recorded beside the files.
+# report. CV/letter names stay fixed and report labels can coincide, so ownership
+# is still recorded beside the files.
 #
 # A clash goes to a SUBFOLDER rather than being refused. A refusal sends the
 # agent to pick another --to (splitting the consultation it was told to keep
@@ -399,7 +418,7 @@ def _manifest_rel_ok(folder: str, rel) -> bool:
     if path.is_absolute() or ".." in path.parts or "\\" in rel:
         return False
     parts = path.parts
-    if len(parts) < 2 or "/".join(parts[-2:]) not in _CLIENT_TAILS:
+    if len(parts) < 2 or not _client_tail_ok("/".join(parts[-2:])):
         return False
     return "/".join(parts[:-2]) == folder
 
@@ -457,7 +476,12 @@ def _alive(root: pathlib.Path, entry: dict) -> bool:
 def unaccounted_files(root: pathlib.Path, deliveries: list[dict]) -> list[str]:
     """Client documents at the top of `root` that no manifest entry recorded."""
     recorded = {rel for entry in deliveries for rel in entry["files"]}
-    return sorted(tail for tail in _CLIENT_TAILS
+    tails = set(_CLIENT_TAILS)
+    directory = root / "报告"
+    if directory.is_dir():
+        tails.update("报告/" + path.name for path in directory.iterdir()
+                     if path.is_file() and _client_tail_ok("报告/" + path.name))
+    return sorted(tail for tail in tails
                   if tail not in recorded and (root / tail).is_file())
 
 
@@ -465,10 +489,10 @@ def planned_copies(workspace: pathlib.Path, make_pdf: bool,
                    include_applications: bool | None) -> dict[str, pathlib.Path]:
     """{client path: workspace file} for what deliver() copies byte-for-byte."""
     _, sources = _delivery_sources(workspace, make_pdf, include_applications)
-    planned = {client_path(src.relative_to(workspace)).as_posix(): src for src in sources}
+    planned = {client_path(src.relative_to(workspace), workspace).as_posix(): src for src in sources}
     if make_pdf and (workspace / "report.pdf").is_file():
         # A reviewed report PDF is copied, never re-rendered (see deliver()).
-        planned[client_path(pathlib.Path("report.pdf")).as_posix()] = workspace / "report.pdf"
+        planned[client_path(pathlib.Path("report.pdf"), workspace).as_posix()] = workspace / "report.pdf"
     return planned
 
 
@@ -479,6 +503,11 @@ def foreign_files(root: pathlib.Path, deliveries: list[dict], workspace: pathlib
     if not unaccounted or root == (DEFAULT_ROOT / workspace.name).resolve():
         return []
     planned = planned_copies(workspace, make_pdf, include_applications)
+    # Older deliveries used a generic report name. Identical bytes establish
+    # the same ownership as before, but an unrecorded old file is retained.
+    for src in tuple(planned.values()):
+        if src.stem == "report":
+            planned[client_path(src.relative_to(workspace)).as_posix()] = src
 
     def same(rel: str) -> bool:
         try:
@@ -1585,12 +1614,12 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
     pdf_landed: set[str] = set()       # stems whose PDF reached the client folder
     text_copies: dict[str, list[pathlib.Path]] = {}  # application stem -> .md/.docx copies
     for src in sources:
-        target = dest / client_path(src.relative_to(workspace))
+        target = dest / client_path(src.relative_to(workspace), workspace)
         # A REDELIVERY must land on the same name. The previous version renamed
         # to `-2` whenever the bytes differed, which froze the obvious filename
         # at round 1 forever: a user opening `<slug>-cv.md` in Downloads after
         # three judge rounds read the FIRST draft and could send it to the
-        # employer. Same source path, same destination, overwritten.
+# employer. Same source path, same destination, overwritten.
         if target in claimed:
             notes.append(f"{target.name}: not delivered — {claimed[target]} and "
                          f"{src.relative_to(workspace)} flatten to the same name. "
@@ -1826,7 +1855,7 @@ def main(argv: list[str] | None = None) -> int:
     except OSError:
         pass  # a workspace we can read but not write is not a delivery failure
 
-    complete = not notes and (args.no_pdf or out / client_path(pathlib.Path("report.pdf")) in written)
+    complete = not notes and (args.no_pdf or out / client_path(pathlib.Path("report.pdf"), ws) in written)
     print(f"{'Delivered' if complete else 'Incomplete delivery:'} {len(written)} file(s) to {out}")
     for p in written:
         print(f"  {p.relative_to(out)}")

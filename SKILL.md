@@ -175,13 +175,22 @@ Preserve the latest user-selected reference for each document; do not shrink
 fonts or replace its structure to make it fit. With the default report layout,
 run `scripts/render_report.py --workspace <ws>`. Custom layouts use its
 `render_with` wrapper. Both bind the source and fresh PDF before visual review.
+Use `scripts/layout_pages.py --workspace <ws> --report` to prepare canonical
+previews. Review every page initially; later, intact passed reviews may cover
+verified unchanged pages. Inspect the listed changed pages and complete the
+draft review as described in `references/layout-review.md`; never refresh a
+changed page's pass without inspecting it.
 Inspect every final page, read the whole report in order, repair any findings,
 and run `scripts/check_layout.py --workspace <ws> --report`. Any content or export
 change requires a new render and review; refreshing review hashes is insufficient.
 Run `scripts/lint_no_prediction.py --workspace <ws>` on the final client text.
 
 Run `scripts/deliver.py --workspace <ws>` last. It copies client files to
-`~/Downloads/<workspace-name>/`, with `报告/求职建议报告.pdf` and editable text;
+`~/Downloads/<workspace-name>/`, with the report under `报告/` and editable text.
+Report filenames include available candidate, company/role or search direction,
+date and mode (recommendation, assessment, application advice or interview
+debrief); incomplete legacy workspaces retain `求职建议报告`. Source files remain
+`report.md`/`report.pdf`;
 requested application files go under `简历/` and an interview brief under
 `面试准备/`. Use the same `--to` directory for
 workspaces serving one consultation; a second workspace or mode lands in its own

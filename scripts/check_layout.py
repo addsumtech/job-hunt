@@ -25,6 +25,7 @@ CHECKS = ("fonts", "font_sizes", "page_geometry", "headings_and_rules",
 
 def inspect(ws: pathlib.Path, report=False):
     findings, hashes = [], {}
+    reuse_cache = {}
     if not report and (ws / "cv.docx").is_file():
         findings.extend(docx_findings(ws / "cv.docx"))
     prefix = "report-" if report else ""
@@ -157,6 +158,14 @@ def inspect(ws: pathlib.Path, report=False):
         for i, raw in enumerate(previews):
             preview = journal.as_mapping(raw)
             seen.append(preview.get("page"))
+            status = preview.get("review_status")
+            if status is not None and status not in ("pass", "reused"):
+                findings.append(f"UNREVIEWED_LAYOUT_PAGE: {name} page {preview.get('page')} still needs visual inspection")
+            if status == "reused" or "reused_from" in preview:
+                import layout_pages
+                problem = layout_pages.validate_reuse(ws, review, name, preview, report, hashes, reuse_cache)
+                if problem:
+                    findings.append(problem)
             image = bind(preview.get("path"), preview.get("sha256"), f"{name} preview {i + 1}")
             if image:
                 try:
@@ -190,7 +199,15 @@ def main(argv=None):
         findings, hashes = inspect(ws, report=args.report)
     for finding in findings:
         print(finding)
-    journal.receipt(ws, gate, hashes, "fail" if findings else "pass", findings)
+    record = journal.receipt(ws, gate, hashes, "fail" if findings else "pass", findings)
+    if not findings:
+        import layout_pages
+        try:
+            layout_pages.remember(ws, args.report, record)
+        except (OSError, ValueError, KeyError, IndexError, TypeError, RuntimeError, journal.YamlUnreadable) as exc:
+            # The review still passed. Unsupported old previews simply get no
+            # reusable baseline; the next round must inspect every page.
+            print(f"NOTICE_LAYOUT_CACHE_UNAVAILABLE: {exc}")
     return 1 if findings else 0
 
 

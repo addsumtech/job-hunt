@@ -402,7 +402,7 @@ def test_a_cv_font_does_not_make_the_report_require_pandoc(tmp_path, monkeypatch
     monkeypatch.setenv('PATH', str(empty))  # no pandoc, no TeX engine, no pdftotext
     assert deliver.main(['--workspace', str(ws), '--to', str(dest)]) == 0
     err = capsys.readouterr().err
-    assert (dest / '报告' / '求职建议报告.pdf').is_file()
+    assert (dest / '报告' / '张伟－求职建议报告.pdf').is_file()
     assert 'NOTICE_REPORT_FONT_NOT_APPLIED' in err and 'Hiragino Sans GB' in err
 
 

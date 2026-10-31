@@ -180,6 +180,8 @@ job-hunt/
     ├── candidate_match.py           # shared discovery matching policy and localized summaries (library)
     ├── render_cv.py                 # CV → md / docx / pdf(LaTeX)
     ├── render_report.py              # bind report source and newly rendered PDF before review
+    ├── layout_pages.py               # canonical previews; reuse only intact passed page reviews
+    ├── report_names.py               # candidate/target/date/mode names for delivered reports
     ├── report_requirements.py        # default report-layout-requirements.yaml for the bundled renderer
     ├── render_letter.py             # motivation letter → md / docx / pdf
     ├── render_rirekisho.py          # Japanese 履歴書 form renderer

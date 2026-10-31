@@ -76,7 +76,9 @@ correct page count, or readable Chinese a template match.
 2. Render the final DOCX in Word/LibreOffice or inspect it in an available office
    app. Inspect every page; inspect the final PDF too. A LaTeX PDF does not prove
    that the Word version has the same layout. Export from Word when the two must
-   match. Save each inspected page preview under `raw/layout/`.
+   match. Generate canonical previews with `python scripts/layout_pages.py
+   --workspace <workspace>` (add `--report` for reports). Inspect the pages listed
+   in `review_required`; on the first review this means every page.
 3. Compare the eight categories below. Keep the source order, not a default
    career heuristic. Check the actual embedded PDF fonts. Do not shrink text to
    conceal overflow. Use at most one blank line between sections and inspect
@@ -101,6 +103,30 @@ correct page count, or readable Chinese a template match.
 5. Run `python scripts/check_layout.py --workspace <workspace>`. Editing the CV,
    reference, preview or review afterward invalidates its receipt. Run the
    comparison again after any re-render. Keep the audit out of the client report.
+
+### Reuse an unchanged page review
+
+`layout_pages.py` writes a `.next.yaml` review draft and 144-dpi RGB previews under
+`raw/layout-pages/`. A passed layout gate archives its reviewed PDF, previews and
+signed journal receipt under `raw/layout-history/`. The next render may reuse a
+page only when that actual passed baseline is intact and its page position,
+pixels, geometry, rotation, text, fonts and links match. Requirements, template
+and user overrides must also match. Form/annotation pages require fresh review;
+a page-count change requires the pagination to be reviewed again.
+
+Inspect each `pending` page in the draft, mark its `review_status: pass`, update
+the eight comparison observations, reviewer/time and unresolved differences, then
+replace the live review with the completed draft and run the normal layout gate.
+Leave `reused_from` on reused pages: the gate validates their evidence. Never
+mark changed pages passed without seeing them. `--adopt` replaces the live review
+only if every page is verified unchanged; it does not run or waive the gate.
+Old previews at another resolution remain valid manual reviews but cannot form
+a reusable baseline; regenerate canonical previews and inspect them once.
+
+Current source/render binding, text completeness and format measurements still
+run for the full document. A DOCX requires its current, separately bound Word
+export; this helper never refreshes that export proof. The full-document editorial
+read described below remains required after content or order changes.
 
 **Reject → redo → review again is mandatory.** A mismatch, missing measurement,
 unreviewed page or substituted font cannot be waived by readable text or a

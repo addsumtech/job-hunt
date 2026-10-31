@@ -720,7 +720,7 @@ def test_a_second_workspace_never_overwrites_the_first_in_a_shared_folder(tmp_pa
     dest = tmp_path / "consultation"
     assert run(acme, dest) == 0
     first = snapshot(dest)
-    assert set(first) == {"报告/求职建议报告.md", "报告/求职建议报告.pdf",
+    assert set(first) == {"报告/Acme BV－ML Engineer－2026-10-24－投递建议报告.md", "报告/Acme BV－ML Engineer－2026-10-24－投递建议报告.pdf",
                           "简历/简历.md", "简历/简历.pdf", "简历/简历.docx"}
     capsys.readouterr()
 
@@ -728,9 +728,9 @@ def test_a_second_workspace_never_overwrites_the_first_in_a_shared_folder(tmp_pa
     output = capsys.readouterr()
     sub = "Beta Corp Data Scientist"
     assert {rel: data for rel, data in snapshot(dest).items() if not rel.startswith(sub)} == first
-    assert client_files(dest / sub) == {"报告/求职建议报告.md", "报告/求职建议报告.pdf",
+    assert client_files(dest / sub) == {"报告/Beta Corp－Data Scientist－2026-10-24－投递建议报告.md", "报告/Beta Corp－Data Scientist－2026-10-24－投递建议报告.pdf",
                                         "简历/简历.md", "简历/简历.pdf"}
-    assert "BETA" in (dest / sub / "报告/求职建议报告.md").read_text(encoding="utf-8")
+    assert "BETA" in (dest / sub / "报告/Beta Corp－Data Scientist－2026-10-24－投递建议报告.md").read_text(encoding="utf-8")
     assert (dest / sub / "简历/简历.pdf").read_bytes() == (beta / "cv.pdf").read_bytes()
     assert "NOTICE_SEPARATE_FOLDER" in output.err and sub in output.err
     assert output.out.rstrip().endswith(str(dest / sub)), "the folder to quote is the real one"
@@ -747,8 +747,8 @@ def test_the_second_workspace_redelivers_into_its_own_subfolder(tmp_path):
     folders = {p.name for p in dest.iterdir() if p.is_dir()} - {"报告", "简历"}
     assert folders == {"Beta Corp Data Scientist"}
     sub = dest / "Beta Corp Data Scientist"
-    assert "round two" in (sub / "报告/求职建议报告.md").read_text(encoding="utf-8")
-    assert "ACME" in (dest / "报告/求职建议报告.md").read_text(encoding="utf-8")
+    assert "round two" in (sub / "报告/Beta Corp－Data Scientist－投递建议报告.md").read_text(encoding="utf-8")
+    assert "ACME" in (dest / "报告/Acme BV－ML Engineer－投递建议报告.md").read_text(encoding="utf-8")
 
 
 def test_one_workspace_in_a_second_mode_keeps_the_first_modes_report(tmp_path, monkeypatch):
@@ -759,9 +759,9 @@ def test_one_workspace_in_a_second_mode_keeps_the_first_modes_report(tmp_path, m
     (ws / "report.md").write_text("# Debrief\n\nINTERVIEW debrief.\n", encoding="utf-8")
     assert deliver.main(["--workspace", str(ws), "--no-pdf"]) == 0
     folder = tmp_path / "Downloads" / ws.name
-    assert "APPLY" in (folder / "报告/求职建议报告.md").read_text(encoding="utf-8")
-    assert "INTERVIEW" in (folder / "模拟面试/报告/求职建议报告.md").read_text(encoding="utf-8")
-    assert client_files(folder / "模拟面试") == {"报告/求职建议报告.md"}
+    assert "APPLY" in (folder / "报告/Acme BV－ML Engineer－投递建议报告.md").read_text(encoding="utf-8")
+    assert "INTERVIEW" in (folder / "模拟面试/报告/Acme BV－ML Engineer－面试复盘报告.md").read_text(encoding="utf-8")
+    assert client_files(folder / "模拟面试") == {"报告/Acme BV－ML Engineer－面试复盘报告.md"}
 
 
 def test_a_redelivery_removes_only_its_own_stale_files(tmp_path):
@@ -775,7 +775,7 @@ def test_a_redelivery_removes_only_its_own_stale_files(tmp_path):
     assert run(ws, dest, "--no-pdf") == 0
     assert not (dest / "简历/求职信.md").exists(), "a letter this round no longer has"
     assert (dest / "简历/notes.txt").read_text(encoding="utf-8") == "the client's own note"
-    assert client_files(dest) == {"报告/求职建议报告.md", "简历/简历.md", "简历/简历.pdf",
+    assert client_files(dest) == {"报告/Acme BV－ML Engineer－投递建议报告.md", "简历/简历.md", "简历/简历.pdf",
                                   "简历/notes.txt"}
 
 
@@ -841,7 +841,7 @@ def test_files_an_older_deliver_left_without_a_manifest_are_not_overwritten(tmp_
     output = capsys.readouterr()
     sub = "Beta Corp Data Scientist"
     assert {rel: data for rel, data in snapshot(dest).items() if not rel.startswith(sub)} == legacy
-    assert client_files(dest / sub) == {"报告/求职建议报告.md", "简历/简历.md", "简历/简历.pdf"}
+    assert client_files(dest / sub) == {"报告/Beta Corp－Data Scientist－投递建议报告.md", "简历/简历.md", "简历/简历.pdf"}
     assert "NOTICE_SEPARATE_FOLDER" in output.err and sub in output.err
     assert "简历/简历.pdf" in output.err, "the notice names the files it stepped around"
     assert output.out.rstrip().endswith(str(dest / sub))
@@ -858,7 +858,7 @@ def test_the_next_workspace_does_not_overwrite_them_either(tmp_path):
     assert run(gamma, dest, "--no-pdf") == 0
     after = snapshot(dest)
     assert {rel: after[rel] for rel in legacy} == legacy
-    assert "GAMMA" in (dest / "Gamma AG ML Engineer/报告/求职建议报告.md").read_text(encoding="utf-8")
+    assert "GAMMA" in (dest / "Gamma AG ML Engineer/报告/Gamma AG－ML Engineer－投递建议报告.md").read_text(encoding="utf-8")
     assert run(beta, dest, "--no-pdf") == 0, "a redelivery returns to its own subfolder"
     assert {p.name for p in dest.iterdir() if p.is_dir()} == {
         "报告", "简历", "Beta Corp Data Scientist", "Gamma AG ML Engineer"}
@@ -876,7 +876,7 @@ def test_unrecorded_files_identical_to_this_rounds_copies_are_its_own(tmp_path, 
     capsys.readouterr()
     assert run(ws, dest, "--no-pdf") == 0
     assert "NOTICE_SEPARATE_FOLDER" not in capsys.readouterr().err
-    assert client_files(dest) == {"报告/求职建议报告.md", "简历/简历.md", "简历/简历.pdf"}
+    assert client_files(dest) == {"报告/求职建议报告.md", "报告/Acme BV－ML Engineer－投递建议报告.md", "简历/简历.md", "简历/简历.pdf"}
 
 
 def test_one_changed_byte_makes_the_unrecorded_files_foreign(tmp_path):
@@ -889,7 +889,7 @@ def test_one_changed_byte_makes_the_unrecorded_files_foreign(tmp_path):
     assert run(ws, dest, "--no-pdf") == 0
     assert (dest / "简历/简历.pdf").read_bytes() == (ws / "cv.pdf").read_bytes() + b"\n"
     assert client_files(dest / "Acme BV ML Engineer") == {
-        "报告/求职建议报告.md", "简历/简历.md", "简历/简历.pdf"}
+        "报告/Acme BV－ML Engineer－投递建议报告.md", "简历/简历.md", "简历/简历.pdf"}
 
 
 def test_unrecorded_files_in_this_workspaces_default_folder_are_its_own(tmp_path, monkeypatch):
@@ -902,8 +902,9 @@ def test_unrecorded_files_in_this_workspaces_default_folder_are_its_own(tmp_path
     folder = tmp_path / "Downloads" / ws.name
     _legacy_delivery(folder, "ROUND-ONE")
     assert deliver.main(["--workspace", str(ws), "--no-pdf"]) == 0
-    assert client_files(folder) == {"报告/求职建议报告.md", "简历/简历.md", "简历/简历.pdf"}
-    assert "ROUND-TWO" in (folder / "报告/求职建议报告.md").read_text(encoding="utf-8")
+    assert client_files(folder) == {"报告/求职建议报告.md", "报告/Acme BV－ML Engineer－2026-10-24－投递建议报告.md", "简历/简历.md", "简历/简历.pdf"}
+    assert "ROUND-ONE" in (folder / "报告/求职建议报告.md").read_text(encoding="utf-8")
+    assert "ROUND-TWO" in (folder / "报告/Acme BV－ML Engineer－2026-10-24－投递建议报告.md").read_text(encoding="utf-8")
     assert (folder / "简历/简历.pdf").read_bytes() == (ws / "cv.pdf").read_bytes()
 
 
@@ -928,7 +929,7 @@ def test_only_the_clients_own_files_leave_the_folder_usable(tmp_path):
     (dest / "简历/notes.txt").write_text("the client's own note", encoding="utf-8")
     (dest / "求职建议报告.md").write_text("a draft the client saved here", encoding="utf-8")
     assert run(ws, dest, "--no-pdf") == 0
-    assert client_files(dest) == {"报告/求职建议报告.md", "简历/简历.md", "简历/简历.pdf",
+    assert client_files(dest) == {"报告/Acme BV－ML Engineer－投递建议报告.md", "简历/简历.md", "简历/简历.pdf",
                                   "简历/notes.txt", "求职建议报告.md"}
 
 
