@@ -274,7 +274,11 @@ def classify(site, command, exit_code, stdout_text, stderr_text,
                 + recovery_guidance("login"))
             return result
 
-        if any(p.search(message) for p in LOGIN_WALL_PATTERNS):
+        # OpenCLI's typed refusal is stable even when its message changes
+        # (e.g. BOSS "redirected ... to the login flow"). Never retry it as
+        # a transport fault merely because no login-wall phrase matched.
+        if (_error_code(stderr_text) == "AUTH_REQUIRED"
+                or any(p.search(message) for p in LOGIN_WALL_PATTERNS)):
             state = result["auth_state"]
             if state == "absent":
                 result["classification"] = "no_auth_adapter"
