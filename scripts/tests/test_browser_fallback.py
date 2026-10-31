@@ -28,6 +28,12 @@ def setup_capture(tmp_path, page=1, text=None, status=None):
             "links": [r["url"] for r in rows], "http_status": status}
     if text is not None:
         rows = []
+    snap['catalog_rows'] = rows
+    snap['navigation_budget'] = dict(
+        version=1, workspace=str(ws.resolve()), site='51job', max_rows=25, max_pages=2,
+        used_rows=0, used_pages=[],
+        stages=[dict(page=page, max_rows=len(rows), row_count=len(rows), row_selector='.job')],
+        observed_rows=len(rows), observed_pages=[page] if rows else [])
     a = ws / "raw/51job-browser-1.json"
     b = ws / "raw/51job-browser-1-rows.json"
     dump(a, snap); dump(b, rows)

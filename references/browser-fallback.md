@@ -127,6 +127,11 @@ an observed selector only when it is outside a form. Form and
 account/application controls remain forbidden. Single-click navigation uses the
 same accounting requirement as a multi-step plan.
 
+Every successful browser `search`, including a direct initial search page with
+no clicks, needs this complete DOM catalog accounting. A hand-selected rows file
+is not the page count. Unaccounted captures remain preserved but cannot pass;
+stop that source rather than treating missing accounting as a network retry.
+
 Before navigation, supply `--workspace`, `--site` and `--budget-plan`. The JSON
 plan contains one `stages` entry for the initial page and each click destination:
 `{"stages":[{"row_selector":".observed-job-card","page":1,"max_rows":10},
