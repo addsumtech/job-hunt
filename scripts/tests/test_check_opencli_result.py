@@ -304,6 +304,36 @@ def test_transport_is_the_default_for_an_unrecognised_failure():
     assert "opencli doctor" not in r["remedy"]
 
 
+@pytest.mark.parametrize("auth_rows, expected", [
+    (None, "not_logged_in"),
+    ([], "no_auth_adapter"),
+    ([{"site": "boss", "status": "logged_in"}], "platform_limit"),
+    ([{"site": "boss", "status": "not_logged_in"}], "not_logged_in"),
+    ([{"site": "boss", "status": "unknown"}], "not_logged_in"),
+])
+@pytest.mark.parametrize("message", [
+    "BOSS redirected the job detail page to the login flow",
+    "The adapter denied this request",
+])
+def test_auth_required_code_uses_login_recovery_despite_changed_wording(auth_rows, expected, message):
+    # Live BOSS detail refusal on 2026-10-31: the text matches none of the
+    # login-wall phrases, but AUTH_REQUIRED must never become a transport retry.
+    stderr = ("ok: false\nerror:\n  code: AUTH_REQUIRED\n"
+              f"  message: {message}\n  exitCode: 77\n")
+    r = coc.classify("boss", "detail", 77, "", stderr, auth_rows)
+    assert r["classification"] == expected
+    assert r["error_message"] == message
+    assert r["empty_result"] is False
+    assert "connected browser" in r["remedy"]
+
+
+def test_auth_required_mentioned_in_a_transport_error_is_not_a_refusal_code():
+    stderr = ("ok: false\nerror:\n  code: BROWSER_CONNECT\n"
+              "  message: Connection reset while decoding AUTH_REQUIRED\n  exitCode: 1\n")
+    r = coc.classify("boss", "detail", 1, "", stderr)
+    assert r["classification"] == "transport"
+
+
 def test_exit0_with_unparsable_stdout_is_transport_not_ok():
     r = coc.classify("51job", "search", 0, "<html>login</html>", "")
     assert r["classification"] == "transport"

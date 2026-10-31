@@ -279,11 +279,16 @@ def test_registered_collection_rounds_cannot_disappear(tmp_path):
 def test_browser_capture_is_revalidated_even_after_pass(tmp_path):
     import record_browser_capture as browser
     ws, data = build(tmp_path)
+    (ws / 'brief.yaml').write_text('target_count: 18\nmax_rows_per_round: 25\nmax_pages_per_site: 2\n')
     snapshot = ws / "raw/employer-browser.json"
     rows_file = ws / "raw/employer-rows.json"
     snapshot.write_text(json.dumps({"url": "https://example.com/jobs",
         "retrieved_at": "2099-01-01T00:00:00Z", "text": "No matching jobs",
-        "links": []}))
+        "links": [], "catalog_rows": [], "navigation_budget": {
+            "version": 1, "workspace": str(ws.resolve()), "site": "employer",
+            "max_rows": 25, "max_pages": 2, "used_rows": 0, "used_pages": [],
+            "stages": [{"page": 1, "max_rows": 0, "row_count": 0, "row_selector": ".job"}],
+            "observed_rows": 0, "observed_pages": []}}))
     rows_file.write_text("[]")
     assert browser.main(["--workspace", str(ws), "--site", "employer",
         "--snapshot-file", str(snapshot), "--rows-file", str(rows_file),

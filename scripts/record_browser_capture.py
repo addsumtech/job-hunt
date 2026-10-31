@@ -239,10 +239,11 @@ def check_stop_order(records):
         if hit:
             findings.append(
                 f"READ_AFTER_STOP: {name or '<unnamed>'} was read after a site "
-                f"refusal; changing tools or renaming the source does not reset "
+                f"refusal or catalog-budget failure; changing tools or renaming the source does not reset "
                 f"the round")
         classification = record.get("classification")
-        if isinstance(classification, str) and classification in STOP_CLASSES:
+        if ((isinstance(classification, str) and classification in STOP_CLASSES)
+                or record.get('budget_error')):
             stopped_names.add(name)
             if host:
                 stopped_hosts.add(host)
@@ -275,6 +276,8 @@ def validate_record(record, workspace):
         snapshot, rows = files
         classification = validate_snapshot(snapshot, rows)
         accounting = browser_budget.usage(snapshot, validate_rows=validate_snapshot)
+        if record.get('command') == 'search' and classification == 'ok' and accounting is None:
+            raise ValueError('NAVIGATION_BUDGET_MISSING: successful search requires complete DOM catalog accounting')
         if accounting is not None:
             count, pages, _ = accounting
             if record.get('search_row_count') != count or record.get('search_pages') != pages:
@@ -375,6 +378,8 @@ def main(argv=None):
         # journey. Its missing accounting fails validation instead of vanishing.
         try:
             accounting = browser_budget.usage(snapshot, validate_rows=validate_snapshot)
+            if args.command == 'search' and classification == 'ok' and accounting is None:
+                raise ValueError('NAVIGATION_BUDGET_MISSING: successful search requires complete DOM catalog accounting')
             if accounting is not None:
                 record['search_row_count'], record['search_pages'], _ = accounting
                 record['empty_result'] = classification == 'ok' and not rows and accounting[0] == 0

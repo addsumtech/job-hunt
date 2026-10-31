@@ -59,6 +59,79 @@ def test_all_stages_count_once_and_page_numbers_are_distinct(tmp_path):
     assert 'ROWS_ABOVE_CAP' in shortlist._check_caps_against_the_run({'max_rows_per_round':20}, {}, [], [call])[0]
 
 
+def test_plain_search_cannot_certify_a_hand_selected_subset(tmp_path):
+    ws, _, _, _, args = setup_capture(tmp_path)
+    cards = [dict(source_id=f'visible-{n}', title=f'Role {n}',
+                  raw_text=f'visible-{n} Role {n}', url=f'https://example.com/job/{n}')
+             for n in range(15)]
+    # The live failure had only generic text/links: no DOM catalog accounting.
+    snapshot = dict(url='https://example.com/jobs', retrieved_at='2099-01-01T00:00:00Z',
+                    text='\n'.join(r['raw_text'] for r in cards),
+                    links=[r['url'] for r in cards], http_status=200)
+    dump(ws / 'raw/51job-browser-1.json', snapshot)
+    dump(ws / 'raw/51job-browser-1-rows.json', cards[:8])
+    assert browser.main(args) == 0  # Preserve the read and its failure.
+    call = browser.read_retrieval_calls(ws)[-1]
+    assert call['classification'] == 'transport'
+    assert 'MISSING' in call['budget_error']
+    assert not call['empty_result']
+    assert 'do not retry' in call['remedy']
+    assert browser.check_stop_order([call, {'action': 'adapter_call', 'site': '51job'}])
+    assert 'MISSING' in ' '.join(browser.validate_record(call, ws))
+    # Re-signing an old successful import must not certify its manual count.
+    legacy = {k: v for k, v in call.items() if k not in ('receipt_hash', '_lineno', 'budget_error')}
+    legacy.update(classification='ok', exit_code=0)
+    legacy = journal.sign_receipt(legacy)
+    assert 'MISSING' in ' '.join(browser.validate_record(legacy, ws))
+
+
+def test_plain_detail_does_not_require_a_search_catalog(tmp_path):
+    ws, _, snapshot, _, args = setup_capture(tmp_path)
+    snapshot.pop('navigation_budget', None)
+    snapshot.pop('catalog_rows', None)
+    dump(ws / 'raw/51job-browser-1.json', snapshot)
+    assert browser.main(args + ['--command', 'detail']) == 0
+    call = browser.read_retrieval_calls(ws)[-1]
+    assert call['classification'] == 'ok'
+    assert not browser.check_stop_order([call, {'action': 'adapter_call', 'site': '51job'}])
+    assert browser.validate_record(call, ws) == []
+
+
+@pytest.mark.parametrize('text, expected', [
+    ('Please sign in to view jobs', 'platform_limit'),
+    ('抱歉，您所在的用户组(游客)无法进行此操作', 'not_logged_in'),
+])
+def test_unaccounted_search_refusal_keeps_its_stop_class(tmp_path, text, expected):
+    ws, _, snapshot, _, args = setup_capture(tmp_path, text=text, status=200)
+    snapshot.pop('navigation_budget')
+    snapshot.pop('catalog_rows')
+    dump(ws / 'raw/51job-browser-1.json', snapshot)
+    assert browser.main(args) == 0
+    call = browser.read_retrieval_calls(ws)[-1]
+    assert call['classification'] == expected
+    assert 'budget_error' not in call
+    assert browser.validate_record(call, ws) == []
+
+
+def test_full_catalogs_count_32_even_when_only_eight_rows_are_selected(tmp_path):
+    ws, *_ = setup_capture(tmp_path)
+    snapshot = journey(ws, (15, 2, 15))
+    snapshot['budget_exceeded'] = True
+    raw, rows = ws / 'raw/51job-32.json', ws / 'raw/51job-32-rows.json'
+    dump(raw, snapshot)
+    dump(rows, snapshot['catalog_rows'][:8])
+    assert browser.main(['--workspace', str(ws), '--site', '51job',
+                         '--snapshot-file', str(raw), '--rows-file', str(rows),
+                         '--fallback-reason', 'unsupported_extraction', '--query', 'Roles']) == 0
+    call = browser.read_retrieval_calls(ws)[-1]
+    assert call['row_count'] == 8
+    assert call['search_row_count'] == 32
+    assert budget.used([call], '51job')[0] == 32
+    assert 'ROWS_ABOVE_CAP' in ' '.join(shortlist._check_caps_against_the_run(
+        {'max_rows_per_round': 25, 'max_pages_per_site': 2}, {}, [], [call]))
+    assert 'EXCEEDED' in ' '.join(browser.validate_record(call, ws))
+
+
 @pytest.mark.parametrize('change,match', [
     ('legacy', 'MISSING'), ('count', 'DOM count'), ('aggregate', 'aggregate'),
     ('chain', 'chain'), ('final', 'final snapshot'), ('row', 'copied verbatim'),
@@ -103,6 +176,9 @@ def test_unexpected_overflow_is_counted_and_stops_next_read(tmp_path):
 
 def test_prepare_uses_previous_calls_and_requires_import(tmp_path):
     ws, *_ = setup_capture(tmp_path)
+    # This test supplies its own pending journey, not the scaffolding capture.
+    (ws / 'raw/51job-browser-1.json').unlink()
+    (ws / 'raw/51job-browser-1-rows.json').unlink()
     snap = journey(ws, (10,))
     pending = ws / 'raw/51job-pending.json'
     dump(pending, snap)
