@@ -603,3 +603,94 @@ def test_cjk_does_not_select_luatex_for_xecjk(monkeypatch):
     monkeypatch.setattr(render_cv.shutil, 'which', lambda name: '/bin/lualatex' if name == 'lualatex' else None)
     assert render_cv.find_latex_engine(cjk=True) is None
     assert render_cv.find_latex_engine(cjk=False) == '/bin/lualatex'
+
+
+@pytest.mark.parametrize('line,expected', [
+    (r'|A\|B|C|', ['A|B', 'C']),
+    (r'|A\\|B|', ['A\\', 'B']),
+    (r'|A\\\|B|C|', ['A\\|B', 'C']),
+    ('||B||', ['', 'B', '']),
+    (r'A\q|B\|', [r'A\q', 'B|']),
+])
+def test_table_delimiters_respect_markdown_escapes(line, expected):
+    assert deliver._table_cells(line) == expected
+
+
+def test_escaped_pipe_job_title_keeps_its_pdf_link(tmp_path):
+    import pymupdf
+    md, pdf = tmp_path / 'report.md', tmp_path / 'report.pdf'
+    md.write_text('# Jobs\n\n| Role | Link |\n| --- | --- |\n'
+                  r'| Senior Associate \| Growth | [Read JD \| details](https://example.test/jobs/100) |'
+                  '\n', encoding='utf-8')
+    assert deliver.render_pdf(md, pdf, None) == (True, '')
+    with pymupdf.open(pdf) as document:
+        text = '\n'.join(page.get_text() for page in document)
+        assert 'Senior Associate | Growth' in text
+        assert 'Read JD | details' in text
+        assert [link['uri'] for page in document for link in page.get_links()] == [
+            'https://example.test/jobs/100']
+
+
+def _walkback_appendix():
+    return '\n## Walk-back list\n\n' + '\n\n'.join(
+        f'### WB-{i} — source limit\n'
+        '- quote: I owned the full project and its results.\n'
+        '- softened: I supported the documented analysis and cannot claim ownership.\n'
+        '- defect: Personal ownership was not supported by the record.\n'
+        f'- transcript: mock/transcript.md#turn-{i}\n'
+        '- status: withdrawn' for i in range(1, 13)) + '\n'
+
+
+@pytest.mark.parametrize('existing_pdf', [False, True])
+def test_one_page_brief_delivers_complete_walkback_appendix(tmp_path, existing_pdf, capsys):
+    import pymupdf
+    ws, dest = tmp_path / 'workspace', tmp_path / 'delivery'
+    ws.mkdir()
+    (ws / 'report.md').write_text('# Advice\n\nUse only documented examples.\n')
+    md, pdf = ws / 'interview-brief.md', ws / 'interview-brief.pdf'
+    md.write_text('# Interview readiness\n\n## Honest gaps\n\n'
+                  'Explain your personal scope and its evidence.\n' + _walkback_appendix(),
+                  encoding='utf-8')
+    if existing_pdf:
+        assert deliver.render_pdf(md, pdf, None) == (True, '')
+    assert deliver.main(['--workspace', str(ws), '--to', str(dest)]) == 0, capsys.readouterr()
+    target = dest / '面试准备/面试准备.pdf'
+    assert (dest / '面试准备/面试准备.md').read_bytes() == md.read_bytes()
+    with pymupdf.open(target) as document:
+        assert document.page_count > 1
+        text = '\n'.join(page.get_text() for page in document)
+        assert 'WB-12' in text
+        assert text.count('status: withdrawn') == 12
+    if existing_pdf:
+        assert target.read_bytes() == pdf.read_bytes()
+
+
+def test_walkback_appendix_does_not_exempt_long_quick_reference(tmp_path):
+    md, pdf = tmp_path / 'interview-brief.md', tmp_path / 'interview-brief.pdf'
+    long_core = '# Interview readiness\n\n' + '\n\n'.join(
+        f'- Claim {i}: explain the documented source and your personal scope. '
+        'Describe the validation and its limits without claiming ownership.' for i in range(35))
+    for source in (long_core + _walkback_appendix(),
+                   '# Interview readiness\n' + _walkback_appendix() + '\n## More preparation\n' + long_core):
+        md.write_text(source, encoding='utf-8')
+        assert deliver.render_pdf(md, pdf, None) == (True, '')
+        assert deliver._brief_page_problem(pdf, md).startswith('INTERVIEW_BRIEF_TOO_LONG')
+
+
+@pytest.mark.parametrize('one_page', [False, True])
+def test_walkback_exception_rejects_a_stale_pdf_without_deleting_source(tmp_path, one_page):
+    import pymupdf
+    md, pdf = tmp_path / 'interview-brief.md', tmp_path / 'interview-brief.pdf'
+    md.write_text('# Interview readiness\n\nKeep documented scope.\n' + _walkback_appendix(),
+                  encoding='utf-8')
+    assert deliver.render_pdf(md, pdf, None) == (True, '')
+    with pymupdf.open(pdf) as document:
+        if one_page:
+            document.select([0])
+        else:
+            document.delete_page(document.page_count - 1)
+        stale = tmp_path / 'stale.pdf'
+        document.save(stale)
+    before = stale.read_bytes()
+    assert deliver._brief_page_problem(stale, md).startswith('INTERVIEW_BRIEF_CONTENT_MISMATCH')
+    assert stale.read_bytes() == before

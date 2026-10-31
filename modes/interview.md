@@ -479,7 +479,10 @@ requests the existing application documents and you pass `--include-applications
 
 `deliver.py` also delivers the current `interview-brief.md` in this mode, because the
 walk-back list was just appended to it and the copy apply delivered does not have it.
-The brief must still render to one page (`INTERVIEW_BRIEF_TOO_LONG`). In the final
+The quick-reference body must still fit on the actual PDF's first page
+(`INTERVIEW_BRIEF_TOO_LONG`). The complete structured `## Walk-back list` follows
+as an appendix in the same Markdown/PDF and may span further pages; retain every
+record and put no further quick-reference sections after it. In the final
 message, point the candidate at the new `面试准备/` copy and say the earlier one is
 superseded.
 

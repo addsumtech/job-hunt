@@ -334,6 +334,151 @@ def test_auth_required_mentioned_in_a_transport_error_is_not_a_refusal_code():
     assert r["classification"] == "transport"
 
 
+# Measured BOSS detail stderr, retest-failures-20261031 ONLINE-RESULT.json.
+# Two Node warning lines precede the OpenCLI document, so a full-document
+# yaml.safe_load fails and the typed AUTH_REQUIRED never reaches classification.
+NODE_NO_COLOR_PREFIX = (
+    "(node:85630) Warning: The 'NO_COLOR' env is ignored due to the "
+    "'FORCE_COLOR' env being set.\n"
+    "(Use `node --trace-warnings ...` to show where the warning was created)\n"
+)
+NODE_PREFIXED_AUTH_REQUIRED = (
+    NODE_NO_COLOR_PREFIX
+    + "ok: false\n"
+    + "error:\n"
+    + "  code: AUTH_REQUIRED\n"
+    + "  message: BOSS redirected the job detail page to the login flow\n"
+    + "  help: Please open Chrome or Chromium and log in to https://www.zhipin.com\n"
+    + "  exitCode: 77"
+)
+
+
+def test_node_warning_prefix_before_auth_required_is_not_transport():
+    assert coc._error_code(NODE_PREFIXED_AUTH_REQUIRED) == "AUTH_REQUIRED"
+    assert coc._error_message(NODE_PREFIXED_AUTH_REQUIRED) == (
+        "BOSS redirected the job detail page to the login flow")
+    r = coc.classify("boss", "detail", 77, "", NODE_PREFIXED_AUTH_REQUIRED, AUTH_ROWS)
+    assert r["classification"] == "platform_limit"
+    assert r["auth_state"] == "logged_in"
+    assert r["error_message"] == "BOSS redirected the job detail page to the login flow"
+    assert "do not retry" in r["remedy"]
+
+
+def test_node_warning_prefix_before_anti_bot_stays_platform_limit():
+    stderr = (NODE_NO_COLOR_PREFIX
+              + "ok: false\nerror:\n  code: ANTI_BOT\n"
+              + "  message: Aliyun WAF slider\n  exitCode: 1\n")
+    assert coc._error_code(stderr) == "ANTI_BOT"
+    r = coc.classify("51job", "search", 1, "", stderr, AUTH_ROWS)
+    assert r["classification"] == "platform_limit"
+    assert r["signal_id"] == "opencli-anti-bot"
+    assert r["error_message"] == "Aliyun WAF slider"
+
+
+def test_warning_mentions_auth_required_but_browser_connect_stays_transport():
+    stderr = (
+        "(node:85630) Warning: The 'NO_COLOR' env is ignored due to the "
+        "'FORCE_COLOR' env being set. AUTH_REQUIRED\n"
+        "(Use `node --trace-warnings ...` to show where the warning was created)\n"
+        "ok: false\nerror:\n  code: BROWSER_CONNECT\n"
+        "  message: Connection reset while decoding AUTH_REQUIRED\n  exitCode: 1\n"
+    )
+    assert coc._error_code(stderr) == "BROWSER_CONNECT"
+    r = coc.classify("boss", "detail", 1, "", stderr, AUTH_ROWS)
+    assert r["classification"] == "transport"
+    assert r["error_message"] == "Connection reset while decoding AUTH_REQUIRED"
+
+
+def test_auth_required_without_a_line_start_protocol_marker_stays_transport():
+    stderr = (NODE_NO_COLOR_PREFIX
+              + "saw ok: false while the log said AUTH_REQUIRED\n"
+              + "  ok: false\n"
+              + "connection reset\n")
+    assert coc._error_code(stderr) is None
+    r = coc.classify("boss", "detail", 1, "", stderr, AUTH_ROWS)
+    assert r["classification"] == "transport"
+
+
+def test_prefixed_stderr_still_scans_captcha_and_429_in_the_body():
+    signals = coc.load_signals(SIGNALS_FILE)
+    captcha = (NODE_NO_COLOR_PREFIX
+               + "ok: false\nerror:\n  code: COMMAND_EXEC\n"
+               + "  message: 'boss request failed'\n"
+               + "  body: 'please complete the captcha'\n"
+               + "  exitCode: 1\n")
+    r = coc.classify("boss", "search", 1, "", captcha, AUTH_ROWS, signals)
+    assert r["error_message"] == "boss request failed"
+    assert r["classification"] == "platform_limit"
+    assert r["signal_id"] == "captcha-interstitial"
+
+    limited = (NODE_NO_COLOR_PREFIX
+               + "ok: false\nerror:\n  code: COMMAND_EXEC\n"
+               + "  message: 'boss request failed'\n"
+               + "  body: 'HTTP 429 Too Many Requests'\n"
+               + "  exitCode: 1\n")
+    r = coc.classify("boss", "search", 1, "", limited, AUTH_ROWS, signals)
+    assert r["error_message"] == "boss request failed"
+    assert r["classification"] == "platform_limit"
+    assert r["signal_id"] == "http-429-rate-limited"
+
+
+def test_successful_job_text_is_unaffected_by_warning_shaped_prose():
+    rows = json.dumps([{
+        "jobId": "173100099",
+        "title": "后端工程师",
+        "description": NODE_PREFIXED_AUTH_REQUIRED + "\ncaptcha HTTP 429 安全验证",
+    }], ensure_ascii=False)
+    r = coc.classify(
+        "51job", "search", 0, rows, NODE_PREFIXED_AUTH_REQUIRED, AUTH_ROWS,
+        coc.load_signals(SIGNALS_FILE))
+    assert r["classification"] == "ok"
+    assert r["signal_id"] is None
+    assert r["error_message"] is None
+    assert r["row_count"] == 1
+
+
+def test_json_error_document_still_supplies_code_and_message():
+    stderr = json.dumps({
+        "ok": False,
+        "error": {
+            "code": "AUTH_REQUIRED",
+            "message": "BOSS redirected the job detail page to the login flow",
+        },
+    })
+    assert coc._error_code(stderr) == "AUTH_REQUIRED"
+    r = coc.classify("boss", "detail", 77, "", stderr, AUTH_ROWS)
+    assert r["classification"] == "platform_limit"
+    assert r["error_message"] == "BOSS redirected the job detail page to the login flow"
+
+
+def test_prefixed_auth_required_does_not_rewrite_stderr_or_journal(tmp_path):
+    stderr_path = tmp_path / "stderr.txt"
+    stderr_path.write_text(NODE_PREFIXED_AUTH_REQUIRED, encoding="utf-8")
+    auth_path = tmp_path / "auth.json"
+    auth_path.write_text(
+        json.dumps([{"site": "boss", "status": "logged_in"}]), encoding="utf-8")
+    rc = coc.main([
+        "--workspace", str(tmp_path),
+        "--site", "boss", "--command", "detail",
+        "--exit-code", "77",
+        "--stdout-file", str(tmp_path / "missing-stdout.json"),
+        "--stderr-file", str(stderr_path),
+        "--auth-status-file", str(auth_path),
+        "--signals-file", str(SIGNALS_FILE),
+    ])
+    assert rc == 1
+    assert stderr_path.read_text(encoding="utf-8") == NODE_PREFIXED_AUTH_REQUIRED
+    assert not (tmp_path / "missing-stdout.json").exists()
+    lines = (tmp_path / "journal.jsonl").read_text(encoding="utf-8").strip().splitlines()
+    assert len(lines) == 1
+    rec = json.loads(lines[0])
+    assert rec["action"] == "adapter_call"
+    assert rec["classification"] == "platform_limit"
+    assert rec["error_message"] == "BOSS redirected the job detail page to the login flow"
+    assert "NO_COLOR" not in lines[0]
+    assert rec["stderr_file"] == str(stderr_path)
+
+
 def test_exit0_with_unparsable_stdout_is_transport_not_ok():
     r = coc.classify("51job", "search", 0, "<html>login</html>", "")
     assert r["classification"] == "transport"

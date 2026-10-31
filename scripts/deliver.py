@@ -792,7 +792,26 @@ def _inline_pdf_markup(text: str) -> str:
 
 
 def _table_cells(line: str) -> list[str]:
-    return [part.strip() for part in line.strip().strip("|").split("|")]
+    line = line.strip()
+    cells = [""]
+    escaped = False
+    for char in line:
+        if escaped:
+            cells[-1] += char if char in "\\|" else "\\" + char
+            escaped = False
+        elif char == "\\":
+            escaped = True
+        elif char == "|":
+            cells.append("")
+        else:
+            cells[-1] += char
+    if escaped:
+        cells[-1] += "\\"
+    if line.startswith("|"):
+        cells.pop(0)
+    if line.endswith("|") and cells and cells[-1] == "":
+        cells.pop()
+    return [part.strip() for part in cells]
 
 
 def _is_table_rule(cells: list[str]) -> bool:
@@ -1445,18 +1464,45 @@ def _render_pdf(md: pathlib.Path, pdf: pathlib.Path,
     return _verify_pdf(pdf, source, needs_cjk, link_source)
 
 
-def _brief_page_problem(pdf: pathlib.Path) -> str:
-    """Measure the actual readiness brief, including an existing PDF copy."""
+def _brief_page_problem(pdf: pathlib.Path, source: pathlib.Path | None = None) -> str:
+    """Keep the quick reference to one page; retain the full walk-back appendix."""
     try:
         import pymupdf
         with pymupdf.open(pdf) as document:
             pages = document.page_count
+            page_texts = [page.get_text() for page in document]
     except Exception as exc:
         return f"INTERVIEW_BRIEF_PAGES_UNVERIFIED: {exc}"
-    if pages > 1:
-        return (f"INTERVIEW_BRIEF_TOO_LONG: rendered {pages} pages; condense repeated "
-                "wording to one page while retaining claim sources, honest gaps and "
-                "reviewer questions. Do not shrink the text.")
+    problem = (f"INTERVIEW_BRIEF_TOO_LONG: rendered {pages} pages; condense repeated "
+               "wording to one page while retaining claim sources, honest gaps and "
+               "reviewer questions. Do not shrink the text.")
+    refusal = problem if pages > 1 else ""
+    if source is None or not source.is_file():
+        return refusal
+    try:
+        text = source.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        return f"INTERVIEW_BRIEF_PAGES_UNVERIFIED: {exc}"
+    marker = re.search(r"^## Walk-back list[ \t]*$", text, re.M)
+    if marker is None:
+        return refusal
+    import check_mock
+    entries = check_mock.walkback_entries(text)
+    if not entries or any(not entry[field] for entry in entries
+                          for field in ("quote", "softened", "defect", "transcript", "status")):
+        return refusal
+    rest = text[marker.end():]
+    if pages > 1 and re.search(r"^##\s+", rest, re.M):
+        return problem  # The appendix must follow all quick-reference content.
+    import layout_requirements
+    missing = layout_requirements.report_text_problems(text, page_texts)
+    link_problem = _pdf_link_problem(pdf, text)
+    if missing or link_problem:
+        return f"INTERVIEW_BRIEF_CONTENT_MISMATCH: {link_problem or missing[0]}"
+    # Measure the actual PDF's first page, including custom fonts/layouts.
+    # A newly rendered one-page prefix cannot vouch for a cached PDF's layout.
+    if layout_requirements.report_text_problems(text[:marker.start()], page_texts[:1]):
+        return problem
     return ""
 
 
@@ -1554,7 +1600,8 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
         claimed[target] = src.relative_to(workspace)
         if src.suffix == ".pdf":
             problems = glyph_findings(src)
-            if src.stem == "interview-brief" and (problem := _brief_page_problem(src)):
+            if src.stem == "interview-brief" and (problem := _brief_page_problem(
+                    src, src.with_suffix(".md"))):
                 problems.append(problem)
             if problems:
                 target.unlink(missing_ok=True)
@@ -1611,7 +1658,7 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
                                 fonts[glyphs] = pick_cjk_font(source)
                             font = fonts[glyphs]
                 ok, why = render_pdf(src, pdf, font)
-                if ok and src.stem == "interview-brief" and (why := _brief_page_problem(pdf)):
+                if ok and src.stem == "interview-brief" and (why := _brief_page_problem(pdf, src)):
                     pdf.unlink(missing_ok=True)
                     ok = False
             except OSError as exc:

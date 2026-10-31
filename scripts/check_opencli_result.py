@@ -145,14 +145,47 @@ def _auth_state(site, auth_rows):
     return "absent"
 
 
+# A full-buffer parse stays first. Node can print warning lines before the
+# OpenCLI document (measured 2026-10-31); that makes the buffer invalid YAML.
+# Only then accept a suffix whose first line is exactly `ok: false`. A code
+# word inside the warning is not a marker.
+_PROTOCOL_OK_FALSE = re.compile(r"(?m)^ok: false[ \t]*\r?$")
+
+
+def _loads_mapping(text):
+    """Return a YAML or JSON mapping, or None. Never scans prose for a code."""
+    candidate = (text or "").strip()
+    if not candidate:
+        return None
+    parsed = None
+    try:
+        parsed = yaml.safe_load(candidate)
+    except yaml.YAMLError:
+        parsed = None
+    if not isinstance(parsed, dict):
+        try:
+            parsed = json.loads(candidate)
+        except (json.JSONDecodeError, ValueError):
+            return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _structured_payload(stderr_text):
+    text = stderr_text or ""
+    parsed = _loads_mapping(text)
+    if parsed is not None:
+        return parsed
+    marker = _PROTOCOL_OK_FALSE.search(text)
+    if marker is None:
+        return None
+    return _loads_mapping(text[marker.start():])
+
+
 def _error_message(stderr_text):
     text = (stderr_text or "").strip()
     if not text:
         return ""
-    try:
-        parsed = yaml.safe_load(text)
-    except yaml.YAMLError:
-        return text
+    parsed = _structured_payload(stderr_text)
     if isinstance(parsed, dict):
         err = parsed.get("error")
         if isinstance(err, dict) and err.get("message"):
@@ -161,11 +194,8 @@ def _error_message(stderr_text):
 
 
 def _error_code(stderr_text):
-    try:
-        body = yaml.safe_load(stderr_text or "")
-    except yaml.YAMLError:
-        return None
-    error = body.get("error") if isinstance(body, dict) else None
+    parsed = _structured_payload(stderr_text)
+    error = parsed.get("error") if isinstance(parsed, dict) else None
     return error.get("code") if isinstance(error, dict) else None
 
 

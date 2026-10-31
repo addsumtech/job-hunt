@@ -331,6 +331,8 @@ Produce the brief in `references/interview-prep.md` (write it to `<workspace>/in
 
 Keep the rendered brief to **one page or less**. If delivery reports `INTERVIEW_BRIEF_TOO_LONG`, condense repeated wording while retaining the claim sources, honest gaps and reviewer questions, then render and inspect it again. Do not shrink the text to force it onto one page.
 
+After a mock interview, the complete structured `## Walk-back list` may follow as an appendix in the same Markdown/PDF. The quick-reference body must still fit on the actual PDF's first page; keep all walk-back records intact and put no further quick-reference sections after the appendix.
+
 ### Step 7.6 — Offer what comes next
 
 Apply ends here, and the user is now at the point the other three modes exist
