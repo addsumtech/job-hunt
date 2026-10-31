@@ -187,3 +187,40 @@ def test_trace_config_environment_does_not_redirect_stock_adapter_overrides(tmp_
     assert compat.main(['--site', 'indeed', '--action', 'apply', '--package-dir', str(package)]) == 0
     assert (tmp_path / 'home/.opencli/clis/indeed/job.js').read_text() == 'fixed();\n'
     assert (config / 'clis/indeed/job.js').read_text() == 'old();\n'
+
+
+def test_boss_detail_patch_regressions_execute_actual_javascript():
+    node = shutil.which('node')
+    if not node:
+        pytest.skip('Node unavailable')
+    result = subprocess.run([node, '--test', str(Path(__file__).with_name('opencli-boss-detail.test.cjs'))],
+                            capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_boss_cli_patch_is_exact_reversible_and_preserves_custom_edits(tmp_path, capsys):
+    package, config = tmp_path / 'package', tmp_path / 'config'
+    site = package / 'clis/boss'
+    site.mkdir(parents=True)
+    (package / 'package.json').write_text('{"name":"@jackwener/opencli","version":"1.8.7"}')
+    original = (Path(__file__).parent / 'fixtures/opencli-1.8.7-boss-detail.js.txt').read_bytes()
+    (site / 'detail.js').write_bytes(original)
+    (site / 'utils.js').write_text('// original utility')
+    (site / 'auth.js').write_text('// bundled auth must remain in the package')
+    args = ['--site', 'boss', '--package-dir', str(package), '--config-dir', str(config)]
+    assert compat.main(args) == 0
+    assert not config.exists()
+    local = config / 'clis/boss/detail.js'
+    assert compat.main(args + ['--action', 'apply']) == 0
+    entry = next(item for item in json.loads(compat.MANIFEST.read_text())['files']
+                 if item['path'] == 'boss/detail.js')
+    assert compat.digest(local.read_bytes()) == entry['patched_sha256']
+    assert (site / 'detail.js').read_bytes() == original
+    assert not (local.parent / 'auth.js').exists()
+    assert compat.main(args + ['--action', 'apply']) == 0
+    assert json.loads(capsys.readouterr().out.splitlines()[-1])['files_changed'] == 0
+    assert compat.main(args + ['--action', 'revert']) == 0
+    assert local.read_bytes() == original
+    local.write_text('// user edit')
+    assert compat.main(args + ['--action', 'apply']) == 2
+    assert local.read_text() == '// user edit'

@@ -369,7 +369,7 @@ page or row caps, and it is not a target count.
 
 ## Retrieval backend — OpenCLI first; one-way built-in CDP fallback
 
-Before using OpenCLI for the first Indeed, 51job, LinkedIn or Nowcoder read, follow `references/opencli-compat.md`:
+Before using OpenCLI for the first BOSS, Indeed, 51job, LinkedIn or Nowcoder read, follow `references/opencli-compat.md`:
 check and automatically apply only the known version/hash-matched local repairs
 with `scripts/opencli_compat.py`. Do not overwrite custom edits or force a patch
 onto another version. This local preparation performs no site reads and cannot

@@ -2,7 +2,7 @@
 
 OpenCLI remains the default reader. The optional patches here address defects
 reproduced with `@jackwener/opencli` 1.8.7; they are maintained by this skill,
-not an OpenCLI upstream release. Before the first Indeed, 51job, LinkedIn or
+not an OpenCLI upstream release. Before the first BOSS, Indeed, 51job, LinkedIn or
 Nowcoder read, the agent
 runs the read-only check below. If all affected bytes match the known original or
 patched version, apply automatically; users need not copy commands or approve
@@ -14,6 +14,7 @@ use the normal reader, or the browser fallback when incompatibility is diagnosed
 
 | Observed defect | Narrow repair | Verified scope |
 |---|---|---|
+| BOSS headhunter detail may omit address/recruiter containers and use a plain h1; swallowed DOM errors become a false login refusal | Tolerate absent optional containers, recognize the detail title, ignore hidden login templates, navigate once with bounded render polling, and keep recommendation cards out of employer metadata | Shanghai original detail live on 2026-10-31 plus extraction/error regressions |
 | 51job's `/pc/search?keyword=…&searchType=2` navigation times out while `/pc/search` renders results | Open the plain entry page; retain the existing keyword, area and limit in the search API request | Python / Shanghai / 3 rows on 2026-09-09 |
 | 51job detail mislabels a current slider as a parsing error, shifts company attributes and loses address/paragraph breaks | Recognize the observed slider instructions as `ANTI_BOT`; use labelled company icons and the full address; preserve HTML line breaks | Beijing live detail on 2026-09-12 plus current/old DOM regressions |
 | Indeed detail returns a sign-in heading as a job | Detect account pages with no job description and report a login error | Account-page DOM regressions and classifier stop-lock tests |
@@ -29,7 +30,7 @@ use the normal reader, or the browser fallback when incompatibility is diagnosed
 ## Check, apply, revert
 
 `python scripts/opencli_compat.py --site indeed` is read-only; substitute `51job`,
-`linkedin` or `nowcoder` for those adapters. It checks the installed package version and exact source hashes.
+`linkedin`, `nowcoder` or `boss` for those adapters. It checks the installed package version and exact source hashes.
 Unknown versions, official-source drift, or local edits are refused, not guessed
 at. Exact hashes of earlier patches shipped by this skill are recognized as
 `previous_patch` and can be upgraded or reverted; user edits remain untouched.

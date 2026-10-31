@@ -281,6 +281,37 @@
           "new": "    throw new CliError('INVALID_ARGUMENT', `Unknown or ambiguous filter \"${s}\"`,\n        'Use an exact supported label or code: ' + Object.keys(table).join(' / '));"
         }
       ]
+    },
+    {
+      "path": "boss/detail.js",
+      "base_sha256": "240ab62655cc14edd0293a352bcce9bb8d5b1d95c88b6d3e2ad2037207ec4153",
+      "patched_sha256": "1162359688f9c4213f2102a3384eaa23493bd42fd09d24bb5f67d052b795788e",
+      "replacements": [
+        {
+          "old": "const element = root.querySelector(selector);",
+          "new": "const element = root?.querySelector(selector);"
+        },
+        {
+          "old": "Array.from(root.querySelectorAll(selector))",
+          "new": "Array.from(root?.querySelectorAll(selector) || [])"
+        },
+        {
+          "old": "const title = first(['.job-primary .name h1', '.job-primary h1', 'h1[title]']);",
+          "new": "const title = first(['.job-primary .name h1', '.job-primary h1', '.job-banner h1', 'h1[title]'])\n        || (/^\\/job_detail\\//.test(window.location.pathname) ? text('h1') : '');"
+        },
+        {
+          "old": "async function captureJobDetail(page, jobId) {\n    const url = `https://www.zhipin.com/job_detail/${encodeURIComponent(jobId)}.html`;\n    await navigateTo(page, 'https://www.zhipin.com/web/geek/jobs', 2);\n    for (let navigationAttempt = 0; navigationAttempt < 2; navigationAttempt++) {\n        await navigateTo(page, url, 5);\n        for (let attempt = 0; attempt < 5; attempt++) {\n            try {\n                const domRow = await readRenderedPage(page, jobId);\n                if (domRow?.name && domRow?.description && domRow?.company) return domRow;\n            } catch { /* wait for a complete render */ }\n            if (attempt < 4) await page.wait(1);\n        }\n    }\n    // The retry loop above swallows every read error, so without this check a\n    // session that got bounced to the login wall reports \"incomplete posting\".\n    // The API path this command replaced classified that as AuthRequiredError\n    // via assertOk; keep that signal rather than losing it to the UI rewrite.\n    if (await isLoginWall(page)) {\n        throw new AuthRequiredError(BOSS_DOMAIN, 'BOSS redirected the job detail page to the login flow');\n    }\n    throw new CommandExecutionError('BOSS detail page did not expose a complete job posting');\n}\n",
+          "new": "async function captureJobDetail(page, jobId) {\n    const url = `https://www.zhipin.com/job_detail/${encodeURIComponent(jobId)}.html`;\n    await navigateTo(page, url, 2);\n    for (let attempt = 0; attempt < 5; attempt++) {\n        if (await isLoginWall(page)) {\n            throw new AuthRequiredError(BOSS_DOMAIN, 'BOSS detail page requires login');\n        }\n        const domRow = await readRenderedPage(page, jobId);\n        if (domRow?.name && domRow?.description && domRow?.company) return domRow;\n        if (attempt < 4) await page.wait(1);\n    }\n    throw new CommandExecutionError('BOSS detail page did not expose a complete job posting');\n}\n"
+        },
+        {
+          "old": "                return !!document.querySelector('.sign-form, .login-card, [class*=\"login-register\"]');",
+          "new": "                return [...document.querySelectorAll('.sign-form, .login-card, [class*=\"login-register\"]')]\n                    .some(element => element.getClientRects().length\n                        && getComputedStyle(element).visibility !== 'hidden'\n                        && getComputedStyle(element).visibility !== 'collapse');"
+        },
+        {
+          "old": "const sideFacts = texts('.job-sider p, .job-sider a[href^=\"/i\"]')",
+          "new": "const companyBlock = document.querySelector('.job-sider .sider-company');\n    const sideFacts = texts('p, a[href^=\"/i\"]', companyBlock)"
+        }
+      ]
     }
   ]
 }

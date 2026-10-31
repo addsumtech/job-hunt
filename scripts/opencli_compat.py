@@ -101,7 +101,7 @@ def execute(changes):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--site', required=True, choices=['indeed', '51job', 'linkedin', 'nowcoder'])
+    parser.add_argument('--site', required=True, choices=['indeed', '51job', 'linkedin', 'nowcoder', 'boss'])
     parser.add_argument('--action', choices=['check', 'apply', 'revert'], default='check')
     parser.add_argument('--package-dir', type=Path)
     parser.add_argument('--config-dir', type=Path,
