@@ -8,6 +8,7 @@ Design: docs/superpowers/specs/2026-11-01-online-presence-design.md.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime
 import difflib
 import json
@@ -106,7 +107,8 @@ def status(name: str, today: datetime.date) -> dict:
         if last is None or (today - last).days > STALE_DAYS:
             stale.append(source)
     return {"to_ask": to_ask, "stale": stale, "broken": broken,
-            "shared_with": record.get("shared_with")}
+            "shared_with": record.get("shared_with"),
+            "pending_for_master": _pending_for_master(name, record)}
 
 
 def record_answer(name: str, source: str, status: str, value, words: str,
@@ -369,16 +371,17 @@ def diff(source: str, previous, current: dict, master: dict, today: datetime.dat
                          or (len(short) >= 6 and short in blob))
             rank = 1000 - _days_since(r.get("pushed_at"), today) + (100 if r.get("role") == "owner" else 0) \
                 + min(r.get("stars") or 0, 500) / 5
+            payload = {k: r.get(k) for k in ("full_name", "html_url", "description", "role")}
             old = before.get(full.lower())
             if old is None and not mentioned:
                 found.append({"id": f"github:{full}", "source": "github", "kind": "new_repo",
                               "summary": f"{full}: {r.get('description') or 'no description'} (role: {r.get('role')})",
-                              "evidence_url": r.get("html_url"), "rank": rank})
+                              "evidence_url": r.get("html_url"), "rank": rank, "repo": payload})
             release = r.get("latest_release")
             if release and (old is not None or mentioned) and release != (old or {}).get("latest_release"):
                 found.append({"id": f"github:{full}@{release}", "source": "github", "kind": "new_release",
                               "summary": f"{full} released {release}", "evidence_url": r.get("html_url"),
-                              "rank": rank})
+                              "rank": rank, "repo": payload})
     elif source == "scholar":
         before = {_norm(p["title"]) for p in (previous or {}).get("papers", [])}
         for paper in current.get("papers", []):
@@ -388,7 +391,8 @@ def diff(source: str, previous, current: dict, master: dict, today: datetime.dat
             found.append({"id": f"scholar:{key}", "source": "scholar", "kind": "new_paper",
                           "summary": f"{paper['title']} — {paper['venue']}, {paper['year']} ({paper['authors']})",
                           "evidence_url": current.get("url"),
-                          "rank": 1000 - 365 * max(0, today.year - int(paper["year"]))})
+                          "rank": 1000 - 365 * max(0, today.year - int(paper["year"])),
+                          "paper": dict(paper)})
     elif source == "website" and previous and previous.get("outcome") == "ok":
         old_lines = str(previous.get("text", "")).splitlines()
         added = [line[1:].strip() for line in difflib.ndiff(old_lines, str(current.get("text", "")).splitlines())
@@ -480,6 +484,126 @@ def confirm(name: str, finding_id: str, decision: str, words: str, correction=No
     raise ValueError(f"no finding {finding_id!r} in {path}")
 
 
+ROLE_LABELS = {"owner": "Owner", "top_contributor": "Lead contributor", "contributor": "Contributor"}
+WRITTEN = ("confirmed", "confirmed_unwritten")
+
+
+def _link_value(source: str, value: str) -> str:
+    if source == "github" and "/" not in value:
+        return f"github.com/{value}"
+    return value
+
+
+def _apply_finding(master: dict, finding: dict) -> bool:
+    """Add one confirmed finding's durable facts to `master`; True if it changed.
+
+    Never edits an entry the user already wrote, and never writes star, fork or
+    release numbers (spec decision 6): those are read fresh from a snapshot.
+    """
+    blob, project_names = _master_text(master)
+    if finding.get("kind") == "new_repo" and finding.get("repo"):
+        repo_data = finding["repo"]
+        short = repo_data["full_name"].split("/")[-1]
+        if _norm(short) in project_names or _norm(repo_data.get("html_url", "")) in blob:
+            return False
+        role = journal.as_mapping(finding.get("correction")).get("role") \
+            or ROLE_LABELS.get(repo_data.get("role"), "Contributor")
+        entry = {"name": short, "role": role}
+        if repo_data.get("description"):
+            entry["description"] = repo_data["description"]
+        entry["links"] = [repo_data["html_url"]]
+        master.setdefault("projects", [])
+        master["projects"] = list(master["projects"] or []) + [entry]
+        return True
+    if finding.get("kind") == "new_paper" and finding.get("paper"):
+        paper = finding["paper"]
+        if _norm(paper["title"]) in blob:
+            return False
+        master["publications"] = list(master.get("publications") or []) + [
+            f"{paper['title']} — {paper['venue']}, {paper['year']}."]
+        return True
+    return False  # releases and page changes carry no durable fact to store
+
+
+def _leading_comments(path: pathlib.Path) -> str:
+    lines = []
+    for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+        if line.startswith("#") or (lines and not line.strip()):
+            lines.append(line)
+        else:
+            break
+    return "".join(lines).rstrip("\n") + ("\n" if lines else "")
+
+
+def writeback(name: str, language: str, workspace=None) -> list:
+    """Write confirmed findings into this language's master through save_profile.py."""
+    import yaml
+    import save_profile
+    record_path = paths.online_presence(name)
+    record = load_record(record_path)
+    target = paths.master_for_language(name, language)
+    todo = [f for f in record["findings"] if f.get("status") in WRITTEN
+            and str(target) not in (f.get("written_to") or [])]
+    if not todo:
+        return []
+    if not target.exists():
+        for finding in todo:
+            finding["status"] = "confirmed_unwritten"
+        save_record(record_path, record)
+        return []
+    master = journal.load_yaml(target)
+    changed = False
+    if master.get("contact") is None:
+        master["contact"] = {}
+    contact = master["contact"]
+    if isinstance(contact, dict) and contact.get("links") is None:
+        contact["links"] = {}
+    link_map = contact.get("links") if isinstance(contact, dict) else None
+    if isinstance(link_map, dict):  # any other shape is the user's; leave it alone
+        for source in SOURCES:
+            answer = journal.as_mapping(record["sources"].get(source))
+            if answer.get("status") == "given" and answer.get("value") and not link_map.get(source):
+                link_map[source] = _link_value(source, answer["value"])
+                changed = True
+    for finding in todo:
+        changed = _apply_finding(master, finding) or changed
+    written = [f["id"] for f in todo]
+    if changed:
+        before = journal.sha256_file(target)
+        with tempfile.TemporaryDirectory() as tmp:
+            staged = pathlib.Path(tmp) / target.name
+            staged.write_text(_leading_comments(target)
+                              + yaml.safe_dump(master, allow_unicode=True, sort_keys=False),
+                              encoding="utf-8")
+            with contextlib.redirect_stdout(sys.stderr):
+                code = save_profile.main(["--name", name, "--profile", str(staged)])
+        if code != 0:
+            raise ValueError(f"save_profile.py refused the write-back (exit {code})")
+        entry = {"master": str(target), "before_sha256": before,
+                 "after_sha256": journal.sha256_file(target), "finding_ids": written,
+                 "date": datetime.date.today().isoformat()}
+        record["writebacks"].append(entry)
+        if workspace is not None:
+            journal.append(workspace, {"action": "master_writeback", **entry})
+    for finding in todo:
+        finding["status"] = "confirmed"
+        finding["written_to"] = list(finding.get("written_to") or []) + [str(target)]
+    save_record(record_path, record)
+    return written
+
+
+def _pending_for_master(name: str, record: dict) -> dict:
+    out = {}
+    for lang, path in paths.master_profiles(name).items():
+        if not lang:
+            continue
+        ids = [f["id"] for f in record["findings"] if f.get("status") == "confirmed"
+               and f.get("written_to") and str(path) not in f["written_to"]]
+        if ids:
+            out[lang] = ids
+    return out
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     sub = ap.add_subparsers(dest="command", required=True)
@@ -512,8 +636,16 @@ def main(argv=None) -> int:
     cf.add_argument("--decision", required=True, choices=FINDING_DECISIONS)
     cf.add_argument("--words", required=True)
     cf.add_argument("--role", help="the user's role, when they correct it")
+    wb = sub.add_parser("writeback", help="write confirmed findings into a master")
+    wb.add_argument("--name", required=True)
+    wb.add_argument("--language", required=True)
+    wb.add_argument("--workspace", type=pathlib.Path)
     args = ap.parse_args(argv)
     try:
+        if args.command == "writeback":
+            written = writeback(args.name, args.language, args.workspace)
+            print(json.dumps({"written": written}, ensure_ascii=False))
+            return 0
         if args.command == "check":
             today = datetime.date.fromisoformat(args.today) if args.today else datetime.date.today()
             print(json.dumps(check(args.name, args.workspace, today, args.force, get=http_get),
