@@ -852,6 +852,32 @@ def _wrap_report_text(value, size, width, text_width, literal=False):
     closing = set("，。；：！？、）】》〉”’」』〕］｝％…,.!?;:)]}")
     opening = set("（【《〈“‘「『〔［｛([{")
     word = re.compile(r"[A-Za-zÀ-ɏ0-9_+/.@:#?&=%~가-힯-]")
+    currency = set("€$£¥₩₹₽")
+    separators = set(",.'’")
+
+    def joined(text, index):
+        """Whether text[index - 1] and text[index] belong to one number.
+
+        `€4,000` once printed as `€4,` / `000`, and `€4000` as `€` / `4000`:
+        a currency sign or a digit-group separator is not a word character, so
+        the word rule above let the line break there.
+        """
+        left, right = text[index - 1], text[index]
+        if left in currency and right.isdigit():
+            return True
+        if left.isdigit() and right in separators:
+            return index + 1 < len(text) and text[index + 1].isdigit()
+        return (left in separators and right.isdigit()
+                and index > 1 and text[index - 2].isdigit())
+
+    def number_span(text, index):
+        start, stop = index - 1, index + 1
+        while start > 0 and joined(text, start):
+            start -= 1
+        while stop < len(text) and joined(text, stop):
+            stop += 1
+        return start, stop
+
     result = []
     for source_line in value.splitlines() or [""]:
         rest = source_line if literal else source_line.strip()
@@ -878,6 +904,10 @@ def _wrap_report_text(value, size, width, text_width, literal=False):
                             stop += 1
                         # Long URLs/words still flow. A token that fits on a
                         # fresh line moves there intact, even beside CJK.
+                        if start > 0 and text_width(rest[start:stop], size) <= width:
+                            end = start
+                    if 0 < end < len(rest) and joined(rest, end):
+                        start, stop = number_span(rest, end)
                         if start > 0 and text_width(rest[start:stop], size) <= width:
                             end = start
                     while end > 1 and (rest[end] in closing or rest[end - 1] in opening):
@@ -925,8 +955,14 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
 
     def write_lines(lines: list[str], x: float, size: float,
                     color: tuple[float, float, float], leading: float,
-                    link: str | None = None, allow_split: bool = False) -> bool:
-        """Paint text through TextWriter, whose CJK metrics stay compact."""
+                    link: str | None = None, allow_split: bool = False,
+                    inline: list[tuple[str, str]] | None = None) -> bool:
+        """Paint text through TextWriter, whose CJK metrics stay compact.
+
+        `inline` holds section links to make clickable where their label is
+        printed; each one placed is removed from the list, so the caller can
+        fall back to a separate link line for a label that wrapped.
+        """
         nonlocal cursor
         height = len(lines) * leading
         if not allow_split and height <= bottom - top and cursor + height > bottom:
@@ -944,6 +980,19 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
             for line in chunk:
                 writer.append(pymupdf.Point(x, cursor + size), line, font=font,
                               fontsize=size)
+                for pending in list(inline or []):
+                    label, target = pending
+                    found = line.find(label) if label else -1
+                    if found < 0:
+                        continue
+                    x0 = x + text_width(line[:found], size)
+                    x1 = x0 + text_width(label, size)
+                    internal_links.append((page.number, pymupdf.Rect(x0, cursor, x1, cursor + leading),
+                                           unquote(target[1:])))
+                    page.draw_line(pymupdf.Point(x0, cursor + size + 2),
+                                   pymupdf.Point(x1, cursor + size + 2),
+                                   color=link_color, width=0.5)
+                    inline.remove(pending)
                 cursor += leading
             writer.write_text(page, color=color)
             if link:
@@ -1006,11 +1055,20 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
                   allow_split: bool = False) -> bool:
         nonlocal cursor
         display, links = text_and_links(value)
-        standalone_link = only_a_link(value)
+        # A list item that is nothing but a link (a contents entry) is a
+        # standalone link too: painting `- 结论` and then a clickable `结论`
+        # under it printed every contents entry twice.
+        standalone_link = only_a_link(value) or (
+            value.startswith("- ") and only_a_link(value[2:]))
         if not standalone_link:
+            # A section link inside prose is clickable where it is printed;
+            # only a label that wrapped across lines still gets its own line.
+            inline = [(label, url) for label, url in links if url.startswith("#")]
+            links = [(label, url) for label, url in links if not url.startswith("#")]
             if not write_lines(wrap(display, size, right - left), left, size, color,
-                               size * 1.35, allow_split=allow_split):
+                               size * 1.35, allow_split=allow_split, inline=inline):
                 return False
+            links = inline + links
             cursor += gap
         for label, url in links:
             link_label = label if url.startswith("#") else f"{style['link']}{label}"
