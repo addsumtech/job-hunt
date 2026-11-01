@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import difflib
 import json
 import os
 import pathlib
@@ -234,6 +235,12 @@ def write_snapshot(name: str, source: str, snapshot: dict, today: datetime.date,
     (base / "snapshots").mkdir(parents=True, exist_ok=True)
     (base / "raw").mkdir(parents=True, exist_ok=True)
     stem = f"{today.isoformat()}-{source}"
+    n_same_day = 1
+    while (base / "snapshots" / f"{stem}.json").exists():
+        # A forced re-check on the same day must not overwrite the snapshot it is
+        # compared against: the diff would then compare a file with itself.
+        n_same_day += 1
+        stem = f"{today.isoformat()}-{source}-{n_same_day}"
     raw_files = []
     for n, (url, status, body) in enumerate(snapshot.get("raw", []), 1):
         rel = f"raw/{stem}-{n}.json"
@@ -317,9 +324,160 @@ def note_check(name: str, source: str, snapshot_path, outcome: str, code, today:
     """Remember the latest check of `source` in the record."""
     path = paths.online_presence(name)
     record = load_record(path)
+    before = journal.as_mapping(record["checks"].get(source))
+    previous = before.get("snapshot") if before.get("outcome") == "ok" else before.get("previous_snapshot")
     record["checks"][source] = {"date": today.isoformat(), "outcome": outcome, "code": code,
-                                "snapshot": str(snapshot_path)}
+                                "snapshot": str(snapshot_path), "previous_snapshot": previous,
+                                "diffed": False}
     save_record(path, record)
+
+
+SHOW_PER_RUN = 4
+
+
+def _norm(text) -> str:
+    return re.sub(r"[^0-9a-z\u4e00-\u9fff]+", "", str(text).lower())
+
+
+def _master_text(master: dict) -> tuple[str, set]:
+    """(everything the master says, normalised) and the set of normalised project names."""
+    names = {_norm(p.get("name", "")) for p in master.get("projects") or [] if isinstance(p, dict)}
+    blob = _norm(json.dumps(master, ensure_ascii=False, default=str))
+    return blob, {n for n in names if n}
+
+
+def _days_since(value, today: datetime.date) -> int:
+    try:
+        return max(0, (today - datetime.date.fromisoformat(str(value)[:10])).days)
+    except ValueError:
+        return 3650
+
+
+def diff(source: str, previous, current: dict, master: dict, today: datetime.date) -> list:
+    """Findings in `current` that `previous` and the master do not already account for."""
+    if not current or current.get("outcome") != "ok":
+        return []
+    blob, project_names = _master_text(master or {})
+    found = []
+    if source == "github":
+        before = {r["full_name"].lower(): r for r in (previous or {}).get("repos", [])}
+        for r in current.get("repos", []):
+            full = r["full_name"]
+            short = _norm(full.split("/")[-1])
+            mentioned = (_norm(r.get("html_url", "")) in blob or short in project_names
+                         or any(short and short in name for name in project_names)
+                         or (len(short) >= 6 and short in blob))
+            rank = 1000 - _days_since(r.get("pushed_at"), today) + (100 if r.get("role") == "owner" else 0) \
+                + min(r.get("stars") or 0, 500) / 5
+            old = before.get(full.lower())
+            if old is None and not mentioned:
+                found.append({"id": f"github:{full}", "source": "github", "kind": "new_repo",
+                              "summary": f"{full}: {r.get('description') or 'no description'} (role: {r.get('role')})",
+                              "evidence_url": r.get("html_url"), "rank": rank})
+            release = r.get("latest_release")
+            if release and (old is not None or mentioned) and release != (old or {}).get("latest_release"):
+                found.append({"id": f"github:{full}@{release}", "source": "github", "kind": "new_release",
+                              "summary": f"{full} released {release}", "evidence_url": r.get("html_url"),
+                              "rank": rank})
+    elif source == "scholar":
+        before = {_norm(p["title"]) for p in (previous or {}).get("papers", [])}
+        for paper in current.get("papers", []):
+            key = _norm(paper["title"])
+            if key in before or key in blob:
+                continue
+            found.append({"id": f"scholar:{key}", "source": "scholar", "kind": "new_paper",
+                          "summary": f"{paper['title']} — {paper['venue']}, {paper['year']} ({paper['authors']})",
+                          "evidence_url": current.get("url"),
+                          "rank": 1000 - 365 * max(0, today.year - int(paper["year"]))})
+    elif source == "website" and previous and previous.get("outcome") == "ok":
+        old_lines = str(previous.get("text", "")).splitlines()
+        added = [line[1:].strip() for line in difflib.ndiff(old_lines, str(current.get("text", "")).splitlines())
+                 if line.startswith("+ ") and line[1:].strip()]
+        if added:
+            found.append({"id": f"website:{today.isoformat()}", "source": "website", "kind": "page_changed",
+                          "summary": "Added on the page: " + " | ".join(added[:5]),
+                          "evidence_url": current.get("url"), "rank": 900})
+    return found
+
+
+def _load_snapshot(path):
+    try:
+        return json.loads(pathlib.Path(path).read_text(encoding="utf-8")) if path else None
+    except (OSError, ValueError):
+        return None
+
+
+def _all_masters(name: str) -> dict:
+    merged = {}
+    for path in paths.master_profiles(name).values():
+        try:
+            merged[str(path)] = journal.load_yaml(path)
+        except journal.YamlUnreadable:
+            continue
+    return merged
+
+
+def check(name: str, workspace, today: datetime.date, force: bool, get=None) -> dict:
+    """Fetch stale GitHub, diff every new snapshot once, and return what to show."""
+    get = get or http_get
+    path = paths.online_presence(name)
+    record = load_record(path)
+    st = status(name, today)
+    checked = {}
+    github = journal.as_mapping(record["sources"].get("github"))
+    if github.get("status") == "given":
+        if force or "github" in st["stale"]:
+            result = fetch_github(github["value"], github.get("extra") or [], get)
+            snap = write_snapshot(name, "github", result, today, workspace=workspace)
+            note_check(name, "github", snap, result["outcome"], result.get("code"), today)
+            checked["github"] = result["outcome"]
+        else:
+            checked["github"] = "fresh"
+    record = load_record(path)
+    masters = _all_masters(name)
+    known = {f["id"]: f for f in record["findings"]}
+    for source in SOURCES:
+        check_entry = journal.as_mapping(record["checks"].get(source))
+        checked.setdefault(source, check_entry.get("outcome", "not_checked") if source != "github"
+                           else "not_checked")
+        if not check_entry or check_entry.get("diffed") or check_entry.get("outcome") != "ok":
+            continue
+        current = _load_snapshot(check_entry.get("snapshot"))
+        previous = _load_snapshot(check_entry.get("previous_snapshot"))
+        for finding in diff(source, previous, current, masters, today):
+            if finding["id"] in known:
+                continue
+            finding.update(status="pending", evidence_file=check_entry.get("snapshot"),
+                           found=today.isoformat())
+            record["findings"].append(finding)
+            known[finding["id"]] = finding
+        check_entry["diffed"] = True
+        record["checks"][source] = check_entry
+    save_record(path, record)
+    pending = sorted((f for f in record["findings"] if f.get("status") == "pending"),
+                     key=lambda f: -float(f.get("rank", 0)))
+    return {"checked": checked, "shown": pending[:SHOW_PER_RUN],
+            "pending_count": max(0, len(pending) - SHOW_PER_RUN)}
+
+
+FINDING_DECISIONS = ("confirmed", "ignored")
+
+
+def confirm(name: str, finding_id: str, decision: str, words: str, correction=None) -> None:
+    if decision not in FINDING_DECISIONS:
+        raise ValueError(f"decision must be one of {FINDING_DECISIONS}")
+    if not (words or "").strip():
+        raise ValueError("record the user's own words")
+    path = paths.online_presence(name)
+    record = load_record(path)
+    for finding in record["findings"]:
+        if finding.get("id") == finding_id:
+            finding.update(status=decision, words=words, decided=datetime.date.today().isoformat())
+            if correction:
+                finding["correction"] = dict(correction)
+            save_record(path, record)
+            return
+    raise ValueError(f"no finding {finding_id!r} in {path}")
 
 
 def main(argv=None) -> int:
@@ -343,8 +501,28 @@ def main(argv=None) -> int:
     ig.add_argument("--capture", required=True, type=pathlib.Path)
     ig.add_argument("--workspace", type=pathlib.Path)
     ig.add_argument("--today")
+    ck = sub.add_parser("check", help="fetch stale GitHub, diff new snapshots, list findings")
+    ck.add_argument("--name", required=True)
+    ck.add_argument("--workspace", type=pathlib.Path)
+    ck.add_argument("--today")
+    ck.add_argument("--force", action="store_true", help="re-check even if checked within 14 days")
+    cf = sub.add_parser("confirm", help="record the user's decision on one finding")
+    cf.add_argument("--name", required=True)
+    cf.add_argument("--finding", required=True)
+    cf.add_argument("--decision", required=True, choices=FINDING_DECISIONS)
+    cf.add_argument("--words", required=True)
+    cf.add_argument("--role", help="the user's role, when they correct it")
     args = ap.parse_args(argv)
     try:
+        if args.command == "check":
+            today = datetime.date.fromisoformat(args.today) if args.today else datetime.date.today()
+            print(json.dumps(check(args.name, args.workspace, today, args.force, get=http_get),
+                             ensure_ascii=False))
+            return 0
+        if args.command == "confirm":
+            confirm(args.name, args.finding, args.decision, args.words,
+                    {"role": args.role} if args.role else None)
+            return 0
         if args.command == "ingest":
             today = datetime.date.fromisoformat(args.today) if args.today else datetime.date.today()
             if not args.capture.is_file():
