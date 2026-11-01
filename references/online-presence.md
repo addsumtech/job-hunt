@@ -16,8 +16,8 @@ the old master.
 python3 scripts/online_presence.py status --name "<name>" --workspace <ws>
 ```
 
-It prints JSON: `to_ask`, `stale`, `broken`, `other_records`, `shared_with` and
-`pending_for_master`, and journals the step (`check_apply.py` and
+It prints JSON: `to_ask`, `stale`, `broken`, `refused`, `other_records`, `shared_with`
+and `pending_for_master`, and journals the step (`check_apply.py` and
 `check_shortlist.py` print `NOTICE_NO_ONLINE_PRESENCE_STEP` when it is missing).
 
 - `other_records` non-empty and nothing recorded here: ask once whether that
@@ -54,7 +54,10 @@ A refusal (403, 429, captcha, "unusual traffic", a login wall) follows
 `references/source-policy.md`: no retry and no other route. This step is not what
 the user came for, so it does not hold the mode: name the site and page, offer the
 `references/user-recovery.md` hand-off once, and continue the mode without that
-source. Never report a refused source as "nothing new".
+source. Never report a refused source as "nothing new": a refused or failed check
+stays in `stale` (and `refused`) until a later check succeeds. If `ingest` reports
+Scholar as `failed` with "no papers recognised", the page layout was not understood;
+say so and look at the capture rather than telling the user nothing changed.
 
 ## 3. Confirm
 

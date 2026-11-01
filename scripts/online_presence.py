@@ -143,7 +143,7 @@ def status(name: str, today: datetime.date) -> dict:
     record = load_record(path)
     if _seed_from_masters(name, record):
         save_record(path, record)
-    to_ask, stale, broken = [], [], []
+    to_ask, stale, broken, refused = [], [], [], []
     for source in SOURCES:
         answer = journal.as_mapping(record["sources"].get(source))
         if answer.get("status") not in ASK_STATUSES:
@@ -155,15 +155,19 @@ def status(name: str, today: datetime.date) -> dict:
         if check.get("outcome") == "failed" and check.get("code") == 404:
             broken.append(source)
             continue
+        if check.get("outcome") == "refused":
+            refused.append(source)
         try:
             last = datetime.date.fromisoformat(str(check.get("date")))
         except ValueError:
             last = None
-        if last is None or (today - last).days > STALE_DAYS:
+        # Only a successful check is current. A refusal or a failure must be tried
+        # again next run, never shown as "fresh" (that would read as "nothing new").
+        if last is None or check.get("outcome") != "ok" or (today - last).days > STALE_DAYS:
             stale.append(source)
     own = paths.online_presence(name)
     shared_with = journal.load_yaml(own).get("shared_with") if own.exists() else None
-    return {"to_ask": to_ask, "stale": stale, "broken": broken,
+    return {"to_ask": to_ask, "stale": stale, "broken": broken, "refused": refused,
             "shared_with": shared_with, "other_records": _other_records(name),
             "pending_for_master": _pending_for_master(name, record)}
 
@@ -188,6 +192,8 @@ def record_answer(name: str, source: str, status: str, value, words: str,
 
 GITHUB_API = "https://api.github.com"
 REFUSED_CODES = (401, 403, 429)
+PER_PAGE = 100
+MAX_PAGES = 10
 
 
 def http_get(url: str) -> tuple[int, bytes]:
@@ -211,8 +217,8 @@ def http_get(url: str) -> tuple[int, bytes]:
 
 
 class _Stop(Exception):
-    def __init__(self, outcome, code):
-        self.outcome, self.code = outcome, code
+    def __init__(self, outcome, code, reason=""):
+        self.outcome, self.code, self.reason = outcome, code, reason
 
 
 def fetch_github(username: str, extra: list, get) -> dict:
@@ -238,10 +244,24 @@ def fetch_github(username: str, extra: list, get) -> dict:
         except (UnicodeDecodeError, ValueError):
             raise _Stop("failed", status)
 
+    def call_list(url, missing_ok=False):
+        """Every page of a listing; a listing longer than MAX_PAGES is not complete."""
+        items = call(url, missing_ok=missing_ok)
+        if items is None:
+            return None
+        page, last = 1, items
+        while isinstance(last, list) and len(last) >= PER_PAGE:
+            if page >= MAX_PAGES:
+                raise _Stop("failed", None, f"partial listing: more than {MAX_PAGES * PER_PAGE} entries at {url}")
+            page += 1
+            last = call(f"{url}&page={page}") or []
+            items = items + last
+        return items
+
     user = username.strip().lower()
     candidates, missing = [], []
     try:
-        owned = call(f"{GITHUB_API}/users/{username}/repos?per_page=100&type=owner")
+        owned = call_list(f"{GITHUB_API}/users/{username}/repos?per_page=100&type=owner")
         candidates += [(r, "owner") for r in owned or []]
         for item in extra or []:
             item = item.strip().strip("/")
@@ -252,7 +272,7 @@ def fetch_github(username: str, extra: list, get) -> dict:
                 else:
                     candidates.append((found, None))
             elif item:
-                listing = call(f"{GITHUB_API}/orgs/{item}/repos?per_page=100", missing_ok=True)
+                listing = call_list(f"{GITHUB_API}/orgs/{item}/repos?per_page=100", missing_ok=True)
                 if listing is None:
                     missing.append(item)
                 else:
@@ -267,8 +287,8 @@ def fetch_github(username: str, extra: list, get) -> dict:
                 if str(journal.as_mapping(data.get("owner")).get("login", "")).lower() == user:
                     role = "owner"
                 else:
-                    people = call(f"{GITHUB_API}/repos/{full}/contributors?per_page=100",
-                                  missing_ok=True) or []
+                    people = call_list(f"{GITHUB_API}/repos/{full}/contributors?per_page=100",
+                                       missing_ok=True) or []
                     logins = [str(p.get("login", "")).lower() for p in people if isinstance(p, dict)]
                     if user not in logins:
                         continue
@@ -282,8 +302,8 @@ def fetch_github(username: str, extra: list, get) -> dict:
                 "latest_release": (release or {}).get("tag_name") if isinstance(release, dict) else None,
                 "topics": data.get("topics") or [], "role": role})
     except _Stop as stop:
-        return {"outcome": stop.outcome, "code": stop.code, "repos": [], "missing_extra": missing,
-                "raw": raw}
+        return {"outcome": stop.outcome, "code": stop.code, "reason": stop.reason, "repos": [],
+                "missing_extra": missing, "raw": raw}
     return {"outcome": "ok", "code": 200, "repos": repos, "missing_extra": missing, "raw": raw}
 
 
@@ -318,6 +338,7 @@ def write_snapshot(name: str, source: str, snapshot: dict, today: datetime.date,
 
 _VENUE_YEAR = re.compile(r"^(?P<venue>.+?),\s*(?P<year>(?:19|20)\d{2})$")
 _SCHOLAR_HEADERS = {"title", "cited by", "year", "show more", "articles", "cited by year"}
+_SCHOLAR_EMPTY = re.compile(r"no articles|没有(?:任何)?文章|記事はありません", re.I)
 
 
 def _capture_outcome(data: dict) -> tuple[str, int | None]:
@@ -368,6 +389,11 @@ def ingest_scholar(capture) -> dict:
             i += 3
         else:
             i += 1
+    if not papers and not _SCHOLAR_EMPTY.search(str(data.get("text", ""))):
+        # A layout this parser does not know must not read as "no new papers".
+        return {"outcome": "failed", "code": code, "papers": [],
+                "reason": f"no papers recognised in {len(lines)} lines; the Scholar page "
+                          "layout may have changed — check the capture by eye"}
     return {"outcome": "ok", "code": code, "papers": papers}
 
 
@@ -423,8 +449,9 @@ def diff(source: str, previous, current: dict, master: dict, today: datetime.dat
         for r in current.get("repos", []):
             full = r["full_name"]
             short = _norm(full.split("/")[-1])
+            # A short name only counts when a project is named exactly that:
+            # "tool" must not be hidden by a project called "Toolkit for MRI".
             mentioned = (_norm(r.get("html_url", "")) in blob or short in project_names
-                         or any(short and short in name for name in project_names)
                          or (len(short) >= 6 and short in blob))
             rank = 1000 - _days_since(r.get("pushed_at"), today) + (100 if r.get("role") == "owner" else 0) \
                 + min(r.get("stars") or 0, 500) / 5
@@ -478,6 +505,20 @@ def _all_masters(name: str) -> dict:
     return merged
 
 
+def _merged_masters(name: str) -> dict:
+    """Every master's projects and publications in one profile-shaped mapping.
+
+    diff() reads `projects` by name; handing it {path: master} hid every project
+    name, so a short-named repository a master already lists was proposed again.
+    """
+    merged = {"projects": [], "publications": [], "_masters": []}
+    for master in _all_masters(name).values():
+        merged["projects"] += [p for p in master.get("projects") or [] if isinstance(p, dict)]
+        merged["publications"] += [str(x) for x in master.get("publications") or []]
+        merged["_masters"].append(master)
+    return merged
+
+
 def check(name: str, workspace, today: datetime.date, force: bool, get=None) -> dict:
     """Fetch stale GitHub, diff every new snapshot once, and return what to show."""
     get = get or http_get
@@ -495,7 +536,7 @@ def check(name: str, workspace, today: datetime.date, force: bool, get=None) -> 
         else:
             checked["github"] = "fresh"
     record = load_record(path)
-    masters = _all_masters(name)
+    masters = _merged_masters(name)
     known = {f["id"]: f for f in record["findings"]}
     for source in SOURCES:
         check_entry = journal.as_mapping(record["checks"].get(source))
@@ -755,8 +796,12 @@ def main(argv=None) -> int:
                                 args.capture.read_bytes())]
             path = write_snapshot(args.name, args.source, snapshot, today, workspace=args.workspace)
             note_check(args.name, args.source, path, snapshot["outcome"], snapshot.get("code"), today)
-            print(json.dumps({"source": args.source, "outcome": snapshot["outcome"],
-                              "snapshot": str(path)}, ensure_ascii=False))
+            summary = {"source": args.source, "outcome": snapshot["outcome"], "snapshot": str(path)}
+            if args.source == "scholar":
+                summary["papers"] = len(snapshot.get("papers") or [])
+            if snapshot.get("reason"):
+                summary["reason"] = snapshot["reason"]
+            print(json.dumps(summary, ensure_ascii=False))
             return 0
         if args.command == "status":
             today = datetime.date.fromisoformat(args.today) if args.today else datetime.date.today()
