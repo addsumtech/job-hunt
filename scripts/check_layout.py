@@ -98,6 +98,7 @@ def inspect(ws: pathlib.Path, report=False):
         findings.append("LAYOUT_DIFFERENCES: resolve all unapproved layout differences before delivery")
 
     artifacts = journal.as_mapping(review.get("artifacts"))
+    word_export_pdf = None  # the PDF the DOCX's pages are counted on, once bound
     if report:
         bind("report.md", review.get("source_sha256"), "report source")
         rendering = ws / "report-render.json"
@@ -134,6 +135,7 @@ def inspect(ws: pathlib.Path, report=False):
             findings.append("STALE_WORD_EXPORT: export must bind the final DOCX")
         if evidence and journal.sha256_file(evidence) != journal.sha256_file(ws / "cv.pdf"):
             findings.append("PDF_NOT_WORD_EXPORT: deliver the reviewed Word export; do not replace it with a different PDF layout")
+        word_export_pdf = evidence
     for name in (("report.pdf",) if report else ("cv.docx", "cv.pdf")):
         if not (ws / name).is_file():
             continue
@@ -143,12 +145,17 @@ def inspect(ws: pathlib.Path, report=False):
         if type(pages) is not int or pages < 1:
             findings.append(f"BAD_LAYOUT_REVIEW: {name} needs its rendered page count")
             continue
-        if name.endswith(".pdf") and artifact:
+        # A DOCX has no page count of its own; its pages are the bound Word
+        # export's. Unchecked, a review could record cv.docx as 1 page beside a
+        # 2-page export and pass with page 2 of the Word layout never inspected.
+        counted = artifact if name.endswith(".pdf") else (word_export_pdf if name == "cv.docx" else None)
+        if counted:
             try:
                 import pymupdf
-                with pymupdf.open(artifact) as doc:
+                with pymupdf.open(counted) as doc:
                     if len(doc) != pages:
-                        findings.append(f"LAYOUT_PAGE_COUNT: {name} has {len(doc)} pages, review recorded {pages}")
+                        what = name if counted is artifact else f"{name} (its Word export PDF)"
+                        findings.append(f"LAYOUT_PAGE_COUNT: {what} has {len(doc)} pages, review recorded {pages}")
             except Exception as exc:
                 findings.append(f"UNREADABLE_LAYOUT_PDF: {name}: {exc}")
         previews = item.get("previews")
@@ -204,10 +211,11 @@ def main(argv=None):
         import layout_pages
         try:
             layout_pages.remember(ws, args.report, record)
-        except (OSError, ValueError, KeyError, IndexError, TypeError, RuntimeError, journal.YamlUnreadable) as exc:
-            # The review still passed. Unsupported old previews simply get no
-            # reusable baseline; the next round must inspect every page.
-            print(f"NOTICE_LAYOUT_CACHE_UNAVAILABLE: {exc}")
+        except Exception as exc:  # the pass receipt is already written; an
+            # optional cache must never turn it into a traceback. The review
+            # still passed. Unsupported old previews simply get no reusable
+            # baseline; the next round must inspect every page.
+            print(f"NOTICE_LAYOUT_CACHE_UNAVAILABLE: {type(exc).__name__}: {exc}")
     return 1 if findings else 0
 
 

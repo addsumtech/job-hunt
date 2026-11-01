@@ -170,3 +170,72 @@ def test_changing_the_proof_and_its_index_does_not_change_past_review_evidence(t
     entry['sha256'] = journal.sha256_file(path)
     index.write_text(json.dumps(entry))
     assert layout_pages.prepare(ws, report=True)['review_required'] == [1, 2]
+
+
+# Review 2026-11-01. A review that recorded cv.docx as 1 page beside a 2-page
+# Word export passed check_layout (the DOCX page count was never compared with
+# anything), wrote a pass receipt, and then remember() died on a bare next()
+# with StopIteration — a traceback after a "pass".
+def _two_page_word_review(tmp_path):
+    ws, review = reviewed_workspace(tmp_path)
+    with pymupdf.open() as doc:
+        for text in ('Test Candidate', 'Page two'):
+            doc.new_page().insert_text((72, 72), text)
+        doc.save(ws / 'cv.pdf')
+        previews = []
+        for number, page in enumerate(doc, 1):
+            page.get_pixmap(dpi=144, colorspace=pymupdf.csRGB, alpha=False).save(ws / f'p{number}.png')
+            previews.append({'page': number, 'path': f'p{number}.png',
+                             'sha256': journal.sha256_file(ws / f'p{number}.png')})
+    (ws / 'word-export.pdf').write_bytes((ws / 'cv.pdf').read_bytes())
+    review['word_export']['sha256'] = journal.sha256_file(ws / 'cv.pdf')
+    review['artifacts']['cv.pdf'] = {'sha256': journal.sha256_file(ws / 'cv.pdf'), 'pages': 2,
+                                     'previews': previews}
+    review['artifacts']['cv.docx'].update(pages=2, previews=[dict(p) for p in previews])
+    return ws, review
+
+
+def test_docx_page_count_is_checked_against_its_word_export(tmp_path, capsys):
+    ws, review = _two_page_word_review(tmp_path)
+    review['artifacts']['cv.docx'].update(pages=1, previews=[review['artifacts']['cv.docx']['previews'][0]])
+    (ws / 'layout-review.yaml').write_text(yaml.safe_dump(review))
+    assert check_layout.main(['--workspace', str(ws)]) == 1
+    out = capsys.readouterr().out
+    assert 'LAYOUT_PAGE_COUNT: cv.docx (its Word export PDF) has 2 pages, review recorded 1' in out
+    assert journal.read_receipts(ws, 'check_layout')[-1]['verdict'] == 'fail'
+
+
+def test_a_matching_two_page_word_review_passes_and_is_archived(tmp_path, capsys):
+    ws, review = _two_page_word_review(tmp_path)
+    (ws / 'layout-review.yaml').write_text(yaml.safe_dump(review))
+    assert check_layout.main(['--workspace', str(ws)]) == 0, capsys.readouterr().out
+    assert (ws / 'layout-cache.json').is_file()
+    plan = layout_pages.prepare(ws)
+    assert plan['review_required'] == [] and plan['reused_pages'] == [1, 2]
+
+
+# The gate now refuses the mismatch above, so remember() cannot be reached with
+# it through check_layout; the lookup itself must still fail as a ValueError
+# (which every caller catches), never as StopIteration (which none does).
+@pytest.mark.parametrize('previews, count', [
+    ([{'page': 1}], 0),                       # page 2 missing
+    ([{'page': 1}, {'page': 1}], 0),          # page 1 doubled, page 2 missing
+    ([{'page': 1}, 'not a mapping'], 0),
+])
+def test_a_missing_or_doubled_page_preview_is_a_value_error(previews, count):
+    with pytest.raises(ValueError, match=f'records {count} previews for page 2'):
+        layout_pages._preview(previews, 2, 'cv.docx')
+    if previews.count({'page': 1}) == 2:
+        with pytest.raises(ValueError, match='records 2 previews for page 1'):
+            layout_pages._preview(previews, 1, 'cv.docx')
+
+
+def test_an_unexpected_cache_error_never_turns_a_pass_into_a_traceback(tmp_path, capsys, monkeypatch):
+    ws, review = _two_page_word_review(tmp_path)
+    (ws / 'layout-review.yaml').write_text(yaml.safe_dump(review))
+
+    def boom(*_args):
+        raise StopIteration('simulated')
+    monkeypatch.setattr(layout_pages, 'remember', boom)
+    assert check_layout.main(['--workspace', str(ws)]) == 0
+    assert 'NOTICE_LAYOUT_CACHE_UNAVAILABLE: StopIteration: simulated' in capsys.readouterr().out

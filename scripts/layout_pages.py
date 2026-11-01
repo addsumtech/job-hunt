@@ -59,6 +59,18 @@ def _page(page):
     return pix, _digest(json.dumps(details, sort_keys=True, ensure_ascii=False).encode()), reusable
 
 
+def _preview(previews, number, what):
+    """The one preview recorded for a page; a missing or doubled page is a ValueError.
+
+    A bare generator lookup raised StopIteration, which no caller catches:
+    check_layout wrote its pass receipt and then died with a traceback.
+    """
+    found = [item for item in previews if isinstance(item, dict) and item.get('page') == number]
+    if len(found) != 1:
+        raise ValueError(f'{what} records {len(found)} previews for page {number}, expected exactly one')
+    return found[0]
+
+
 def _same_pixels(image, pix):
     import pymupdf
     old = pymupdf.Pixmap(image)
@@ -98,10 +110,13 @@ def remember(ws, report, receipt):
             if name not in artifacts:
                 continue
             previews = artifacts[name]['previews']
+            if not isinstance(previews, list) or len(previews) != len(doc):
+                raise ValueError(f'{name} review covers {len(previews) if isinstance(previews, list) else 0} '
+                                 f'pages but {pdf_name} has {len(doc)}')
             pages = []
             for number, page in enumerate(doc, 1):
                 pix, signature, supported = _page(page)
-                preview = next(item for item in previews if item['page'] == number)
+                preview = _preview(previews, number, name)
                 source = _local(ws, preview['path'])
                 if not _same_pixels(source, pix):
                     raise ValueError('reviewed previews are not the canonical 144-dpi RGB PDF render; use layout_pages.py before the next visual review')
@@ -156,7 +171,7 @@ def _baseline(ws, raw, report, hashes):
             for number, item in enumerate(records, 1):
                 source = _local(ws, (directory / item['preview']).relative_to(ws))
                 actual = journal.sha256_file(source)
-                old = next(item for item in review['artifacts'][name]['previews'] if item['page'] == number)
+                old = _preview(review['artifacts'][name]['previews'], number, 'archived review')
                 pix, signature, supported = _page(doc[number - 1])
                 if (item['page'] != number or old['page'] != number
                         or actual != item['sha256'] or actual != old['sha256']
