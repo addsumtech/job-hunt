@@ -1619,7 +1619,7 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
         # to `-2` whenever the bytes differed, which froze the obvious filename
         # at round 1 forever: a user opening `<slug>-cv.md` in Downloads after
         # three judge rounds read the FIRST draft and could send it to the
-# employer. Same source path, same destination, overwritten.
+        # employer. Same source path, same destination, overwritten.
         if target in claimed:
             notes.append(f"{target.name}: not delivered — {claimed[target]} and "
                          f"{src.relative_to(workspace)} flatten to the same name. "

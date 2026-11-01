@@ -204,7 +204,10 @@ Agent 先验证 OpenCLI，确认不兼容后才使用内置 CDP 读取脚本。I
 自动化检查覆盖证据引用、源档案保护、评审结果解析、个人信息处理、排版和模式交接等环节：
 
 ```bash
-python3 -m venv .venv && . .venv/bin/activate
+PY=$(for p in python3.14 python3.13 python3.12 python3.11 python3.10 python3; do
+  command -v "$p" >/dev/null && "$p" -c 'import sys; sys.exit(sys.version_info < (3, 10))' 2>/dev/null && { echo "$p"; break; }
+done)
+"${PY:?no Python 3.10+ found; install one first}" -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt pytest
 make check
 make eval-lint

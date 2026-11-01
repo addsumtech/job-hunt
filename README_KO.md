@@ -203,7 +203,10 @@ Agent가 해당 정보원을 일시 중지하고 로그인이나 인증을 안�
 자동 검사는 근거 참조, 원본 프로필 보호, 검토 결과 파싱, 개인정보 처리, 조판, 모드 간 전환 등을 다룹니다.
 
 ```bash
-python3 -m venv .venv && . .venv/bin/activate
+PY=$(for p in python3.14 python3.13 python3.12 python3.11 python3.10 python3; do
+  command -v "$p" >/dev/null && "$p" -c 'import sys; sys.exit(sys.version_info < (3, 10))' 2>/dev/null && { echo "$p"; break; }
+done)
+"${PY:?no Python 3.10+ found; install one first}" -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt pytest
 make check
 make eval-lint

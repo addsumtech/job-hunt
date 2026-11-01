@@ -203,7 +203,10 @@ Agent はその情報源を一時停止し、ログインや認証を案内し�
 自動チェックは、根拠への参照、元プロフィールの保護、レビュー結果の解析、個人情報の扱い、組版、モード間の引き継ぎなどを対象にしています。
 
 ```bash
-python3 -m venv .venv && . .venv/bin/activate
+PY=$(for p in python3.14 python3.13 python3.12 python3.11 python3.10 python3; do
+  command -v "$p" >/dev/null && "$p" -c 'import sys; sys.exit(sys.version_info < (3, 10))' 2>/dev/null && { echo "$p"; break; }
+done)
+"${PY:?no Python 3.10+ found; install one first}" -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt pytest
 make check
 make eval-lint

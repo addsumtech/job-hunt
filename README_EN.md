@@ -203,7 +203,10 @@ Files are stored locally; model calls and web access depend on your chosen agent
 Automated checks cover evidence references, source-profile preservation, verdict parsing, personal-data handling, rendering, and mode handoffs:
 
 ```bash
-python3 -m venv .venv && . .venv/bin/activate
+PY=$(for p in python3.14 python3.13 python3.12 python3.11 python3.10 python3; do
+  command -v "$p" >/dev/null && "$p" -c 'import sys; sys.exit(sys.version_info < (3, 10))' 2>/dev/null && { echo "$p"; break; }
+done)
+"${PY:?no Python 3.10+ found; install one first}" -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt pytest
 make check
 make eval-lint
