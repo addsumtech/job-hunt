@@ -301,6 +301,33 @@ def answer_bank(name: str) -> pathlib.Path:
     return profile_dir(name) / ANSWER_BANK_NAME
 
 
+ONLINE_PRESENCE_NAME = "online-presence.yaml"
+
+
+def online_presence(name: str) -> pathlib.Path:
+    """The per-person record of public profiles (GitHub, Scholar, website)."""
+    return profile_dir(name) / ONLINE_PRESENCE_NAME
+
+
+def online_presence_dir(name: str) -> pathlib.Path:
+    """Snapshots and raw captures of those profiles, beside the record."""
+    return profile_dir(name) / "online-presence"
+
+
+def online_presence_of(workspace) -> pathlib.Path:
+    """The online-presence record of the profile that owns an apply or discover workspace.
+
+    Unlike profile_dir_of (applications only, because it routes the answer bank),
+    a discover round under searches/ owns a record too.
+    """
+    workspace = pathlib.Path(workspace)
+    if workspace.parent.name not in ("applications", "searches") or len(workspace.parents) < 2:
+        raise ValueError(
+            f"{workspace} is not a workspace: expected "
+            "<profile_dir>/applications/<name> or <profile_dir>/searches/<name>")
+    return workspace.parents[1] / ONLINE_PRESENCE_NAME
+
+
 def search_dir(name: str, slug: str) -> pathlib.Path:
     return profile_dir(name) / "searches" / slugify(slug)
 
