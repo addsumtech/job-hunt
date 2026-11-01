@@ -287,6 +287,13 @@ def main(argv=None) -> int:
         print(f"cannot run {GATE}: workspace {ws} does not exist", file=sys.stderr)
         return 2
 
+    # A notice, never a finding: the online-presence step is optional for the
+    # package's validity (a site may refuse, the user may decline).
+    import online_presence
+    notice = online_presence.step_notice(ws)
+    if notice:
+        print(notice, file=sys.stderr)
+
     findings = []
 
     # ── the layer-1.5 backstop ────────────────────────────────────────────

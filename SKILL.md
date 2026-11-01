@@ -126,6 +126,11 @@ python3 scripts/enter_mode.py --workspace <ws> --mode <mode> \
     --because "<why this mode, from the user's request>"
 ```
 
+In apply, discover and assess, run the online-presence step from
+[references/online-presence.md](references/online-presence.md) before the profile is
+frozen: ask once for GitHub, Google Scholar and a personal website, check them when
+stale, and write only user-confirmed findings into the master.
+
 The entry records the mode file's content hash and fast capabilities in
 `journal.jsonl`; a missing or stale entry cannot satisfy a completion gate.
 Read `modes/<mode>.md` and follow its artifact schemas and gates.

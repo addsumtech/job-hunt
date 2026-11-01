@@ -1355,6 +1355,10 @@ def main(argv=None):
     if not workspace.is_dir():
         print(f"workspace not found: {workspace}", file=sys.stderr)
         return 2
+    import online_presence
+    notice = online_presence.step_notice(workspace)
+    if notice:  # stderr only: a notice is not a finding and changes no exit code
+        print(notice, file=sys.stderr)
     shortlist_path = workspace / "shortlist.yaml"
     if not shortlist_path.is_file():
         return _fail_to_run(workspace, f"missing input: {shortlist_path}")

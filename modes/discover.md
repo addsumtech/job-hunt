@@ -351,6 +351,10 @@ the second is the politeness cap from `references/source-policy.md`. Falling sho
 
 ### Freeze the profile before reading job details
 
+First run the online-presence step (`references/online-presence.md`,
+`scripts/online_presence.py status --name "<name>" --workspace <ws>`): confirmed
+findings written into the master before the snapshot become this round's evidence.
+
 The recommendation is about the CV supplied for **this** round, not a master
 profile that might change tomorrow. Before the first detail fetch, create the
 round-local snapshot once:

@@ -86,6 +86,7 @@ job-hunt/
 │   ├── browser-fallback.md          # Read-only browser capture and fallback
 │   ├── daily-browser.md            # Daily-browser CDP and bounded parallel sources
 │   ├── network-recovery.md         # Bounded retries and authorized route diagnostics
+│   ├── online-presence.md          # Ask once for GitHub/Scholar/website, check, confirm, write back
 │   ├── agent-setup.md              # Agent installs tools and prepares daily-browser CDP
 │   ├── opencli-compat.md            # Optional version-checked adapter repairs
 │   ├── opencli-patches/             # Exact replacements and upstream license

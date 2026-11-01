@@ -5,7 +5,7 @@ a shortlist. Nothing else in this file runs until step 1 has produced usable tex
 
 **This mode owns** `posting.yaml`, `posting-source.txt`, `cv-source.txt`,
 `evidence-blocks.json`, `fit-assessment.yaml`, `fit-assessment.md`, `coverage.json`.
-It reads `profile.yaml` and never writes it. Resolve the workspace with
+It reads `profile.yaml` and never writes it except through a confirmed online-presence write-back. Resolve the workspace with
 `paths.workspace(name, company, role, today_iso)` using today's local ISO date — never by joining strings. That
 one function owns the shape `~/.claude/job-profiles/<name>/applications/<company>-<role>-<YYYY-MM-DD>/`,
 which is byte-identical to the old skill's so "resume an unfinished application" keeps
@@ -179,6 +179,10 @@ Write the barrier in your own words, in the reader's language. The **id** is wha
 (section below the verdict line).
 
 ## 5. Cut evidence blocks
+
+Run the online-presence step first (`references/online-presence.md`,
+`scripts/online_presence.py status --name "<name>" --workspace <ws>`), so confirmed
+public work is in the master before `cv-source.txt` is taken from it.
 
 ```
 python3 scripts/evidence_blocks.py --workspace <ws> \

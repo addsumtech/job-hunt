@@ -91,6 +91,12 @@ The canonical profile schema is `assets/profile.example.yaml`. Everything downst
 
 **One candidate has one CV per language, and saving a new one never overwrites another language's.** A Chinese CV is a different document from an English one — different conventions, length rules and personal-data expectations — not a translation of it, so a user who supplies both has two masters: `profile.yaml` and `profile.<lang>.yaml` beside it. **Save through `python3 scripts/save_profile.py --name <name> --profile <file>`, never by writing the path yourself.** It resolves the slot by reading each existing master's own `meta.language` rather than trusting a filename, so a second English CV goes back into the legacy `profile.yaml` instead of becoming a duplicate; it backs up what it replaces; and it refuses a profile with no `meta.language`, because the unsuffixed slot is where a legacy English master usually lives and dropping an untagged CV there is the overwrite this is here to prevent. On the read side the same rule runs backwards: tailor from the master whose language matches the CV language chosen in Step 0, and say which file you took as the base. Reaching for the English master to build a Chinese CV throws away the one the user wrote for exactly that purpose.
 
+**Before fingerprinting, run the online-presence step**
+(`references/online-presence.md`): `python3 scripts/online_presence.py status --name
+"<name>" --workspace <workspace>`, ask once for anything it lists, check and confirm
+findings, then `writeback`. Confirmed public work (a repository the CV omits) then
+reaches this run through the master, as an ordinary `profile-line` source.
+
 **Then fingerprint that master.** The path comes from `scripts/paths.py` and takes the CV
 language, because one candidate can have one master per language; without it this
 resolves to `profile.yaml` and the provenance gate checks a Chinese CV against an

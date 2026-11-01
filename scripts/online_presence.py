@@ -661,8 +661,27 @@ def _pending_for_master(name: str, record: dict) -> dict:
     return out
 
 
+def step_notice(workspace) -> str:
+    """NOTICE text when this workspace's journal has no online-presence status step."""
+    path = pathlib.Path(workspace) / "journal.jsonl"
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    except (OSError, UnicodeError):
+        lines = []
+    for line in lines:
+        try:
+            if json.loads(line).get("action") == "online_presence_status":
+                return ""
+        except (ValueError, AttributeError):
+            continue
+    return ("NOTICE_NO_ONLINE_PRESENCE_STEP: this workspace never ran "
+            "`online_presence.py status`; public GitHub/Scholar/website updates were not "
+            "checked for this run (references/online-presence.md)")
+
+
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="command", required=True)
     st = sub.add_parser("status", help="which profiles to ask for, which are stale or broken")
     st.add_argument("--name", required=True)
@@ -701,6 +720,11 @@ def main(argv=None) -> int:
     lk.add_argument("--name", required=True)
     lk.add_argument("--with", dest="other", required=True)
     lk.add_argument("--words", required=True)
+    # The top-level --help lists every subcommand's usage, so one call shows the
+    # whole interface (and the documented-command guard can see real flags).
+    ap.epilog = "subcommands:\n" + "\n".join(
+        "  " + parser.format_usage().replace("usage: ", "").strip()
+        for parser in sub.choices.values())
     args = ap.parse_args(argv)
     try:
         if args.command == "link":
