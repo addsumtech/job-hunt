@@ -12,6 +12,7 @@ import datetime
 import json
 import os
 import pathlib
+import re
 import sys
 import tempfile
 import urllib.error
@@ -249,6 +250,78 @@ def write_snapshot(name: str, source: str, snapshot: dict, today: datetime.date,
     return path
 
 
+_VENUE_YEAR = re.compile(r"^(?P<venue>.+?),\s*(?P<year>(?:19|20)\d{2})$")
+_SCHOLAR_HEADERS = {"title", "cited by", "year", "show more", "articles", "cited by year"}
+
+
+def _capture_outcome(data: dict) -> tuple[str, int | None]:
+    """ok / refused / failed for a browser capture, using the shared stop signals."""
+    status = data.get("http_status")
+    code = status if isinstance(status, int) else None
+    if data.get("blocked") or code in REFUSED_CODES:
+        return "refused", code
+    text = str(data.get("text") or "")
+    import check_opencli_result
+    for signal in check_opencli_result.load_signals(check_opencli_result.DEFAULT_SIGNALS_FILE):
+        if signal["regex"].search(text):
+            return "refused", code
+    if code is not None and code >= 400:
+        return "failed", code
+    if not text.strip():
+        return "failed", code
+    return "ok", code or 200
+
+
+def _read_capture(path) -> dict:
+    data = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"{path}: a browser capture is a JSON object")
+    return data
+
+
+def ingest_scholar(capture) -> dict:
+    """Papers listed on a captured Google Scholar profile page.
+
+    The page text lists each article as three lines: title, authors, then
+    "venue, year". Papers whose author line has no comma (a single author) are
+    not recognised; the diff then simply proposes nothing for them.
+    """
+    data = _read_capture(capture)
+    outcome, code = _capture_outcome(data)
+    if outcome != "ok":
+        return {"outcome": outcome, "code": code, "papers": []}
+    lines = [line.strip() for line in str(data.get("text", "")).splitlines() if line.strip()]
+    papers, i = [], 0
+    while i + 2 < len(lines):
+        title, authors, venue_line = lines[i], lines[i + 1], lines[i + 2]
+        match = _VENUE_YEAR.match(venue_line)
+        if (match and "," in authors and not _VENUE_YEAR.match(authors)
+                and title.lower() not in _SCHOLAR_HEADERS and not title.isdigit()):
+            papers.append({"title": title, "authors": authors,
+                           "venue": match.group("venue").strip(), "year": int(match.group("year"))})
+            i += 3
+        else:
+            i += 1
+    return {"outcome": "ok", "code": code, "papers": papers}
+
+
+def ingest_website(capture) -> dict:
+    data = _read_capture(capture)
+    outcome, code = _capture_outcome(data)
+    if outcome != "ok":
+        return {"outcome": outcome, "code": code, "url": data.get("url"), "text": ""}
+    return {"outcome": "ok", "code": code, "url": data.get("url"), "text": data.get("text")}
+
+
+def note_check(name: str, source: str, snapshot_path, outcome: str, code, today: datetime.date) -> None:
+    """Remember the latest check of `source` in the record."""
+    path = paths.online_presence(name)
+    record = load_record(path)
+    record["checks"][source] = {"date": today.isoformat(), "outcome": outcome, "code": code,
+                                "snapshot": str(snapshot_path)}
+    save_record(path, record)
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     sub = ap.add_subparsers(dest="command", required=True)
@@ -264,8 +337,29 @@ def main(argv=None) -> int:
     rc.add_argument("--extra", nargs="*", default=None,
                     help="GitHub organisations or org/repo the profile page does not list")
     rc.add_argument("--words", required=True, help="the user's answer, verbatim")
+    ig = sub.add_parser("ingest", help="turn a Scholar or website capture into a snapshot")
+    ig.add_argument("--name", required=True)
+    ig.add_argument("--source", required=True, choices=("scholar", "website"))
+    ig.add_argument("--capture", required=True, type=pathlib.Path)
+    ig.add_argument("--workspace", type=pathlib.Path)
+    ig.add_argument("--today")
     args = ap.parse_args(argv)
     try:
+        if args.command == "ingest":
+            today = datetime.date.fromisoformat(args.today) if args.today else datetime.date.today()
+            if not args.capture.is_file():
+                print(f"ONLINE_PRESENCE_MISSING_INPUT: capture {args.capture} does not exist",
+                      file=sys.stderr)
+                return 2
+            reader = ingest_scholar if args.source == "scholar" else ingest_website
+            snapshot = reader(args.capture)
+            snapshot["raw"] = [(snapshot.get("url") or str(args.capture), snapshot.get("code"),
+                                args.capture.read_bytes())]
+            path = write_snapshot(args.name, args.source, snapshot, today, workspace=args.workspace)
+            note_check(args.name, args.source, path, snapshot["outcome"], snapshot.get("code"), today)
+            print(json.dumps({"source": args.source, "outcome": snapshot["outcome"],
+                              "snapshot": str(path)}, ensure_ascii=False))
+            return 0
         if args.command == "status":
             today = datetime.date.fromisoformat(args.today) if args.today else datetime.date.today()
             result = status(args.name, today)
@@ -280,7 +374,7 @@ def main(argv=None) -> int:
         print(f"ONLINE_PRESENCE_UNREADABLE: {exc}; fix or remove the file — it was not changed",
               file=sys.stderr)
         return 2
-    except ValueError as exc:
+    except (ValueError, UnicodeDecodeError) as exc:
         print(f"ONLINE_PRESENCE_BAD_INPUT: {exc}", file=sys.stderr)
         return 2
 
