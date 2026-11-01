@@ -74,7 +74,7 @@ def test_scholar_text_without_recognised_papers_is_not_an_empty_profile(tmp_path
 
 def test_ingest_cli_reports_how_many_papers_it_parsed(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(paths, "PROFILES_ROOT", tmp_path / "s")
-    text = "\n".join(["Title", "A Paper", "J Doe, X", "Venue, 2025"])
+    text = "\n".join(["Title", "Cited by", "Year", "A Paper", "J Doe, X", "Venue", "2025"])
     path = tmp_path / "c.json"
     path.write_text(json.dumps({"url": "u", "text": text, "http_status": 200}))
     assert op.main(["ingest", "--name", "Jane Doe", "--source", "scholar", "--capture", str(path)]) == 0

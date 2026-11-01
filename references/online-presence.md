@@ -16,8 +16,8 @@ the old master.
 python3 scripts/online_presence.py status --name "<name>" --workspace <ws>
 ```
 
-It prints JSON: `to_ask`, `stale`, `broken`, `refused`, `other_records`, `shared_with`
-and `pending_for_master`, and journals the step (`check_apply.py` and
+It prints JSON: `to_ask`, `stale`, `broken`, `refused`, `malformed`, `other_records`,
+`shared_with` and `pending_for_master`, and journals the step (`check_apply.py` and
 `check_shortlist.py` print `NOTICE_NO_ONLINE_PRESENCE_STEP` when it is missing).
 
 - `other_records` non-empty and nothing recorded here: ask once whether that
@@ -31,12 +31,20 @@ and `pending_for_master`, and journals the step (`check_apply.py` and
   never re-ask a recorded answer unless the user asks to change it.
 - `broken` (the last check got 404): show the stored value and ask whether it is
   mistyped; record the correction. That is not a fresh ask.
+- `malformed`: the stored answer is damaged (hand-edited, no value). Show it and
+  ask the user to correct it; it is not re-asked as a new question.
+- A GitHub answer may be a username, `@user` or a profile URL; it is stored as the
+  username. Another site or a repository URL is refused: ask again for the username.
 - LinkedIn is not a source here, and neither is any page that needs a login.
 
 ## 2. Check the stale sources
 
 GitHub is fetched by the script. Scholar and the website are read by you with the
 existing browser route, then ingested:
+
+Capture Scholar with `hl=en` and newest first, so the parser can read the table
+and new papers are on the first page (the default order is by citations and shows
+only 20): append `&hl=en&view_op=list_works&sortby=pubdate` to the profile URL.
 
 ```bash
 python3 scripts/run_tool.py --browser chrome browser \
@@ -57,7 +65,9 @@ the user came for, so it does not hold the mode: name the site and page, offer t
 source. Never report a refused source as "nothing new": a refused or failed check
 stays in `stale` (and `refused`) until a later check succeeds. If `ingest` reports
 Scholar as `failed` with "no papers recognised", the page layout was not understood;
-say so and look at the capture rather than telling the user nothing changed.
+say so and look at the capture rather than telling the user nothing changed. A
+`warning` (fewer papers read than the page's "Articles 1–N" total, or lines that fit
+no row) means the snapshot is partial: say which, and look at the capture.
 
 ## 3. Confirm
 
@@ -83,7 +93,12 @@ python3 scripts/online_presence.py writeback --name "<name>" --language <cv lang
 
 Confirmed repositories become `projects` entries, confirmed papers become
 `publications`, and missing profile links go into `contact.links`, written through
-`save_profile.py` (dated backup). Star, fork and release numbers are never written;
+`save_profile.py` (dated backup). Tell the user before the first write-back that the
+master is reformatted when it is saved: the leading comment block is kept, but
+comments inside the body and the original key order are lost (the dated backup
+keeps the old file). A link whose last check got 404 is not written. When
+`projects` or `publications` is not a list, that finding is left unwritten with a
+`skipped_reason`; tell the user to add it by hand or make the field a list. Star, fork and release numbers are never written;
 when a CV wants one, read it from the newest snapshot and cite it as a
 `fetched-artifact` with its date. An entry the user already wrote is never edited.
 Without a master yet, findings wait as `confirmed_unwritten`. `pending_for_master`
