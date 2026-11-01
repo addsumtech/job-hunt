@@ -38,6 +38,7 @@ def main(argv=None):
     if "node" in runtime:
         paths += [str(Path(runtime["node"]).parent), str(Path(runtime["opencli"]).parents[4] / ".bin")]
     env["PATH"] = os.pathsep.join(paths + [env.get("PATH", "")])
+    env["JOBHUNT_RUNTIME_ROOT"] = str(args.root.expanduser())
     if ((args.workspace or (args.tool == 'browser' and '--budget-plan' in args.args))
             and os.path.abspath(sys.executable) != os.path.abspath(runtime['python'])):
         # Budget validation uses the prepared Python dependencies, even when

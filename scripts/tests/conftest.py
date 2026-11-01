@@ -42,3 +42,14 @@ def deny_file_reads(monkeypatch):
     monkeypatch.setattr(builtins, "open", guard(builtins.open))
     monkeypatch.setattr(io, "open", guard(io.open))
     return lambda path: denied.add(pathlib.Path(path).resolve())
+
+
+@pytest.fixture(autouse=True)
+def _no_machine_runtime(monkeypatch, tmp_path_factory):
+    """Keep this machine's prepared runtime out of every test.
+
+    doctor.py and opencli_compat.py inspect the runtime recorded under
+    default_root() before PATH. Without this, a developer's real runtime.json
+    would decide what tests that stub PATH actually see.
+    """
+    monkeypatch.setenv("JOBHUNT_RUNTIME_ROOT", str(tmp_path_factory.mktemp("no-runtime")))

@@ -28,7 +28,7 @@ import subprocess
 import sys
 import tempfile
 
-from opencli_compat import installed_package
+from opencli_compat import installed_package, prepared_opencli
 from host_execution import HOST_EXECUTION_REQUIRED, tectonic_needs_host_execution
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
@@ -191,7 +191,7 @@ def fast_capabilities() -> list[str]:
         missing.append("pdftotext")
     if not office_binary():
         missing.append("LibreOffice (soffice) to measure Word page counts")
-    if not shutil.which("opencli"):
+    if not opencli_tools()[0]:
         missing.append("opencli")
     return missing
 
@@ -212,6 +212,24 @@ def install_hint(binary: str) -> str:
     return (brew if mac else apt).get(binary, f"install {binary}")
 
 
+def opencli_tools() -> tuple[str | None, str | None, str]:
+    """`(opencli, node, problem)`: the OpenCLI run_tool.py runs, and its Node.
+
+    The prepared runtime comes first, because every recorded read goes through
+    it; PATH is used only when no runtime with OpenCLI was prepared. A runtime
+    that records a missing package is reported, never replaced by whatever
+    `opencli` PATH happens to hold.
+    """
+    try:
+        prepared = prepared_opencli()
+    except ValueError as exc:
+        return None, None, str(exc)
+    if prepared:
+        node, package = prepared
+        return str(package), node or shutil.which("node"), ""
+    return shutil.which("opencli"), shutil.which("node"), ""
+
+
 def can_use_opencli_cdp() -> tuple[bool, str]:
     """Inspect website routing without connecting to any browser or extension.
 
@@ -219,9 +237,11 @@ def can_use_opencli_cdp() -> tuple[bool, str]:
     selects BrowserBridge for website adapters. Probe the installed factory,
     never instantiate its result. Live endpoint/profile verification is separate.
     """
-    if not shutil.which("opencli"):
+    opencli, node, problem = opencli_tools()
+    if problem:
+        return False, problem
+    if not opencli:
         return False, "opencli is not installed"
-    node = shutil.which("node")
     if not node:
         return False, "Node.js is unavailable; OpenCLI CDP routing is unverified"
     try:
@@ -308,12 +328,12 @@ def checks() -> list[dict]:
         **({"detail": office} if office else {}),
     })
     out.append({
-        "what": "job adapters (opencli)", "ok": bool(shutil.which("opencli")),
+        "what": "job adapters (opencli)", "ok": bool(opencli_tools()[0]),
         "cost": "OpenCLI adapters are unavailable; verify daily-browser CDP separately "
                 "or use a pasted posting",
         "fix": install_hint("opencli"), "auto": False,
     })
-    if shutil.which("opencli"):
+    if opencli_tools()[0]:
         connected, detail = can_use_opencli_cdp()
         out.append({
             "what": "OpenCLI website CDP routing", "ok": connected,

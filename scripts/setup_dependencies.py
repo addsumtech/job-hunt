@@ -26,6 +26,15 @@ PATCHES = SKILL / "assets" / "opencli-cdp"
 
 
 def default_root():
+    """The prepared runtime's directory.
+
+    `JOBHUNT_RUNTIME_ROOT` names it explicitly. run_tool.py exports it to every
+    child, so a helper run through a custom `--root` inspects that runtime rather
+    than the default one.
+    """
+    explicit = os.environ.get("JOBHUNT_RUNTIME_ROOT", "").strip()
+    if explicit:
+        return Path(explicit).expanduser()
     return Path(os.environ.get("LOCALAPPDATA", Path.home() / ".local/share")) / "job-hunt"
 
 

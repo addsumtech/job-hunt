@@ -16,16 +16,62 @@ def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def _package_of(path):
+    """The @jackwener/opencli package directory containing `path`, or None."""
+    for parent in Path(path).resolve().parents:
+        metadata = parent / 'package.json'
+        if metadata.is_file():
+            try:
+                name = json.loads(metadata.read_text()).get('name')
+            except (OSError, ValueError, AttributeError):
+                continue
+            if name == '@jackwener/opencli':
+                return parent
+    return None
+
+
+def prepared_opencli():
+    """`(node, package)` recorded by setup_dependencies.py, or None without one.
+
+    run_tool.py runs the recorded OpenCLI, so the helpers that inspect or patch
+    OpenCLI must inspect that same copy. Measured 2026-11-01: with a different
+    global `opencli` first on PATH, this helper reported "Unsupported OpenCLI
+    version" and doctor reported CDP routing unconfirmed, both about the wrong
+    installation. A runtime that records a path which no longer holds OpenCLI is
+    an error, not a reason to fall back to PATH and inspect another copy again.
+    """
+    from setup_dependencies import default_root
+    record = default_root() / 'runtime.json'
+    if not record.is_file():
+        return None
+    try:
+        runtime = json.loads(record.read_text())
+    except (OSError, ValueError) as exc:
+        raise ValueError(f'Prepared runtime {record} is unreadable ({exc}); re-run '
+                         'scripts/setup_dependencies.py --discovery') from None
+    main = runtime.get('opencli') if isinstance(runtime, dict) else None
+    if not main:
+        return None  # prepared without --discovery: no private OpenCLI to inspect
+    package = _package_of(main)
+    if package is None:
+        raise ValueError(f'Prepared runtime {record} records OpenCLI at {main}, but no '
+                         '@jackwener/opencli package is there; re-run '
+                         'scripts/setup_dependencies.py --discovery')
+    node = runtime.get('node')
+    return (node if node and Path(node).is_file() else None), package
+
+
 def installed_package():
+    prepared = prepared_opencli()
+    if prepared:
+        return prepared[1]
     executable = shutil.which('opencli')
     if not executable:
         raise ValueError('OpenCLI is not installed; this helper does not install it.')
-    for parent in Path(executable).resolve().parents:
-        metadata = parent / 'package.json'
-        if metadata.is_file():
-            if json.loads(metadata.read_text()).get('name') == '@jackwener/opencli':
-                return parent
-    raise ValueError('Cannot locate the OpenCLI package; supply --package-dir.')
+    package = _package_of(executable)
+    if package is None:
+        raise ValueError('Cannot locate the OpenCLI package; supply --package-dir.')
+    return package
 
 
 def prepare(package, config, site, action, manifest):
