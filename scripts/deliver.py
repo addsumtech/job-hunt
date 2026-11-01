@@ -1394,7 +1394,11 @@ def pdf_text(pdf: pathlib.Path) -> str:
 def visible_markdown(md: pathlib.Path) -> str:
     """Use the same Markdown parser as the renderer; link targets are not ink.
 
-    On parser failure keep the original text, so loss detection fails closed.
+    On parser failure keep the original text, so loss detection fails closed,
+    minus the destinations of Markdown links: `[结论](#结论)` paints 结论 once,
+    never the `#结论` after it. Without pandoc (CI, many users) those targets
+    were counted as text the PDF had to show; a contents block of CJK anchors
+    then read back 58 of 77 characters and the PDF was deleted as lossy.
     """
     source = md.read_text(encoding="utf-8", errors="replace")
     try:
@@ -1405,7 +1409,7 @@ def visible_markdown(md: pathlib.Path) -> str:
             return result.stdout.decode("utf-8")
     except (OSError, UnicodeError, subprocess.SubprocessError):
         pass
-    return source
+    return _MD_LINK.sub(r"\1", source)
 
 
 def pick_cjk_font(source: str = "测试中文渲染") -> str | dict | None:

@@ -64,6 +64,7 @@ SECTIONS = ['结论', '先看的两个岗位', '这一轮没有覆盖的地方']
 
 
 def test_contents_entries_print_once_and_jump(tmp_path):
+    tmp_path.mkdir(exist_ok=True)
     toc = '\n'.join(f'- [{name}](#{name})' for name in SECTIONS)
     body = '\n\n'.join(f'## {name}\n\n这一节的正文。' for name in SECTIONS)
     lines, links = render(tmp_path, f'# 报告\n\n{toc}\n\n{body}\n')
@@ -147,3 +148,35 @@ def test_a_list_of_external_links_prints_each_once(tmp_path):
     lines, links = render(tmp_path, md)
     assert lines.count('链接：打开职位') == 1 and '- 打开职位' not in lines
     assert [link['uri'] for link in links] == ['https://example.com/jobs/1', 'https://example.com/jobs/2']
+
+
+@pytest.fixture
+def no_pandoc(monkeypatch):
+    """CI has no pandoc: visible_markdown then falls back to the raw source."""
+    real = deliver.subprocess.run
+
+    def run(cmd, *args, **kwargs):
+        if cmd and cmd[0] == 'pandoc':
+            raise FileNotFoundError('pandoc')
+        return real(cmd, *args, **kwargs)
+    monkeypatch.setattr(deliver.subprocess, 'run', run)
+
+
+def test_link_targets_are_not_counted_as_ink_without_pandoc(no_pandoc, tmp_path):
+    """Measured on CI 2026-11-01: a contents block of CJK anchors read back
+    58 of 77 CJK characters, because the `(#结论)` targets were counted as text
+    the PDF should show, and the PDF was deleted as having lost characters."""
+    md = tmp_path / 'report.md'
+    md.write_text('见[结论](#结论)和[岗位](https://example.com/职位)。', encoding='utf-8')
+    visible = deliver.visible_markdown(md)
+    assert visible == '见结论和岗位。'
+    test_contents_entries_print_once_and_jump(tmp_path / 'toc')
+
+
+def test_a_real_cjk_loss_still_fails_without_pandoc(no_pandoc, tmp_path):
+    pdf = tmp_path / 'report.pdf'
+    doc = pymupdf.open()
+    doc.new_page().insert_text((72, 72), 'Report')
+    doc.save(pdf)
+    ok, reason = deliver._verify_pdf(pdf, '这一份报告的中文正文全部丢失了。' * 4, True)
+    assert not ok and 'lost CJK characters' in reason
