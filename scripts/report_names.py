@@ -29,7 +29,8 @@ def report_stem(workspace: Path, mode: str) -> str:
 
     Name comes from the first readable profile ``meta.name``. Context comes from
     ``posting.yaml`` (company plus role_title, otherwise title), or else from up
-    to three ``brief.yaml`` locations and three target titles. The date is the
+    to three ``brief.yaml`` locations plus the brief's ``report_label`` (a short
+    reader-facing direction), falling back to its first target title. The date is the
     first YYYY-MM-DD in ``workspace.name``. Missing pieces are left out. With
     neither a name nor a context, the legacy stem is returned.
     """
@@ -72,7 +73,15 @@ def _context(workspace: Path) -> str | None:
     brief = _mapping(workspace, "brief.yaml")
     if brief is None:
         return None
-    parts = _strings(brief.get("locations")) + _strings(brief.get("target_titles"))
+    # target_titles are search queries, written in both market languages and in
+    # run order. Measured 2026-11-01, three of them made a 180-byte name mixing
+    # English and Dutch query variants ("…medical imaging AI－medische
+    # beeldvorming－LLM engineer…"). A brief names its direction once, in the
+    # reader's words, through report_label; otherwise the first, most specific
+    # query stands for the round.
+    direction = _clean(brief.get("report_label"))
+    parts = _strings(brief.get("locations")) + (
+        [direction] if direction else _strings(brief.get("target_titles"), limit=1))
     if not parts:
         return None
     return _SEP.join(parts)

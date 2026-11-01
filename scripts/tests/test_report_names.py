@@ -102,3 +102,23 @@ def test_unrecorded_named_report_is_protected(tmp_path):
                                 '报告/\ud800－投递建议报告.md', '报告/\u202e－投递建议报告.md'])
 def test_dynamic_manifest_namespace_stays_inside_report_documents(rel):
     assert not deliver._manifest_rel_ok('', rel)
+
+
+def test_a_bilingual_query_list_does_not_become_the_filename(tmp_path):
+    """Measured 2026-11-01: three run-order queries in two languages made the name."""
+    write(tmp_path, 'candidate-profile.yaml', {'meta': {'name': 'Donghang Lyu'}})
+    write(tmp_path, 'brief.yaml', {'locations': ['Netherlands'], 'target_titles': [
+        'medical imaging AI', 'medische beeldvorming', 'LLM engineer', 'machine learning engineer']})
+    assert report_stem(tmp_path, 'discover') == 'Donghang Lyu－Netherlands－medical imaging AI－岗位推荐报告'
+
+
+@pytest.mark.parametrize('label,expected', [
+    ('AI/ML 初级', 'Donghang Lyu－Netherlands－AIML 初级－岗位推荐报告'),
+    ('  ', 'Donghang Lyu－Netherlands－medical imaging AI－岗位推荐报告'),
+    (['not', 'a string'], 'Donghang Lyu－Netherlands－medical imaging AI－岗位推荐报告'),
+])
+def test_report_label_names_the_direction_in_the_readers_words(tmp_path, label, expected):
+    write(tmp_path, 'candidate-profile.yaml', {'meta': {'name': 'Donghang Lyu'}})
+    write(tmp_path, 'brief.yaml', {'locations': ['Netherlands'], 'report_label': label,
+                                   'target_titles': ['medical imaging AI', 'LLM engineer']})
+    assert report_stem(tmp_path, 'discover') == expected

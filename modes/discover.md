@@ -304,6 +304,8 @@ slug: 2026-08-09-suanfa-shanghai       # <YYYY-MM-DD>-<short-slug>
 created: "2026-08-09"
 trigger_reason: "上一份 JD 被 assess 判为 likely_screen_out（缺 C++ 生产经验）…"
 target_titles: ["算法工程师", "algorithm engineer"]
+report_label: "算法岗"                 # optional: the direction in the reader's words, used in
+                                       # the report filename; default: first target title
 markets: ["cn"]                        # cn / nl / de / uk / us / other
 locations: ["上海", "西安"]
 seniority: mid                         # new_grad|junior|mid|senior|unknown

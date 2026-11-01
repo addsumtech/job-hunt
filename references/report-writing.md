@@ -209,6 +209,10 @@ In Markdown, use one H1 for the document title, H2 for sections and H3 for roles
 or subtopics, so the renderer can preserve that visual hierarchy.
 Write contents entries as Markdown links to heading anchors; the bundled renderer
 resolves them after pagination. Do not hard-code page numbers into the source.
+The bundled renderer lays out a table of more than four columns as one labelled
+paragraph block per row, not a grid, and prints `**bold**` as plain text. Keep a
+comparison table to four columns when it should read as a table, and do not rely
+on bold to carry meaning.
 Keep figures at reading size rather than turning counts into oversized statistic
 cards. Use comparison tables where they help, with no card frame around every
 recommendation. A compact linked contents block can share the opening page.
