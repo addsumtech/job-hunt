@@ -740,7 +740,25 @@ _ZH_RECEIVED_NOUN = (r"(?:拿到|拿下|获得|收到)\s*" + _ZH_CLAUSE + r"{0,4
 # `英文面试没问题` says the candidate can handle an English interview, which
 # is an assessment of ability, not of the outcome.
 _ZH_SURE_PREDICATE = (r"稳了|稳稳的|稳的|没跑了?|跑不了|十拿九稳|板上钉钉|妥了|毫无悬念|有戏"
-                      r"|肯定的|必然的|铁定的|胜券在握|指日可待")
+                      r"|肯定的|必然的|铁定的|胜券在握|指日可待|是你的了|非你莫属|囊中之物"
+                      r"|没(?:有|啥|什么)?悬念")
+# The same predicates said with a received outcome as the subject, plus the
+# understatements that mean "no obstacle" (measured 2026-11-01, both exit 0:
+# 以你的背景，进面问题不大 / 这个岗位你稳了). Only after a RECEIVED outcome:
+# 排版问题不大 and 英文面试没问题 judge the material and the ability.
+_ZH_NO_OBSTACLE = (r"不成问题|没(?:有|啥|什么)?(?:大)?问题|问题不大|不是(?:什么)?问题"
+                   r"|不在话下")
+# The job itself as the subject (这个岗位你稳了 / 这份offer基本是你的了). Only the
+# outcome-only predicates: 这份工作挺稳的 / 国企岗位比较稳 describe job STABILITY,
+# so 稳的 / 稳稳的 are absent, and the job noun needs a determiner before it or
+# 你/您 after it — 等工作稳了再跳槽 is about settling in, not a forecast.
+_ZH_JOB_SURE = (r"稳了|没跑了?|跑不了|十拿九稳|板上钉钉|妥了|毫无悬念|胜券在握|是你的了"
+                r"|非你莫属|囊中之物|没(?:有|啥|什么)?悬念|(?:你|您)(?:就)?拿定了")
+_ZH_JOB = r"(?:岗位|职位|工作|offer|机会)"
+_ZH_DEGREE = r"(?:已经|基本上|基本|应该|肯定|绝对|完全|几乎|算是|就|也)?(?:是)?"
+# A denied claim is the honest disclaimer: 不能说进面问题不大 / 这不代表offer稳了.
+_ZH_DENIED_BEFORE = (r"(?<!不能说)(?<!不敢说)(?<!很难说)(?<!难说)(?<!不好说)(?<!没法说)"
+                     r"(?<!无法说)(?<!不代表)(?<!不等于)(?<!不意味着)(?<!并不是)(?<!不是说)")
 _ZH_MEANS = (r"(?:通过|经过|经由|靠着?|凭着?|凭借|借助|依靠|依托|利用|借着?|在|于|趁着?)"
              r"[^，,。！？；;!?\n、]{1,8}?")
 _CERTAIN_FORECAST_ZH = (
@@ -760,11 +778,15 @@ _CERTAIN_FORECAST_ZH = (
     r"(?:顺利|直接|轻松|成功)?(?:地)?(?:" + _RECEIVE_ZH + r")"
     r"(?!\s*(?:之?前|之?后|以前|以后|的时候|时|再|才))"
     # 进面基本稳了 / 拿到offer是板上钉钉的事 / 录用基本没跑了
-    r"|(?:" + _ZH_RECEIVED_NOUN + r")\s*(?:的事|这件事|这事)?"
-    r"(?:已经|基本上|基本|应该|肯定|绝对|完全|几乎|算是|就)?(?:是)?"
-    r"(?:" + _ZH_SURE_PREDICATE + r"|不成问题|没问题)"
-    r"|" + _ZH_IV + r"\s*(?:已经|基本上|基本|应该|肯定|绝对|完全|几乎|算是|就)?(?:是)?"
+    r"|" + _ZH_NEGATOR_BEFORE + _ZH_DENIED_BEFORE + r"(?:" + _ZH_RECEIVED_NOUN + r")\s*(?:的事|这件事|这事)?"
+    r"\s*(?:你|您)?" + _ZH_DEGREE +
+    r"(?:" + _ZH_SURE_PREDICATE + r"|" + _ZH_NO_OBSTACLE + r")"
+    r"|" + _ZH_IV + r"\s*(?:你|您)?" + _ZH_DEGREE +
     r"(?:" + _ZH_SURE_PREDICATE + r")"
+    # 这个岗位你稳了 / 这份offer基本是你的了 / 职位你没跑了
+    r"|" + _ZH_DENIED_BEFORE + r"(?:这个|这份|这一?个|该|此)\s*" + _ZH_JOB + r"\s*(?:你|您)?" + _ZH_DEGREE +
+    r"(?:" + _ZH_JOB_SURE + r")"
+    r"|(?<![个份该此])" + _ZH_DENIED_BEFORE + _ZH_JOB + r"\s*(?:你|您)" + _ZH_DEGREE + r"(?:" + _ZH_JOB_SURE + r")"
     # 拿到面试的机会很大 / 进面的希望很大 — a likelihood stated as high. 可能性
     # stays allowed bare: the mandated disclaimer says 不给出…可能性估计.
     r"|(?:" + _ZH_IV + r"|offer|录用|录取|入围|进面|上岸|通过(?:初筛|筛选|面试)"

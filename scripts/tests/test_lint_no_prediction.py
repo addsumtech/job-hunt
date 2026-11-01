@@ -1454,3 +1454,71 @@ def test_certainty_still_governs_the_outcome_across_one_short_phrase(text):
                          ids=range(len(_SHORT_PHRASE_TWINS_STAY_QUIET)))
 def test_the_bounded_gap_does_not_reach_advice_or_another_clause(text):
     assert lint.scan_text(text, "report.md") == [], text
+
+
+# ---------------------------------------------------------------------------
+# Colloquial Chinese certainty (review 2026-11-01). Both reported lines exited 0
+# on 1.3.4: `以你的背景，进面问题不大` (an understatement of "no obstacle" after a
+# received outcome) and `这个岗位你稳了` (the job itself as the subject). The
+# rest were written after the fix and checked against the pre-fix lint: every
+# forecast below passed it.
+_COLLOQUIAL_FORECASTS_ZH = [
+    "以你的背景，进面问题不大。",
+    "这个岗位你稳了。",
+    "这个岗位你基本稳了。",
+    "这份offer基本是你的了。",
+    "这个职位非你莫属。",
+    "通过初筛没什么问题。",
+    "进面应该问题不大。",
+    "offer不是问题。",
+    "这个机会你没跑了。",
+    "职位你稳了。",
+    "简历筛选问题不大，可以放心投。",
+    "录用没什么悬念。",
+    "面试你稳了。",
+    "这份工作你就拿定了。",
+    "该岗位基本是你的了。",
+    "入围问题不大。",
+    "我判断这个岗位你稳了。",
+]
+
+# The same words judging the material, the ability or job STABILITY, and the
+# disclaimers that deny the claim. `面试问题不大…` stays quiet by the existing
+# 面试问题 = interview-questions exclusion, which is also why `拿到面试问题不大`
+# is not in the list above: the two readings cannot be told apart.
+_COLLOQUIAL_TWINS_STAY_QUIET = [
+    "排版问题不大，只需微调页边距。",
+    "英文面试没问题，你在荷兰工作过三年。",
+    "简历里的问题不大，主要是缺少量化成果。",
+    "等工作稳了再考虑跳槽。",
+    "国企岗位比较稳，适合看重稳定的人。",
+    "这份工作挺稳的，但薪资涨幅有限。",
+    "这个岗位的稳定性更好。",
+    "面试问题不大会涉及底层原理。",
+    "这个岗位你需要稳住心态，别急着谈薪。",
+    "你的项目经历问题不大，技能部分要补。",
+    "岗位要求里的Python没问题，你有五年经验。",
+    "这个机会值得投，但不保证能进面。",
+    "没有人能保证进面没问题。",
+    "不能说进面问题不大，证据还不够。",
+    "面试前把自我介绍练稳了再去。",
+    "工作经历这一块没什么问题。",
+    "这份工作你可以先拿定主意再投。",
+    "这个岗位你要考虑通勤。",
+    "offer谈判时薪资问题不大，关键是签字费。",
+    "这不代表offer稳了。",
+    "很难说这个岗位你稳了。",
+    "并不是说录用没问题。",
+]
+
+
+@pytest.mark.parametrize("text", _COLLOQUIAL_FORECASTS_ZH,
+                         ids=range(len(_COLLOQUIAL_FORECASTS_ZH)))
+def test_a_colloquial_chinese_certainty_forecast_fires(text):
+    assert "PREDICTION_WORD" in codes(_out(lint.scan_text(text, "report.md"))), text
+
+
+@pytest.mark.parametrize("text", _COLLOQUIAL_TWINS_STAY_QUIET,
+                         ids=range(len(_COLLOQUIAL_TWINS_STAY_QUIET)))
+def test_colloquial_twins_about_material_ability_or_stability_stay_quiet(text):
+    assert lint.scan_text(text, "report.md") == [], text
