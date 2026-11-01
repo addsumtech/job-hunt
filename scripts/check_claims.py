@@ -1142,7 +1142,8 @@ def _writeback_chain(ws, master, start_sha, now_sha):
     """
     try:
         import online_presence
-        record = online_presence.load_record(paths.online_presence_of(ws))
+        record = online_presence.load_record(
+            online_presence.resolve_record_path(paths.online_presence_of(ws)))
     except (ValueError, OSError, journal.YamlUnreadable, ImportError):
         return None
     steps = [w for w in record.get("writebacks", []) if isinstance(w, dict)

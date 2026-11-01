@@ -62,6 +62,61 @@ def save_record(path, record: dict) -> None:
     os.replace(tmp, path)
 
 
+def resolve_record_path(path) -> pathlib.Path:
+    """Follow a `shared_with` stub to the record it points at (one hop)."""
+    path = pathlib.Path(path)
+    if not path.exists():
+        return path
+    shared = journal.load_yaml(path).get("shared_with")
+    if not shared:
+        return path
+    target = path.parent.parent / str(shared) / paths.ONLINE_PRESENCE_NAME
+    if not target.exists():
+        raise ValueError(f"{path} is shared with {shared!r}, which has no online-presence record")
+    return target
+
+
+def _record_path(name: str) -> pathlib.Path:
+    return resolve_record_path(paths.online_presence(name))
+
+
+def _other_records(name: str) -> list:
+    own = paths.online_presence(name)
+    if own.exists() and journal.load_yaml(own).get("shared_with"):
+        return []
+    out = []
+    root = paths.PROFILES_ROOT
+    if not root.is_dir():
+        return out
+    for directory in sorted(root.iterdir()):
+        candidate = directory / paths.ONLINE_PRESENCE_NAME
+        if directory == own.parent or not candidate.is_file():
+            continue
+        try:
+            if journal.load_yaml(candidate).get("shared_with"):
+                continue
+        except journal.YamlUnreadable:
+            continue
+        out.append(directory.name)
+    return out
+
+
+def link(name: str, other: str, words: str) -> None:
+    """Point this person's directory at another directory's record."""
+    if not (words or "").strip():
+        raise ValueError("record the user's own words")
+    slug = paths.slugify(other)
+    target = paths.PROFILES_ROOT / slug / paths.ONLINE_PRESENCE_NAME if slug else None
+    if target is None or not target.is_file():
+        raise ValueError(f"{other!r} has no online-presence record to share")
+    own = paths.online_presence(name)
+    if own.exists():
+        existing = load_record(own)
+        if existing["sources"] or existing["findings"] or existing["writebacks"]:
+            raise ValueError(f"{own} already holds its own answers; it cannot become a link")
+    save_record(own, {"shared_with": slug, "words": words, "date": datetime.date.today().isoformat()})
+
+
 def _seed_from_masters(name: str, record: dict) -> bool:
     """Copy github/scholar/website links a master already holds; True if anything changed."""
     changed = False
@@ -84,7 +139,7 @@ def _seed_from_masters(name: str, record: dict) -> bool:
 
 
 def status(name: str, today: datetime.date) -> dict:
-    path = paths.online_presence(name)
+    path = _record_path(name)
     record = load_record(path)
     if _seed_from_masters(name, record):
         save_record(path, record)
@@ -106,8 +161,10 @@ def status(name: str, today: datetime.date) -> dict:
             last = None
         if last is None or (today - last).days > STALE_DAYS:
             stale.append(source)
+    own = paths.online_presence(name)
+    shared_with = journal.load_yaml(own).get("shared_with") if own.exists() else None
     return {"to_ask": to_ask, "stale": stale, "broken": broken,
-            "shared_with": record.get("shared_with"),
+            "shared_with": shared_with, "other_records": _other_records(name),
             "pending_for_master": _pending_for_master(name, record)}
 
 
@@ -119,7 +176,7 @@ def record_answer(name: str, source: str, status: str, value, words: str,
         raise ValueError(f"{source}: status given needs the profile value")
     if not (words or "").strip():
         raise ValueError("record the user's own words")
-    path = paths.online_presence(name)
+    path = _record_path(name)
     record = load_record(path)
     entry = {"status": status, "value": (value or "").strip() or None, "words": words,
              "date": datetime.date.today().isoformat()}
@@ -324,7 +381,7 @@ def ingest_website(capture) -> dict:
 
 def note_check(name: str, source: str, snapshot_path, outcome: str, code, today: datetime.date) -> None:
     """Remember the latest check of `source` in the record."""
-    path = paths.online_presence(name)
+    path = _record_path(name)
     record = load_record(path)
     before = journal.as_mapping(record["checks"].get(source))
     previous = before.get("snapshot") if before.get("outcome") == "ok" else before.get("previous_snapshot")
@@ -424,7 +481,7 @@ def _all_masters(name: str) -> dict:
 def check(name: str, workspace, today: datetime.date, force: bool, get=None) -> dict:
     """Fetch stale GitHub, diff every new snapshot once, and return what to show."""
     get = get or http_get
-    path = paths.online_presence(name)
+    path = _record_path(name)
     record = load_record(path)
     st = status(name, today)
     checked = {}
@@ -472,7 +529,7 @@ def confirm(name: str, finding_id: str, decision: str, words: str, correction=No
         raise ValueError(f"decision must be one of {FINDING_DECISIONS}")
     if not (words or "").strip():
         raise ValueError("record the user's own words")
-    path = paths.online_presence(name)
+    path = _record_path(name)
     record = load_record(path)
     for finding in record["findings"]:
         if finding.get("id") == finding_id:
@@ -539,7 +596,7 @@ def writeback(name: str, language: str, workspace=None) -> list:
     """Write confirmed findings into this language's master through save_profile.py."""
     import yaml
     import save_profile
-    record_path = paths.online_presence(name)
+    record_path = _record_path(name)
     record = load_record(record_path)
     target = paths.master_for_language(name, language)
     todo = [f for f in record["findings"] if f.get("status") in WRITTEN
@@ -640,8 +697,15 @@ def main(argv=None) -> int:
     wb.add_argument("--name", required=True)
     wb.add_argument("--language", required=True)
     wb.add_argument("--workspace", type=pathlib.Path)
+    lk = sub.add_parser("link", help="share another directory's record (same person)")
+    lk.add_argument("--name", required=True)
+    lk.add_argument("--with", dest="other", required=True)
+    lk.add_argument("--words", required=True)
     args = ap.parse_args(argv)
     try:
+        if args.command == "link":
+            link(args.name, args.other, args.words)
+            return 0
         if args.command == "writeback":
             written = writeback(args.name, args.language, args.workspace)
             print(json.dumps({"written": written}, ensure_ascii=False))
