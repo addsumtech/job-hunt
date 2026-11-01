@@ -95,6 +95,7 @@ import unicodedata
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import journal
+import paths
 
 GATE = "check_claims"
 FINGERPRINT = "master-fingerprint.json"
@@ -1132,6 +1133,33 @@ def trace(term, family, paired, exact, prose, families, others=()):
     return UNSOURCED, None, None
 
 
+def _writeback_chain(ws, master, start_sha, now_sha):
+    """(finding ids, last date) when recorded write-backs lead from start_sha to now_sha.
+
+    online_presence.py logs each write it makes to a master with before/after
+    hashes. A master changed only by those writes is not a tailoring mutation; any
+    other change still is, so the chain must reach the current hash exactly.
+    """
+    try:
+        import online_presence
+        record = online_presence.load_record(paths.online_presence_of(ws))
+    except (ValueError, OSError, journal.YamlUnreadable, ImportError):
+        return None
+    steps = [w for w in record.get("writebacks", []) if isinstance(w, dict)
+             and str(w.get("master")) == str(master)]
+    sha, ids, last = start_sha, [], None
+    for _ in range(len(steps)):
+        step = next((w for w in steps if w.get("before_sha256") == sha), None)
+        if step is None:
+            break
+        sha = step.get("after_sha256")
+        ids += [str(i) for i in step.get("finding_ids") or []]
+        last = step.get("date")
+        if sha == now_sha:
+            return ids, last
+    return None
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--workspace", required=True)
@@ -1214,7 +1242,14 @@ def main(argv=None) -> int:
             # the empty mapping as a verified master.
             findings.append(f"MASTER_UNREADABLE: {exc.reason} — no claim was verified "
                             f"against {master}; fix the master and re-run")
-        if now != fp["sha256"]:
+        chain = _writeback_chain(ws, master, fp["sha256"], now) if now != fp["sha256"] else None
+        if chain:
+            ids, last_date = chain
+            findings.append(f"MASTER_WRITEBACK: {master} gained {len(ids)} confirmed "
+                            f"online-presence item(s) on {last_date} ({', '.join(ids)}); tell "
+                            f"the user what was added, then re-run check_claims.py --record "
+                            f"--master {master}")
+        elif now != fp["sha256"]:
             findings.append(f"MASTER_MUTATED: profile.yaml content changed during this "
                             f"run ({fp['sha256'][:12]}… → {now[:12]}…) — the master "
                             f"profile is never mutated by tailoring; tailoring works on "
