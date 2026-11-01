@@ -865,6 +865,15 @@ def _wrap_report_text(value, size, width, text_width, literal=False):
         left, right = text[index - 1], text[index]
         if left in currency and right.isdigit():
             return True
+        # `€ 4000` and `4,000 €`: one space between a sign and its amount.
+        after = text[index + 1] if index + 1 < len(text) else ""
+        before = text[index - 2] if index > 1 else ""
+        if right == " " and ((left in currency and after.isdigit())
+                             or (left.isdigit() and after in currency)):
+            return True
+        if left == " " and ((before in currency and right.isdigit())
+                            or (before.isdigit() and right in currency)):
+            return True
         if left.isdigit() and right in separators:
             return index + 1 < len(text) and text[index + 1].isdigit()
         return (left in separators and right.isdigit()
@@ -961,8 +970,12 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
 
         `inline` holds section links to make clickable where their label is
         printed; each one placed is removed from the list, so the caller can
-        fall back to a separate link line for a label that wrapped.
+        fall back to a separate link line for a label that wrapped. Each
+        entry is `(label, target, occurrence)`: the label's index among its
+        equal strings in the block, so `结论很简单：见[结论](#结论)` links the
+        second `结论`, not the first.
         """
+        inline_seen: dict[str, int] = {}
         nonlocal cursor
         height = len(lines) * leading
         if not allow_split and height <= bottom - top and cursor + height > bottom:
@@ -981,8 +994,15 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
                 writer.append(pymupdf.Point(x, cursor + size), line, font=font,
                               fontsize=size)
                 for pending in list(inline or []):
-                    label, target = pending
-                    found = line.find(label) if label else -1
+                    label, target, occurrence = pending
+                    found, seen = -1, inline_seen.get(label, 0)
+                    position = line.find(label) if label else -1
+                    while position >= 0:
+                        if seen == occurrence:
+                            found = position
+                            break
+                        seen += 1
+                        position = line.find(label, position + len(label))
                     if found < 0:
                         continue
                     x0 = x + text_width(line[:found], size)
@@ -993,6 +1013,9 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
                                    pymupdf.Point(x1, cursor + size + 2),
                                    color=link_color, width=0.5)
                     inline.remove(pending)
+                for label in {item[0] for item in inline or []} | set(inline_seen):
+                    if label:
+                        inline_seen[label] = inline_seen.get(label, 0) + line.count(label)
                 cursor += leading
             writer.write_text(page, color=color)
             if link:
@@ -1063,12 +1086,17 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
         if not standalone_link:
             # A section link inside prose is clickable where it is printed;
             # only a label that wrapped across lines still gets its own line.
-            inline = [(label, url) for label, url in links if url.startswith("#")]
+            inline = []
+            for match in _MD_LINK.finditer(value):
+                label, url = text_and_links(match.group(1))[0], html.unescape(match.group(2))
+                if url.startswith("#"):
+                    before, _ = text_and_links(value[:match.start()])
+                    inline.append((label, url, before.count(label)))
             links = [(label, url) for label, url in links if not url.startswith("#")]
             if not write_lines(wrap(display, size, right - left), left, size, color,
                                size * 1.35, allow_split=allow_split, inline=inline):
                 return False
-            links = inline + links
+            links = [(label, url) for label, url, _ in inline] + links
             cursor += gap
         for label, url in links:
             link_label = label if url.startswith("#") else f"{style['link']}{label}"
