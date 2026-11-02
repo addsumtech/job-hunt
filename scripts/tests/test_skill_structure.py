@@ -133,7 +133,9 @@ def test_the_self_check_names_every_script():
             # Reads references/discovery-sources.md for check_shortlist; there is
             # no run step, and a self-check line telling a round to "run the
             # catalogue" would describe work nobody does.
-            "discovery_catalogue.py"}
+            "discovery_catalogue.py",
+            # Weekly digest libraries: digest.py and check_digest.py import them.
+            "digest_compose.py", "digest_inbox.py", "digest_ledger.py"}
     section = _self_check_items()
     for f in sorted((ROOT / "scripts").glob("*.py")):
         if f.name in skip:

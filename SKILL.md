@@ -101,6 +101,9 @@ longer form.
 
 ## Enter a full mode
 
+A weekly job email (set up, change, stop, or a scheduled run) follows
+[references/weekly-digest.md](references/weekly-digest.md).
+
 For a new machine or a missing required capability, read
 [references/agent-setup.md](references/agent-setup.md), prepare the private runtime
 with `scripts/setup_dependencies.py`, and run `scripts/doctor.py`. Reuse working

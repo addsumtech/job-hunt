@@ -314,6 +314,36 @@ def online_presence_dir(name: str) -> pathlib.Path:
     return profile_dir(name) / "online-presence"
 
 
+DIGEST_SETTINGS_NAME = "digest.yaml"
+DIGEST_SEEN_NAME = "digest-seen.yaml"
+
+
+def digest_settings(name: str) -> pathlib.Path:
+    """The weekly digest's settings and state (references/weekly-digest.md)."""
+    return profile_dir(name) / DIGEST_SETTINGS_NAME
+
+
+def digest_seen(name: str) -> pathlib.Path:
+    """Every role a weekly digest has already sent."""
+    return profile_dir(name) / DIGEST_SEEN_NAME
+
+
+def digest_workspace(name: str, date: str) -> pathlib.Path:
+    """A fresh discover-shaped workspace for one digest run, never an existing one.
+
+    A retry on the same day gets `-2`, `-3`…: reusing a failed run's directory
+    would mix its captures into the new round.
+    """
+    if not _ISO_DATE.match(str(date)):
+        raise ValueError(f"date must be YYYY-MM-DD, got {date!r}")
+    base = profile_dir(name) / "searches" / f"{date}-weekly-digest"
+    candidate, n = base, 1
+    while candidate.exists():
+        n += 1
+        candidate = base.with_name(f"{base.name}-{n}")
+    return candidate
+
+
 def online_presence_of(workspace) -> pathlib.Path:
     """The online-presence record of the profile that owns an apply or discover workspace.
 

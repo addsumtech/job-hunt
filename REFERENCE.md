@@ -87,6 +87,7 @@ job-hunt/
 │   ├── daily-browser.md            # Daily-browser CDP and bounded parallel sources
 │   ├── network-recovery.md         # Bounded retries and authorized route diagnostics
 │   ├── online-presence.md          # Ask once for GitHub/Scholar/website, check, confirm, write back
+│   ├── weekly-digest.md            # Weekly reminder + emailed discover round: setup, run, cancel
 │   ├── agent-setup.md              # Agent installs tools and prepares daily-browser CDP
 │   ├── opencli-compat.md            # Optional version-checked adapter repairs
 │   ├── opencli-patches/             # Exact replacements and upstream license
@@ -148,6 +149,7 @@ job-hunt/
     ├── check_personal_data.py       # Cluster-1 personal-data interlock
     ├── check_render_freshness.py    # the judges read the files still on disk
     ├── check_shortlist.py           # discover's gate: row provenance, caps, md↔yaml agreement
+    ├── check_digest.py              # weekly digest gate: new, read, linked, sources named, no prediction
     ├── check_search_coverage.py     # complete search coverage across all registered rounds
     ├── check_skill_lossless.py      # CI only — the migration moved content, did not delete it
     ├── check_word_limits.py         # supporting-statement per-criterion word limits
@@ -184,6 +186,10 @@ job-hunt/
     ├── layout_pages.py               # canonical previews; reuse only intact passed page reviews
     ├── report_names.py               # candidate/target/date/mode names for delivered reports
     ├── online_presence.py            # ask once for GitHub/Scholar/website, snapshot, diff, confirm, write back
+    ├── digest.py                     # weekly digest: setup, hourly reminder, scheduler, inbox, compose, presend/sent
+    ├── digest_compose.py             # weekly digest email text (library)
+    ├── digest_inbox.py               # weekly digest reply rules: cancel / pause / feedback / yes (library)
+    ├── digest_ledger.py              # weekly digest ledger of roles already sent (library)
     ├── report_requirements.py        # default report-layout-requirements.yaml for the bundled renderer
     ├── render_letter.py             # motivation letter → md / docx / pdf
     ├── render_rirekisho.py          # Japanese 履歴書 form renderer

@@ -199,6 +199,10 @@ language the user happens to type in. The file is reused across later rounds.
 - `brief.yaml` below is this round's *narrowing* of these preferences, not a copy of
   them: preferences are durable, a brief is one round.
 
+A weekly-digest round runs this mode from the digest's standing brief, with the user
+present, as described in `references/weekly-digest.md` (the brief and preferences are
+not asked again).
+
 ## Before Step 0 — region, then platforms, then the login hand-off
 
 Run these three in order, before the trigger reason and before `brief.yaml`.
@@ -890,6 +894,10 @@ the adapter returned, or leave the field empty; never assemble or invent them.
 what the code means and its exact repair.
 
 ## Hand the artifacts over
+
+After the artifacts, you may mention once that an optional weekly email of new
+matching roles exists, with what it needs (`references/weekly-digest.md`, "Before
+offering it"). Set it up only on the user's yes.
 
 Follow SKILL.md "Client deliverables" (write `report.md` after reading
 `references/report-writing.md`, render and review it, run `lint_no_prediction.py`,
