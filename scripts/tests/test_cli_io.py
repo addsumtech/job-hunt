@@ -68,7 +68,7 @@ def test_the_floor_is_the_one_the_documentation_states():
     setup_dependencies.py enforces 3.10; a floor in cli_io that disagreed would
     refuse a Python the docs promise, or accept one setup refuses."""
     assert cli_io.MIN_PYTHON == (3, 10)
-    for doc in ("README.md", "README_EN.md", "REFERENCE.md", "references/agent-setup.md"):
+    for doc in ("README.md", "README_ZH.md", "REFERENCE.md", "references/agent-setup.md"):
         assert "Python 3.10+" in _source(ROOT / doc), doc
     assert re.search(r"version_info\s*<\s*\(3,\s*10\)", _source(SCRIPTS / "setup_dependencies.py"))
 

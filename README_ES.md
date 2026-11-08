@@ -1,8 +1,8 @@
 # job-hunt: busca empleo, crea tu CV y practica entrevistas
 
 <p align="center">
-  <a href="README.md">简体中文</a> ·
-  <a href="README_EN.md">English</a> ·
+  <a href="README.md">English</a> ·
+  <a href="README_ZH.md">简体中文</a> ·
   <a href="README_JA.md">日本語</a> ·
   <a href="README_KO.md">한국어</a> ·
   <a href="README_ES.md"><strong>Español</strong></a>
@@ -20,11 +20,27 @@
   <a href="CHANGELOG.md">Registro de cambios (chino)</a>
 </p>
 
+**Una skill de búsqueda de empleo para Claude Code y Codex: lee la oferta completa, adapta tu CV solo con experiencia real y lo somete a tres revisores de IA independientes.**
+
+- **Solo lo que hiciste**: cada línea nueva remite a tu CV o a tus respuestas, y tu perfil original no se modifica. Lo que pide la oferta y te falta se presenta como carencia.
+- **La oferta completa**: cada oferta recomendada se contrasta con su descripción completa; la que no se puede leer queda sin verificar.
+- **Tres revisores independientes**: un filtro ATS (lectura y palabras clave), un reclutador (claridad y requisitos básicos) y un responsable de contratación (si tu experiencia respalda el puesto). Solo se aprueba cuando aprueban los tres, en un máximo de tres rondas.
+- **Maquetación revisada página a página**: los archivos Word/PDF se revisan página a página antes de entregarlos y otra vez tras cada cambio.
+- **Sin cifras imposibles de comprobar**: ninguna puntuación del tipo "82 % de coincidencia"; solo pruebas, carencias y el esfuerzo de preparación.
+
 <p align="center">
-  <img src="docs/assets/hero.jpg" alt="Proceso de búsqueda de empleo ilustrado: buscar ofertas, valorar la adecuación, crear el CV y practicar entrevistas">
+  <a href="docs/assets/examples/cv-en.png"><img src="docs/assets/examples/cv-en.png" width="49%" alt="Ejemplo de CV en inglés exportado del PDF real"></a>
+  <a href="docs/assets/examples/report-en-01.png"><img src="docs/assets/examples/report-en-01.png" width="49%" alt="Extracto anonimizado de un informe: conclusión, orden de candidatura y ofertas prioritarias"></a>
+  <br><sub>Izquierda: ejemplo de CV (persona ficticia). Derecha: extracto anonimizado de una búsqueda real de septiembre de 2026 (entonces algunas ofertas solo tenían resumen). Ver también el <a href="docs/assets/examples/cv-zh.png">CV en chino</a> y la <a href="docs/assets/examples/report-en-02.png">página 2 del informe</a>.</sub>
 </p>
 
-job-hunt es una skill de búsqueda de empleo para Claude Code y Codex. Te ayuda a encontrar ofertas, decidir dónde postularte, crear un CV en chino o inglés y otros documentos de candidatura, y practicar entrevistas.
+### Ejemplos de la evaluación
+
+- **Recuperado de la experiencia**: el ATS filtraba por "Slurm"; la línea de habilidades no lo incluía, pero un puesto incluía una migración a un clúster Slurm. El CV usó esa experiencia y registró su origen.
+- **Una carencia real no se disimula**: el puesto exigía el registro neerlandés de físico clínico (BIG), que el candidato no tenía. En lugar de insertar la palabra clave, lo señaló como requisito obligatorio.
+- **Sin puntuación tras una entrevista simulada**: como entrevistador y sin ninguna skill, el mismo modelo respondió "Verdict: would not advance. 8/25." job-hunt no da puntuación ni veredicto de contratación.
+
+<sub>De la evaluación de comportamiento de septiembre de 2026, con candidatos ficticios y una ejecución por escenario (n = 1): muestra que lo hizo en esas ejecuciones, no con qué frecuencia. Consulta el [registro de evaluación](evals/iterations/iteration-2-with-skill.md).</sub>
 
 Comparte tus objetivos, experiencia o el enlace de una oferta. El agente organiza la información, comprueba los requisitos, edita los documentos y revisa la maquetación. Incluye orientación para recién graduados, cambios de carrera, periodos sin empleo, perfiles técnicos y de investigación, y candidaturas internacionales.
 
@@ -38,6 +54,8 @@ Comparte tus objetivos, experiencia o el enlace de una oferta. El agente organiz
 | **interview · Practicar entrevistas** | Quieres ensayar respuestas y preguntas de seguimiento | Simula una entrevista con la oferta y el CV, registra las respuestas y revisa la comunicación y el respaldo factual |
 
 Puedes usar las funciones por separado o combinarlas según tus necesidades. Tú eliges el siguiente paso y presentas la candidatura con los documentos terminados.
+
+Opcional: pregunta una sola vez por tu GitHub, Google Scholar y web personal, y añade a tu perfil los proyectos y artículos nuevos que confirmes. También puede enviarte por correo, una vez por semana, las ofertas nuevas (necesita una herramienta de correo y algo de configuración; tú decides si usarlo).
 
 ## Primer uso
 
@@ -78,49 +96,6 @@ Usa job-hunt para hacer una entrevista simulada con esta oferta y mi CV.
 Cada consulta incluye un informe; los demás documentos dependen de la tarea elegida. El formato se adapta al mercado y a la empresa: por ejemplo, el rirekisho y el documento de trayectoria profesional en Japón, o el supporting statement para el NHS y la función pública del Reino Unido.
 
 La entrega se guarda en una sola carpeta `~/Downloads/<workspace-name>/`, organizada en `简历/` (CV) y `报告/` (informe). Las siguientes etapas usan la misma ubicación para facilitar el acceso a los documentos actuales.
-
-## Cómo se comprueba y mejora el trabajo
-
-### Ofertas completas y experiencia real
-
-Un informe completo exige leer la descripción íntegra de cada oferta seleccionada. Los resúmenes sirven para la selección inicial. Si no se puede acceder a una descripción, el informe explica el motivo y la marca como pendiente; no cuenta como revisada.
-
-Las modificaciones y los consejos se basan en la experiencia que aportes. El agente conserva el perfil original, edita una copia y enumera las evidencias que faltan. No inventa habilidades ni cifras de rendimiento y no predice las probabilidades de contratación.
-
-### Tres revisiones independientes de IA del CV
-
-| Perspectiva | Qué comprueba |
-|---|---|
-| **Sistema de seguimiento de candidaturas (ATS)** | Si el CV se puede procesar y sus palabras clave corresponden a los requisitos del puesto |
-| **Selección de personal** | Claridad y requisitos básicos |
-| **Responsable del equipo** | Si los proyectos, las responsabilidades y la experiencia respaldan los requisitos del puesto |
-
-Un CV convencional se corrige y revisa hasta un máximo de tres rondas. Las carencias que requieren más experiencia real o documentación quedan señaladas. Los formularios y las declaraciones por criterios se comprueban según sus requisitos específicos.
-
-### Maquetación y devolución de la entrevista
-
-Antes de entregar, se revisa cada página de Word/PDF frente a la plantilla, las fuentes, la alineación, los espacios y la paginación. Tras un cambio se repite la revisión; los problemas de formato pendientes impiden dar el trabajo por terminado.
-
-Después de la entrevista simulada, la calidad de las respuestas y su respaldo factual se evalúan de forma independiente, indicando qué detalles añadir y qué frases del CV revisar.
-
-## Ejemplos de CV e informe
-
-### CV en inglés
-
-Imagen obtenida de un CV ficticio en PDF. Los nombres, centros, empresas, proyectos y cifras son ilustrativos. La versión china aparece en el [README en chino](README.md).
-
-<p align="center">
-  <a href="docs/assets/examples/cv-en.png"><img src="docs/assets/examples/cv-en.png" width="680" alt="CV ficticio en inglés con formación, experiencia, prácticas, proyectos y habilidades"></a>
-</p>
-
-### Extracto del informe de búsqueda (en inglés)
-
-Extracto anonimizado y traducido al inglés de una búsqueda real del 11 de septiembre de 2026, con valoraciones de puestos y preparación. Esta muestra histórica conserva algunas ofertas que solo tenían un resumen; los informes completos actuales exigen leer cada descripción íntegra. El CV ficticio no se utilizó para estas valoraciones. Haz clic para ampliar.
-
-<p align="center">
-  <a href="docs/assets/examples/report-en-01.png"><img src="docs/assets/examples/report-en-01.png" width="49%" alt="Informe anonimizado en inglés: prioridades y puestos seleccionados"></a>
-  <a href="docs/assets/examples/report-en-02.png"><img src="docs/assets/examples/report-en-02.png" width="49%" alt="Informe anonimizado en inglés: análisis de puestos, carencias y preparación"></a>
-</p>
 
 ## Instalación
 

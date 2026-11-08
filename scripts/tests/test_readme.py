@@ -8,8 +8,8 @@ entire searches/ workspace missing — and stay green for months.
 
 The overview and technical reference must not disagree:
 
-  README.md                 the Chinese overview a reader lands on
-  README_EN/JA/KO/ES.md      the other four language editions
+  README.md                 the English overview a reader lands on
+  README_ZH/JA/KO/ES.md      the other four language editions
   REFERENCE.md               the layout, the workspace shape, the numbers
 
 Language editions are a drift risk: a correction in one must reach the others.
@@ -25,7 +25,7 @@ import pytest
 ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 README = ROOT / "README.md"
 REFERENCE = ROOT / "REFERENCE.md"
-READMES = [README] + [ROOT / f"README_{lang}.md" for lang in ("EN", "JA", "KO", "ES")]
+READMES = [README] + [ROOT / f"README_{lang}.md" for lang in ("ZH", "JA", "KO", "ES")]
 
 
 def _text(p=README):
@@ -185,7 +185,9 @@ def test_each_readme_links_all_languages():
         for target in READMES:
             assert f'href="{target.name}"' in text, (readme.name, target.name)
         assert "README_CN.md" not in text, readme.name
+        assert "README_EN.md" not in text, readme.name
     assert not (ROOT / "README_CN.md").exists()
+    assert not (ROOT / "README_EN.md").exists(), "English is README.md; README_EN.md is a stale copy"
 
 
 @pytest.mark.parametrize("readme", READMES, ids=lambda p: p.name)

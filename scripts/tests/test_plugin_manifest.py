@@ -23,7 +23,7 @@ PLUGIN = ROOT / ".claude-plugin" / "plugin.json"
 MARKET = ROOT / ".claude-plugin" / "marketplace.json"
 SKILL = ROOT / "SKILL.md"
 READMES = [ROOT / "README.md"] + [
-    ROOT / f"README_{lang}.md" for lang in ("EN", "JA", "KO", "ES")
+    ROOT / f"README_{lang}.md" for lang in ("ZH", "JA", "KO", "ES")
 ]
 HUB_LISTINGS = (
     "https://skillhub.cn/skills/user_f486c577/best-job-hunt",
