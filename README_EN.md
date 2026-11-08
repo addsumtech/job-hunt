@@ -20,11 +20,27 @@
   <a href="CHANGELOG.md">Changelog (Chinese)</a>
 </p>
 
+**A job-search skill for Claude Code and Codex: it reads the full posting, tailors your CV only from experience you really have, and puts it past three independent AI reviewers.**
+
+- **Only what you did**: every new line traces to your CV or your answers, and your original profile is never edited. What the role needs and you lack is listed as a gap.
+- **The full posting**: every recommended role is checked against its complete job description; one it cannot read is marked unverified.
+- **Three independent reviewers**: an ATS screener (readability, keywords), a recruiter (clarity, basic requirements) and a hiring manager (whether your experience supports the role). It passes only when all three do, within three rounds.
+- **Page-by-page layout check**: Word/PDF files are checked page by page before delivery, and again after any change.
+- **No numbers nobody can check**: no "82% match" score, only the evidence, the gaps and the effort to prepare.
+
 <p align="center">
-  <img src="docs/assets/hero.jpg" alt="Illustrated career workflow: find roles, assess fit, create a CV and practise interviews">
+  <a href="docs/assets/examples/cv-en.png"><img src="docs/assets/examples/cv-en.png" width="49%" alt="English CV example exported from the actual PDF"></a>
+  <a href="docs/assets/examples/report-en-01.png"><img src="docs/assets/examples/report-en-01.png" width="49%" alt="Anonymized job-search report excerpt: conclusion, application order and priority roles"></a>
+  <br><sub>Left: a CV example (fictional person). Right: an anonymized excerpt from a real job search in September 2026 (some leads then had only a summary). See also the <a href="docs/assets/examples/cv-zh.png">Chinese CV</a> and <a href="docs/assets/examples/report-en-02.png">report page 2</a>.</sub>
 </p>
 
-job-hunt is a career skill for Claude Code and Codex. It helps you find roles, decide where to apply, create a Chinese or English CV and application materials, and practise interviews.
+### Examples from evaluation runs
+
+- **Recovered from the experience section**: the ATS screened on "Slurm"; the skills line left it out, but one role included a Slurm cluster migration. The CV used that experience and recorded its source.
+- **A real gap is not papered over**: the role required Dutch clinical-physicist registration (BIG), which the candidate lacked. Instead of inserting the keyword, it named the hard requirement.
+- **No score after a mock interview**: as interviewer with no skill loaded, the same model returned "Verdict: would not advance. 8/25." job-hunt gives no score and no hiring verdict.
+
+<sub>From the September 2026 behavioural evaluation, with fictional candidates, one run per scenario (n = 1): these runs did it, which says nothing about how often. See the [evaluation record](evals/iterations/iteration-2-with-skill.md).</sub>
 
 Share your goals, experience or a posting link. The agent organizes the information, checks requirements, edits your documents and reviews their layout. Guidance covers new graduates, career changes, employment gaps, technical and research roles, and international applications.
 
@@ -38,6 +54,8 @@ Share your goals, experience or a posting link. The agent organizes the informat
 | **interview · Practise interviews** | You want to rehearse answers and follow-up questions | Uses the role and CV to run a mock interview, record answers, and review delivery and factual support |
 
 Use the features separately or connect them as needed. You choose the next step and submit the finished application yourself.
+
+Optional: it asks once for your GitHub, Google Scholar and personal website and adds new projects and papers to your profile after you confirm them. It can also email you new roles once a week (this needs an email tool and some setup; it is your choice).
 
 ## First use
 
@@ -78,49 +96,6 @@ Use job-hunt to run a mock interview based on this posting and my CV.
 Each consultation includes a report; other documents depend on the task you choose. Local and employer requirements determine the format, such as a Japanese rirekisho and career-history document, or an NHS/Civil Service supporting statement in the UK.
 
 Delivery goes into one `~/Downloads/<workspace-name>/` folder, organized into `简历/` (CV) and `报告/` (report). Later stages use the same location so you can find the current documents.
-
-## How the work is checked
-
-### Full postings and real experience
-
-A complete career report requires reading the full description of every retained posting. Search summaries are for initial screening. If a description genuinely cannot be accessed, the report explains why and marks it unresolved; it does not count as reviewed.
-
-CV edits and advice use the experience you provide. The agent preserves your source profile, edits a copy, and lists missing evidence. It does not invent skills or performance figures, or predict hiring odds.
-
-### Three independent AI CV reviews
-
-| Review perspective | What it checks |
-|---|---|
-| **Applicant tracking system (ATS)** | Whether the CV can be parsed and its keywords reflect the role's requirements |
-| **Recruiter** | Readability and basic eligibility |
-| **Hiring manager** | Whether projects, responsibilities and experience support the role's requirements |
-
-A standard CV is revised and reviewed for up to three rounds. Gaps that need more real experience or evidence remain explicit. Employer forms and criterion-based statements are checked against their own requirements.
-
-### Layout and interview feedback
-
-Before delivery, every Word/PDF page is checked against your template, fonts, alignment, spacing and pagination. Changes trigger another review; unresolved layout issues prevent completion.
-
-After a mock interview, answer quality and factual support receive separate independent assessments, identifying details to add and CV wording to revise.
-
-## CV and report examples
-
-### English CV
-
-This image is rendered from a fictional CV PDF. Names, institutions, employers, projects and figures are illustrative. The [Chinese README](README.md) shows the Chinese version.
-
-<p align="center">
-  <a href="docs/assets/examples/cv-en.png"><img src="docs/assets/examples/cv-en.png" width="680" alt="Fictional English CV with education, work experience, internships, projects and skills"></a>
-</p>
-
-### Career report excerpt
-
-An anonymized English excerpt from a real search on 11 September 2026, showing role judgments and preparation. This historical snapshot retains some summary-only leads; current complete reports require each posting’s full details. The fictional CV was not used for these judgments. Click an image for full size.
-
-<p align="center">
-  <a href="docs/assets/examples/report-en-01.png"><img src="docs/assets/examples/report-en-01.png" width="49%" alt="Anonymized English career report with priorities and selected roles"></a>
-  <a href="docs/assets/examples/report-en-02.png"><img src="docs/assets/examples/report-en-02.png" width="49%" alt="Anonymized English career report with role analysis, gaps and preparation"></a>
-</p>
 
 ## Install
 

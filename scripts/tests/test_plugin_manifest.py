@@ -113,14 +113,15 @@ def test_both_install_paths_are_documented(readme):
 
 @pytest.mark.parametrize("readme", READMES, ids=lambda p: p.name)
 def test_the_readme_links_to_supported_skill_hubs(readme):
-    """Listing pages follow the release badge and precede the project image."""
+    """Listing pages follow the release badge and precede the first project image
+    (an illustration or the example CV, whichever the first screen shows)."""
     text = readme.read_text(encoding="utf-8")
     release = "https://github.com/addsumtech/job-hunt/releases"
-    hero = "docs/assets/hero.jpg"
+    first_image = text.index('src="docs/assets/')
     for url, badge in zip(HUB_LISTINGS, HUB_BADGES):
         assert url in text, f"{readme.name} omits {url}"
         assert badge in text, f"{readme.name} does not render {url} as a badge"
-        assert text.index(release) < text.index(badge) < text.index(hero), (
+        assert text.index(release) < text.index(badge) < first_image, (
             f"{readme.name} does not place {url} after the release block")
 
 
