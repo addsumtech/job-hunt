@@ -51,6 +51,7 @@ Comparte tus objetivos, experiencia o el enlace de una oferta. El agente organiz
 | **discover · Buscar ofertas** | Tienes un objetivo, pero necesitas encontrar vacantes adecuadas | Busca por mercado y preferencias, lee la descripción completa de las ofertas seleccionadas y organiza enlaces y consejos |
 | **assess · Decidir si postularte** | Quieres valorar un puesto concreto | Compara requisitos y experiencia, e identifica condiciones excluyentes, fortalezas, carencias y esfuerzo de preparación |
 | **apply · Crear el CV y la candidatura** | Necesitas un CV o documentos adaptados a una oferta | Crea un borrador a partir de tu experiencia o edita el CV existente, maqueta Word/PDF y realiza revisiones independientes |
+| **prepare · Preparar entrevistas** | Quieres saber qué preparar para tu campo y mercado, sin necesitar una oferta concreta | Crea un plan de preparación a partir de tus puestos objetivo, mercado, nivel y CV, con lo que pesa cada etapa del proceso de ese mercado (pruebas escritas, centros de evaluación). Practica preguntas de conocimiento verificable de cualquier campo y problemas de programación cuyo código se ejecuta con casos de prueba ocultos, con pistas si las pides |
 | **interview · Practicar entrevistas** | Quieres ensayar respuestas y preguntas de seguimiento | Simula una entrevista con la oferta y el CV, registra las respuestas y revisa la comunicación y el respaldo factual |
 
 Puedes usar las funciones por separado o combinarlas según tus necesidades. Tú eliges el siguiente paso y presentas la candidatura con los documentos terminados.
@@ -189,7 +190,7 @@ make eval-lint
 
 `make check` ejecuta las pruebas de Python, las comprobaciones del contenido migrado, las tablas de mercado y la búsqueda de caracteres ocultos. Necesita Python 3.10 o posterior con `requirements.txt` instalado (el `python3` de macOS es 3.9). Las pruebas que usan herramientas externas necesitan tenerlas instaladas; las comprobaciones de la instalación local de la skill son opcionales.
 
-[`evals/`](evals/README.md) contiene 20 escenarios de comportamiento. La segunda iteración (2026-09-05/06) ejecutó 15 escenarios con y sin la skill, una vez por grupo (n = 1). Diez comprobaciones pasaron de `FAIL` en la referencia a `PASS` con la skill. El [registro de evaluación](evals/iterations/iteration-2-with-skill.md) recoge los resultados, las comprobaciones pendientes y el escenario invalidado.
+[`evals/`](evals/README.md) contiene 23 escenarios de comportamiento. La segunda iteración (2026-09-05/06) ejecutó 15 escenarios con y sin la skill, una vez por grupo (n = 1). Diez comprobaciones pasaron de `FAIL` en la referencia a `PASS` con la skill. El [registro de evaluación](evals/iterations/iteration-2-with-skill.md) recoge los resultados, las comprobaciones pendientes y el escenario invalidado.
 
 Los tres revisores de CV se probaron mediante `codex exec` el 2026-09-06. Consulta [portabilidad entre agentes](references/portability.md) para configurar otros entornos y conocer el alcance de las pruebas.
 

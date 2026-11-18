@@ -30,7 +30,7 @@ the artifacts. `RUN_NOTES.md` is where iteration-1's real diagnostic value sat:
 it is the only place a renderer bug or a reference file nobody read gets
 recorded, because no assertion covers those.
 
-## The twenty evals
+## The twenty-three evals
 
 | id | name | mode | baseline_kind | guards |
 |---|---|---|---|---|
@@ -54,6 +54,9 @@ recorded, because no assertion covers those.
 | 17 | `apply-ats-reject-buried-evidence` | apply | old_skill | 1 |
 | 18 | `interview-unsourced-drift` | interview | no_skill | — |
 | 19 | `interview-well-sourced` | interview | no_skill | — |
+| 20 | `interview-coding-round` | interview | no_skill | — |
+| 21 | `interview-knowledge-round` | interview | no_skill | — |
+| 22 | `prepare-uk-nurse` | prepare | no_skill | — |
 "guards" counts assertions with `role: discriminating`, and the column is
 generated from `assertions.yaml`, not maintained by hand — `test_eval_runbook.py`
 fails if the two disagree. It used to be hand-written and drifted: it claimed 24
@@ -241,7 +244,7 @@ did.
 
 ## Stage 2 — the matrix
 
-Twenty evals × two arms × three runs = **120 runs**. Dispatch per eval, both arms
+Twenty-three evals × two arms × three runs = **138 runs**. Dispatch per eval, both arms
 in the same turn, so the two arms of a pair meet the same conditions.
 
 The only cost data that exists is iteration-1's, over a different scenario set:

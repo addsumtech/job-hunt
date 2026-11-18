@@ -26,7 +26,7 @@ ROLES = ("discriminating", "regression")
 
 EXPECTED_BASELINE = ("fail", "not_exercised", "pass")
 
-MODES = ("discover", "assess", "apply", "interview")
+MODES = ("discover", "assess", "apply", "interview", "prepare")
 
 # The document's own keys. `coverage` is load-bearing -- it is how a mode
 # declares it has no discriminating assertion left -- so a typo in it must be a

@@ -76,7 +76,8 @@ job-hunt/
 │   ├── discover.md                  # Layer 1.5 — find roles (read-only)
 │   ├── assess.md                    # Layer 1.5 — judge one posting
 │   ├── apply.md                     # Layer 1.5 — build and pressure-test the package
-│   └── interview.md                 # Layer 1.5 — rehearse and debrief
+│   ├── interview.md                 # Layer 1.5 — rehearse and debrief
+│   └── prepare.md                   # Layer 1.5 — study plan and drills, no posting needed
 ├── references/                     # Layer 2 — read on demand
 │   ├── candidate-situations.md      # Non-standard candidates (gap, switch, exec, military, intl)
 │   ├── cv-craft.md                  # CV writing conventions (markets, links, bullets, ordering)
@@ -102,6 +103,7 @@ job-hunt/
 │   ├── gap-analysis.md              # Gap analysis, tailoring methodology, claim provenance
 │   ├── interview-prep.md            # Interview-readiness brief
 │   ├── interview-shapes.md          # Round types, tags and bands for the mock interview
+│   ├── preparation.md               # Preparation plan, knowledge and coding drills, family catalogue
 │   ├── job-posting-extraction.md   # How to parse a posting (+ fetch sanity, application type)
 │   ├── motivation-letter.md         # Letter craft guide
 │   ├── rirekisho.md                 # Japanese 履歴書 form guide
@@ -136,6 +138,8 @@ job-hunt/
     ├── check_evidence_refs.py       # evidence refs resolve; no block ids in reader prose
     ├── check_letter.py              # letter body constraints
     ├── check_mock.py                # interview mode's gate: quotes, tags, promotions, question log
+    ├── check_drill.py               # prepare mode's drill gate: rows per question, hints, runner results, study notes
+    ├── check_prep_plan.py           # preparation plan: every topic tied to the direction, posting, CV or loop
     ├── check_no_write.py            # discover is read-only — a journaled write command fails
     ├── record_browser_capture.py    # Browser snapshot importer and evidence checks
     ├── browser_budget.py            # Intermediate-catalog accounting (library)
@@ -159,6 +163,7 @@ job-hunt/
     ├── host_execution.py            # shared renderer host/sandbox diagnostics (library)
     ├── setup_dependencies.py         # Private Python/Node/OpenCLI installation
     ├── run_tool.py                   # Invoke the prepared runtime and bundled clients
+    ├── run_mock_tests.py             # Run a mock coding round's solution against its hidden cases
     ├── browser_cdp.mjs               # Direct CDP read capture; no npm packages/extensions
     ├── pdf_glyphs.py                # inspect painted PDF glyph IDs, including missing CJK
     ├── deliver.py                   # hand-off: the round's readable artifacts land

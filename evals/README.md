@@ -1,6 +1,6 @@
 # job-hunt evaluation harness
 
-Twenty scenarios, two arms, three runs each. The harness is here in the repo;
+Twenty-three scenarios, two arms, three runs each. The harness is here in the repo;
 **the results root is outside the repo**, at
 `~/code_project/job-hunt-workspace/iteration-<N>/`, because a run produces a real
 workspace containing a real person's profile data and a results tree inside the

@@ -51,6 +51,7 @@ Share your goals, experience or a posting link. The agent organizes the informat
 | **discover · Find roles** | You have a direction but need suitable openings | Searches by market and preferences, reads the full details of retained postings, and organizes links and advice |
 | **assess · Decide whether to apply** | You want to evaluate a specific role | Compares requirements with your experience, identifying eligibility barriers, strengths, gaps and preparation effort |
 | **apply · Create your CV and application** | You need a CV or materials tailored to a role | Builds a draft from your experience or edits an existing CV, then formats Word/PDF files and runs independent reviews |
+| **prepare · Prepare for interviews** | You want to know what to prepare for your field and market, before or without a specific posting | Builds a preparation plan from your target roles, market, level and CV, covering what each stage of that market's process weighs, from written tests to assessment centres. It runs practice drills of checkable knowledge for any field, and of coding problems whose code is run against hidden test cases, with hints on request |
 | **interview · Practise interviews** | You want to rehearse answers and follow-up questions | Uses the role and CV to run a mock interview, record answers, and review delivery and factual support |
 
 Use the features separately or connect them as needed. You choose the next step and submit the finished application yourself.
@@ -189,7 +190,7 @@ make eval-lint
 
 `make check` runs Python tests, migration content-preservation checks, market-table checks and a hidden-character scan. It needs Python 3.10+ with `requirements.txt` installed (macOS's built-in `python3` is 3.9). Tests that use external tools need those tools installed; local skill-installation checks are optional.
 
-[`evals/`](evals/README.md) contains 20 behavioural scenarios. The second iteration (2026-09-05/06) ran 15 scenarios with and without the skill, once per group (n = 1). Ten behavioural checks changed from baseline `FAIL` to with-skill `PASS`. See the [evaluation record](evals/iterations/iteration-2-with-skill.md) for results, untested checks and the invalid scenario.
+[`evals/`](evals/README.md) contains 23 behavioural scenarios. The second iteration (2026-09-05/06) ran 15 scenarios with and without the skill, once per group (n = 1). Ten behavioural checks changed from baseline `FAIL` to with-skill `PASS`. See the [evaluation record](evals/iterations/iteration-2-with-skill.md) for results, untested checks and the invalid scenario.
 
 The three CV reviewers were tested through `codex exec` on 2026-09-06. See [agent portability](references/portability.md) for setup on other hosts and the scope of testing.
 

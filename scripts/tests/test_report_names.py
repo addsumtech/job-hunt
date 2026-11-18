@@ -38,6 +38,14 @@ def test_discovery_uses_real_brief_fields_and_profile_precedence(tmp_path):
     assert report_stem(tmp_path, 'assess') == '李明－Acme－Analyst－岗位评估报告'
 
 
+def test_a_prepare_session_is_named_from_its_direction(tmp_path):
+    ws = tmp_path / '2026-11-18-band-5-nurse-uk'
+    ws.mkdir()
+    write(ws, 'direction.yaml', {'target_titles': ['Staff Nurse (Band 5)', 'Community nurse'],
+                                 'family': 'clinical', 'market': 'uk'})
+    assert report_stem(ws, 'prepare') == 'Staff Nurse (Band 5)－2026-11-18－面试准备计划'
+
+
 def test_bad_metadata_and_external_symlinks_are_skipped(tmp_path):
     ws = tmp_path / 'empty'
     ws.mkdir()
