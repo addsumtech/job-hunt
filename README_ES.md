@@ -1,4 +1,4 @@
-# job-hunt: busca empleo, crea tu CV y practica entrevistas
+# job-hunt: busca empleo, evalúa ofertas, crea tu CV, prepara y practica entrevistas
 
 <p align="center">
   <a href="README.md">English</a> ·
@@ -22,7 +22,7 @@
 
 <p align="center"><img src="docs/assets/banner.jpg" alt="job-hunt: buscar, evaluar, postular, prepararse y ensayar la entrevista" width="100%"></p>
 
-**Una skill de búsqueda de empleo para Claude Code y Codex: lee la oferta completa, adapta tu CV solo con experiencia real y lo somete a tres revisores de IA independientes.**
+**Una skill de búsqueda de empleo para Claude Code, Codex y otros agentes como WorkBuddy: lee la oferta completa, adapta tu CV solo con experiencia real, lo somete a tres revisores de IA independientes y te prepara para entrevistas de cualquier sector.**
 
 - **Solo lo que hiciste**: cada línea nueva remite a tu CV o a tus respuestas, y tu perfil original no se modifica. Lo que pide la oferta y te falta se presenta como carencia.
 - **La oferta completa**: cada oferta recomendada se contrasta con su descripción completa; la que no se puede leer queda sin verificar.
@@ -60,6 +60,25 @@ Puedes usar las funciones por separado o combinarlas según tus necesidades. Tú
 
 Opcional: pregunta una sola vez por tu GitHub, Google Scholar y web personal, y añade a tu perfil los proyectos y artículos nuevos que confirmes. También puede enviarte por correo, una vez por semana, las ofertas nuevas (necesita una herramienta de correo y algo de configuración; tú decides si usarlo).
 
+## Cómo funciona
+
+```mermaid
+flowchart LR
+    you["Tu CV, respuestas<br/>y objetivo"] --> profile["Tu perfil<br/>(el original nunca se edita)"]
+    posting["Una oferta<br/>o una búsqueda"] --> mode
+    profile --> mode["Una función a la vez<br/>discover · assess · apply<br/>prepare · interview"]
+    mode --> checks{"Scripts de control"}
+    checks -- "una línea sin fuente,<br/>una fecha o cifra inventada" --> mode
+    checks --> review["Revisores independientes<br/>cada uno en un contexto nuevo"]
+    review -- "rechazado: cambios puntuales" --> mode
+    review --> out["Informe, CV o plan<br/>en ~/Downloads"]
+```
+
+- **Tu material es la única fuente.** Cada línea del CV adaptado remite a un hecho de tu CV o de tus respuestas. Un script de control rechaza una línea sin fuente y cualquier habilidad, cargo, fecha o cifra que no hayas dado.
+- **Los controles son código, no promesas.** Cada paso termina con un script que aprueba o rechaza y deja constancia; sin esa constancia, una función no se da por terminada. Los archivos Word y PDF se revisan página a página.
+- **Las revisiones vienen de un contexto nuevo.** Los revisores de ATS, reclutador y responsable de contratación, y los dos evaluadores de la entrevista, ven solo el documento y sus propias instrucciones, nunca la conversación que lo escribió; por eso una aprobación es una segunda opinión real.
+- **Tú decides cada paso.** Al terminar una función te propone la siguiente; nunca envía una candidatura ni escribe a nadie por ti.
+
 ## Primer uso
 
 ### 1. Instala y configura
@@ -84,6 +103,7 @@ Cada ejemplo es un punto de partida independiente:
 Usa job-hunt para buscar puestos de product manager de IA en Shanghái.
 Usa job-hunt. Aquí tienes una oferta y mi CV. ¿Merece la pena postularme?
 Usa job-hunt para convertir esta experiencia en CV en chino e inglés, en Word y PDF.
+Usa job-hunt para preparar entrevistas de enfermería en el Reino Unido y hazme preguntas clínicas.
 Usa job-hunt para hacer una entrevista simulada con esta oferta y mi CV.
 ```
 
@@ -95,6 +115,7 @@ Usa job-hunt para hacer una entrevista simulada con esta oferta y mi CV.
 | **CV adaptado (Word/PDF)** | Un Word editable y un PDF maquetado, creados a partir de tu experiencia o adaptados a una oferta |
 | **Documentos adicionales (a petición)** | Carta de presentación o motivación, formulario de la empresa o declaración organizada por criterios |
 | **Preparación y devolución de entrevista (a petición)** | Guía de preparación, transcripción y evaluaciones independientes de la calidad de las respuestas y su respaldo factual |
+| **Plan de preparación de entrevistas (PDF, prepare)** | Las etapas del proceso de tu mercado para tu sector y nivel, qué estudiar y por qué, resultados de los ejercicios y notas de estudio |
 
 Cada consulta incluye un informe; los demás documentos dependen de la tarea elegida. El formato se adapta al mercado y a la empresa: por ejemplo, el rirekisho y el documento de trayectoria profesional en Japón, o el supporting statement para el NHS y la función pública del Reino Unido.
 

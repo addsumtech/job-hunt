@@ -1,4 +1,4 @@
-# job-hunt: find roles, create your CV, practise interviews
+# job-hunt: find roles, judge fit, tailor your CV, prepare for and practise interviews
 
 <p align="center">
   <a href="README.md"><strong>English</strong></a> ·
@@ -22,7 +22,7 @@
 
 <p align="center"><img src="docs/assets/banner.jpg" alt="job-hunt: discover, assess, apply, prepare, interview" width="100%"></p>
 
-**A job-search skill for Claude Code and Codex: it reads the full posting, tailors your CV only from experience you really have, and puts it past three independent AI reviewers.**
+**A job-search skill for Claude Code, Codex and other agents such as WorkBuddy: it reads the full posting, tailors your CV only from experience you really have, puts it past three independent AI reviewers, and prepares you for interviews in any field.**
 
 - **Only what you did**: every new line traces to your CV or your answers, and your original profile is never edited. What the role needs and you lack is listed as a gap.
 - **The full posting**: every recommended role is checked against its complete job description; one it cannot read is marked unverified.
@@ -60,6 +60,25 @@ Use the features separately or connect them as needed. You choose the next step 
 
 Optional: it asks once for your GitHub, Google Scholar and personal website and adds new projects and papers to your profile after you confirm them. It can also email you new roles once a week (this needs an email tool and some setup; it is your choice).
 
+## How it works
+
+```mermaid
+flowchart LR
+    you["Your CV, answers<br/>and goal"] --> profile["Your profile<br/>(the original is never edited)"]
+    posting["A posting<br/>or a search"] --> mode
+    profile --> mode["One mode at a time<br/>discover · assess · apply<br/>prepare · interview"]
+    mode --> checks{"Check scripts"}
+    checks -- "a line with no source,<br/>an invented date or number" --> mode
+    checks --> review["Independent reviewers<br/>each in a fresh context"]
+    review -- "rejected: targeted edits" --> mode
+    review --> out["Report, CV or plan<br/>in ~/Downloads"]
+```
+
+- **Your material is the only source.** Each line of a tailored CV points to a fact in your CV or your answers. A check script rejects a line with no source, and any skill, title, date or number you never gave.
+- **Checks are code, not promises.** Every step ends with a script that passes or fails and records the result; a mode is not reported complete without those records. Word and PDF files are checked page by page.
+- **Reviews come from a fresh context.** The ATS, recruiter and hiring-manager reviewers, and the two interview assessors, see only the document and their own instructions, never the conversation that wrote it, so a pass is a real second opinion.
+- **You decide each next step.** At the end of a mode it offers the next one; it never submits an application or messages anyone for you.
+
 ## First use
 
 ### 1. Install and set up
@@ -84,6 +103,7 @@ Each of these is a separate starting point:
 Use job-hunt to find AI product manager roles in Shanghai.
 Use job-hunt. Here is a posting and my CV. Is this worth applying to?
 Use job-hunt to turn this experience into Chinese and English CVs in Word and PDF.
+Use job-hunt to plan my preparation for nursing interviews in the UK and quiz me on clinical questions.
 Use job-hunt to run a mock interview based on this posting and my CV.
 ```
 
@@ -95,6 +115,7 @@ Use job-hunt to run a mock interview based on this posting and my CV.
 | **Tailored CV (Word/PDF)** | An editable Word document and a typeset PDF, built from your experience or adapted to a role |
 | **Additional application materials (on request)** | A cover letter, motivation letter, employer form or criterion-based supporting statement |
 | **Interview preparation and feedback (on request)** | An interview brief, mock transcript, and independent assessments of answer quality and factual support |
+| **Interview preparation plan (PDF, prepare mode)** | The stages of your market's process for your field and level, what to study and why, drill results and study notes |
 
 Each consultation includes a report; other documents depend on the task you choose. Local and employer requirements determine the format, such as a Japanese rirekisho and career-history document, or an NHS/Civil Service supporting statement in the UK.
 

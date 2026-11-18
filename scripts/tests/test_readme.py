@@ -75,7 +75,7 @@ def test_the_layout_matches_the_repo():
 def test_the_readme_names_the_skill_it_documents():
     for readme in READMES:
         assert _text(readme).startswith("# job-hunt"), readme.name
-        for mode in ("discover", "assess", "apply", "interview"):
+        for mode in ("discover", "assess", "apply", "prepare", "interview"):
             assert mode in _text(readme), f"{readme.name} omits the {mode} mode"
 
 
@@ -207,7 +207,7 @@ def test_the_four_modes_table_is_complete(readme):
     for months."""
     table = _text(readme).split("|---|", 1)
     assert len(table) > 1, f"{readme.name} has no mode table"
-    for mode in ("discover", "assess", "apply", "interview"):
+    for mode in ("discover", "assess", "apply", "prepare", "interview"):
         assert f"**{mode}" in _text(readme), f"{readme.name}'s table omits {mode}"
 
 
