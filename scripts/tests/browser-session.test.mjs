@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {promisify} from 'node:util';
 import {execFile, spawn} from 'node:child_process';
-import {createSession} from '../browser_session.mjs';
+import {createSession, consentMsFor} from '../browser_session.mjs';
 const tick = () => new Promise(r=>setImmediate(r));
 
 test('successive clients share one connection and cannot access each others tabs', async()=>{
@@ -276,4 +276,11 @@ exports.WebSocketServer=class extends EventEmitter {close(){}};
     }
     await rm(root,{recursive:true,force:true});
   }
+});
+
+test('in WorkBuddy, consent outlasts the longest foreground Bash wait', ()=>{
+  // A model that forgets run_in_background is blocked for up to 600 s, after which
+  // WorkBuddy backgrounds the call. The session must still be waiting when it returns.
+  assert.ok(consentMsFor({CODEBUDDY_SANDBOX_BROKER_EXECUTION_ATTEMPT_ID:'x'}) > 600000);
+  assert.equal(consentMsFor({}), 120000);
 });

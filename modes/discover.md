@@ -442,8 +442,8 @@ the user's explicit completion/continue reply before a new linked round.
 Every live OpenCLI or browser read goes through one persistent browser session, so
 start it once for the task as described in [daily-browser.md](../references/daily-browser.md).
 In WorkBuddy, send the first command as a separate Bash call with
-`run_in_background: true` and `timeout: 600000`. Check `browser-session status`
-before the second command. Run the auth probe through the wrapper **without**
+`run_in_background: true`; it does not exit while the session lives. Check
+`browser-session status` before the second command. Run the auth probe through the wrapper **without**
 `--workspace` and save it into the round yourself:
 
 ```bash

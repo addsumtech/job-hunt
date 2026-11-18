@@ -34,8 +34,11 @@ OpenCLI capability diagnosis first, following
    Start `python scripts/run_tool.py browser-session start` once and wait for
    consent; use `browser-session status` instead of repeated starts while waiting.
    In WorkBuddy, run that command in its own Bash call with
-   `run_in_background: true` and `timeout: 600000`. Keep the returned Bash task
-   running while using the browser. Its sandbox authorization is bound to
+   `run_in_background: true`; it serves the session and does not exit. Keep the
+   returned Bash task running while using the browser. If the call ran in the
+   foreground, WorkBuddy moves it to the background at its timeout and the
+   session stays up: check `browser-session status` and continue, without
+   `stop`, `reset` or another `start`. Its sandbox authorization is bound to
    that task; shell detachment via `&` or `nohup` loses it when the call exits.
    Startup briefly waits for an already authorized handshake. If it still reports
    `waiting_for_consent`, check status once before asking the user to find a prompt;

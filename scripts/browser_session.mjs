@@ -14,6 +14,11 @@ const send = (ws, value) => {if (ws?.readyState === 1) ws.send(JSON.stringify(va
 const failed = state => ['disconnected', 'consent_timeout'].includes(state);
 const active = state => ['connected', 'waiting_for_consent'].includes(state);
 const connectionHelp = browser => `Cannot connect to the selected daily ${browser}. Keep it open and ${browser === 'chrome' ? 'enable remote debugging at chrome://inspect/#remote-debugging' : 'enable its supported remote-debugging endpoint'}, then start one session and accept the browser's connection prompt.`;
+// WorkBuddy waits at most 600 s on a foreground Bash call (BASH_MAX_TIMEOUT_MS),
+// then moves it to the background and keeps the process. A model that runs
+// `start` without run_in_background is blocked until then and cannot tell the
+// user to accept Chrome's prompt, so the consent window must outlast that wait.
+export const consentMsFor = env => env.CODEBUDDY_SANDBOX_BROKER_EXECUTION_ATTEMPT_ID ? 11 * 60 * 1000 : 120000;
 const stoppedHelp = browser => `The browser session ended. Do not reconnect automatically. WorkBuddy can reset it from a new chat after the user asks to resume, or the user can reset it from a terminal. ${connectionHelp(browser)}`;
 
 export async function createSession({endpoint, WebSocket, WebSocketServer,
@@ -288,7 +293,8 @@ export async function main(argv) {
         await rename(stagingFile,stateFile);
       });
     };
-    const session = await createSession({endpoint:source_endpoint,WebSocket,WebSocketServer,changed:save});
+    const session = await createSession({endpoint:source_endpoint,WebSocket,WebSocketServer,changed:save,
+      consentMs:consentMsFor(process.env)});
     localEndpoint = session.endpoint;
     save(session.status());
     process.once('SIGTERM',()=>{void session.close();});
