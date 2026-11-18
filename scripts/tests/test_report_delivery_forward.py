@@ -39,7 +39,7 @@ def test_foreign_employer_and_source_titles_do_not_change_report_language(
     (ws / 'report.md').write_text(
         f'{body}\n\n"{quote}"\n\n[Posting]({url})\n', encoding='utf-8')
     assert deliver.main(['--workspace', str(ws), '--to', str(dest)]) == 0
-    with pymupdf.open(dest / '报告' / '求职建议报告.pdf') as doc:
+    with pymupdf.open(dest / deliver.client_path(pathlib.Path('report.pdf'), ws)) as doc:
         text = '\n'.join(page.get_text() for page in doc)
         assert text.splitlines()[0] == footer
         assert page_label in text and link_label + 'Posting' in text
@@ -142,7 +142,7 @@ def test_fenced_counts_render_content_without_interpreting_code_as_markdown(tmp_
         f'{fence}text\n{literal}\n{fence}\n\n'
         '[岗位链接](https://example.test/posting)\n', encoding='utf-8')
     assert deliver.main(['--workspace', str(ws), '--to', str(dest)]) == 0
-    with pymupdf.open(dest / '报告' / '求职建议报告.pdf') as doc:
+    with pymupdf.open(dest / deliver.client_path(pathlib.Path('report.pdf'), ws)) as doc:
         text = '\n'.join(page.get_text() for page in doc)
         assert literal in text
         assert fence not in text
@@ -216,8 +216,8 @@ def test_names_in_mixed_titles_do_not_override_the_report_body_language(
     source = f'# {title}\n\n{body}\n'
     (ws / 'report.md').write_text(source, encoding='utf-8')
     assert deliver.main(['--workspace', str(ws), '--to', str(dest)]) == 0
-    assert (dest / '报告' / '求职建议报告.md').read_text(encoding='utf-8') == source
-    with pymupdf.open(dest / '报告' / '求职建议报告.pdf') as doc:
+    assert (dest / deliver.client_path(pathlib.Path('report.md'), ws)).read_text(encoding='utf-8') == source
+    with pymupdf.open(dest / deliver.client_path(pathlib.Path('report.pdf'), ws)) as doc:
         text = '\n'.join(page.get_text() for page in doc)
         assert text.splitlines()[0] == footer
         assert title in text

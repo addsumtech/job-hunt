@@ -62,7 +62,8 @@ def test_readiness_brief_refuses_overlength_then_delivers_a_readable_one_page(
         assert deliver.main(args) == expected
         output = capsys.readouterr()
         assert md.read_text(encoding='utf-8') == source
-        assert (target.with_suffix('.md')).read_text(encoding='utf-8') == source
+        current = dest / deliver.client_path(pathlib.Path('interview-brief.pdf'), ws)
+        assert (current.with_suffix('.md')).read_text(encoding='utf-8') == source
         if expected:
             assert 'INTERVIEW_BRIEF_TOO_LONG' in output.err
             assert not target.exists()
@@ -71,7 +72,7 @@ def test_readiness_brief_refuses_overlength_then_delivers_a_readable_one_page(
                     assert document.page_count > 1, 'source draft must remain available for revision'
         else:
             assert 'INTERVIEW_BRIEF_TOO_LONG' not in output.err
-            with pymupdf.open(target) as document:
+            with pymupdf.open(current) as document:
                 assert document.page_count == 1
                 text = document[0].get_text()
                 assert all(value in text for value in ('Source:', 'No clinical registration', 'personal scope'))
@@ -654,8 +655,8 @@ def test_one_page_brief_delivers_complete_walkback_appendix(tmp_path, existing_p
     if existing_pdf:
         assert deliver.render_pdf(md, pdf, None) == (True, '')
     assert deliver.main(['--workspace', str(ws), '--to', str(dest)]) == 0, capsys.readouterr()
-    target = dest / '面试准备/面试准备.pdf'
-    assert (dest / '面试准备/面试准备.md').read_bytes() == md.read_bytes()
+    target = dest / deliver.client_path(pathlib.Path('interview-brief.pdf'), ws)
+    assert target.with_suffix('.md').read_bytes() == md.read_bytes()
     with pymupdf.open(target) as document:
         assert document.page_count > 1
         text = '\n'.join(page.get_text() for page in document)

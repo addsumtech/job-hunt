@@ -65,8 +65,8 @@ def test_rtl_rerender_removes_stale_source_and_delivery_keeps_refusal(
     output = capsys.readouterr()
     assert "NOTICE_PDF_REFUSED" in output.err
     assert "right-to-left" in output.err
-    assert (dest / "简历" / "简历.md").is_file()
-    assert (dest / "简历" / "简历.docx").is_file()
+    assert (dest / deliver.client_path(pathlib.Path("cv.md"), ws)).is_file()
+    assert (dest / deliver.client_path(pathlib.Path("cv.docx"), ws)).is_file()
     assert not list(dest.rglob("*.pdf"))
     assert not (dest / "简历" / "简历.tex").exists()
     assert (dest / "unrelated.tex").read_text(encoding="utf-8") == "keep this"

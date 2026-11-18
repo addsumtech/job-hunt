@@ -247,7 +247,10 @@ Persona: Sanne de Vries, MR reconstruction team lead — direct, asks for number
 ## 4. Assess — two passes, deliberately different inputs
 
 Dispatch **both** assessors in one message (two `Agent` calls, in parallel). Each gets
-exactly the files in its row and nothing else:
+exactly the files in its row and nothing else. On a host with no `Agent` tool, open each
+pass in a fresh context as `references/portability.md` §2 describes (codex: native
+multi-agent, else `codex exec --skip-git-repo-check`). Never assess the round yourself
+in this conversation: you ran it, so you are not an independent assessor.
 
 | Pass | Agent file | Given | **Deliberately NOT given** |
 |---|---|---|---|
@@ -517,7 +520,7 @@ The quick-reference body must still fit on the actual PDF's first page
 (`INTERVIEW_BRIEF_TOO_LONG`). The complete structured `## Walk-back list` follows
 as an appendix in the same Markdown/PDF and may span further pages; retain every
 record and put no further quick-reference sections after it. In the final
-message, point the candidate at the new `面试准备/` copy and say the earlier one is
+message, point the candidate at the new `面试准备/` (or, in the report's language, e.g. `Interview prep/`) copy and say the earlier one is
 superseded.
 
 Then follow SKILL.md "Client deliverables": write `report.md` (read

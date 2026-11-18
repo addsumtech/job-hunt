@@ -176,6 +176,9 @@ python3 scripts/run_mock_tests.py --dir <ws>/mock/code/round-<n>/Q<n> \
     --cmd "python3 <solution file>"     # or: --build "g++ -O2 -o sol sol.cpp" --cmd ./sol
 ```
 
+`--cmd` and `--build` run through the system shell, which on Windows is `cmd.exe`:
+write `python <solution file>` or the built `.exe` there, not `python3` or `./<binary>`.
+
 Log the outcome as an interviewer turn, `**Test run:** 2 of 3 cases passed (failed:
 empty input)`. Name the failed cases and keep their inputs hidden: revealing a failing
 input is a `nudge` hint and is logged as one. The candidate may fix and resubmit;

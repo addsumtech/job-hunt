@@ -31,7 +31,9 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
+import os
 import pathlib
+import signal
 import subprocess
 import sys
 
@@ -93,17 +95,45 @@ def status_of(passed: int, total: int) -> str:
     return "none_passed" if passed == 0 else "some_failed"
 
 
+def _kill_tree(proc: subprocess.Popen) -> None:
+    """Kill the command and everything it started. Killing only the shell left a
+    timed-out solution running: `cd x && python3 sol.py` with an infinite loop kept
+    one process per timed-out case at full CPU after the runner had returned."""
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True)
+    else:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+
+
 def _run(cmd: str, qdir: pathlib.Path, stdin: str, timeout: float) -> dict:
     started = datetime.datetime.now()
+    # Its own process group, so a timeout reaches the solution and not just the shell.
+    # UTF-8 both ways: a locale codec (cp936 on a Chinese Windows) misreads the output.
+    group = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt"
+             else {"start_new_session": True})
+    proc = subprocess.Popen(cmd, shell=True, cwd=qdir, stdin=subprocess.PIPE,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                            encoding="utf-8", errors="replace", **group)
     try:
-        proc = subprocess.run(cmd, shell=True, cwd=qdir, input=stdin, text=True,
-                              capture_output=True, timeout=timeout)
-    except subprocess.TimeoutExpired as exc:
-        out = exc.stdout.decode() if isinstance(exc.stdout, bytes) else (exc.stdout or "")
-        return {"timed_out": True, "returncode": None, "stdout": out[:KEEP], "stderr": "",
-                "seconds": round(timeout, 3)}
+        out, err = proc.communicate(stdin, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        _kill_tree(proc)
+        try:
+            out, _ = proc.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            out = ""
+        return {"timed_out": True, "returncode": None, "stdout": (out or "")[:KEEP],
+                "stderr": "", "seconds": round(timeout, 3)}
+    finally:
+        if proc.poll() is None:
+            _kill_tree(proc)
+    if os.name != "nt":
+        _kill_tree(proc)  # anything the solution left running in the background
     return {"timed_out": False, "returncode": proc.returncode,
-            "stdout": proc.stdout[:KEEP], "stderr": proc.stderr[:KEEP],
+            "stdout": out[:KEEP], "stderr": err[:KEEP],
             "seconds": round((datetime.datetime.now() - started).total_seconds(), 3)}
 
 

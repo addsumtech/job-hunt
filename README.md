@@ -98,7 +98,7 @@ Use job-hunt to run a mock interview based on this posting and my CV.
 
 Each consultation includes a report; other documents depend on the task you choose. Local and employer requirements determine the format, such as a Japanese rirekisho and career-history document, or an NHS/Civil Service supporting statement in the UK.
 
-Delivery goes into one `~/Downloads/<workspace-name>/` folder, organized into `简历/` (CV) and `报告/` (report). Later stages use the same location so you can find the current documents.
+Delivery goes into one `~/Downloads/<workspace-name>/` folder, organized into `Application/` (CV) and `Report/` (report), named in your report's language (`简历/` and `报告/` for a Chinese one). Later stages use the same location so you can find the current documents.
 
 ## Install
 

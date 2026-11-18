@@ -94,7 +94,8 @@ every answer, with a header (`Round type:`, `Market:`, `Family:`) and one
 `## Q<n> — <question>` heading per question. Log every hint as `**Hint (<level>):**`.
 Run code only through `scripts/run_mock_tests.py`.
 
-**Assess with one pass.** Dispatch `agents/mock-assessor-transcript.md` with the
+**Assess with one pass.** Dispatch `agents/mock-assessor-transcript.md`, in a fresh
+context (`Agent`; on other hosts `references/portability.md` §2), never yourself, with the
 transcript, `direction.yaml`, `cv.md` and, for coding, each
 `mock/code/round-<n>/Q<n>/result.json`. Copy its `MOCK-ASSESSMENT-V1` block verbatim
 into `mock/assessment-<n>.md`. There is no posting, so no `COVERAGE` rows, and no

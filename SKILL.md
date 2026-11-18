@@ -203,9 +203,11 @@ Run `scripts/lint_no_prediction.py --workspace <ws>` on the final client text.
 
 Run `scripts/deliver.py --workspace <ws>` last. It copies client files to
 `~/Downloads/<workspace-name>/`, with the report under `报告/` and editable text.
+Folder and file names follow the report's language (`Report/`, `Informe/`,
+`レポート/`, `보고서/`; Chinese when there is no text to tell).
 Report filenames include available candidate, company/role or search direction,
-date and mode (recommendation, assessment, application advice or interview
-debrief); incomplete legacy workspaces retain `求职建议报告`. Source files remain
+date and mode (recommendation, assessment, application advice, interview
+debrief or preparation plan); incomplete legacy workspaces retain `求职建议报告`. Source files remain
 `report.md`/`report.pdf`;
 requested application files go under `简历/` and an interview brief under
 `面试准备/`. Use the same `--to` directory for

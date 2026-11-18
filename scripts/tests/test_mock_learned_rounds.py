@@ -4,8 +4,14 @@ Same discipline as the rest of the mock suite: build a quiet, passing round, the
 break exactly one thing per test.
 """
 import json
+import os
 import pathlib
+import shutil
+import subprocess
 import sys
+import time
+
+import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -438,3 +444,20 @@ def test_prep_gate_writes_a_receipt(tmp_path, monkeypatch):
     assert check_prep_plan.main(["--workspace", str(ws),
                                  "--skill-root", str(F.skill_root(ws))]) == 0
     assert journal.read_receipts(ws, "check_prep_plan")[-1]["verdict"] == "pass"
+
+
+@pytest.mark.skipif(os.name == "nt" or not shutil.which("pgrep"), reason="needs pgrep")
+def test_a_timed_out_solution_does_not_keep_running(tmp_path):
+    """Killing only the shell left `cd . && <loop>` running at full CPU after the runner
+    returned, one process per timed-out case."""
+    marker = f"loop_{os.getpid()}_{tmp_path.name}.py"
+    (tmp_path / marker).write_text("while True:\n    pass\n", encoding="utf-8")
+    (tmp_path / "cases.json").write_text(json.dumps([{"name": "a", "stdin": "", "expected": "1"}]),
+                                         encoding="utf-8")
+    result = run_mock_tests.run(tmp_path, f"cd . && {PY} {marker}", timeout=1)
+    assert result["status"] == "none_passed"
+    time.sleep(0.5)
+    left = subprocess.run(["pgrep", "-f", marker], capture_output=True, text=True).stdout.split()
+    for pid in left:
+        os.kill(int(pid), 9)
+    assert not left, f"{len(left)} solution process(es) still running after the timeout"

@@ -1,4 +1,5 @@
 import pathlib
+from pathlib import Path
 import sys
 
 import pytest
@@ -77,12 +78,13 @@ def test_named_redelivery_migrates_only_owned_unedited_legacy_report(tmp_path, c
     journal.append(ws, {'action': 'mode_entry', 'mode': 'apply'})
     dest = tmp_path / 'delivery'
     assert run(ws, dest, '--no-pdf') == 0
-    old = dest / '报告/求职建议报告.md'
+    old = dest / deliver.client_path(Path('report.md'), ws)  # the generic name
     if client_edited:
         old.write_text('Client edited this report.')
     write(ws, 'posting.yaml', {'company': 'Acme', 'role_title': 'Analyst'})
     assert run(ws, dest, '--no-pdf') == 0
-    new = dest / '报告/Acme－Analyst－2026-09-06－投递建议报告.md'
+    new = dest / deliver.client_path(Path('report.md'), ws)
+    assert new != old and new.name.startswith('Acme－Analyst－2026-09-06－')
     assert new.read_bytes() == (ws / 'report.md').read_bytes()
     assert old.exists() == client_edited
     if client_edited:
@@ -102,7 +104,8 @@ def test_unrecorded_named_report_is_protected(tmp_path):
     foreign.write_text('Keep this foreign report.')
     assert run(ws, dest, '--no-pdf') == 0
     assert foreign.read_text() == 'Keep this foreign report.'
-    assert len(list(dest.rglob('*报告.md'))) == 2
+    reports = [p for p in dest.rglob('*.md') if p.parent.name in deliver._REPORT_FOLDERS]
+    assert len(reports) == 2, 'the foreign report and this round\'s (in its own subfolder)'
 
 
 @pytest.mark.parametrize('rel', ['报告/../../victim－投递建议报告.md', '报告/other.txt',

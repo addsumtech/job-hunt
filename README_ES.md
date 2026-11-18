@@ -98,7 +98,7 @@ Usa job-hunt para hacer una entrevista simulada con esta oferta y mi CV.
 
 Cada consulta incluye un informe; los demás documentos dependen de la tarea elegida. El formato se adapta al mercado y a la empresa: por ejemplo, el rirekisho y el documento de trayectoria profesional en Japón, o el supporting statement para el NHS y la función pública del Reino Unido.
 
-La entrega se guarda en una sola carpeta `~/Downloads/<workspace-name>/`, organizada en `简历/` (CV) y `报告/` (informe). Las siguientes etapas usan la misma ubicación para facilitar el acceso a los documentos actuales.
+La entrega se guarda en una sola carpeta `~/Downloads/<workspace-name>/`, organizada en `Candidatura/` (CV) e `Informe/` (informe), con los nombres en el idioma de tu informe. Las siguientes etapas usan la misma ubicación para facilitar el acceso a los documentos actuales.
 
 ## Instalación
 

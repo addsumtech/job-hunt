@@ -55,12 +55,14 @@ tailoring happen is not a second opinion, it is the same opinion.
 Any of these gives you that, in preference order:
 
 1. **A subagent / task / sub-session tool**, if the host has one. Dispatch all
-   three at once so they cannot influence each other's ordering.
+   three at once so they cannot influence each other's ordering. WorkBuddy has an
+   `Agent` tool, and codex has native multi-agent support (`codex features list`
+   shows `multi_agent`); use those before the CLI route below.
 2. **A fresh invocation of the host's own CLI**, which is what makes this
    portable. The persona files are standalone, so:
 
    ```bash
-   codex exec "$(cat agents/ats-screener.md)
+   codex exec --skip-git-repo-check --ephemeral -s read-only "$(cat agents/ats-screener.md)
 
    POSTING:
    $(cat "$WS/posting.yaml")
@@ -73,7 +75,10 @@ Any of these gives you that, in preference order:
 
    Substitute the host's equivalent (`claude -p`, `gemini -p`, and so on). One
    process per judge, run them concurrently, and save each verdict to a file so
-   `parse_verdicts.py` can read it.
+   `parse_verdicts.py` can read it. Keep `--skip-git-repo-check`: without it codex
+   refuses to run outside a git repository (`Not inside a trusted directory`), and
+   an installed copy of this skill and every workspace are not repositories.
+   `-s read-only` is enough, because the persona and its inputs are in the prompt.
 
    **Measured end to end, 2026-09-06, codex-cli 0.147.0.** All three judge
    personas were run through `codex exec` against a real apply workspace from

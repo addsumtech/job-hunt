@@ -490,6 +490,19 @@ def lossless_allowlist(root=None) -> pathlib.Path:
         "lossless-allowlist.json"
 
 
+def unwritable_store(path, exc: OSError) -> str:
+    """One actionable line for a store the host will not let this process write.
+
+    Codex's default sandbox, for one, allows writes only inside its working
+    directory, and a bare PermissionError traceback left the agent to improvise a
+    location — a profile saved somewhere no later run looks."""
+    return (f"STORE_UNWRITABLE: cannot write {path}: {exc.strerror or exc}. The host's "
+            f"sandbox or file permissions block it. Ask the user to allow writing to "
+            f"{PROFILES_ROOT}, or set JOBHUNT_PROFILES_ROOT to a folder this agent can "
+            "write, then run this again. Never save the profile or workspace somewhere "
+            "else by hand.")
+
+
 def main(argv=None) -> int:
     """`paths.py --name … --company … --role …` creates one application workspace
     and prints its absolute path.
@@ -525,7 +538,11 @@ def main(argv=None) -> int:
     except ValueError as exc:
         print(f"cannot run: {exc}", file=sys.stderr)
         return 2
-    path.mkdir(parents=True, exist_ok=True)
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except PermissionError as exc:
+        print(unwritable_store(path, exc), file=sys.stderr)
+        return 2
     print(path.resolve())
     return 0
 
