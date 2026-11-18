@@ -20,6 +20,8 @@
   <a href="CHANGELOG.md">更新日志</a>
 </p>
 
+<p align="center"><img src="docs/assets/banner.jpg" alt="job-hunt：找岗位、评估岗位、投递、面试准备、模拟面试" width="100%"></p>
+
 **给 Claude Code 和 Codex 用的求职 Skill：读完整招聘页，只用你的真实经历改简历，再由三个独立的 AI 评审把关。**
 
 - **只写你做过的事**：新内容都能追溯到你的简历或回答，原始档案不动；岗位要求而你没有的，列为差距。

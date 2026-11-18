@@ -20,6 +20,8 @@
   <a href="CHANGELOG.md">변경 기록 (중국어)</a>
 </p>
 
+<p align="center"><img src="docs/assets/banner.jpg" alt="job-hunt: 공고 탐색, 공고 평가, 지원, 면접 준비, 모의 면접" width="100%"></p>
+
 **Claude Code와 Codex용 취업 Skill: 공고 전문을 읽고, 실제 경험만으로 이력서를 고치며, 서로 독립된 세 AI 검토로 확인합니다.**
 
 - **실제로 한 일만**: 새로 쓴 내용은 모두 원래 이력서나 사용자의 답변까지 추적할 수 있고, 원본 프로필은 수정하지 않습니다. 공고가 요구하지만 없는 것은 부족한 점으로 정리합니다.

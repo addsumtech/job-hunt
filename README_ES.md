@@ -20,6 +20,8 @@
   <a href="CHANGELOG.md">Registro de cambios (chino)</a>
 </p>
 
+<p align="center"><img src="docs/assets/banner.jpg" alt="job-hunt: buscar, evaluar, postular, prepararse y ensayar la entrevista" width="100%"></p>
+
 **Una skill de búsqueda de empleo para Claude Code y Codex: lee la oferta completa, adapta tu CV solo con experiencia real y lo somete a tres revisores de IA independientes.**
 
 - **Solo lo que hiciste**: cada línea nueva remite a tu CV o a tus respuestas, y tu perfil original no se modifica. Lo que pide la oferta y te falta se presenta como carencia.

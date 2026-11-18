@@ -20,6 +20,8 @@
   <a href="CHANGELOG.md">Changelog (Chinese)</a>
 </p>
 
+<p align="center"><img src="docs/assets/banner.jpg" alt="job-hunt: discover, assess, apply, prepare, interview" width="100%"></p>
+
 **A job-search skill for Claude Code and Codex: it reads the full posting, tailors your CV only from experience you really have, and puts it past three independent AI reviewers.**
 
 - **Only what you did**: every new line traces to your CV or your answers, and your original profile is never edited. What the role needs and you lack is listed as a gap.
