@@ -62,8 +62,6 @@ Optional: it asks once for your GitHub, Google Scholar and personal website and 
 
 ## How it works
 
-<p align="center"><img src="docs/assets/how-it-works-en.png" alt="How job-hunt works: your CV, answers and goal feed your profile; one mode runs at a time; check scripts and independent reviewers send failures back for targeted edits; the report, CV or plan goes to ~/Downloads" width="100%"></p>
-
 - **Your material is the only source.** Each line of a tailored CV points to a fact in your CV or your answers. A check script rejects a line with no source, and any skill, title, date or number you never gave.
 - **Checks are code, not promises.** Every step ends with a script that passes or fails and records the result; a mode is not reported complete without those records. Word and PDF files are checked page by page.
 - **Reviews come from a fresh context.** The ATS, recruiter and hiring-manager reviewers, and the two interview assessors, see only the document and their own instructions, never the conversation that wrote it, so a pass is a real second opinion.

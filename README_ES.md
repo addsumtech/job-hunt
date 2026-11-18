@@ -62,8 +62,6 @@ Opcional: pregunta una sola vez por tu GitHub, Google Scholar y web personal, y 
 
 ## Cómo funciona
 
-<p align="center"><img src="docs/assets/how-it-works-es.png" alt="Cómo funciona job-hunt: tu CV, respuestas y objetivo forman tu perfil; se ejecuta una función a la vez; los scripts de control y los revisores independientes devuelven lo que falla para cambios puntuales; el informe, CV o plan va a ~/Downloads" width="100%"></p>
-
 - **Tu material es la única fuente.** Cada línea del CV adaptado remite a un hecho de tu CV o de tus respuestas. Un script de control rechaza una línea sin fuente y cualquier habilidad, cargo, fecha o cifra que no hayas dado.
 - **Los controles son código, no promesas.** Cada paso termina con un script que aprueba o rechaza y deja constancia; sin esa constancia, una función no se da por terminada. Los archivos Word y PDF se revisan página a página.
 - **Las revisiones vienen de un contexto nuevo.** Los revisores de ATS, reclutador y responsable de contratación, y los dos evaluadores de la entrevista, ven solo el documento y sus propias instrucciones, nunca la conversación que lo escribió; por eso una aprobación es una segunda opinión real.
