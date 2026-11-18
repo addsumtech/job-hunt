@@ -1,11 +1,11 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {EventEmitter} from 'node:events';
+import {EventEmitter, once} from 'node:events';
 import {mkdtemp, readFile, writeFile, mkdir, rm, realpath} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {promisify} from 'node:util';
-import {execFile} from 'node:child_process';
+import {execFile, spawn} from 'node:child_process';
 import {createSession} from '../browser_session.mjs';
 const tick = () => new Promise(r=>setImmediate(r));
 
@@ -209,6 +209,71 @@ exports.WebSocketServer=class extends EventEmitter {close(){}};
   } finally {
     try {await run('stop');} catch {}
     await new Promise(r=>setTimeout(r,100));
+    await rm(root,{recursive:true,force:true});
+  }
+});
+
+test('WorkBuddy keeps the session in its Bash process and blocks starts after it dies', async()=>{
+  const root=await realpath(await mkdtemp(join(tmpdir(),'browser-workbuddy-')));
+  const args=action=>[join(root,'browser_session.mjs'),action,'--root',root,'--browser','chrome'];
+  const env={...process.env,CODEBUDDY_SANDBOX_BROKER_EXECUTION_ATTEMPT_ID:'fixture',
+    CODEBUDDY_SANDBOX_BROKER_SESSION_ID:'first-chat'};
+  const run=(action, session=env.CODEBUDDY_SANDBOX_BROKER_SESSION_ID)=>
+    promisify(execFile)(process.execPath,args(action),{
+      env:{...env,CODEBUDDY_SANDBOX_BROKER_SESSION_ID:session},timeout:3000
+    });
+  let child;
+  try {
+    await writeFile(join(root,'browser_session.mjs'),await readFile(new URL('../browser_session.mjs',import.meta.url)));
+    await writeFile(join(root,'browser_cdp.mjs'),"export async function dailyEndpoint(){return 'ws://127.0.0.1:1/devtools/browser/fixture';}");
+    await mkdir(join(root,'node_modules/ws'),{recursive:true});
+    await writeFile(join(root,'runtime.json'),JSON.stringify({opencli:join(root,'opencli.js')}));
+    await writeFile(join(root,'node_modules/ws/index.js'),`
+const {EventEmitter}=require('node:events');
+const {appendFileSync}=require('node:fs');
+const {join}=require('node:path');
+exports.WebSocket=class extends EventEmitter {
+ constructor(){super();appendFileSync(join(__dirname,'../../connections'),'1');this.readyState=1;queueMicrotask(()=>this.emit('open'));}
+ close(){this.readyState=3;this.emit('close');}
+};
+exports.WebSocketServer=class extends EventEmitter {close(){}};
+`);
+    child=spawn(process.execPath,args('start'),{env,stdio:['ignore','pipe','inherit']});
+    const [line]=await once(child.stdout,'data',{signal:AbortSignal.timeout(3000)});
+    assert.equal(JSON.parse(line).pid,child.pid);
+    const repeated=JSON.parse((await run('start')).stdout);
+    assert.equal(repeated.pid,child.pid);
+    assert.equal(repeated.reused,true);
+    assert.equal(JSON.parse((await run('status')).stdout).upstream_connections,1);
+    assert.equal(await readFile(join(root,'connections'),'utf8'),'1');
+
+    const exited=once(child,'exit');
+    child.kill('SIGKILL');
+    await exited;
+    for (const action of ['status','endpoint','start']) {
+      await assert.rejects(run(action),{stderr:/Do not reconnect automatically/});
+    }
+    await run('stop');
+    await assert.rejects(run('start'),{stderr:/Do not reconnect automatically/});
+    assert.equal(await readFile(join(root,'connections'),'utf8'),'1');
+    await assert.rejects(run('reset'),{stderr:/Do not reconnect automatically/});
+    await run('reset','next-chat');
+    assert.equal(JSON.parse((await run('status')).stdout).state,'stopped');
+
+    child=spawn(process.execPath,args('start'),{env,stdio:['ignore','pipe','inherit']});
+    await once(child.stdout,'data',{signal:AbortSignal.timeout(3000)});
+    const stopped=once(child,'exit');
+    await run('stop');
+    await stopped;
+    await assert.rejects(run('start'),{stderr:/Do not reconnect automatically/});
+    await assert.rejects(run('reset'),{stderr:/Do not reconnect automatically/});
+    assert.equal(await readFile(join(root,'connections'),'utf8'),'11');
+  } finally {
+    if (child && child.exitCode === null && child.signalCode === null) {
+      const exited=once(child,'exit');
+      child.kill('SIGKILL');
+      await exited;
+    }
     await rm(root,{recursive:true,force:true});
   }
 });

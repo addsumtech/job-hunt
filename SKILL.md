@@ -162,6 +162,12 @@ authorized CDP connection to the user's daily browser and existing login profile
 use a separate browser only on explicit request. Never use browser extensions,
 close the daily browser or close the user's existing tabs.
 
+For a live login probe or browser read, use `scripts/run_tool.py` and the one
+session described in [references/daily-browser.md](references/daily-browser.md).
+In WorkBuddy, run `browser-session start` once as a WorkBuddy Bash background
+task. Route OpenCLI, including `auth status`, and browser reads through the
+wrapper. On disconnect, stop the browser work and wait for the user to resume.
+
 When a platform requests human verification, stop that source and follow
 [references/user-recovery.md](references/user-recovery.md): tell the user the site
 and page, let them complete it in the connected browser, and wait for their
