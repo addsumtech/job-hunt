@@ -62,17 +62,7 @@
 
 ## 仕組み
 
-```mermaid
-flowchart LR
-    you["あなたの CV・回答<br/>・目標"] --> profile["あなたのプロフィール<br/>（元のファイルは変更しない）"]
-    posting["求人<br/>または検索条件"] --> mode
-    profile --> mode["一度に一つの機能<br/>discover · assess · apply<br/>prepare · interview"]
-    mode --> checks{"チェックスクリプト"}
-    checks -- "出典のない行、<br/>作られた日付や数字" --> mode
-    checks --> review["独立したレビュー<br/>それぞれ新しいコンテキストで"]
-    review -- "不合格：該当箇所を修正" --> mode
-    review --> out["レポート・CV・準備プラン<br/>を ~/Downloads に"]
-```
+<p align="center"><img src="docs/assets/how-it-works-ja.png" alt="job-hunt の仕組み：CV・回答・目標がプロフィールになり、一度に一つの機能を実行し、チェックスクリプトと独立したレビューが不合格を差し戻し、レポート・CV・準備プランを ~/Downloads に保存" width="100%"></p>
 
 - **材料はあなたが出したものだけ。** 調整した CV の各行は、あなたの CV か回答にある事実に対応します。出典のない行や、あなたが伝えていないスキル・役職・日付・数字は、チェックスクリプトが止めます。
 - **チェックは約束ではなくコード。** 各ステップは合否を判定して記録を残すスクリプトで終わり、その記録がなければ機能は完了と報告されません。Word と PDF はページごとに確認します。

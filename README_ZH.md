@@ -62,17 +62,7 @@
 
 ## 工作原理
 
-```mermaid
-flowchart LR
-    you["你的简历、回答<br/>和求职目标"] --> profile["你的档案<br/>（原件不会被修改）"]
-    posting["岗位链接<br/>或搜索条件"] --> mode
-    profile --> mode["每次一个功能<br/>discover · assess · apply<br/>prepare · interview"]
-    mode --> checks{"检查脚本"}
-    checks -- "没有出处的句子、<br/>编造的日期或数字" --> mode
-    checks --> review["独立评审<br/>各自在全新上下文中"]
-    review -- "未通过：针对性修改" --> mode
-    review --> out["报告、简历或准备计划<br/>放进 ~/Downloads"]
-```
+<p align="center"><img src="docs/assets/how-it-works-zh.png" alt="job-hunt 的工作流程：你的简历、回答和目标进入档案；每次运行一个功能；检查脚本和独立评审把未通过的内容退回修改；报告、简历或准备计划放进 ~/Downloads" width="100%"></p>
 
 - **只用你提供的材料。** 定制简历的每一句都能对应到你的简历或回答里的某条事实。没有出处的句子，以及你从未提供过的技能、职位、日期和数字，都会被检查脚本拦下。
 - **检查是代码，不是承诺。** 每一步都以一个判定通过或失败、并留下记录的脚本结束；缺了这些记录，功能不会报告完成。Word 和 PDF 会逐页检查。

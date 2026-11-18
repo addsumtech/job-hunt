@@ -62,17 +62,7 @@ Optional: it asks once for your GitHub, Google Scholar and personal website and 
 
 ## How it works
 
-```mermaid
-flowchart LR
-    you["Your CV, answers<br/>and goal"] --> profile["Your profile<br/>(the original is never edited)"]
-    posting["A posting<br/>or a search"] --> mode
-    profile --> mode["One mode at a time<br/>discover · assess · apply<br/>prepare · interview"]
-    mode --> checks{"Check scripts"}
-    checks -- "a line with no source,<br/>an invented date or number" --> mode
-    checks --> review["Independent reviewers<br/>each in a fresh context"]
-    review -- "rejected: targeted edits" --> mode
-    review --> out["Report, CV or plan<br/>in ~/Downloads"]
-```
+<p align="center"><img src="docs/assets/how-it-works-en.png" alt="How job-hunt works: your CV, answers and goal feed your profile; one mode runs at a time; check scripts and independent reviewers send failures back for targeted edits; the report, CV or plan goes to ~/Downloads" width="100%"></p>
 
 - **Your material is the only source.** Each line of a tailored CV points to a fact in your CV or your answers. A check script rejects a line with no source, and any skill, title, date or number you never gave.
 - **Checks are code, not promises.** Every step ends with a script that passes or fails and records the result; a mode is not reported complete without those records. Word and PDF files are checked page by page.

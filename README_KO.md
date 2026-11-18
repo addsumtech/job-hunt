@@ -62,17 +62,7 @@
 
 ## 작동 방식
 
-```mermaid
-flowchart LR
-    you["이력서·답변<br/>·목표"] --> profile["내 프로필<br/>(원본은 수정하지 않음)"]
-    posting["공고 또는<br/>검색 조건"] --> mode
-    profile --> mode["한 번에 한 기능<br/>discover · assess · apply<br/>prepare · interview"]
-    mode --> checks{"검사 스크립트"}
-    checks -- "출처 없는 문장,<br/>지어낸 날짜나 숫자" --> mode
-    checks --> review["독립 검토<br/>각자 새 컨텍스트에서"]
-    review -- "불합격: 해당 부분 수정" --> mode
-    review --> out["보고서·이력서·준비 계획<br/>~/Downloads에 저장"]
-```
+<p align="center"><img src="docs/assets/how-it-works-ko.png" alt="job-hunt 작동 방식: 이력서·답변·목표가 프로필이 되고, 한 번에 한 기능을 실행하며, 검사 스크립트와 독립 검토가 불합격을 되돌려 수정하고, 보고서·이력서·준비 계획을 ~/Downloads에 저장" width="100%"></p>
 
 - **사용자가 준 자료만 씁니다.** 맞춤 이력서의 모든 문장은 이력서나 답변 속 사실과 연결됩니다. 출처 없는 문장, 사용자가 말하지 않은 기술·직함·날짜·숫자는 검사 스크립트가 막습니다.
 - **검사는 약속이 아니라 코드입니다.** 각 단계는 통과 여부를 판정하고 기록을 남기는 스크립트로 끝나며, 그 기록이 없으면 기능을 완료로 보고하지 않습니다. Word와 PDF는 페이지마다 확인합니다.

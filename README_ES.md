@@ -62,17 +62,7 @@ Opcional: pregunta una sola vez por tu GitHub, Google Scholar y web personal, y 
 
 ## Cómo funciona
 
-```mermaid
-flowchart LR
-    you["Tu CV, respuestas<br/>y objetivo"] --> profile["Tu perfil<br/>(el original nunca se edita)"]
-    posting["Una oferta<br/>o una búsqueda"] --> mode
-    profile --> mode["Una función a la vez<br/>discover · assess · apply<br/>prepare · interview"]
-    mode --> checks{"Scripts de control"}
-    checks -- "una línea sin fuente,<br/>una fecha o cifra inventada" --> mode
-    checks --> review["Revisores independientes<br/>cada uno en un contexto nuevo"]
-    review -- "rechazado: cambios puntuales" --> mode
-    review --> out["Informe, CV o plan<br/>en ~/Downloads"]
-```
+<p align="center"><img src="docs/assets/how-it-works-es.png" alt="Cómo funciona job-hunt: tu CV, respuestas y objetivo forman tu perfil; se ejecuta una función a la vez; los scripts de control y los revisores independientes devuelven lo que falla para cambios puntuales; el informe, CV o plan va a ~/Downloads" width="100%"></p>
 
 - **Tu material es la única fuente.** Cada línea del CV adaptado remite a un hecho de tu CV o de tus respuestas. Un script de control rechaza una línea sin fuente y cualquier habilidad, cargo, fecha o cifra que no hayas dado.
 - **Los controles son código, no promesas.** Cada paso termina con un script que aprueba o rechaza y deja constancia; sin esa constancia, una función no se da por terminada. Los archivos Word y PDF se revisan página a página.
