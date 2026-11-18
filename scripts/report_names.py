@@ -19,6 +19,7 @@ _MODES = {
     "assess": "岗位评估报告",
     "apply": "投递建议报告",
     "interview": "面试复盘报告",
+    "prepare": "面试准备计划",
 }
 _LEGACY = "求职建议报告"
 _PROFILE_FILES = ("candidate-profile.yaml", "tailored-profile.yaml", "profile.yaml")
@@ -30,7 +31,8 @@ def report_stem(workspace: Path, mode: str) -> str:
     Name comes from the first readable profile ``meta.name``. Context comes from
     ``posting.yaml`` (company plus role_title, otherwise title), or else from up
     to three ``brief.yaml`` locations plus the brief's ``report_label`` (a short
-    reader-facing direction), falling back to its first target title. The date is the
+    reader-facing direction), falling back to its first target title, or else
+    from the first ``direction.yaml`` target title (prepare mode). The date is the
     first YYYY-MM-DD in ``workspace.name``. Missing pieces are left out. With
     neither a name nor a context, the legacy stem is returned.
     """
@@ -72,7 +74,11 @@ def _context(workspace: Path) -> str | None:
             return _SEP.join(parts)
     brief = _mapping(workspace, "brief.yaml")
     if brief is None:
-        return None
+        # A prepare workspace has neither a posting nor a brief; its direction.yaml
+        # names the target, and the first title stands for the session.
+        direction_file = _mapping(workspace, "direction.yaml")
+        titles = _strings(direction_file.get("target_titles"), limit=1) if direction_file else []
+        return titles[0] if titles else None
     # target_titles are search queries, written in both market languages and in
     # run order. Measured 2026-11-01, three of them made a 180-byte name mixing
     # English and Dutch query variants ("…medical imaging AI－medische

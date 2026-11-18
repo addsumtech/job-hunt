@@ -68,6 +68,8 @@ GATES = [
     ("check_search_coverage.py", [], "search-coverage.yaml and brief.yaml"),
     ("check_no_write.py", ["--no-fetch"], "journal.jsonl"),
     ("check_mock.py", ["--round", "1", "--today", TODAY], "mock/transcript-1.md"),
+    ("check_prep_plan.py", [], "mock/prep-plan.md"),
+    ("check_drill.py", ["--round", "1"], "mock/transcript-1.md"),
     ("check_render_freshness.py", ["--round", "1"], "judge-round-1.json"),
 ]
 

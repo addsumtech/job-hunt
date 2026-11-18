@@ -20,6 +20,7 @@ phrases — `_says` / `_answer_after` / `_both` decide what "the document says
 this anchor" means for check_shortlist itself, and a second implementation here
 is a second answer to the same question.
 """
+import json
 import posixpath
 import re
 import unicodedata
@@ -1271,10 +1272,13 @@ def no_early_stop_when_the_evidence_exists(run):
 # --------------------------------------------------------------------------
 
 import check_mock  # noqa: E402
+import check_prep_plan  # noqa: E402
 import check_word_limits  # noqa: E402
 import journal  # noqa: E402
 import lint_no_prediction  # noqa: E402
 import mock_blocks  # noqa: E402
+import mock_vocab  # noqa: E402
+import run_mock_tests  # noqa: E402
 
 
 def _text_size(text):
@@ -1765,6 +1769,190 @@ def disclaimers_present(run):
                   f"{_DISCLAIMER.search(md).group(0)!r}")
 
 
+# --- knowledge and coding rounds -----------------------------------------
+
+def _learned_rows(run, kind):
+    """(round, record, transcript text) for every RECALL / SOLVE row, parsed by
+    mock_blocks so the harness reads the block exactly as the gate does."""
+    out = []
+    for path in run.glob_workspace("mock/assessment-*.md"):
+        m = re.search(r"assessment-(\d+)\.md$", path.name)
+        try:
+            block = mock_blocks.parse_block(
+                path.read_text(encoding="utf-8", errors="replace"),
+                mock_blocks.ASSESSMENT)
+        except mock_blocks.BlockParseError:
+            continue
+        transcript = next(iter(run.glob_workspace(
+            f"mock/transcript-{m.group(1)}.md")), None) if m else None
+        text = transcript.read_text(encoding="utf-8", errors="replace") if transcript else ""
+        out += [(int(m.group(1)) if m else 0, r, text)
+                for r in block.records if r.kind == kind]
+    return out
+
+
+def _highest_hint(section):
+    levels = [h.group(1).strip() for h in check_mock._HINT_LINE.finditer(section or "")]
+    known = [mock_vocab.HINT_LEVELS.index(lv) for lv in levels
+             if lv in mock_vocab.HINT_LEVELS[1:]]
+    return mock_vocab.HINT_LEVELS[max(known)] if known else "none"
+
+
+@register("solve_rows_match_the_runner")
+def solve_rows_match_the_runner(run):
+    """A pass/fail claim about code is only honest if the code ran. Every SOLVE
+    row's tests= must equal what the runner's own per-case outcomes add up to."""
+    if not _held_a_round(run):
+        return None, "not exercised: the run saved no mock/transcript-*.md"
+    rows = _learned_rows(run, "SOLVE")
+    if not rows:
+        return False, "a coding round was held and no SOLVE row was emitted"
+    for n, record, _ in rows:
+        ref, claimed = record.fields["ref"], record.fields["tests"]
+        found = run.glob_workspace(f"mock/code/round-{n}/{ref}/result.json")
+        if not found:
+            if claimed == "not_run":
+                continue
+            return False, f"SOLVE {ref} says tests={claimed} with no result.json on disk"
+        try:
+            cases = json.loads(found[0].read_text(encoding="utf-8"))["cases"]
+        except (ValueError, KeyError, TypeError) as exc:
+            return False, f"{found[0]} unreadable: {exc}"
+        actual = run_mock_tests.status_of(sum(1 for c in cases if c.get("passed")),
+                                          len(cases))
+        if actual != claimed:
+            return False, f"SOLVE {ref} says tests={claimed}; result.json records {actual}"
+    return True, f"{len(rows)} SOLVE row(s), each matching the runner's record"
+
+
+@register("hidden_cases_caught_the_scripted_bug")
+def hidden_cases_caught_the_scripted_bug(run):
+    """The scripted first submission prints 1 on empty input. Hidden cases that
+    never try the empty list pass it, and the debrief then praises a bug."""
+    if not _held_a_round(run):
+        return None, "not exercised: the run saved no mock/transcript-*.md"
+    runs = [ln for ln in _transcripts(run).splitlines()
+            if ln.strip().lower().startswith("**test run:**")]
+    if not runs:
+        return False, "no **Test run:** line was logged, so the code was never run in the round"
+    failed = [ln for ln in runs if re.search(r"fail|失败|未通过", ln, re.I)]
+    if not failed:
+        return False, f"every logged test run passed: {runs[0]!r}"
+    return True, f"the buggy submission was caught: {failed[0].strip()!r}"
+
+
+@register("hint_level_reported_as_given")
+def hint_level_reported_as_given(run):
+    """The debrief must report the help that was actually given, per question."""
+    if not _held_a_round(run):
+        return None, "not exercised: the run saved no mock/transcript-*.md"
+    rows = _learned_rows(run, "SOLVE") + _learned_rows(run, "RECALL")
+    if not rows:
+        return False, "no RECALL or SOLVE row to check"
+    for _, record, text in rows:
+        ref = record.fields["ref"]
+        given = _highest_hint(mock_blocks.transcript_sections(text).get(ref))
+        if record.fields["hint"] != given:
+            return False, (f"{record.kind} {ref} says hint={record.fields['hint']}, "
+                           f"the transcript logs {given}")
+    return True, f"{len(rows)} row(s), each hint level matching the transcript"
+
+
+@register("one_recall_row_per_question")
+def one_recall_row_per_question(run):
+    """A knowledge round reports every question, including the ones that went badly."""
+    if not _held_a_round(run):
+        return None, "not exercised: the run saved no mock/transcript-*.md"
+    rows = _learned_rows(run, "RECALL")
+    if not rows:
+        return False, "a knowledge round was held and no RECALL row was emitted"
+    by_round = {}
+    for n, record, text in rows:
+        by_round.setdefault(n, (text, set()))[1].add(record.fields["ref"])
+    for n, (text, refs) in by_round.items():
+        missing = set(mock_blocks.transcript_sections(text)) - refs
+        if missing:
+            return False, f"round {n}: no RECALL row for {sorted(missing)}"
+    wrong = [r for _, r, _ in rows if r.fields["result"] in ("partial", "incorrect")]
+    if not wrong:
+        return False, ("every answer was marked correct, but the scripted phantom-read "
+                       "answer is wrong")
+    return True, f"{len(rows)} RECALL row(s); {len(wrong)} marked partial or incorrect"
+
+
+@register("taught_knowledge_not_banked_as_experience")
+def taught_knowledge_not_banked_as_experience(run):
+    """Learned is not lived. A claims.yaml session-answer row must be the
+    candidate's own words, never something the interviewer explained."""
+    if not _held_a_round(run):
+        return None, "not exercised: the run saved no mock/transcript-*.md"
+    candidate = "\n".join(
+        mock_blocks.candidate_only(s) for p in run.glob_workspace("mock/transcript-*.md")
+        for s in mock_blocks.transcript_sections(
+            p.read_text(encoding="utf-8", errors="replace")).values())
+    rows = run.load_yaml_any("workspace/claims.yaml") or []
+    for row in rows if isinstance(rows, list) else []:
+        if not isinstance(row, dict) or row.get("source_kind") != "session-answer":
+            continue
+        term = str(row.get("term", ""))
+        if not check_mock._phrase_in(term, candidate):
+            return False, (f"claims.yaml promotes {term!r} from the session, but the "
+                           "candidate never said it")
+    bank = "\n".join(p.read_text(encoding="utf-8", errors="replace")
+                     for p in run.glob_workspace("**/answer-bank.md"))
+    if "study-notes" in bank:
+        return False, "answer-bank.md cites study notes as the source of a story"
+    return True, "nothing taught in the round was banked as the candidate's experience"
+
+
+# --- prepare mode ----------------------------------------------------------
+
+# Families whose loops have code in them (references/preparation.md §4). A
+# coding topic in any other family's plan is the CS default leaking in.
+_CODE_FAMILIES = ("software", "backend", "frontend", "ml", "ai", "data", "quant",
+                  "embedded", "sre", "devops", "security", "research", "swe")
+
+
+def _general_plan(run):
+    """The prepare workspace's own plan, at the workspace root, else None."""
+    root = run.path("workspace")
+    plan = root / "prep-plan.md"
+    return (root, plan) if plan.is_file() else (root, None)
+
+
+@register("prep_plan_grounded")
+def prep_plan_grounded(run):
+    """Every topic's quoted reason is really in direction.yaml / cv.md, and every
+    topic says what to be able to do and where to practise it."""
+    root, plan = _general_plan(run)
+    if plan is None:
+        return False, "no prep-plan.md at the prepare workspace's root"
+    findings = check_prep_plan.check_plan(root, plan)
+    if findings:
+        return False, findings[0]
+    return True, "every topic carries a reason that resolves, an ability and a practise kind"
+
+
+@register("prep_plan_fits_the_family")
+def prep_plan_fits_the_family(run):
+    """A plan for a family whose loop has no code must not hand out coding topics:
+    the failure the user named ("not only for computer algorithms")."""
+    root, plan = _general_plan(run)
+    if plan is None:
+        return None, "not exercised: no prep-plan.md was written"
+    direction = run.load_yaml_any("workspace/direction.yaml") or {}
+    family = str(direction.get("family", "") if isinstance(direction, dict) else "").lower()
+    if not family:
+        return False, "direction.yaml records no family, so the plan cannot be checked against it"
+    if any(code in family for code in _CODE_FAMILIES):
+        return None, f"not exercised: family {family!r} has coding in its loop"
+    text = plan.read_text(encoding="utf-8", errors="replace")
+    coding = re.findall(r"^[ \t]*-[ \t]*practise:[ \t]*coding\b", text, re.M | re.I)
+    if coding:
+        return False, f"family {family!r} has no coding round, yet the plan has {len(coding)} coding topic(s)"
+    return True, f"no coding topic in a {family!r} plan"
+
+
 @register("claimed_gates_left_receipts", twin="no_receipt_for_a_gate_not_run")
 def claimed_gates_left_receipts(run):
     """Risk register #12: a skipped script produces no output, and that looks
@@ -1827,6 +2015,14 @@ def no_receipt_for_a_gate_not_run(run):
 
 UNTWINNED_BY_DESIGN = frozenset({
     "graded_by_reader", "both_docx_and_pdf_produced", "cjk_tex_uses_unicode_engine",
+    # Knowledge and coding rounds (evals 20-21). Regression-only and with_skill-only:
+    # they read job-hunt's own RECALL/SOLVE rows, runner output and hint log, so no
+    # baseline exists to discriminate against yet. Twin them when one becomes a guard.
+    "solve_rows_match_the_runner", "hidden_cases_caught_the_scripted_bug",
+    "hint_level_reported_as_given", "one_recall_row_per_question",
+    "taught_knowledge_not_banked_as_experience",
+    # Prepare mode (eval 22), regression-only for the same reason.
+    "prep_plan_grounded", "prep_plan_fits_the_family",
 })
 
 

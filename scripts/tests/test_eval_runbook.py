@@ -36,7 +36,7 @@ def test_the_runbook_orders_the_pilot_before_the_matrix():
 
 
 def test_the_runbook_records_the_run_count_and_does_not_predict_the_cost():
-    assert "120" in RUNBOOK
+    assert "138" in RUNBOOK
     assert re.search(r"not a prediction", RUNBOOK)
 
 

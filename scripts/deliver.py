@@ -81,7 +81,7 @@ APPLICATION_PDF_SOURCES = {
 }
 # A second mode of the same workspace delivers beside the first, never over it.
 MODE_FOLDERS = {"discover": "岗位搜索", "assess": "岗位评估", "apply": "投递材料",
-                "interview": "模拟面试"}
+                "interview": "模拟面试", "prepare": "面试准备计划"}
 
 
 def report_audience_findings(source: str) -> list[str]:
@@ -350,7 +350,8 @@ def _client_tail_ok(tail: str) -> bool:
     if tail in _CLIENT_TAILS:
         return True
     path = pathlib.PurePosixPath(tail)
-    suffixes = ("岗位推荐报告", "岗位评估报告", "投递建议报告", "面试复盘报告", "求职建议报告")
+    suffixes = ("岗位推荐报告", "岗位评估报告", "投递建议报告", "面试复盘报告", "面试准备计划",
+                "求职建议报告")
     return (len(path.parts) == 2 and path.parts[0] == "报告"
             and path.suffix in {".md", ".pdf", ".docx"}
             and not any(unicodedata.category(char) in {"Cc", "Cf", "Cs"} for char in path.name)
@@ -1633,7 +1634,7 @@ def _delivery_sources(workspace: pathlib.Path, make_pdf: bool,
     # letter PDF leaves the delivery incomplete. Elsewhere they are existing
     # source documents copied on explicit request: say what is missing, no more.
     mode = journal.current_mode(workspace)
-    applying = mode not in {"discover", "assess", "interview"}
+    applying = mode not in {"discover", "assess", "interview", "prepare"}
     if include_applications is None:
         include_applications = applying
     # Interview mode appends its walk-back list to the brief, so the copy apply

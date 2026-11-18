@@ -43,8 +43,8 @@ def test_the_real_document_lints_clean():
     assert findings == [], "\n".join(findings)
 
 
-def test_all_twenty_evals_are_present_with_contiguous_ids():
-    assert sorted(e["id"] for e in DOC["evals"]) == list(range(20))
+def test_all_twenty_three_evals_are_present_with_contiguous_ids():
+    assert sorted(e["id"] for e in DOC["evals"]) == list(range(23))
 
 
 def test_every_scenario_file_on_disk_is_used_by_an_eval():

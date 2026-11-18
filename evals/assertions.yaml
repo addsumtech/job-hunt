@@ -1,4 +1,4 @@
-# The twenty evals of iteration-2.
+# The twenty-three evals (iteration-2's twenty, plus 20–21 for knowledge and coding rounds and 22 for prepare mode).
 #
 # Every assertion declares:
 #   role              discriminating (the baseline is expected NOT to satisfy it)
@@ -737,6 +737,178 @@ evals:
     falsifier: A run answering "I can't assess this round" — which contains no score and no hiring word,
       so it satisfies A18-3 perfectly while helping nobody.
     checker: assessment_delivered_for_the_round
+- id: 20
+  name: interview-coding-round
+  mode: interview
+  baseline_kind: no_skill
+  scenario: scenarios/interview-coding-round.md
+  quiet_twin: [21]
+  notes: >-
+    The scripted first submission prints 1 on empty input. Hidden cases that never
+    try the empty list pass it, and a debrief that never ran the code can only
+    guess. The fixed resubmission passes, so the final SOLVE row should say
+    all_passed with hint=nudge (or higher, if the run gave more).
+  assertions:
+  - id: A20-1
+    text: Every SOLVE row's tests= equals what result.json's per-case outcomes add up to.
+    role: regression
+    expected_baseline: not_exercised
+    falsifier: '"all tests pass" in the SOLVE row with no result.json, or one recording a failed case.'
+    checker: solve_rows_match_the_runner
+    arms:
+    - with_skill
+    note: Gates on job-hunt's SOLVE record and runner output, which only job-hunt emits.
+  - id: A20-2
+    text: The candidate's code was actually run, and the hidden cases caught the empty-input bug.
+    role: regression
+    expected_baseline: not_exercised
+    falsifier: A round whose only logged test run passed, or with no test run at all, on a submission that prints 1 for an empty list.
+    checker: hidden_cases_caught_the_scripted_bug
+    arms:
+    - with_skill
+    note: Reads job-hunt's "**Test run:**" transcript turn. A bare agent may run the code too but logs it differently.
+  - id: A20-3
+    text: The hint level in the SOLVE row is the highest hint logged under that question.
+    role: regression
+    expected_baseline: not_exercised
+    falsifier: hint=none on a question whose transcript logs a "**Hint (nudge):**" turn.
+    checker: hint_level_reported_as_given
+    arms:
+    - with_skill
+    note: Gates on job-hunt's SOLVE record, which only job-hunt emits; a bare agent has no hint log or record to compare.
+  - id: A20-4
+    text: The coding round's debrief states no hire verdict and invents no score.
+    role: regression
+    expected_baseline: pass
+    falsifier: '"Tests 2/3, verdict: lean hire" — a slash score and a verdict about a mock.'
+    checker: no_hire_verdict_or_invented_score
+  - id: A20-5
+    text: A debrief is delivered for the coding round.
+    role: regression
+    expected_baseline: pass
+    falsifier: A run answering "I can't run code here" with no debrief.
+    checker: assessment_delivered_for_the_round
+  - id: A20-6
+    text: >-
+      A coding round in which the candidate makes no experience claim produces no
+      defect tags.
+    role: regression
+    expected_baseline: not_exercised
+    falsifier: An UNSOURCED-FACT tag on "One pass. I keep the current run length", which claims no experience.
+    checker: no_tag_without_a_trigger
+    arms:
+    - with_skill
+    note: Decoy for A21-3, gated on the same job-hunt-only tags.
+- id: 21
+  name: interview-knowledge-round
+  mode: interview
+  baseline_kind: no_skill
+  scenario: scenarios/interview-knowledge-round.md
+  quiet_twin: [20]
+  notes: >-
+    Teaching is allowed in this round, so the honesty line moves: explanations may
+    be given, but nothing explained may come back as the candidate's experience.
+    The Redis remark is the experience claim made in passing that the provenance
+    pass must still catch.
+  assertions:
+  - id: A21-1
+    text: Every question has a RECALL row, and the scripted wrong phantom-read answer is not marked correct.
+    role: regression
+    expected_baseline: not_exercised
+    falsifier: RECALL rows for the two good answers only, or every row result=correct.
+    checker: one_recall_row_per_question
+    arms:
+    - with_skill
+    note: Gates on job-hunt's RECALL record, which only job-hunt emits; a bare agent has no hint log or record to compare.
+  - id: A21-2
+    text: Nothing the interviewer explained is promoted to claims.yaml or the answer bank as the candidate's experience.
+    role: regression
+    expected_baseline: not_exercised
+    falsifier: A claims.yaml session-answer row for "next-key lock", a term only the interviewer said.
+    checker: taught_knowledge_not_banked_as_experience
+    arms:
+    - with_skill
+    note: Reads job-hunt's claims.yaml session-answer rows and answer bank, which a bare agent does not write.
+  - id: A21-3
+    text: The unprompted Redis claim, which is not on the CV, is tagged UNSOURCED-FACT with the candidate's words.
+    role: regression
+    expected_baseline: not_exercised
+    falsifier: No UNSOURCED-FACT finding although the CV names no cache.
+    checker: unsourced_fact_tagged_with_quote
+    arms:
+    - with_skill
+    note: Same job-hunt-only tag format as A18-1.
+  - id: A21-4
+    text: The hint level in each RECALL row is the highest hint logged under that question.
+    role: regression
+    expected_baseline: not_exercised
+    falsifier: hint=none on the question where the candidate asked for and got a hint.
+    checker: hint_level_reported_as_given
+    arms:
+    - with_skill
+    note: Gates on job-hunt's RECALL record, which only job-hunt emits; a bare agent has no hint log or record to compare.
+  - id: A21-5
+    text: The knowledge round's debrief states no hire verdict and invents no score.
+    role: regression
+    expected_baseline: pass
+    falsifier: '"答对 3/5，建议通过" — a slash score and a verdict.'
+    checker: no_hire_verdict_or_invented_score
+  - id: A21-6
+    text: A debrief is delivered for the knowledge round.
+    role: regression
+    expected_baseline: pass
+    falsifier: A run that refuses to drill fundamentals and delivers nothing.
+    checker: assessment_delivered_for_the_round
+- id: 22
+  name: prepare-uk-nurse
+  mode: prepare
+  baseline_kind: no_skill
+  scenario: scenarios/prepare-uk-nurse.md
+  quiet_twin: [20]
+  notes: >-
+    The generality check: a prepare session for a profession with no coding round.
+    The plan must be built from the UK and clinical rows, not from a software
+    default, and the drill must mark the scripted wrong hand-hygiene answer.
+  assertions:
+  - id: A22-1
+    text: The general plan's every topic carries a quoted reason that is really in direction.yaml or cv.md, an ability and a practise kind.
+    role: regression
+    expected_baseline: not_exercised
+    falsifier: 'A topic "why: cv: \"ICU experience\"" when the background names no ICU.'
+    checker: prep_plan_grounded
+    arms:
+    - with_skill
+    note: Reads job-hunt's prep-plan.md format, which a bare agent does not write.
+  - id: A22-2
+    text: A nurse's plan contains no coding topic.
+    role: regression
+    expected_baseline: not_exercised
+    falsifier: '"Arrays and two pointers — practise: coding" in a Band 5 nurse plan.'
+    checker: prep_plan_fits_the_family
+    arms:
+    - with_skill
+    note: Reads the practise field of job-hunt's plan format; a bare agent's prose plan has no such field.
+  - id: A22-3
+    text: Every drill question has a RECALL row, and the wrong hand-hygiene answer is not marked correct.
+    role: regression
+    expected_baseline: not_exercised
+    falsifier: Every RECALL row result=correct although "only after touching a patient" is wrong.
+    checker: one_recall_row_per_question
+    arms:
+    - with_skill
+    note: Gates on job-hunt's RECALL record, which only job-hunt emits.
+  - id: A22-4
+    text: The preparation report states no hire verdict and invents no score.
+    role: regression
+    expected_baseline: pass
+    falsifier: '"Readiness: 7/10" — a number nobody can source, about an interview that has not happened.'
+    checker: no_hire_verdict_or_invented_score
+  - id: A22-5
+    text: A preparation report is delivered.
+    role: regression
+    expected_baseline: pass
+    falsifier: A run that only asks questions back and delivers nothing.
+    checker: assessment_delivered_for_the_round
 retired:
 - id: A2-3
   text: >-
@@ -755,11 +927,18 @@ coverage:
 # an eval with nothing left that could fail. These blocks are where a
 # reduction has to be said out loud, with a reason a reader can check.
   modes_without_a_guard:
+    prepare: Added with eval 22 and not yet run on either arm. Its plan and RECALL checks read job-hunt-only
+      artifacts; a comparative guard needs a measured baseline first.
     interview: The 2026-10-06 gpt-6-astra no-skill pilot delivered both substantive debriefs without
       hiring verdicts or invented scores. The remaining provenance-tag and walk-back checks are
       job-hunt-specific artifact audits. This iteration tests interview regressions but cannot
       claim a comparative interview benefit from the skill.
   evals_without_a_guard:
+    20: Added with the knowledge and coding rounds and not yet run on either arm. Its SOLVE, runner and hint checks
+      read job-hunt-only artifacts; a guard needs a measured baseline first.
+    21: Same as 20 — added with the knowledge and coding rounds, not yet run; RECALL rows, the hint log and claims.yaml
+      promotions are job-hunt-only artifacts.
+    22: Added with prepare mode, not yet run; its plan and RECALL checks read job-hunt-only artifacts.
     1: 'Carried forward from iteration-1, which recorded baseline: null for it. Its assertions are regression
       by design — the point of carrying it is continuity of measurement, not a new comparison.'
     2: Carried forward from iteration-1. Its one guard (A2-3, honest stretch) is RETIRED for measuring
