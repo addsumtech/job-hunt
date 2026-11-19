@@ -179,6 +179,9 @@ python3 scripts/run_mock_tests.py --dir <ws>/mock/code/round-<n>/Q<n> \
 `--cmd` and `--build` run through the system shell, which on Windows is `cmd.exe`:
 write `python <solution file>` or the built `.exe` there, not `python3` or `./<binary>`.
 
+A case passes only when the whole output matches. A solution that prints without end
+is stopped at the output limit and the case is reported as `OUTPUT LIMIT`, a failure.
+
 Log the outcome as an interviewer turn, `**Test run:** 2 of 3 cases passed (failed:
 empty input)`. Name the failed cases and keep their inputs hidden: revealing a failing
 input is a `nudge` hint and is logged as one. The candidate may fix and resubmit;
@@ -244,6 +247,12 @@ The debrief for a drill, one `## Q<n>` entry per question heading (the gates fai
   missing item, the failed case names;
 - the concept or pattern to study next, and a follow-up drill **described**, not a
   numbered link.
+
+Facts are written as facts: a reference range, a rate, a probability worked out in
+the answer, "2 of 3 cases passed". The lint reads these notes and the plan as subject
+matter. It still fails a number or a probability word about the candidate's outcome,
+and any mark given to the candidate ("score", "rating", "7/10"). A fact that carries
+such a word, like a clinical score, goes in backticks.
 
 Everything here is public knowledge, which teaching may supply. None of it is the
 candidate's experience: it never enters `answer-bank.md`, `claims.yaml` or the CV.

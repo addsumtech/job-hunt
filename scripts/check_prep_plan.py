@@ -56,7 +56,9 @@ def is_prep_workspace(workspace: pathlib.Path) -> bool:
     a session that never recorded its mode entry must still be read as the plan it
     is, so the missing entry is reported as NO_MODE_ENTRY rather than as a missing
     plan in the wrong directory."""
-    return pathlib.Path(workspace).parent.name == "prep"
+    # Resolved: `--workspace .` from inside the prep workspace has parent name ''
+    # and was read as an interview workspace, whose plan is mock/prep-plan.md.
+    return pathlib.Path(workspace).resolve().parent.name == "prep"
 
 
 def plan_path(workspace: pathlib.Path) -> pathlib.Path:
@@ -70,7 +72,17 @@ def plan_path(workspace: pathlib.Path) -> pathlib.Path:
 _HEADING = re.compile(r"^##[ \t]+(.+?)[ \t]*$", re.M)
 _FIELD = {name: re.compile(r"^[ \t]*-[ \t]*" + name + r":[ \t]*(\S.*?)[ \t]*$", re.M)
           for name in ("why", "be able to", "practise")}
-_QUOTED = re.compile(r"^[\"“'‘](.+)[\"”'’]$")
+# German „…“, guillemets and CJK corner brackets are how those plans quote.
+_QUOTED = re.compile(r"^[\"“„'‘«「『](.+)[\"”“'’»」』]$")
+# A quotation short enough to be in any file proves nothing: `cv: " "` and
+# `direction: "e"` both passed for a topic the CV never mentions.
+_MIN_QUOTE_CJK, _MIN_QUOTE_OTHER = 2, 3
+_CJK = re.compile(r"[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]")
+
+
+def _too_short(quote: str) -> bool:
+    bare = re.sub(r"[\W_]+", "", quote)
+    return len(bare) < (_MIN_QUOTE_CJK if _CJK.search(bare) else _MIN_QUOTE_OTHER)
 
 
 def _norm(text: str) -> str:
@@ -97,6 +109,11 @@ def check_plan(workspace: pathlib.Path, path: pathlib.Path | None = None) -> lis
         end = marks[index + 1].start() if index + 1 < len(marks) else len(text)
         body, topic = text[mark.end():end], mark.group(1)
         found = {name: rx.search(body) for name, rx in _FIELD.items()}
+        # The opening section that lays out the loop (modes/prepare.md §2) is prose
+        # under its own heading, not a topic. Only the first heading gets this, and
+        # only with none of the three fields, so a bare topic name still fails.
+        if index == 0 and len(marks) > 1 and not any(found.values()):
+            continue
         if not found["be able to"]:
             findings.append(
                 f"PREP_NO_ABILITY: topic {topic!r} has no '- be able to:' line — a "
@@ -111,7 +128,8 @@ def check_plan(workspace: pathlib.Path, path: pathlib.Path | None = None) -> lis
                 f"PREP_NO_WHY: topic {topic!r} has no '- why:' line, so nothing ties "
                 "it to this posting, this CV or this loop")
             continue
-        kind, _, reason = found["why"].group(1).partition(":")
+        # Either colon, whichever comes first: a Chinese plan writes `cv：`.
+        kind, reason = (re.split(r"[:：]", found["why"].group(1), maxsplit=1) + [""])[:2]
         kind, reason = kind.strip().lower(), reason.strip()
         if kind not in WHY_KINDS or not reason:
             findings.append(
@@ -130,6 +148,10 @@ def check_plan(workspace: pathlib.Path, path: pathlib.Path | None = None) -> lis
             findings.append(
                 f"PREP_WHY_NO_SOURCE: topic {topic!r} quotes {source.name}, which is "
                 "not in the workspace")
+        elif _too_short(quoted.group(1)):
+            findings.append(
+                f"PREP_WHY_TOO_SHORT: topic {topic!r} quotes {quoted.group(1)!r} — "
+                f"too little to show {source.name} asks for this; quote the phrase")
         elif _norm(quoted.group(1)) not in _norm(source.read_text(encoding="utf-8")):
             findings.append(
                 f"PREP_WHY_NOT_IN_SOURCE: topic {topic!r} quotes {quoted.group(1)!r}, "

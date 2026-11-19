@@ -117,7 +117,9 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"backed up {replaced.name} -> {backup.name}")
             shutil.copy2(src, target)
             print(f"saved {target}")
-        except PermissionError as exc:
+        except OSError as exc:
+            # Any refusal to write, as in paths.main: a file in the store's place
+            # raises NotADirectoryError, which is not a PermissionError.
             print(paths.unwritable_store(target.parent, exc), file=sys.stderr)
             return 2
 

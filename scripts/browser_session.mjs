@@ -3,7 +3,7 @@
 import {createServer} from 'node:http';
 import {randomBytes} from 'node:crypto';
 import {createRequire} from 'node:module';
-import {readFile, writeFile, mkdir, unlink, open, rename} from 'node:fs/promises';
+import {readFile, writeFile, mkdir, unlink, open, rename, stat} from 'node:fs/promises';
 import {join, resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {spawn} from 'node:child_process';
@@ -28,15 +28,29 @@ const ENDINGS = {
   idle_timeout: 'The browser session expired after 30 idle minutes.',
   browser_disconnected: 'The browser closed the authorized connection (it was closed, restarted, or the connection was revoked).',
   consent_timeout: "The browser's connection prompt was not accepted in time.",
+  // Never written by the session itself: a killed process records nothing. It
+  // is derived from a record that still says connected/waiting while no session
+  // process answers. That record has no ended_reason, so it used to fall through
+  // to the remote-debugging instructions below.
+  process_gone: 'The browser session process is no longer running (it was killed, it crashed, or the machine restarted).',
 };
 const settingsIntact = "The browser's remote-debugging setting is not the cause.";
-const stoppedHelp = (browser, record) => {
-  const reason = record?.ended_reason;
+// Endings nobody chose: the user did not stop the session and the browser did
+// not refuse it. The same chat may start one new session; the browser asks the
+// user for consent again, so this cannot reconnect behind their back.
+const RESTARTABLE = ['idle_timeout', 'process_gone'];
+const restartHelp = "Run browser-session start once in this chat and ask the user to accept the browser's connection prompt again; no reset is needed.";
+const corruptHelp = file => `The browser session state file is unreadable (damaged or half-written): ${file}. ${settingsIntact} Run browser-session reset once to clear it, then start one session and accept the browser's connection prompt.`;
+const stoppedHelp = (browser, reason) => {
   if (reason === 'consent_timeout') return `${ENDINGS[reason]} ${resumeHelp} Then start one session and accept the browser's connection prompt.`;
+  if (RESTARTABLE.includes(reason)) return `${ENDINGS[reason]} ${settingsIntact} ${restartHelp}`;
   if (ENDINGS[reason]) return `${ENDINGS[reason]} ${settingsIntact} ${resumeHelp}`;
   // connection_refused, or a record written before reasons were kept.
   return `The browser session ended. ${resumeHelp} ${connectionHelp(browser)}`;
 };
+// A state change holds the lock for a few seconds at most (a start waits about
+// five for its child). A lock older than this was left by a killed process.
+const LOCK_STALE_MS = 30000;
 
 export async function createSession({endpoint, WebSocket, WebSocketServer,
   idleMs = 30 * 60 * 1000, consentMs = 120000, changed = () => {}}) {
@@ -125,7 +139,9 @@ export async function createSession({endpoint, WebSocket, WebSocketServer,
       publish();
     });
   });
-  upstream.on('open', () => {state = 'connected';everConnected = true;clearTimeout(consentTimer);publish();});
+  // The idle clock starts at consent, not at launch: in WorkBuddy the prompt
+  // may wait 11 minutes, and those came out of the "30 idle minutes".
+  upstream.on('open', () => {state = 'connected';everConnected = true;lastUse = Date.now();clearTimeout(consentTimer);publish();});
   upstream.on('error', () => {});
   upstream.on('message', raw => {
     let message;try {message = JSON.parse(raw.toString());} catch {return;}
@@ -194,50 +210,106 @@ export async function main(argv) {
   const workbuddySession = managed ? process.env.CODEBUDDY_SANDBOX_BROKER_SESSION_ID : undefined;
   await mkdir(root, {recursive:true});
   const stateFile = join(root, `browser-session-${browser}.json`), lockFile = stateFile + '.lock';
+  // A damaged record is reported as such instead of surfacing a JSON parser
+  // message from every command, `reset` included, with no way to clear it.
   async function readState() {
-    try {return JSON.parse(await readFile(stateFile,'utf8'));}
-    catch (err) {if (err.code !== 'ENOENT') throw err;}
+    let raw;
+    try {raw = await readFile(stateFile,'utf8');}
+    catch (err) {if (err.code === 'ENOENT') return undefined;throw err;}
+    try {
+      const record = JSON.parse(raw);
+      if (record && typeof record === 'object' && !Array.isArray(record)) return record;
+    } catch {}
+    return {corrupt:true};
   }
-  const isLive = record => Number.isInteger(record?.pid) && record.pid > 0 && alive(record.pid);
-  const endedUnexpectedly = record => failed(record?.state) || (active(record?.state) && !isLive(record));
-  let previous = await readState();
+  // A live pid is not a live session. The record outlives its process (it is
+  // kept after stop), and the pid is later handed to an unrelated program: a
+  // cleanly stopped record then made `start` answer "stopping; wait" and
+  // `reset` answer "wait for it to stop" until that program happened to exit.
+  // So ask the recorded endpoint who it is. Its path is this session's random
+  // token; only that session answers there with this pid. A probe that merely
+  // times out stays "live": a busy session must never be replaced by a second
+  // browser connection.
+  async function probe(record) {
+    if (!Number.isInteger(record?.pid) || record.pid <= 0 || !alive(record.pid) || typeof record.endpoint !== 'string') return {live:false};
+    try {
+      const url = new URL(record.endpoint);url.protocol = 'http:';url.pathname += '/status';
+      const response = await fetch(url,{signal:AbortSignal.timeout(2000)});
+      if (!response.ok) return {live:false};
+      const status = await response.json();
+      return status?.pid === record.pid ? {live:true,status} : {live:false};
+    } catch (err) {return {live:err?.name === 'TimeoutError'};}
+  }
+  let previous, live = false, liveStatus;
+  async function load() {
+    previous = await readState();
+    ({live, status:liveStatus} = await probe(previous));
+  }
+  // The record still claims a session and no session process answers.
+  const gone = () => active(previous?.state) && !live;
+  const ending = () => gone() ? 'process_gone' : previous?.ended_reason;
+  await load();
   async function withStartLock(action) {
-    let lock;
-    try {lock = await open(lockFile,'wx',0o600);} catch (err) {
-      if (err.code === 'EEXIST') throw Error('A browser session state change is in progress; check status');
-      throw err;
+    const token = randomBytes(8).toString('hex');
+    const claim = () => writeFile(lockFile,JSON.stringify({pid:process.pid,at:Date.now(),token}),{flag:'wx',mode:0o600});
+    try {await claim();} catch (err) {
+      if (err.code !== 'EEXIST') throw err;
+      // The lock used to be an empty file with no owner, so one left behind by
+      // a killed command refused every later start, stop and reset. Take it
+      // over when its holder is gone or it is older than any state change. An
+      // unreadable or ownerless lock (an older version's) is judged by age.
+      let holder = {}, age = Infinity;
+      try {holder = JSON.parse(await readFile(lockFile,'utf8')) || {};} catch {}
+      try {age = Date.now() - (Number.isFinite(holder.at) ? holder.at : (await stat(lockFile)).mtimeMs);} catch {}
+      if (age < LOCK_STALE_MS && (!Number.isInteger(holder.pid) || alive(holder.pid))) throw Error('A browser session state change is in progress; check status');
+      await unlink(lockFile).catch(() => {});
+      try {await claim();} catch (again) {
+        if (again.code === 'EEXIST') throw Error('A browser session state change is in progress; check status');
+        throw again;
+      }
     }
     try {return await action();}
-    finally {await lock.close();await unlink(lockFile);}
+    finally {
+      // Release only our own lock; a slow command may have been taken over.
+      try {if (JSON.parse(await readFile(lockFile,'utf8')).token === token) await unlink(lockFile);} catch {}
+    }
   }
   async function contact(suffix, method = 'GET') {
-    if (!previous?.endpoint || !isLive(previous)) throw Error('No running browser session');
+    if (!previous?.endpoint || !live) throw Error('No running browser session');
     const url = new URL(previous.endpoint);url.protocol = 'http:';url.pathname += suffix;
     const response = await fetch(url,{method,signal:AbortSignal.timeout(2000)});
     if (!response.ok) throw Error(await response.text());
     return response;
   }
+  const currentStatus = async () => liveStatus ?? await (await contact('/status')).json();
   if (action === 'status') {
-    if (endedUnexpectedly(previous)) throw Error(stoppedHelp(browser, previous));
-    if (!isLive(previous) || previous.state === 'closed') {
-      console.log(JSON.stringify({state:'stopped',browser,...(previous?.ended_reason ? {reason:previous.ended_reason} : {})}));return;
+    if (previous?.corrupt) throw Error(corruptHelp(stateFile));
+    if (failed(previous?.state)) throw Error(stoppedHelp(browser, previous.ended_reason));
+    if (!live || previous.state === 'closed') {
+      const reason = ending();
+      console.log(JSON.stringify({state:'stopped',browser,...(reason ? {reason} : {})}));return;
     }
-    const status = await (await contact('/status')).json();
-    if (failed(status.state)) throw Error(stoppedHelp(browser, previous));
+    const status = await currentStatus();
+    if (failed(status.state)) throw Error(stoppedHelp(browser, previous.ended_reason));
     console.log(JSON.stringify({...status,browser}));return;
   }
   if (action === 'endpoint') {
-    if (endedUnexpectedly(previous)) throw Error(stoppedHelp(browser, previous));
-    if (!isLive(previous) && previous?.state === 'closed') throw Error(`${ENDINGS[previous.ended_reason] || ENDINGS.stopped} ${settingsIntact} No browser session is running.`);
-    const status = await (await contact('/status')).json();
+    if (previous?.corrupt) throw Error(corruptHelp(stateFile));
+    if (failed(previous?.state)) throw Error(stoppedHelp(browser, previous.ended_reason));
+    if (!live && (previous?.state === 'closed' || gone())) {
+      const reason = ending();
+      throw Error(`${ENDINGS[reason] || ENDINGS.stopped} ${settingsIntact} No browser session is running.${RESTARTABLE.includes(reason) ? ` ${restartHelp}` : ''}`);
+    }
+    const status = await currentStatus();
     if (status.state !== 'connected') throw Error(`Browser session is ${status.state}; wait for user consent instead of opening another connection`);
-    if (previous.source_endpoint !== await dailyEndpoint(browser)) throw Error(stoppedHelp(browser, previous));
+    if (previous.source_endpoint !== await dailyEndpoint(browser)) throw Error(stoppedHelp(browser, previous.ended_reason));
     console.log(previous.endpoint);return;
   }
   if (action === 'stop') {
     return withStartLock(async () => {
-      previous = await readState();
-      if (isLive(previous)) {
+      await load();
+      if (previous?.corrupt) throw Error(corruptHelp(stateFile));
+      if (live) {
         if (active(previous.state)) await contact('/stop','POST');
         console.log(JSON.stringify({state:'stopping',browser}));return;
       }
@@ -246,10 +318,12 @@ export async function main(argv) {
   }
   if (action === 'reset') {
     return withStartLock(async () => {
-      previous = await readState();
-      if (isLive(previous)) throw Error('Wait for the existing browser session to stop before resetting');
-      if (managed && previous && (!workbuddySession || !previous.workbuddy_session ||
-          workbuddySession === previous.workbuddy_session)) throw Error(stoppedHelp(browser, previous));
+      await load();
+      if (live) throw Error('Wait for the existing browser session to stop before resetting');
+      // A damaged record names no chat, so the new-chat rule below cannot be
+      // applied to it; refusing would leave it in place for good.
+      if (managed && previous && !previous.corrupt && (!workbuddySession || !previous.workbuddy_session ||
+          workbuddySession === previous.workbuddy_session)) throw Error(stoppedHelp(browser, ending()));
       if (previous) await unlink(stateFile);
       console.log(JSON.stringify({state:'stopped',browser}));
     });
@@ -257,20 +331,24 @@ export async function main(argv) {
   if (action === 'serve' && !managed) return serve();
   if (action !== 'start') throw Error('Use start, status, stop or reset');
   return withStartLock(async () => {
-    previous = await readState();
+    await load();
+    if (previous?.corrupt) throw Error(corruptHelp(stateFile));
+    // Checked first: a session still shutting down is about to become one of
+    // the cases below, and "stopping; wait" is the only true answer until then.
+    if (live && previous.state === 'closed') throw Error('Browser session is stopping; wait for status to report stopped');
     // An idle expiry is neither a failure nor a stop the user asked for: the
     // session ran out while the chat waited (for the user's answers, on
     // 2026-11-19). Refusing the next start left that chat with no way to read a
     // single page. One new start asks for consent once; it cannot loop, because
-    // each expiry needs another 30 idle minutes. Every other ending still waits
-    // for the user and a new chat.
-    const idledOut = previous?.state === 'closed' && previous.ended_reason === 'idle_timeout' && !isLive(previous);
-    if (endedUnexpectedly(previous) || (managed && previous?.state === 'closed' && !idledOut)) throw Error(stoppedHelp(browser, previous));
-    if (isLive(previous)) {
-      if (previous.state === 'closed') throw Error('Browser session is stopping; wait for status to report stopped');
-      if (previous.source_endpoint !== await dailyEndpoint(browser)) throw Error(stoppedHelp(browser, previous));
-      const status = await (await contact('/status')).json();
-      if (failed(status.state)) throw Error(stoppedHelp(browser, previous));
+    // each expiry needs another 30 idle minutes. A session whose process was
+    // killed is the same kind of ending. Every other ending still waits for the
+    // user and a new chat.
+    const restartable = RESTARTABLE.includes(ending());
+    if (failed(previous?.state) || (managed && previous?.state === 'closed' && !restartable)) throw Error(stoppedHelp(browser, previous.ended_reason));
+    if (live) {
+      if (previous.source_endpoint !== await dailyEndpoint(browser)) throw Error(stoppedHelp(browser, previous.ended_reason));
+      const status = await currentStatus();
+      if (failed(status.state)) throw Error(stoppedHelp(browser, previous.ended_reason));
       console.log(JSON.stringify({...status,browser,reused:true}));return;
     }
     let sourceEndpoint;
@@ -293,7 +371,7 @@ export async function main(argv) {
       const state = await readState();
       if (state?.pid===child.pid) {
         if (firstState === null) firstState = i;
-        if (failed(state.state)) throw Error(stoppedHelp(browser, state));
+        if (failed(state.state)) throw Error(stoppedHelp(browser, state.ended_reason));
         if (state.state === 'closed') throw Error(connectionHelp(browser));
         if (state.state !== 'waiting_for_consent' || i - firstState >= 20) {
           console.log(JSON.stringify({state:state.state,browser,pid:state.pid,reused:false}));return;

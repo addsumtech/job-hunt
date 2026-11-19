@@ -276,7 +276,7 @@ def test_code_in_study_notes_is_not_scanned_as_prose(tmp_path):
     import lint_no_prediction
     ws = coding_ws(tmp_path, notes=STUDY_NOTES + "\n```python\nmid = (lo + hi) % 2 + 1/2\n```\n")
     corpus = lint_no_prediction.capture_corpus(ws)
-    scanner = lambda text, source: lint_no_prediction.scan_text(text, source, corpus)  # noqa: E731
+    scanner = lambda text, source, **kw: lint_no_prediction.scan_text(text, source, corpus, **kw)  # noqa: E731
     assert gate(ws, vocab_scanner=scanner) == []
 
 
@@ -284,7 +284,7 @@ def test_prose_in_study_notes_is_still_scanned(tmp_path):
     import lint_no_prediction
     ws = coding_ws(tmp_path, notes=STUDY_NOTES + "\nYou have a 70% chance of passing.\n")
     corpus = lint_no_prediction.capture_corpus(ws)
-    scanner = lambda text, source: lint_no_prediction.scan_text(text, source, corpus)  # noqa: E731
+    scanner = lambda text, source, **kw: lint_no_prediction.scan_text(text, source, corpus, **kw)  # noqa: E731
     assert gate(ws, vocab_scanner=scanner) != []
 
 
@@ -461,3 +461,162 @@ def test_a_timed_out_solution_does_not_keep_running(tmp_path):
     for pid in left:
         os.kill(int(pid), 9)
     assert not left, f"{len(left)} solution process(es) still running after the timeout"
+
+
+# ------------------------------------------------- found in the 2026-11-20 review
+
+def _qdir(tmp_path, solution, cases):
+    qdir = tmp_path / "Q1"
+    qdir.mkdir()
+    (qdir / "cases.json").write_text(json.dumps(cases), encoding="utf-8")
+    (qdir / "solution.py").write_text(solution, encoding="utf-8")
+    return qdir
+
+
+def test_a_long_expected_output_is_compared_in_full(tmp_path):
+    """The comparison used the 2000 characters kept for result.json, so a correct
+    solution failed every case whose answer ran past them."""
+    expected = "\n".join(str(i) for i in range(1000))
+    qdir = _qdir(tmp_path, "n = int(input())\nprint(*range(n), sep='\\n')\n",
+                 [{"name": "large", "stdin": "1000\n", "expected": expected}])
+    result = run_mock_tests.run(qdir, f"{PY} solution.py")
+    assert result["status"] == "all_passed"
+    assert len(result["cases"][0]["stdout"]) <= run_mock_tests.KEEP
+
+
+def test_a_long_wrong_output_still_fails(tmp_path):
+    expected = "\n".join(str(i) for i in range(1000))
+    qdir = _qdir(tmp_path, "n = int(input())\nprint(*range(n - 1), sep='\\n')\n",
+                 [{"name": "large", "stdin": "1000\n", "expected": expected}])
+    assert run_mock_tests.run(qdir, f"{PY} solution.py")["status"] == "none_passed"
+
+
+def test_an_endless_printer_is_stopped_at_the_output_limit(tmp_path, monkeypatch):
+    """Buffered until the timeout, `while True: print(...)` grew the runner to
+    gigabytes and overran a 5 s timeout by 40 s."""
+    monkeypatch.setattr(run_mock_tests, "MAX_OUTPUT", 200_000)
+    qdir = _qdir(tmp_path, "while True:\n    print('x' * 1000)\n",
+                 [{"name": "a", "stdin": "", "expected": "1"}])
+    started = time.monotonic()
+    result = run_mock_tests.run(qdir, f"{PY} solution.py", timeout=30)
+    assert time.monotonic() - started < 15
+    case = result["cases"][0]
+    assert case["output_limit"] and not case["passed"] and not case["timed_out"]
+    assert len(case["stdout"]) <= run_mock_tests.KEEP
+
+
+def test_cases_that_are_not_utf8_cannot_run(tmp_path, capsys):
+    qdir = tmp_path / "Q1"
+    qdir.mkdir()
+    (qdir / "cases.json").write_bytes(
+        '[{"name": "空输入", "stdin": "", "expected": "0"}]'.encode("gbk"))
+    (qdir / "solution.py").write_text("print(0)\n", encoding="utf-8")
+    assert run_mock_tests.main(["--dir", str(qdir), "--cmd", "true"]) == 2
+    assert "cannot run" in capsys.readouterr().err
+
+
+def test_a_file_the_solution_writes_while_running_does_not_make_the_result_stale(tmp_path):
+    logging = BUGGY + "open('log.txt', 'a').write('ran\\n')\n"
+    ws = coding_ws(tmp_path, solution=logging, run=False)
+    qdir = check_mock.code_dir(ws, 2, "Q1")
+    run_mock_tests.run(qdir, f"{PY} solution.py")
+    result = run_mock_tests.run(qdir, f"{PY} solution.py")
+    assert "log.txt" not in result["solution_sha256"]
+    assert "solution.py" in result["solution_sha256"]
+    assert gate(ws) == []
+
+
+@pytest.mark.parametrize("line", [
+    "**Interviewer:** **Hint (nudge):** What should the run be after a reset?",
+    "**Hint (nudge)：** What should the run be after a reset?",
+    "**Hint (nudge)**: What should the run be after a reset?",
+    "**hint (nudge):** What should the run be after a reset?",
+    "**Hint(nudge):** What should the run be after a reset?",
+    "- **Hint (nudge):** What should the run be after a reset?",
+    "**提示（nudge）：** 重置之后当前长度应该是多少？",
+    "**Hint (Nudge):** What should the run be after a reset?",
+])
+def test_a_hint_logged_in_a_near_miss_of_the_format_still_counts(tmp_path, line):
+    """Each of these was invisible to the gate, so `hint=none` passed over a
+    transcript that logged the help."""
+    strict = "**Hint (nudge):** What should the current run be right after a number that is not larger than the previous one?"
+    assert strict in CODING_TRANSCRIPT
+    ws = coding_ws(tmp_path, transcript=CODING_TRANSCRIPT.replace(strict, line), hint="none")
+    assert "HINT_MISMATCH" in codes(gate(ws))
+    ws2 = coding_ws(tmp_path / "ok", transcript=CODING_TRANSCRIPT.replace(strict, line))
+    assert gate(ws2) == []
+
+
+def test_an_explanation_turn_is_not_a_hint(tmp_path):
+    transcript = CODING_TRANSCRIPT + "**Explanation:** A hint (nudge) was given above.\n"
+    assert gate(coding_ws(tmp_path, transcript=transcript)) == []
+
+
+def _result_path(ws):
+    return check_mock.code_dir(ws, 2, "Q1") / "result.json"
+
+
+@pytest.mark.parametrize("damage", [
+    lambda d: d.update(cases=[1, 2]),
+    lambda d: d.update(cases={"a": 1}),
+    lambda d: d.update(cases=[]),
+    lambda d: d.update(cases=[{"passed": "yes"}]),
+    lambda d: d.update(solution_sha256=["solution.py"]),
+    lambda d: d.pop("solution_sha256"),
+    lambda d: d.update(solution_sha256={}),
+    lambda d: d.pop("cases_sha256"),
+], ids=["int-cases", "dict-cases", "no-cases", "non-bool-passed", "list-hashes",
+        "no-hashes", "empty-hashes", "no-cases-hash"])
+def test_a_result_the_runner_did_not_write_is_unreadable(tmp_path, damage):
+    """Each was either a traceback that exited 1 like a finding, or a pass: no cases
+    counted as all_passed, and no solution hashes meant never stale."""
+    ws = coding_ws(tmp_path, tests="all_passed", solution=FIXED)
+    assert gate(ws) == []
+    data = json.loads(_result_path(ws).read_text(encoding="utf-8"))
+    damage(data)
+    _result_path(ws).write_text(json.dumps(data), encoding="utf-8")
+    assert codes(gate(ws)) == ["TEST_RESULT_UNREADABLE"]
+
+
+# -- subject matter in study notes and plans
+
+def _real_scanner(ws):
+    return check_mock._default_scanner(ws)
+
+
+@pytest.mark.parametrize("line", [
+    "- correct answer: the target range is 94–98% on room air.",
+    "- correct answer: P(two aces) = 1/221, about 0.45%.",
+    "- 正确答案：条件概率，已知 A 发生时 B 的概率是 1/4。",
+    "- what your answer missed: 2 of 3 cases passed; the failing one was empty input.",
+    "- 你的回答漏了：3 个用例过了 2 个，2/3，失败的是空输入。",
+    "- correct answer: the probability of drawing two aces without replacement.",
+    "- next: probability questions come up in quant interviews, practise them at speed.",
+])
+def test_subject_matter_in_study_notes_is_not_a_prediction(tmp_path, line):
+    """Facts with a percent sign, a fraction or the word probability failed every
+    quant, clinical and aptitude drill unless they were hidden in backticks."""
+    ws = coding_ws(tmp_path, notes=STUDY_NOTES + line + "\n")
+    assert gate(ws, vocab_scanner=_real_scanner(ws)) == []
+
+
+@pytest.mark.parametrize("line", [
+    "You have an 80% chance of passing the interview.",
+    "Your score: 7/10.",
+    "你通过面试的概率很高。",
+    "The probability of getting an offer is high.",
+    "Your odds are good.",
+    "评分 8/10",
+    "拿到 offer 的可能性有 70%",
+])
+def test_a_forecast_or_a_mark_in_study_notes_still_fails(tmp_path, line):
+    ws = coding_ws(tmp_path, notes=STUDY_NOTES + line + "\n")
+    assert gate(ws, vocab_scanner=_real_scanner(ws)) != []
+
+
+def test_the_assessment_is_not_a_subject_surface(tmp_path):
+    ws = coding_ws(tmp_path)
+    path = ws / "mock" / "assessment-2.md"
+    path.write_text(path.read_text(encoding="utf-8") + "\nThe pass rate here is 94%.\n",
+                    encoding="utf-8")
+    assert any(f.startswith("PERCENT") for f in gate(ws, vocab_scanner=_real_scanner(ws)))

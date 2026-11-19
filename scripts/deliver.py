@@ -185,6 +185,18 @@ _SPANISH = re.compile(r"\b(?:tus|candidaturas?|experiencia|puestos?|evidencia|"
                       r"entrevistas?|necesidades|usuarios?|requisitos|"
                       r"curr[ií]culum|trabajo|responsabilidades|confirma|"
                       r"solicitud|puedes)\b")
+# Function words only one of the three languages uses. Two Spanish nouns also
+# turn up in an English report that quotes a Madrid posting, and in a Portuguese
+# one (requisitos, entrevistas, candidatura are spelled alike); both then
+# arrived in Informe/ with a Spanish footer. The small words say which language
+# the sentences themselves are written in.
+_WORD = re.compile(r"[^\W\d_]+")
+_SPANISH_ONLY = frozenset("el la los las del y en un una con al lo tu más pero muy "
+                          "también está son hay".split())
+_ENGLISH_ONLY = frozenset("the and of to is you your that with for this are it be "
+                          "on in".split())
+_PORTUGUESE_ONLY = frozenset("os do da dos das em um uma com ao não você são na nas "
+                             "e é seu sua".split())
 _REPORT_STYLES = {
     "ja": {"font": "japan", "footer": "キャリア相談レポート",
            "page": "{number} ページ", "link": "リンク：", "separator": "："},
@@ -221,9 +233,45 @@ def text_language(text: str) -> str:
     # Articles and prepositions such as de/la/un also occur in Dutch, French,
     # Italian and people's names. Require distinct Spanish vocabulary before
     # replacing the documented English fallback for other Latin languages.
-    if len(set(_SPANISH.findall(text.casefold()))) >= 2:
-        return "es"
+    folded = text.casefold()
+    if len(set(_SPANISH.findall(folded))) >= 2:
+        words = Counter(_WORD.findall(folded))
+        spanish, english, portuguese = (sum(words[word] for word in group) for group in (
+            _SPANISH_ONLY, _ENGLISH_ONLY, _PORTUGUESE_ONLY))
+        # A tie (a table of labels with no sentences) keeps the vocabulary's answer.
+        if spanish >= english and spanish >= portuguese:
+            return "es"
     return "en"
+
+
+def report_language(markdown: str) -> str:
+    """text_language of a Markdown document's own prose: the one rule behind both
+    the PDF's footer labels and the delivered file and folder names.
+
+    Measured before the two shared it: a Chinese assessment whose links and stack
+    names outnumbered its Han characters went out as Report/…Job assessment.pdf
+    with a 职业咨询报告 footer, because the names counted the URLs and the footer
+    did not.
+    """
+    # Code blocks, comments and link destinations are not the client's narrative.
+    prose = "\n".join(line for line, literal in _report_lines(markdown) if not literal)
+    prose = _RAW_ANGLE_URL.sub("", _MD_LINK.sub(r"\1", prose))
+    prose = _MD_CODE.sub("", prose)
+    # An unambiguous local-language title is stronger evidence than repeated
+    # English skill names. Mixed titles can contain a person's or employer's
+    # name, so let the narrative decide instead of counting title letters.
+    title = next((line[2:].strip() for line in prose.splitlines()
+                  if line.startswith("# ") and has_cjk(line)
+                  and not re.search(r"[A-Za-zÀ-ɏ]", line)), "")
+    if not title:
+        return text_language(prose)
+    if _JAPANESE.search(title) or _KOREAN.search(title):
+        return text_language(title)
+    # A title in Han alone (応募書類, 面接準備) is as Japanese as it is Chinese, and
+    # read on its own it put a 职业咨询报告 footer on a Japanese report. It says the
+    # report is not English; the body's own script, Latin names aside, says which.
+    body = text_language(re.sub(r"[A-Za-zÀ-ɏ]", "", prose))
+    return body if body in {"ja", "ko"} else "zh"
 
 
 def _portable_report_style(text: str) -> dict[str, str] | None:
@@ -397,7 +445,7 @@ def delivery_language(workspace: pathlib.Path) -> str:
         except (OSError, UnicodeError):
             continue
         if text.strip():
-            return text_language(text)
+            return report_language(text)
     return "zh"
 
 
@@ -612,24 +660,82 @@ def legacy_twins(root: pathlib.Path, deliveries: list[dict], workspace: pathlib.
     """Unrecorded Chinese-named copies of the documents this round delivers under
     its own language's names (简历/简历.pdf for Application/CV.pdf, ...).
 
-    Call it only when the round lands in `root` itself, which means every
-    unrecorded file there was proven this workspace's own (see foreign_files).
-    The old names were overwritten in place; with new names they are removed
-    instead, so a stale CV or brief never sits beside the current one. The
-    generic report is left alone, as it always was."""
+    Call it only when the round lands in `root` itself. The old names were
+    overwritten in place; with new names they are removed instead, so a stale CV
+    or brief never sits beside the current one. The generic report is left
+    alone, as it always was.
+
+    Each one has to be proven this workspace's own, exactly as foreign_files
+    proves it: byte-identical to what this round copies, or `root` is the
+    default folder named after this workspace. Landing in `root` is not that
+    proof. A workspace the manifest already places there skips foreign_files, and
+    a 简历/简历.pdf the user put in the folder afterwards was deleted under a
+    notice calling it this workspace's earlier copy (measured 2026-11-20)."""
     unaccounted = set(unaccounted_files(root, deliveries))
     if not unaccounted:
         return []
     planned = planned_copies(workspace, make_pdf, include_applications)
-    stems = {src.stem for src in planned.values() if src.stem != "report"}
+    sources = {src.name: src for src in planned.values() if src.stem != "report"}
+    own_folder = root == (DEFAULT_ROOT / workspace.name).resolve()
     twins = []
-    for stem in sorted(stems):
+    for stem in sorted({src.stem for src in sources.values()}):
         for suffix in (".md", ".pdf", ".docx"):
             legacy = client_path(pathlib.Path(stem + suffix)).as_posix()
             current = client_path(pathlib.Path(stem + suffix), workspace).as_posix()
-            if legacy != current and legacy in unaccounted:
-                twins.append(legacy)
+            if legacy == current or legacy not in unaccounted:
+                continue
+            if not own_folder:
+                try:
+                    if (root / legacy).read_bytes() != sources[stem + suffix].read_bytes():
+                        continue
+                except (KeyError, OSError):
+                    continue  # nothing this round copies under that name vouches for it
+            twins.append(legacy)
     return twins
+
+
+def _same_file(one: pathlib.Path, other: pathlib.Path) -> bool:
+    """Two spellings of one file: a case-insensitive or normalising volume
+    (macOS, Windows) answers to both, and a string comparison cannot know."""
+    try:
+        return one.samefile(other)
+    except OSError:
+        return False
+
+
+def unowned_targets(out: pathlib.Path, previous: dict, root: pathlib.Path,
+                    workspace: pathlib.Path, make_pdf: bool,
+                    include_applications: bool | None) -> list[str]:
+    """Files this round would write into its recorded folder `out` over a file
+    its own manifest entry never recorded and whose bytes it cannot match.
+
+    The manifest sends a redelivery back to its folder without asking what else
+    is there, which was safe while the names never changed. They now follow the
+    report's language: after the upgrade an English report's CV lands on
+    Application/CV.pdf, and a client who kept their own Application/CV.pdf in
+    that shared folder had it overwritten without a word (measured 2026-11-20).
+    """
+    _, sources = _delivery_sources(workspace, make_pdf, include_applications)
+    copies = planned_copies(workspace, make_pdf, include_applications)
+    targets = set(copies)
+    for src in sources:
+        if make_pdf and src.suffix == ".md" and src.stem in REPORT_RENDERED:
+            # Rendered here, so there are no bytes to compare in advance.
+            targets.add(client_path(src.relative_to(workspace), workspace)
+                        .with_suffix(".pdf").as_posix())
+    recorded = [root / rel for rel in previous["files"]]
+    unowned = []
+    for tail in sorted(targets):
+        path = out / tail
+        if not path.is_file() or any(_same_file(path, known) for known in recorded):
+            continue
+        try:
+            if tail in copies and path.read_bytes() == copies[tail].read_bytes():
+                continue
+        except OSError:
+            pass
+        unowned.append(path.relative_to(root).as_posix())
+    return unowned
 
 
 def _safe_folder_name(text: str) -> str:
@@ -651,7 +757,7 @@ def _posting_label(workspace: pathlib.Path) -> str:
 
 
 def choose_folder(root: pathlib.Path, deliveries: list[dict], workspace: pathlib.Path,
-                  mode: str, foreign: list[str] | tuple = ()
+                  mode: str, foreign: list[str] | tuple = (), unowned=None
                   ) -> tuple[str, dict | None, dict | None]:
     """(folder, this owner's previous entry, the entry it had to step around).
 
@@ -659,16 +765,25 @@ def choose_folder(root: pathlib.Path, deliveries: list[dict], workspace: pathlib
     `foreign` (see foreign_files) holds the destination's top level like a
     recorded delivery would; the entry stepped around is then
     `{"unaccounted": foreign}`.
+
+    `unowned`, when given, is called with this owner's previous entry and returns
+    the files in its folder this round would overwrite without owning them (see
+    unowned_targets). Any such file moves the round to a fresh subfolder; the
+    previous entry is still returned, so its own recorded files are cleaned up.
     """
     live = [entry for entry in deliveries if _alive(root, entry)]
     own = next((entry for entry in live if entry["workspace"] == str(workspace)
                 and entry["mode"] == mode), None)
-    if own is not None:
+    blocked = list(unowned(own)) if own is not None and unowned is not None else []
+    if own is not None and not blocked:
         return own["folder"], own, None
     taken = {entry["folder"]: entry for entry in live}
-    if "" not in taken and foreign:
-        taken[""] = {"unaccounted": list(foreign)}
-    if "" not in taken:
+    stepped_around = taken.get("")
+    if blocked:
+        stepped_around = {"unaccounted": blocked}
+    elif "" not in taken and foreign:
+        stepped_around = taken[""] = {"unaccounted": list(foreign)}
+    if stepped_around is None:
         return "", None, None
     labels = MODE_FOLDERS_BY_LANG[delivery_language(workspace)]
     mode_label = labels.get(mode, labels[""])
@@ -693,7 +808,7 @@ def choose_folder(root: pathlib.Path, deliveries: list[dict], workspace: pathlib
                 continue  # somebody else's folder, or files no manifest accounts for
         except OSError:
             continue
-        return candidate, None, taken[""]
+        return candidate, own, stepped_around
     raise ManifestError(f"no free subfolder name for {workspace.name} in {root}")
 
 
@@ -714,6 +829,11 @@ def finish_manifest(root: pathlib.Path, deliveries: list[dict], workspace: pathl
         path = root / rel
         try:
             if not path.is_file():
+                continue
+            # A report renamed in case only (acme bv -> Acme BV) is, on macOS and
+            # Windows, the file this run just wrote: removing the old spelling
+            # removed the delivery itself while the run said Delivered.
+            if any(_same_file(path, new) for new in written):
                 continue
             if journal.sha256_file(path) != sha:
                 notices.append(
@@ -1664,20 +1784,11 @@ def _render_pdf(md: pathlib.Path, pdf: pathlib.Path,
 
     style = _portable_report_style(source)
     if style:
-        # Counts blocks and source URLs are not the client's narrative language.
-        prose = "\n".join(line for line, literal in _report_lines(link_source) if not literal)
-        prose = _RAW_ANGLE_URL.sub("", _MD_LINK.sub(r"\1", prose))
-        prose = _MD_CODE.sub("", prose)
-        # An unambiguous local-language title is stronger evidence than repeated
-        # English skill names. Mixed titles can contain a person's or employer's
-        # name, so let the narrative decide instead of counting title letters.
-        local_title = next((line[2:].strip() for line in prose.splitlines()
-                            if line.startswith("# ") and has_cjk(line)
-                            and not re.search(r"[A-Za-zÀ-ɏ]", line)), "")
-        language_style = _portable_report_style(local_title or prose)
-        if language_style:
-            for key in ("footer", "page", "link", "separator"):
-                style[key] = language_style[key]
+        # The labels follow the narrative (report_language, which also names the
+        # delivered files); the font above still covers every quoted glyph.
+        language_style = _REPORT_STYLES[report_language(link_source)]
+        for key in ("footer", "page", "link", "separator"):
+            style[key] = language_style[key]
     # Without an explicit selection, prefer bundled, embedded report fonts.
     # This keeps Chinese, English, Japanese, Korean and Spanish layout identical
     # across machines, while the explicit RTL refusal above remains unchanged.
@@ -2012,7 +2123,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         deliveries = read_manifest(dest)
         foreign = foreign_files(dest, deliveries, ws, not args.no_pdf, include_applications)
-        folder, previous, displaced = choose_folder(dest, deliveries, ws, mode, foreign)
+        folder, previous, displaced = choose_folder(
+            dest, deliveries, ws, mode, foreign,
+            lambda own: unowned_targets(dest / own["folder"] if own["folder"] else dest, own,
+                                        dest, ws, not args.no_pdf, include_applications))
     except ManifestError as exc:
         print(f"DELIVER_MANIFEST_UNREADABLE: {exc}. It records which workspace wrote "
               "each file here, so nothing was copied rather than risk overwriting "

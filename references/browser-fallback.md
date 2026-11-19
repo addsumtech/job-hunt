@@ -231,7 +231,12 @@ Login do not establish a login wall. Explicit wall language does.
 The bundled reader also treats a final URL whose path is a verification page
 (a whole `captcha` path segment, for example WeChat's
 `/mp/wappoc_appmsgcaptcha`) as a refusal even when that page renders no text:
-it sets `blocked: true` and hands the tab to the user. A page that loaded but
+it sets `blocked: true` and hands the tab to the user. The URL counts only
+when the page shows almost nothing: with no readable text at all, any path that
+mentions `captcha` (`/captcha-verify`, `/recaptcha/challenge`) is handed over;
+with a few words, only the whole segment is; a page with readable content is
+read normally whatever its address (an article at `/wiki/CAPTCHA`, a product
+page at `/product/captcha`). A page that loaded but
 exposed no readable text is marked `empty_capture: true`, prints
 `EMPTY_CAPTURE` and exits 2. Neither is an empty search result or a read
 article; do not retry it through another tool.

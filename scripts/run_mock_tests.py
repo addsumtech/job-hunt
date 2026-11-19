@@ -36,14 +36,21 @@ import pathlib
 import signal
 import subprocess
 import sys
+import tempfile
+import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import journal
 
 CASES = "cases.json"
 RESULT = "result.json"
-# Enough of a wrong answer to see what went wrong, not a megabyte of it.
+# Enough of a wrong answer to see what went wrong, not a megabyte of it. This bounds
+# what is WRITTEN to result.json; the comparison reads the whole output.
 KEEP = 2000
+# No hidden case expects this much. A solution that prints in an endless loop is
+# stopped here instead of being buffered until the timeout: `while True: print(...)`
+# took the runner to 5.7 GB and 48 s on a 5 s timeout (measured 2026-11-20).
+MAX_OUTPUT = 8 * 1024 * 1024
 
 
 class CannotRun(RuntimeError):
@@ -63,8 +70,10 @@ def load_cases(qdir: pathlib.Path) -> list:
         raise CannotRun(f"{path} is missing — write the hidden cases before running")
     try:
         cases = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise CannotRun(f"{path} is not valid JSON: {exc}") from exc
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise CannotRun(f"{path} is not valid UTF-8 JSON: {exc}") from exc
+    except OSError as exc:
+        raise CannotRun(f"{path} could not be read: {exc}") from exc
     if not isinstance(cases, list) or not cases:
         raise CannotRun(f"{path} must be a non-empty JSON list of cases")
     for i, case in enumerate(cases):
@@ -108,33 +117,59 @@ def _kill_tree(proc: subprocess.Popen) -> None:
             pass
 
 
+def _read(handle, limit: int) -> str:
+    handle.seek(0)
+    return handle.read(limit).decode("utf-8", errors="replace")
+
+
 def _run(cmd: str, qdir: pathlib.Path, stdin: str, timeout: float) -> dict:
-    started = datetime.datetime.now()
+    """One command, fed `stdin`, with its whole stdout returned.
+
+    Output goes to temporary files, not pipes: the size can be watched while the
+    command runs, and nothing is held in memory until it is read back. `stdout` is
+    complete up to MAX_OUTPUT — the caller compares it, then keeps only KEEP of it.
+    """
+    started = time.monotonic()
     # Its own process group, so a timeout reaches the solution and not just the shell.
-    # UTF-8 both ways: a locale codec (cp936 on a Chinese Windows) misreads the output.
     group = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt"
              else {"start_new_session": True})
-    proc = subprocess.Popen(cmd, shell=True, cwd=qdir, stdin=subprocess.PIPE,
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-                            encoding="utf-8", errors="replace", **group)
-    try:
-        out, err = proc.communicate(stdin, timeout=timeout)
-    except subprocess.TimeoutExpired:
-        _kill_tree(proc)
+    timed_out = flooded = False
+    with tempfile.TemporaryFile() as fin, tempfile.TemporaryFile() as fout, \
+            tempfile.TemporaryFile() as ferr:
+        # UTF-8 both ways: a locale codec (cp936 on a Chinese Windows) misreads it.
+        fin.write(stdin.encode("utf-8"))
+        fin.seek(0)
+        proc = subprocess.Popen(cmd, shell=True, cwd=qdir, stdin=fin, stdout=fout,
+                                stderr=ferr, **group)
         try:
-            out, _ = proc.communicate(timeout=5)
-        except subprocess.TimeoutExpired:
-            out = ""
-        return {"timed_out": True, "returncode": None, "stdout": (out or "")[:KEEP],
-                "stderr": "", "seconds": round(timeout, 3)}
-    finally:
-        if proc.poll() is None:
-            _kill_tree(proc)
-    if os.name != "nt":
-        _kill_tree(proc)  # anything the solution left running in the background
-    return {"timed_out": False, "returncode": proc.returncode,
-            "stdout": out[:KEEP], "stderr": err[:KEEP],
-            "seconds": round((datetime.datetime.now() - started).total_seconds(), 3)}
+            while True:
+                try:
+                    proc.wait(timeout=0.05)
+                    break
+                except subprocess.TimeoutExpired:
+                    if max(os.fstat(fout.fileno()).st_size,
+                           os.fstat(ferr.fileno()).st_size) > MAX_OUTPUT:
+                        flooded = True
+                    elif time.monotonic() - started >= timeout:
+                        timed_out = True
+                    else:
+                        continue
+                    _kill_tree(proc)
+                    try:
+                        proc.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        pass
+                    break
+        finally:
+            if proc.poll() is None:
+                _kill_tree(proc)
+        if os.name != "nt":
+            _kill_tree(proc)  # anything the solution left running in the background
+        out, err = _read(fout, MAX_OUTPUT), _read(ferr, KEEP)
+    return {"timed_out": timed_out, "output_limit": flooded,
+            "returncode": None if (timed_out or flooded) else proc.returncode,
+            "stdout": out, "stderr": err,
+            "seconds": round(timeout if timed_out else time.monotonic() - started, 3)}
 
 
 def run(qdir, cmd: str, build: str | None = None, timeout: float = 5.0) -> dict:
@@ -156,7 +191,8 @@ def run(qdir, cmd: str, build: str | None = None, timeout: float = 5.0) -> dict:
         built = _run(build, qdir, "", max(timeout, 60.0))
         if built["timed_out"] or built["returncode"] != 0:
             result["build_ok"] = False
-            result["build_output"] = (built["stdout"] + built["stderr"])[:KEEP]
+            # The end of a compiler's output names the error; the start is often notes.
+            result["build_output"] = (built["stdout"] + built["stderr"])[-KEEP:]
     # Hashed AFTER the build. A build never edits the sources, and the binary it
     # writes is the one the cases run against. Hashing before it recorded the
     # previous submission's binary, so every resubmitted C++/Java/Go solution read
@@ -170,12 +206,26 @@ def run(qdir, cmd: str, build: str | None = None, timeout: float = 5.0) -> dict:
                              "stderr": "build failed", "seconds": 0})
             continue
         got = _run(cmd, qdir, case["stdin"], timeout)
-        passed = (not got["timed_out"] and got["returncode"] == 0
+        # Compared in full. Comparing the KEEP-truncated text failed every correct
+        # solution whose expected output ran past 2000 characters — the large case
+        # references/preparation.md asks for.
+        passed = (not got["timed_out"] and not got["output_limit"]
+                  and got["returncode"] == 0
                   and normalize_output(got["stdout"]) == normalize_output(case["expected"]))
         outcomes.append({"name": case["name"], "passed": passed,
-                         "timed_out": got["timed_out"], "returncode": got["returncode"],
-                         "expected": case["expected"][:KEEP], "stdout": got["stdout"],
+                         "timed_out": got["timed_out"],
+                         "output_limit": got["output_limit"],
+                         "returncode": got["returncode"],
+                         "expected": case["expected"][:KEEP],
+                         "stdout": got["stdout"][:KEEP],
                          "stderr": got["stderr"], "seconds": got["seconds"]})
+    # A file the run itself rewrites (a log the solution appends to) is not the code
+    # under test, and its hash is out of date the moment the last case ends: the gate
+    # then read every later result as STALE_TEST_RESULT. Keep what stayed the same.
+    after = file_hashes(qdir, candidate_files(qdir))
+    result["solution_sha256"] = {name: digest
+                                 for name, digest in result["solution_sha256"].items()
+                                 if after.get(name) == digest}
     passed = sum(1 for o in outcomes if o["passed"])
     result.update(cases=outcomes, passed=passed, total=len(outcomes),
                   status=status_of(passed, len(outcomes)))
@@ -199,7 +249,8 @@ def main(argv=None) -> int:
     if not result["build_ok"]:
         print("BUILD FAILED:\n" + result["build_output"])
     for case in result["cases"]:
-        mark = "pass" if case["passed"] else ("TIMEOUT" if case["timed_out"] else "FAIL")
+        mark = ("pass" if case["passed"] else "TIMEOUT" if case["timed_out"]
+                else "OUTPUT LIMIT" if case.get("output_limit") else "FAIL")
         print(f"{mark}  {case['name']}  ({case['seconds']}s)")
     print(f"{result['passed']} of {result['total']} cases passed — status "
           f"{result['status']}; written to {pathlib.Path(args.dir) / RESULT}")

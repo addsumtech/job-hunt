@@ -1548,8 +1548,54 @@ def blockquote_allowlist(lines: list[str]) -> set[int]:
     return exempt
 
 
+# ---- subject surfaces: a prep plan and a round's study notes -------------------
+#
+# These files TEACH. `The target range is 94–98%`, `P(two aces) = 1/221`, a
+# `## Probability` topic for a quant candidate and `2 of 3 cases passed` are the
+# content, and with the ordinary rules every quant, data, clinical, accounting and
+# aptitude drill failed its gate unless each fact was hidden in backticks (measured
+# 2026-11-20). What stays banned there is what is banned everywhere: a number or a
+# probability word about THE CANDIDATE'S OUTCOME, and a mark given to the candidate.
+_SUBJECT_NOUN = re.compile(
+    r"probabilit(?:y|ies)|odds|likelihood|概率|机率|機率|確率|확률|probabilités?"
+    r"|probabilidad(?:es)?|probabilità|wahrscheinlichkeit(?:en)?", re.I)
+_SUBJECT_OUTCOME = re.compile(
+    r"\b(?:interview(?:s|ed|ing)?|offers?|hired?|hiring|shortlist(?:ed|ing)?"
+    r"|screen(?:ed|ing)?|reject(?:ed|ion)?|(?:the|this|that|a)\s+(?:job|role|position)"
+    r"|pass(?:es|ed|ing)?|succeed(?:s|ed|ing)?|success|fail(?:s|ed|ing)?)\b"
+    r"|面试|面試|录用|錄用|录取|錄取|入围|入圍|进面|進面|上岸|初筛|初篩|通过|通過|拿到|过关|過關"
+    r"|offer|面接|内定|採用|合格|합격|면접|entrevista|oferta|Vorstellungsgespr", re.I)
+_SUBJECT_CHANCE = re.compile(
+    r"\b(?:chances?|odds|likel(?:y|ihood)|probab\w+|confiden\w+)\b"
+    r"|概率|机率|機率|几率|幾率|可能性|把握|胜算|勝算|確率|見込み|확률|가능성", re.I)
+# A mark given to the candidate. `GCS score 13/15` is caught too: say it in backticks.
+_SUBJECT_MARK = re.compile(
+    r"\b(?:scor(?:e|es|ed|ing)|rat(?:ed|ing|ings)|grad(?:e|es|ed|ing)|marks?"
+    r"|out\s+of\s+(?:10|100)|readiness)\b"
+    r"|得分|评分|評分|打分|分数|分數|匹配度|点数|點數|採点|점수", re.I)
+_SUBJECT_OWNED = re.compile(
+    r"(?:\b(?:your|their|his|her|interview|offer|hiring|hire|success|pass(?:ing)?)"
+    r"|你的|您的|面试|面試|录用|錄用|录取|錄取|通过|通過|成功|合格|内定)\W{0,3}(?:的)?$", re.I)
+_SUBJECT_LINK = re.compile(r"\s*(?:of|that|to|for|you|your|de|que|dass)\b", re.I)
+
+
+def _subject_matter(code: str, line: str, match) -> bool:
+    """True when this finding, on a subject surface, is the subject and not a forecast."""
+    if code in ("PERCENT", "SCORE_PATTERN"):
+        return not (_SUBJECT_MARK.search(line)
+                    or (_SUBJECT_CHANCE.search(line) and _SUBJECT_OUTCOME.search(line)))
+    if code != "PREDICTION_WORD" or not _SUBJECT_NOUN.fullmatch(match.group(0)):
+        return False
+    if _SUBJECT_OWNED.search(line[max(0, match.start() - 16):match.start()]):
+        return False
+    after = line[match.end():match.end() + 45]
+    if match.group(0).isascii():
+        return not (_SUBJECT_LINK.match(after) and _SUBJECT_OUTCOME.search(after))
+    return not _SUBJECT_OUTCOME.search(after[:14])
+
+
 def scan_text(text: str, label: str, corpus: str = "", *,
-              judgement: bool | None = None) -> list[str]:
+              judgement: bool | None = None, subject: bool = False) -> list[str]:
     # A caller reading an actual debrief can know its role even when the model
     # chose a noncanonical filename. Keep the original label in every finding.
     if judgement is None:
@@ -1566,6 +1612,8 @@ def scan_text(text: str, label: str, corpus: str = "", *,
         masked = mask_exempt_spans(mask_copied_numbers(quoted, corpus))
         for code, pattern in checks:
             for match in pattern.finditer(masked):
+                if subject and _subject_matter(code, masked, match):
+                    continue
                 original = line[match.start():match.end()]
                 findings.append(f"{code}: {label}:{number + 1}: {original!r} "
                                 f"in {line.strip()!r}")

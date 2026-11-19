@@ -34,7 +34,9 @@ OpenCLI capability diagnosis first, following
    Start `python scripts/run_tool.py browser-session start` once and wait for
    consent; use `browser-session status` instead of repeated starts while waiting.
    Start it immediately before the first live read, after every question to the
-   user is answered: an idle session closes itself after 30 minutes.
+   user is answered: an idle session closes itself after 30 minutes. The 30
+   minutes count from the last use, or from the moment the browser accepted the
+   connection; time spent waiting for consent is not idle time.
    In WorkBuddy, run that command in its own Bash call with
    `run_in_background: true`; it serves the session and does not exit. Keep the
    returned Bash task running while using the browser. If the call ran in the
@@ -52,6 +54,13 @@ OpenCLI capability diagnosis first, following
    The one exception is an idle expiry: when `browser-session status` reports
    `"state":"stopped","reason":"idle_timeout"`, run `browser-session start`
    once in the same chat and tell the user to accept the browser's prompt again.
+   A session whose process is gone is treated the same way: the task was
+   killed, it crashed or the machine restarted, and `status` reports
+   `"reason":"process_gone"`. Nobody stopped it and the browser did not refuse
+   it, so run `browser-session start` once in the same chat; no `reset` is
+   needed, and `reset` in that chat answers with the same instruction. A stop
+   the user asked for, a dropped connection and an expired consent still wait
+   for the user.
    Read the reason in the error before telling the user what to do. Only a
    message that itself names `chrome://inspect/#remote-debugging` means the
    setting may be off; a stopped, expired or disconnected session says the
@@ -59,6 +68,14 @@ OpenCLI capability diagnosis first, following
    An ended session from an older install without a chat ID can be reset from
    the user's terminal. Keep `stop`, `reset` and `start` outside site and job
    retry loops.
+   If a command reports that the session state file is unreadable, run
+   `browser-session reset` once (allowed in any chat for a damaged file), then
+   start one session. A read that fails with `BROWSER_SESSION_UNAVAILABLE`
+   carries the session's own explanation; follow it, and do not rerun
+   `setup_dependencies.py` for it. `A browser session state change is in
+   progress` means another `start`, `stop` or `reset` is running: check
+   `status` and try again shortly. A lock left by a killed command is taken
+   over automatically after 30 seconds.
    Run OpenCLI (including `auth status`) and fallback captures through
    `run_tool.py` so they reuse this connection. Close it with
    `browser-session stop` at the end. Idle sessions expire after 30 minutes;

@@ -133,3 +133,15 @@ def test_report_label_names_the_direction_in_the_readers_words(tmp_path, label, 
     write(tmp_path, 'brief.yaml', {'locations': ['Netherlands'], 'report_label': label,
                                    'target_titles': ['medical imaging AI', 'LLM engineer']})
     assert report_stem(tmp_path, 'discover') == expected
+
+
+@pytest.mark.parametrize("space", ["\u3000", "\u00a0", "\u2003"])
+def test_a_name_pasted_with_a_non_ascii_space_can_be_delivered_twice(tmp_path, space):
+    """The stem kept the space, the manifest check stripped it, and the second
+    delivery to the folder stopped at DELIVER_MANIFEST_UNREADABLE."""
+    ws = build(tmp_path)
+    write(ws, 'profile.yaml', {'meta': {'name': f'{space}张三{space}'}})
+    assert report_stem(ws, 'apply').startswith('张三－')
+    dest = tmp_path / 'out'
+    assert run(ws, dest, '--no-pdf') == 0
+    assert run(ws, dest, '--no-pdf') == 0

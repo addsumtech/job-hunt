@@ -391,7 +391,16 @@ def check_assessment(assessment_text: str, transcript_text: str, round_no: int,
 # A hint is logged in the transcript as its own turn, `**Hint (nudge):** ...`, so the
 # help given is countable rather than remembered. `[^)]*` and not the closed set, so
 # a misspelt level is reported instead of silently not counting as a hint at all.
-_HINT_LINE = re.compile(r"^\*\*Hint \(([^)]*)\):\*\*", re.M)
+#
+# The documented form is the strict one; what is COUNTED is every near miss of it.
+# A full-width colon, the colon outside the bold, a lower-case `hint`, a list bullet
+# or a `**Interviewer:**` prefix each made the line invisible, and `hint=none` then
+# passed over a transcript that plainly logged help (measured 2026-11-20). 提示 is
+# the same turn in a Chinese transcript.
+_HINT_LINE = re.compile(
+    r"^[ \t]*(?:[-*+][ \t]+)?(?:\*\*[^*\n]{1,40}[:：]\*\*[ \t]*)?"
+    r"\*\*[ \t]*(?:hint|提示)[ \t]*[(（]([^)）\n]*)[)）][ \t]*"
+    r"(?:[:：][ \t]*\*\*|\*\*[ \t]*[:：]?)", re.M | re.I)
 _TRANSCRIPT_ROUND_TYPE = re.compile(r"^Round type:[ \t]*(\S+)", re.M | re.I)
 
 
@@ -434,11 +443,26 @@ def _check_solve_result(record, workspace: pathlib.Path, round_no: int) -> list:
         return []
     try:
         result = json.loads(path.read_text(encoding="utf-8"))
-        cases = result["cases"]
-        actual = run_mock_tests.status_of(sum(1 for c in cases if c.get("passed")),
-                                          len(cases))
-    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         return [f"TEST_RESULT_UNREADABLE: {path}: {type(exc).__name__}: {exc}"]
+    # The shape run_mock_tests.py writes, checked before anything is read from it. A
+    # hand-written file with no cases counted as all_passed (0 of 0), one with no
+    # solution hashes was never stale whatever happened to the code, and a list where
+    # a dict belongs was a traceback that exited 1 like a finding.
+    cases = result.get("cases") if isinstance(result, dict) else None
+    hashes = result.get("solution_sha256") if isinstance(result, dict) else None
+    if (not isinstance(cases, list) or not cases
+            or not all(isinstance(c, dict) and isinstance(c.get("passed"), bool)
+                       for c in cases)
+            or not isinstance(hashes, dict) or not hashes
+            or not all(isinstance(v, str) for v in hashes.values())
+            or not isinstance(result.get("cases_sha256"), str)):
+        return [
+            f"TEST_RESULT_UNREADABLE: {path} is not a result scripts/run_mock_tests.py "
+            "wrote (it needs a non-empty cases list, cases_sha256 and solution_sha256) "
+            "— re-run the script rather than editing the file"
+        ]
+    actual = run_mock_tests.status_of(sum(1 for c in cases if c["passed"]), len(cases))
     findings = []
     if claimed != actual:
         findings.append(
@@ -453,7 +477,7 @@ def _check_solve_result(record, workspace: pathlib.Path, round_no: int) -> list:
             f"STALE_TEST_RESULT: {ref}: {cases_path.name} changed after the run "
             "recorded in result.json — re-run scripts/run_mock_tests.py"
         )
-    for name, digest in sorted((result.get("solution_sha256") or {}).items()):
+    for name, digest in sorted(hashes.items()):
         file = qdir / name
         if not file.is_file() or journal.sha256_file(file) != digest:
             findings.append(
@@ -499,7 +523,7 @@ def check_learned_records(block, transcript_text: str, workspace: pathlib.Path,
                 )
         section = sections.get(ref)
         if section is not None:
-            levels = [m.group(1).strip() for m in _HINT_LINE.finditer(section)]
+            levels = [m.group(1).strip().lower() for m in _HINT_LINE.finditer(section)]
             for level in levels:
                 if level not in V.HINT_LEVELS[1:]:
                     findings.append(
@@ -852,7 +876,7 @@ def _default_scanner(workspace: pathlib.Path):
     # Use the same verified source corpus as the standalone lint and assessment
     # gate. Without it, true historical metrics pass there but fail in mock guides.
     corpus = capture_corpus(workspace)
-    return lambda text, source: scanner(text, source, corpus)
+    return lambda text, source, **kw: scanner(text, source, corpus, **kw)
 
 
 _FENCE = re.compile(r"^[ \t]*(```|~~~).*?^[ \t]*\1[ \t]*$", re.M | re.S)
@@ -871,6 +895,9 @@ def blank_code(text: str) -> str:
 
 
 def check_vocabulary(paths: list, scanner, code_ok: tuple = ()) -> list:
+    """`code_ok` names the files that TEACH a subject — a prep plan, study notes.
+    Their code is blanked, and they are scanned as subject matter: see
+    lint_no_prediction.scan_text(subject=True)."""
     if scanner is None:
         raise MissingDependency(
             "scripts/lint_no_prediction.py (Plan 2) is not importable — refusing to "
@@ -883,8 +910,10 @@ def check_vocabulary(paths: list, scanner, code_ok: tuple = ()) -> list:
         # this skip reports "nothing to scan" rather than standing in for "clean".
         if path.exists():
             text = path.read_text(encoding="utf-8")
-            findings.extend(scanner(blank_code(text) if path in code_ok else text,
-                                    str(path)))
+            if path in code_ok:
+                findings.extend(scanner(blank_code(text), str(path), subject=True))
+            else:
+                findings.extend(scanner(text, str(path)))
     return findings
 
 

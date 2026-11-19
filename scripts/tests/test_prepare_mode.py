@@ -10,6 +10,8 @@ import json
 import pathlib
 import sys
 
+import pytest
+
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import check_drill
@@ -243,3 +245,85 @@ def test_drill_gate_receipt_and_missing_transcript_contract(tmp_path, capsys, mo
     assert check_drill.main(["--workspace", str(ws), "--round", "2",
                              "--skill-root", str(root)]) == 2
     assert journal.read_receipts(ws, "check_drill")[-1]["verdict"] == "could_not_run"
+
+
+# ------------------------------------------------- found in the 2026-11-20 review
+
+def test_a_relative_workspace_is_still_a_prep_workspace(tmp_path, monkeypatch):
+    """`--workspace .` has parent name '' and was read as an interview workspace:
+    NO_PREP_PLAN for mock/prep-plan.md, with the plan sitting right there."""
+    ws, root = prep_ws(tmp_path)
+    monkeypatch.chdir(ws)
+    assert check_prep_plan.is_prep_workspace(pathlib.Path("."))
+    assert plan_gate(pathlib.Path("."), root) == []
+
+
+QUANT_PLAN = """# Preparation plan — Quant researcher
+
+## Probability
+- why: family: Quant — Probability, statistics, mental arithmetic
+- be able to: compute a conditional probability aloud, e.g. two aces is 1/221, under 0.5%
+- practise: knowledge
+
+## 条件概率与期望
+- why: direction: "newly qualified"
+- be able to: 30 秒内口算常见的概率问题
+- practise: knowledge
+"""
+
+
+def test_a_plan_may_name_probability_as_a_subject(tmp_path):
+    ws, root = prep_ws(tmp_path, plan=QUANT_PLAN)
+    assert check_prep_plan.run(ws, skill_root=root) == []
+
+
+def test_a_plan_may_not_forecast_the_outcome(tmp_path):
+    ws, root = prep_ws(tmp_path, plan=QUANT_PLAN + "\nYour probability of getting an offer is high.\n")
+    assert "PREDICTION_WORD" in codes(check_prep_plan.run(ws, skill_root=root))
+
+
+def test_the_opening_loop_section_is_not_a_topic(tmp_path):
+    opener = ("## The loop you are preparing for\n"
+              "Application form, then a values-based panel interview with a scenario.\n\n")
+    ws, root = prep_ws(tmp_path, plan=PLAN.replace("## Values-based questions",
+                                                   opener + "## Values-based questions"))
+    assert plan_gate(ws, root) == []
+
+
+def test_a_bare_topic_after_the_first_heading_still_fails(tmp_path):
+    ws, root = prep_ws(tmp_path, plan=PLAN + "\n## Medication safety\n")
+    assert "PREP_NO_ABILITY" in codes(plan_gate(ws, root))
+
+
+def test_a_plan_of_one_bare_heading_still_fails(tmp_path):
+    ws, root = prep_ws(tmp_path, plan="# Plan\n\n## Everything\nRead widely.\n")
+    assert "PREP_NO_ABILITY" in codes(plan_gate(ws, root))
+
+
+@pytest.mark.parametrize("why", [
+    'cv: „Recognised a deteriorating patient on placement“',
+    'cv: «Recognised a deteriorating patient on placement»',
+    'cv: 「Recognised a deteriorating patient on placement」',
+    'cv： "Recognised a deteriorating patient on placement"',
+])
+def test_other_quotation_marks_and_a_full_width_colon_are_read(tmp_path, why):
+    ws, root = prep_ws(tmp_path, plan=PLAN.replace(
+        'cv: "Recognised a deteriorating patient on placement"', why))
+    assert plan_gate(ws, root) == []
+
+
+@pytest.mark.parametrize("quote", ['" "', '"e"', '"在"'])
+def test_a_quote_too_short_to_prove_anything_fails(tmp_path, quote):
+    ws, root = prep_ws(tmp_path, cv=CV + "在职\n", plan=PLAN.replace(
+        '"Recognised a deteriorating patient on placement"', quote))
+    assert "PREP_WHY_TOO_SHORT" in codes(plan_gate(ws, root))
+
+
+def test_a_clinical_fact_in_drill_notes_is_not_a_prediction(tmp_path):
+    ws, root = drill_ws(tmp_path, notes=NOTES + "- Target oxygen saturation is 94–98% for most adults.\n")
+    assert check_drill.run(ws, 1, skill_root=root) == []
+
+
+def test_a_forecast_in_drill_notes_still_fails(tmp_path):
+    ws, root = drill_ws(tmp_path, notes=NOTES + "- You have a 90% chance of passing the interview.\n")
+    assert check_drill.run(ws, 1, skill_root=root) != []

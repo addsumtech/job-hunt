@@ -15,6 +15,17 @@ import uuid
 from setup_dependencies import SKILL, default_root
 
 
+class SessionUnavailable(ValueError):
+    """The browser session ended, expired or is still waiting for consent.
+
+    Kept apart from the other launch failures because the remedy differs: the
+    runtime is installed and intact, and browser_session.mjs has already said
+    what to do. Printed like the rest, an idle expiry ended with "run
+    scripts/setup_dependencies.py for the needed capability" and sent the
+    agent to reinstall a runtime that was never the problem.
+    """
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--root", type=Path, default=default_root())
@@ -58,7 +69,7 @@ def main(argv=None):
                 "endpoint", "--root", str(args.root.expanduser()), "--browser", browser],
                 capture_output=True, text=True)
             if probe.returncode:
-                raise ValueError(probe.stderr.strip())
+                raise SessionUnavailable(probe.stderr.strip())
             return probe.stdout.strip()
 
         if args.tool == "opencli":
@@ -185,6 +196,9 @@ def main(argv=None):
 if __name__ == "__main__":
     try:
         sys.exit(main())
+    except SessionUnavailable as exc:
+        print(f"BROWSER_SESSION_UNAVAILABLE: {exc}", file=sys.stderr)
+        sys.exit(1)
     except (OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
         print(f"TOOL_UNAVAILABLE: {exc}; run scripts/setup_dependencies.py for the needed capability", file=sys.stderr)
         sys.exit(1)
