@@ -213,3 +213,27 @@ def test_a_case_only_rename_does_not_delete_the_report_just_delivered(tmp_path, 
     reports = [rel for rel in client_files(dest) if rel.startswith("Report/")]
     assert len(reports) == 1 and reports[0].lower().endswith("application advice.md")
     assert (dest / MANIFEST).is_file()
+
+
+# ---- 1.5.1 follow-ups ------------------------------------------------------
+
+def test_a_short_spanish_report_without_the_vocabulary_is_spanish():
+    text = ("# Informe\n\nEl equipo es pequeño y la empresa está en Madrid. Hay margen "
+            "para crecer, pero el puesto pide más años de los que tienes.\n")
+    assert deliver.text_language(text) == "es"
+
+
+@pytest.mark.parametrize("text", [
+    "The team is small and the company is in Madrid. Los Angeles and El Paso are "
+    "the other offices, and Las Vegas is the third. You would report to the CTO.",
+    "L'équipe est petite et la société est à Paris. Il y a de la marge pour grandir, "
+    "mais le poste demande plus d'années que vous n'en avez.",
+    "Il team è piccolo e la società è a Milano. C'è margine per crescere, ma il "
+    "ruolo chiede più anni di quelli che hai. Lo stipendio è nella media.",
+    "A equipa é pequena e a empresa está em Lisboa. Há margem para crescer, mas a "
+    "vaga pede mais anos do que tens. O salário está na média.",
+    "Het team is klein en het bedrijf zit in Utrecht. Er is ruimte om te groeien, "
+    "maar de functie vraagt meer jaren dan je hebt.",
+])
+def test_other_latin_languages_still_fall_back_to_english(text):
+    assert deliver.text_language(text) == "en"
