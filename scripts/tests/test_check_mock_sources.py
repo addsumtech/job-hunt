@@ -238,7 +238,7 @@ def test_an_explicit_answer_bank_path_is_honoured(tmp_path):
 # ---------------------------------------------------------------- banned vocabulary
 
 def test_banned_vocabulary_findings_are_passed_through(tmp_path):
-    def scanner(text, source):
+    def scanner(text, source, **_):
         return [f"BANNED_VOCAB: {source}: 'strong candidate'"] if "assessment" in source else []
 
     findings = check_mock.run(F.build(tmp_path), 2, today=TODAY, vocab_scanner=scanner)
@@ -248,7 +248,7 @@ def test_banned_vocabulary_findings_are_passed_through(tmp_path):
 def test_the_vocabulary_scanner_sees_the_candidate_facing_files(tmp_path):
     seen = []
 
-    def scanner(text, source):
+    def scanner(text, source, **_):
         seen.append(pathlib.Path(source).name)
         return []
 

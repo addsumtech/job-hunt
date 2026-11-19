@@ -124,7 +124,12 @@ def _clean(value: object) -> str | None:
     if not isinstance(value, str):
         return None
     text = _UNSAFE.sub("", value)
-    text = "".join(char for char in text if unicodedata.category(char) not in {"Cc", "Cf", "Cs"}).strip(" .")
+    text = "".join(char for char in text if unicodedata.category(char) not in {"Cc", "Cf", "Cs"})
+    # Every kind of space, not only U+0020: a name pasted with a leading
+    # ideographic or no-break space made a stem deliver.py's own manifest check
+    # (which strips them all) refused to read back, so the first delivery passed
+    # and every later one to that folder stopped at DELIVER_MANIFEST_UNREADABLE.
+    text = re.sub(r"^[\s.]+|[\s.]+$", "", text)
     return text or None
 
 

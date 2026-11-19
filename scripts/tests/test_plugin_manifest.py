@@ -87,6 +87,19 @@ def test_the_version_is_semver():
     assert re.fullmatch(r"\d+\.\d+\.\d+", _json(PLUGIN)["version"])
 
 
+def test_the_changelog_newest_release_is_the_manifest_version():
+    """A version bump that leaves its notes under the unreleased heading ships a
+    release whose changelog stops one version short; a dated heading with no
+    bump describes a release nobody can install."""
+    text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    released = re.findall(r"^## (\d+\.\d+\.\d+) — \d{4}-\d{2}-\d{2}$", text, re.M)
+    assert released, "CHANGELOG.md has no dated release heading"
+    assert released[0] == _json(PLUGIN)["version"], (
+        f"CHANGELOG.md's newest release is {released[0]}, the manifests say "
+        f"{_json(PLUGIN)['version']}")
+    assert len(released) == len(set(released)), "a release heading is repeated"
+
+
 @pytest.mark.parametrize("readme", READMES, ids=lambda p: p.name)
 def test_the_readme_advertises_the_manifest_version(readme):
     """A badge or an install line quoting a version the manifests do not carry

@@ -48,3 +48,26 @@ def test_doctor_probes_writes_without_creating_the_folder(locked):
     assert not (locked / "not-yet").exists()
     ok, _ = doctor.can_write(locked.parent / "free" / "deeper")
     assert ok and not (locked.parent / "free").exists()
+
+
+@pytest.fixture
+def store_is_a_file(tmp_path, monkeypatch):
+    """Not a permission problem: JOBHUNT_PROFILES_ROOT names a regular file."""
+    root = tmp_path / "not-a-folder"
+    root.write_text("", encoding="utf-8")
+    monkeypatch.setattr(paths, "PROFILES_ROOT", root)
+    return root
+
+
+def test_paths_reports_a_file_in_the_store_place_and_exits_2(store_is_a_file, capsys):
+    assert paths.main(["--name", "Test Person", "--company", "Acme", "--role", "Nurse"]) == 2
+    assert capsys.readouterr().err.startswith("STORE_UNWRITABLE:")
+
+
+def test_save_profile_reports_a_file_in_the_store_place_and_exits_2(store_is_a_file, tmp_path,
+                                                                    capsys):
+    profile = tmp_path / "p.yaml"
+    profile.write_text("meta:\n  language: en\nname: Test Person\n", encoding="utf-8")
+    assert save_profile.main(["--name", "Test Person", "--profile", str(profile)]) == 2
+    assert "STORE_UNWRITABLE:" in capsys.readouterr().err
+

@@ -85,11 +85,49 @@ test('a verification page with no readable text is handed to the user, not close
   assert.deepEqual(commands.filter(c=>c.method==='JobHunt.handoffTarget').map(c=>c.params.targetId),[target]);
 });
 
-test('only a whole captcha path segment is a verification URL',()=>{
+test('beside a little text, only a whole captcha path segment is a verification URL',()=>{
+  const little='环境异常';
   for (const url of ['https://mp.weixin.qq.com/mp/wappoc_appmsgcaptcha?x=1','https://example.com/captcha','https://example.com/security/captcha/verify','https://example.com/captcha.html'])
-    assert.equal(refusalUrl(url),true,url);
+    assert.equal(refusalUrl(url,little),true,url);
   for (const url of ['https://example.com/jobs/captcha-engineer','https://example.com/jobs?q=captcha','https://example.com/recaptcha-team/roles','https://example.com/','not a url'])
-    assert.equal(refusalUrl(url),false,url);
+    assert.equal(refusalUrl(url,little),false,url);
+});
+
+test('a readable page under a captcha path is read, not handed to the user as a wall',async()=>{
+  // The URL alone decided: an encyclopedia article at /wiki/CAPTCHA and a
+  // vendor's /product/captcha page came back blocked with 4200 readable
+  // characters, their tab was left open in front of the user, and the recorder
+  // stopped the whole source for the round.
+  const article='A CAPTCHA is a type of challenge-response test used in computing to determine whether the user is human. '.repeat(40);
+  for (const pageUrl of ['https://en.wikipedia.org/wiki/CAPTCHA','https://cloud.tencent.com/product/captcha','https://github.com/topics/captcha','https://example.com/blog/2024/captcha/']) {
+    assert.equal(refusalUrl(pageUrl,article),false,pageUrl);
+    const {Socket,commands}=fixture({pageUrl,pageText:article});
+    const result=await capture({endpoint:'ws://127.0.0.1:9222/devtools/browser/test',url:pageUrl,settleMs:0,WebSocketImpl:Socket});
+    assert.equal(result.blocked,undefined,pageUrl);
+    assert.equal(result.handoff,undefined,pageUrl);
+    assert.equal(result.empty_capture,undefined,pageUrl);
+    assert.equal(commands.at(-1).method,'Target.closeTarget',pageUrl);
+    assert.deepEqual(commands.filter(c=>c.method==='JobHunt.handoffTarget'),[],pageUrl);
+  }
+});
+
+test('a textless page whose path mentions captcha is handed to the user, however the site spells it',async()=>{
+  // Only a whole `captcha` segment counted, so these verification pages were
+  // closed as empty captures and the user was left with nothing to solve.
+  for (const pageUrl of ['https://example.com/captcha-verify?return=%2Fjobs','https://example.com/recaptcha/challenge','https://example.com/Security/CaptchaCheck']) {
+    const {Socket,commands,target}=fixture({pageUrl,pageText:' \n'});
+    const result=await capture({endpoint:'ws://127.0.0.1:9222/devtools/browser/test',url:'https://example.com/jobs',settleMs:0,WebSocketImpl:Socket});
+    assert.equal(result.blocked,true,pageUrl);
+    assert.equal(result.empty_capture,undefined,pageUrl);
+    assert.equal(result.handoff.kept_open,true,pageUrl);
+    assert.deepEqual(commands.filter(c=>c.method==='Target.closeTarget'),[],pageUrl);
+    assert.deepEqual(commands.filter(c=>c.method==='JobHunt.handoffTarget').map(c=>c.params.targetId),[target],pageUrl);
+  }
+  // The query string is the site's own search and filter input, never evidence.
+  const {Socket,commands}=fixture({pageUrl:'https://example.com/jobs?q=captcha',pageText:''});
+  const result=await capture({endpoint:'ws://127.0.0.1:9222/devtools/browser/test',url:'https://example.com/jobs?q=captcha',settleMs:0,WebSocketImpl:Socket});
+  assert.deepEqual([result.blocked,result.empty_capture],[undefined,true]);
+  assert.equal(commands.at(-1).method,'Target.closeTarget');
 });
 
 test('a loaded page with no readable text is flagged, and its own tab is still closed',async()=>{

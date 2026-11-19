@@ -209,7 +209,7 @@ Folder and file names follow the report's language (`Report/`, `Informe/`,
 `レポート/`, `보고서/`; Chinese when there is no text to tell).
 Report filenames include available candidate, company/role or search direction,
 date and mode (recommendation, assessment, application advice, interview
-debrief or preparation plan); incomplete legacy workspaces retain `求职建议报告`. Source files remain
+debrief or preparation plan); a workspace naming neither a candidate nor a target keeps the generic name in that language (`求职建议报告`, `Career consultation report`). Source files remain
 `report.md`/`report.pdf`;
 requested application files go under `简历/` and an interview brief under
 `面试准备/`. Use the same `--to` directory for

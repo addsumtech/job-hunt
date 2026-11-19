@@ -28,8 +28,22 @@ export const REFUSAL = /(?:enter|complete|solve) (?:the |this |a )?captcha|(?:ve
 // the read exited 0. The FINAL URL is evidence too. Match a whole path segment
 // only, so a posting such as /jobs/captcha-engineer is not a wall.
 export const REFUSAL_PATH = /(?:^|\/)(?:[a-z0-9]+_)*(?:app)?(?:msg)?captcha(?:[._][a-z0-9]+)?(?:\/|$)/i;
-export function refusalUrl(value) {
-  try {return REFUSAL_PATH.test(new URL(value).pathname);} catch {return false;}
+// The URL is evidence only for a page that shows (almost) nothing. As the sole
+// test it called every readable page under such a path a wall: an encyclopedia
+// article at /wiki/CAPTCHA and a vendor's /product/captcha page were marked
+// blocked, left open in front of the user and stopped their source for the
+// round. A wall says little; an article does not fit in this many characters.
+export const REFUSAL_URL_MAX_TEXT = 80;
+// With no text at all there is nothing to misjudge, so any path that mentions
+// captcha counts (/captcha-verify, /recaptcha/challenge, /Security/CaptchaCheck).
+// Those were closed as empty pages, leaving the user nothing to solve.
+export function refusalUrl(value, text = '') {
+  const readable = String(text ?? '').replace(/\s+/g, ' ').trim().length;
+  if (readable > REFUSAL_URL_MAX_TEXT) return false;
+  try {
+    const path = new URL(value).pathname;
+    return readable ? REFUSAL_PATH.test(path) : /captcha/i.test(path);
+  } catch {return false;}
 }
 // An unrendered body's innerText can include script/style source. Read only
 // text nodes with rendered rectangles, excluding non-content elements.
@@ -443,7 +457,7 @@ export async function capture({endpoint, url, settleMs = 1500, timeoutMs = 15000
       if (budgetExceeded) snapshot.budget_exceeded = true;
     }
     if (navigationError) snapshot.navigation_error = navigationError;
-    if (REFUSAL.test(snapshot.text.replace(/\s+/g, ' ')) || refusalUrl(snapshot.url)) refused = true;
+    if (REFUSAL.test(snapshot.text.replace(/\s+/g, ' ')) || refusalUrl(snapshot.url, snapshot.text)) refused = true;
     if (refused) snapshot.blocked = true;
     // A page that loaded and exposed no readable text is not a successful read.
     if (!refused && !snapshot.text.trim()) snapshot.empty_capture = true;

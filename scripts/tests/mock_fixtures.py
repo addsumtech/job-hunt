@@ -248,6 +248,6 @@ def build(tmp_path, *, round_no=2, transcript=None, assessment=None, question_lo
     return workspace
 
 
-def no_vocab(text, source):
+def no_vocab(text, source, **_):
     """Stub for scripts/lint_no_prediction.py (Plan 2): finds nothing, quietly."""
     return []

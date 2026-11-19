@@ -540,7 +540,10 @@ def main(argv=None) -> int:
         return 2
     try:
         path.mkdir(parents=True, exist_ok=True)
-    except PermissionError as exc:
+    except OSError as exc:
+        # Not PermissionError alone: a file where the store should be
+        # (NotADirectoryError, FileExistsError) and a read-only volume (EROFS)
+        # are the same dead end for the agent, and doctor.py reports them alike.
         print(unwritable_store(path, exc), file=sys.stderr)
         return 2
     print(path.resolve())

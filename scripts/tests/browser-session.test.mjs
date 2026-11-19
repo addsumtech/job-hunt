@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {EventEmitter, once} from 'node:events';
-import {mkdtemp, readFile, writeFile, mkdir, rm, realpath} from 'node:fs/promises';
+import {mkdtemp, readFile, writeFile, mkdir, rm, realpath, utimes, access} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {promisify} from 'node:util';
@@ -213,7 +213,7 @@ exports.WebSocketServer=class extends EventEmitter {close(){}};
   }
 });
 
-test('WorkBuddy keeps the session in its Bash process and blocks starts after it dies', async()=>{
+test('WorkBuddy keeps the session in its Bash process; a killed one restarts in the same chat, a stopped one does not', async()=>{
   const root=await realpath(await mkdtemp(join(tmpdir(),'browser-workbuddy-')));
   const args=action=>[join(root,'browser_session.mjs'),action,'--root',root,'--browser','chrome'];
   const env={...process.env,CODEBUDDY_SANDBOX_BROKER_EXECUTION_ATTEMPT_ID:'fixture',
@@ -250,23 +250,34 @@ exports.WebSocketServer=class extends EventEmitter {close(){}};
     const exited=once(child,'exit');
     child.kill('SIGKILL');
     await exited;
-    for (const action of ['status','endpoint','start']) {
-      await assert.rejects(run(action),{stderr:/Do not reconnect automatically/});
+    // A killed process writes no ending. Its record still said `connected`, so
+    // every command answered with the remote-debugging instructions and the
+    // user was sent to enable a setting that was on. Nobody chose this ending:
+    // the same chat may start once more, and the browser asks for consent again.
+    assert.deepEqual(JSON.parse((await run('status')).stdout),{state:'stopped',browser:'chrome',reason:'process_gone'});
+    for (const [action,says] of [['endpoint',/no longer running[^]*No browser session is running/],['reset',/no longer running/]]) {
+      await assert.rejects(run(action),error=>{
+        assert.match(error.stderr,says);
+        assert.match(error.stderr,/start once in this chat/);
+        assert.doesNotMatch(error.stderr,/chrome:\/\/inspect|enable remote debugging|Do not reconnect automatically/);
+        return true;
+      });
     }
-    await run('stop');
-    await assert.rejects(run('start'),{stderr:/Do not reconnect automatically/});
+    // Nothing reconnected on its own while those commands ran.
     assert.equal(await readFile(join(root,'connections'),'utf8'),'1');
-    await assert.rejects(run('reset'),{stderr:/Do not reconnect automatically/});
-    await run('reset','next-chat');
-    assert.equal(JSON.parse((await run('status')).stdout).state,'stopped');
-
     child=spawn(process.execPath,args('start'),{env,stdio:['ignore','pipe','inherit']});
-    await once(child.stdout,'data',{signal:AbortSignal.timeout(3000)});
+    const [again]=await once(child.stdout,'data',{signal:AbortSignal.timeout(3000)});
+    assert.deepEqual([JSON.parse(again).pid,JSON.parse(again).reused],[child.pid,false]);
+    assert.equal(await readFile(join(root,'connections'),'utf8'),'11');
+
+    // A stop the user asked for is still final for this chat.
     const stopped=once(child,'exit');
     await run('stop');
     await stopped;
     await assert.rejects(run('start'),{stderr:/Do not reconnect automatically/});
     await assert.rejects(run('reset'),{stderr:/Do not reconnect automatically/});
+    await run('reset','next-chat');
+    assert.equal(JSON.parse((await run('status')).stdout).state,'stopped');
     assert.equal(await readFile(join(root,'connections'),'utf8'),'11');
   } finally {
     if (child && child.exitCode === null && child.signalCode === null) {
@@ -380,4 +391,176 @@ exports.WebSocketServer=class extends EventEmitter {close(){}};
     if (child && child.exitCode === null && child.signalCode === null) {const exited=once(child,'exit');child.kill('SIGKILL');await exited;}
     await rm(root,{recursive:true,force:true});
   }
+});
+
+// A session CLI in a private root: the script itself, a stubbed endpoint lookup
+// (never the real browser) and a `ws` double that connects at once.
+async function cliRoot(prefix, env={}) {
+  const root=await realpath(await mkdtemp(join(tmpdir(),prefix)));
+  await writeFile(join(root,'browser_session.mjs'),await readFile(new URL('../browser_session.mjs',import.meta.url)));
+  await writeFile(join(root,'browser_cdp.mjs'),"export async function dailyEndpoint(){return 'ws://127.0.0.1:1/devtools/browser/fixture';}");
+  await mkdir(join(root,'node_modules/ws'),{recursive:true});
+  await writeFile(join(root,'runtime.json'),JSON.stringify({opencli:join(root,'opencli.js')}));
+  await writeFile(join(root,'node_modules/ws/index.js'),`
+const {EventEmitter}=require('node:events');
+exports.WebSocket=class extends EventEmitter {
+ constructor(){super();this.readyState=1;queueMicrotask(()=>this.emit('open'));}
+ close(){this.readyState=3;this.emit('close');}
+};
+exports.WebSocketServer=class extends EventEmitter {close(){}};
+`);
+  const clean={...process.env};
+  delete clean.CODEBUDDY_SANDBOX_BROKER_EXECUTION_ATTEMPT_ID;delete clean.CODEBUDDY_SANDBOX_BROKER_SESSION_ID;
+  const args=action=>[join(root,'browser_session.mjs'),action,'--root',root,'--browser','chrome'];
+  const run=(action,extra={})=>promisify(execFile)(process.execPath,args(action),{env:{...clean,...env,...extra},timeout:10000});
+  const stateFile=join(root,'browser-session-chrome.json');
+  const record=fields=>writeFile(stateFile,JSON.stringify({pid:2147483646,browser:'chrome',
+    source_endpoint:'ws://127.0.0.1:1/devtools/browser/fixture',endpoint:'ws://127.0.0.1:1/devtools/browser/x',...fields}));
+  return {root,run,args,stateFile,record,lockFile:stateFile+'.lock',env:{...clean,...env}};
+}
+
+test('a record whose pid now belongs to another program is not a live session', async()=>{
+  // The record is kept after a stop and its pid is reused. `kill(pid, 0)` then
+  // said "alive": status reported stopped while start said "stopping; wait" and
+  // reset said "wait for it to stop", until the unrelated program exited.
+  const {root,run,record}=await cliRoot('browser-pid-reuse-');
+  const other=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});
+  try {
+    await once(other,'spawn');
+    await record({pid:other.pid,state:'closed',ended_reason:'stopped'});
+    assert.equal(JSON.parse((await run('status')).stdout).state,'stopped');
+    assert.equal(JSON.parse((await run('reset')).stdout).state,'stopped');
+
+    // A record that still claims a connection is a lost session, not a
+    // transport error ("fetch failed") on every command.
+    await record({pid:other.pid,state:'connected'});
+    assert.deepEqual(JSON.parse((await run('status')).stdout),{state:'stopped',browser:'chrome',reason:'process_gone'});
+
+    // In WorkBuddy the idle restart must not be vetoed by that program either.
+    const wb={CODEBUDDY_SANDBOX_BROKER_EXECUTION_ATTEMPT_ID:'fixture',CODEBUDDY_SANDBOX_BROKER_SESSION_ID:'same-chat'};
+    await record({pid:other.pid,state:'closed',ended_reason:'idle_timeout',workbuddy_session:'same-chat'});
+    const served=spawn(process.execPath,[join(root,'browser_session.mjs'),'start','--root',root,'--browser','chrome'],
+      {env:{...process.env,...wb},stdio:['ignore','pipe','inherit']});
+    try {
+      const [line]=await once(served.stdout,'data',{signal:AbortSignal.timeout(5000)});
+      assert.deepEqual([JSON.parse(line).pid,JSON.parse(line).reused],[served.pid,false]);
+    } finally {const exited=once(served,'exit');served.kill('SIGKILL');await exited;}
+  } finally {
+    const exited=once(other,'exit');other.kill('SIGKILL');await exited;
+    await rm(root,{recursive:true,force:true});
+  }
+});
+
+test('a session still shutting down says so in WorkBuddy, even after an idle expiry', async()=>{
+  // For the ~100 ms a closing session is still up, WorkBuddy's start answered
+  // "Do not reconnect automatically" for an idle expiry it would accept a
+  // moment later. The server here stands in for that closing session.
+  const {createServer}=await import('node:http');
+  const wb={CODEBUDDY_SANDBOX_BROKER_EXECUTION_ATTEMPT_ID:'fixture',CODEBUDDY_SANDBOX_BROKER_SESSION_ID:'same-chat'};
+  const {root,run,record}=await cliRoot('browser-closing-',wb);
+  const closing=createServer((req,res)=>res.end(JSON.stringify({pid:process.pid,state:'closed'})));
+  await new Promise(ok=>closing.listen(0,'127.0.0.1',ok));
+  try {
+    await record({pid:process.pid,state:'closed',ended_reason:'idle_timeout',workbuddy_session:'same-chat',
+      endpoint:`ws://127.0.0.1:${closing.address().port}/devtools/browser/x`});
+    await assert.rejects(run('start'),error=>{
+      assert.match(error.stderr,/stopping; wait/);
+      assert.doesNotMatch(error.stderr,/Do not reconnect automatically/);
+      return true;
+    });
+  } finally {closing.close();await rm(root,{recursive:true,force:true});}
+});
+
+test('a lock left by a killed command is taken over, and a held one is respected', async()=>{
+  // The lock was an empty file with no owner. One left behind refused start,
+  // stop and reset for good while status reported a clean stop.
+  const {root,run,lockFile}=await cliRoot('browser-lock-');
+  const gone=()=>assert.rejects(access(lockFile),{code:'ENOENT'});
+  const old=new Date(Date.now()-120000);
+  try {
+    await writeFile(lockFile,JSON.stringify({pid:2147483646,at:Date.now(),token:'dead'}));
+    assert.equal(JSON.parse((await run('reset')).stdout).state,'stopped');
+    await gone();
+    // An ownerless lock from an older version is judged by its age.
+    await writeFile(lockFile,'');await utimes(lockFile,old,old);
+    assert.equal(JSON.parse((await run('stop')).stdout).state,'stopped');
+    await gone();
+    // A live holder that has held it longer than any state change takes.
+    await writeFile(lockFile,JSON.stringify({pid:process.pid,at:Date.now()-120000,token:'slow'}));
+    assert.equal(JSON.parse((await run('reset')).stdout).state,'stopped');
+    await gone();
+
+    for (const held of [JSON.stringify({pid:process.pid,at:Date.now(),token:'held'}),'']) {
+      await writeFile(lockFile,held);
+      await assert.rejects(run('reset'),{stderr:/state change is in progress/});
+      // The refused command must not release a lock it does not own.
+      assert.equal(await readFile(lockFile,'utf8'),held);
+    }
+  } finally {await rm(root,{recursive:true,force:true});}
+});
+
+test('a damaged state file is named as such and reset clears it, in WorkBuddy too', async()=>{
+  // Every command, reset included, used to fail with the JSON parser's message
+  // ("Unterminated string in JSON at position 25") and leave the file in place.
+  const wb={CODEBUDDY_SANDBOX_BROKER_EXECUTION_ATTEMPT_ID:'fixture',CODEBUDDY_SANDBOX_BROKER_SESSION_ID:'same-chat'};
+  for (const env of [{},wb]) for (const damage of ['{"pid":123,"browser":"chr','','[]','null']) {
+    const {root,run,stateFile}=await cliRoot('browser-damaged-',env);
+    try {
+      await writeFile(stateFile,damage);
+      for (const action of ['status','endpoint','start','stop']) {
+        await assert.rejects(run(action),error=>{
+          assert.match(error.stderr,/state file is unreadable[^]*browser-session reset once/,action);
+          assert.doesNotMatch(error.stderr,/JSON|chrome:\/\/inspect/,action);
+          return true;
+        });
+      }
+      assert.equal(await readFile(stateFile,'utf8'),damage);
+      assert.equal(JSON.parse((await run('reset')).stdout).state,'stopped');
+      await assert.rejects(access(stateFile),{code:'ENOENT'});
+      assert.deepEqual(JSON.parse((await run('status')).stdout),{state:'stopped',browser:'chrome'});
+    } finally {await rm(root,{recursive:true,force:true});}
+  }
+});
+
+test('the idle clock starts when the browser accepts, not when the session was launched', async t=>{
+  // Consent can take 11 minutes in WorkBuddy. Counted from launch, a session
+  // accepted at minute 10 expired 20 minutes later as "30 idle minutes".
+  t.mock.timers.enable({apis:['setInterval','setTimeout','Date']});
+  class Socket extends EventEmitter {
+    constructor(){super();this.readyState=0;setTimeout(()=>{this.readyState=1;this.emit('open');},45000);}
+    send(){} close(){this.readyState=3;this.emit('close');}
+  }
+  class Server extends EventEmitter {close(){}}
+  const session=await createSession({endpoint:'ws://fixture',WebSocket:Socket,WebSocketServer:Server,idleMs:60000,consentMs:100000});
+  try {
+    t.mock.timers.tick(45000);
+    assert.equal(session.status().state,'connected');
+    // 90 s after launch, 45 s after consent: within the limit.
+    t.mock.timers.tick(45000);
+    assert.equal(session.status().state,'connected');
+    t.mock.timers.tick(30000);
+    assert.deepEqual([session.status().state,session.status().reason],['closed','idle_timeout']);
+  } finally {
+    // close() waits on a mocked timer before it releases the HTTP server; let
+    // it finish, or a failed assertion above would leave the test run hanging.
+    void session.close();
+    for (let i=0;i<3;i++) {t.mock.timers.tick(1000);await tick();}
+  }
+});
+
+test('an idle expiry tells the same chat to start, on reset as on a read', async()=>{
+  // reset answered "Do not reconnect automatically ... from a new chat" for the
+  // one ending the guidance says to restart in place.
+  const wb={CODEBUDDY_SANDBOX_BROKER_EXECUTION_ATTEMPT_ID:'fixture',CODEBUDDY_SANDBOX_BROKER_SESSION_ID:'same-chat'};
+  const {root,run,record}=await cliRoot('browser-idle-reset-',wb);
+  try {
+    await record({state:'closed',ended_reason:'idle_timeout',workbuddy_session:'same-chat'});
+    for (const action of ['reset','endpoint']) {
+      await assert.rejects(run(action),error=>{
+        assert.match(error.stderr,/expired after 30 idle minutes[^]*start once in this chat/,action);
+        assert.doesNotMatch(error.stderr,/Do not reconnect automatically|chrome:\/\/inspect/,action);
+        return true;
+      });
+    }
+  } finally {await rm(root,{recursive:true,force:true});}
 });
