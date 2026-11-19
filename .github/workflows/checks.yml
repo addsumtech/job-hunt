@@ -31,3 +31,17 @@ jobs:
         run: python3 scripts/check_hidden_chars.py
       - name: Lint eval assertions
         run: python3 evals/lint_assertions.py
+
+  # The coding-round runner has a branch of its own on Windows: cmd.exe as the
+  # shell, taskkill for the process tree, CREATE_NEW_PROCESS_GROUP. It shipped
+  # in 1.5.0 without ever having run there, so these two files run on a Windows
+  # machine. The rest of the suite stays on Linux above.
+  runner-on-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt pytest
+      - run: python -m pytest scripts/tests/test_mock_learned_rounds.py scripts/tests/test_prepare_mode.py -q

@@ -145,3 +145,26 @@ def test_a_name_pasted_with_a_non_ascii_space_can_be_delivered_twice(tmp_path, s
     dest = tmp_path / 'out'
     assert run(ws, dest, '--no-pdf') == 0
     assert run(ws, dest, '--no-pdf') == 0
+
+
+def test_a_folder_already_stuck_on_a_spaced_name_heals_on_the_next_delivery(tmp_path):
+    """A manifest written before 1.5.1 records the stem with its ideographic space.
+    Refusing to read it left that folder refusing every delivery for good."""
+    import json
+    import deliver
+    ws = build(tmp_path)
+    write(ws, 'profile.yaml', {'meta': {'name': '张三'}})
+    dest = tmp_path / 'out'
+    assert run(ws, dest, '--no-pdf') == 0
+    manifest = dest / deliver.MANIFEST_NAME
+    data = json.loads(manifest.read_text(encoding='utf-8'))
+    entry = data['deliveries'][0]
+    old = next(rel for rel in entry['files'] if '张三－' in rel)
+    spaced = old.replace('张三－', '　张三－')
+    (dest / old).rename(dest / spaced)
+    entry['files'][spaced] = entry['files'].pop(old)
+    manifest.write_text(json.dumps(data, ensure_ascii=False), encoding='utf-8')
+
+    assert run(ws, dest, '--no-pdf') == 0
+    assert (dest / old).is_file()
+    assert not (dest / spaced).exists()

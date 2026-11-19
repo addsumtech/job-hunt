@@ -197,6 +197,14 @@ _ENGLISH_ONLY = frozenset("the and of to is you your that with for this are it b
                           "on in".split())
 _PORTUGUESE_ONLY = frozenset("os do da dos das em um uma com ao não você são na nas "
                              "e é seu sua".split())
+# Words that are Spanish and not French, Italian, Portuguese or Dutch. The shared
+# small words (la, un, en, con, de) cannot tell those apart, which is why the
+# vocabulary above is asked for first; but a short Spanish report that happens to
+# use none of those nouns was named and footed in English. Three different ones
+# of these, in sentences where Spanish function words outnumber the others', are
+# Spanish prose.
+_SPANISH_DISTINCT = frozenset("el los las y muy pero hay también más está estás eres "
+                              "tienes usted años empresa equipo puesto".split())
 _REPORT_STYLES = {
     "ja": {"font": "japan", "footer": "キャリア相談レポート",
            "page": "{number} ページ", "link": "リンク：", "separator": "："},
@@ -234,8 +242,9 @@ def text_language(text: str) -> str:
     # Italian and people's names. Require distinct Spanish vocabulary before
     # replacing the documented English fallback for other Latin languages.
     folded = text.casefold()
-    if len(set(_SPANISH.findall(folded))) >= 2:
-        words = Counter(_WORD.findall(folded))
+    words = Counter(_WORD.findall(folded))
+    if (len(set(_SPANISH.findall(folded))) >= 2
+            or sum(1 for word in _SPANISH_DISTINCT if words[word]) >= 3):
         spanish, english, portuguese = (sum(words[word] for word in group) for group in (
             _SPANISH_ONLY, _ENGLISH_ONLY, _PORTUGUESE_ONLY))
         # A tie (a table of labels with no sentences) keeps the vocabulary's answer.
@@ -491,7 +500,12 @@ def _client_tail_ok(tail: str) -> bool:
             and path.suffix in {".md", ".pdf", ".docx"}
             and not any(unicodedata.category(char) in {"Cc", "Cf", "Cs"} for char in path.name)
             and len(path.stem.encode("utf-8")) <= 200
-            and path.stem == path.stem.strip().strip(".")
+            # ASCII space and dot only. Before 1.5.1 a name pasted with an
+            # ideographic or no-break space kept it in the stem; stripping every
+            # kind of space here refused the manifest that recorded such a file,
+            # and that folder then stopped every later delivery. Read, the entry
+            # is cleaned up like any other and replaced under the trimmed name.
+            and path.stem == path.stem.strip(" .")
             and not re.search(r'[\x00-\x1f\x7f<>:"/\\|?*]', path.name)
             and any(path.stem.endswith("－" + suffix) and len(path.stem) > len(suffix) + 1
                     for suffix in _report_suffixes()))
