@@ -42,6 +42,14 @@ context are relevant;
 consider it explicitly during source selection rather than silently omitting it.
 A generic web search is not a substitute for an actual WeChat search. If Sogou or
 an article cannot be accessed, record that result and the scope actually read.
+Sogou search rows carry a `weixin.sogou.com/link?url=...` redirect, not the
+article's own `mp.weixin.qq.com/s/...` address. Opening the redirect in the
+browser can land on WeChat's verification page
+(`mp.weixin.qq.com/mp/wappoc_appmsgcaptcha`); the reader then marks the capture
+`blocked`, hands the page to the user and stops the source. Use the article
+address only when a capture's final `url` is that `mp.weixin.qq.com/s/...` page.
+Never construct one from a redirect, and report a row whose article was not
+read as an unread lead.
 
 ### WeChat coverage for domestic job discovery
 

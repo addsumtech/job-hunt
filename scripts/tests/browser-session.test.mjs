@@ -284,3 +284,100 @@ test('in WorkBuddy, consent outlasts the longest foreground Bash wait', ()=>{
   assert.ok(consentMsFor({CODEBUDDY_SANDBOX_BROKER_EXECUTION_ATTEMPT_ID:'x'}) > 600000);
   assert.equal(consentMsFor({}), 120000);
 });
+
+test('every ending records why, and an idle expiry is not reported as a stop', async()=>{
+  const seen=[];
+  class Socket extends EventEmitter {
+    constructor(){super();this.readyState=1;queueMicrotask(()=>this.emit('open'));}
+    send(){} close(){this.readyState=3;this.emit('close');}
+  }
+  class Server extends EventEmitter {close(){}}
+  const idle=await createSession({endpoint:'ws://fixture',WebSocket:Socket,WebSocketServer:Server,idleMs:5,changed:x=>seen.push({...x})});
+  await new Promise(r=>setTimeout(r,60));
+  assert.deepEqual([idle.status().state,idle.status().reason],['closed','idle_timeout']);
+  assert.ok(seen.some(x=>x.state==='closed' && x.reason==='idle_timeout'));
+
+  let upstream;
+  class Dropped extends Socket {constructor(){super();upstream=this;}}
+  const dropped=await createSession({endpoint:'ws://fixture',WebSocket:Dropped,WebSocketServer:Server});
+  await tick();
+  upstream.close();
+  assert.deepEqual([dropped.status().state,dropped.status().reason],['disconnected','browser_disconnected']);
+
+  class Refused extends EventEmitter {
+    constructor(){super();this.readyState=0;setImmediate(()=>{this.readyState=3;this.emit('close');});}
+    send(){} close(){}
+  }
+  const refused=await createSession({endpoint:'ws://fixture',WebSocket:Refused,WebSocketServer:Server});
+  await new Promise(r=>setTimeout(r,20));
+  assert.deepEqual([refused.status().state,refused.status().reason],['disconnected','connection_refused']);
+
+  class Pending extends EventEmitter {constructor(){super();this.readyState=0;} send(){} close(){this.readyState=3;}}
+  const unanswered=await createSession({endpoint:'ws://fixture',WebSocket:Pending,WebSocketServer:Server,consentMs:5});
+  await new Promise(r=>setTimeout(r,40));
+  assert.deepEqual([unanswered.status().state,unanswered.status().reason],['consent_timeout','consent_timeout']);
+});
+
+test('WorkBuddy restarts in the same chat after an idle expiry, and only names remote debugging when it could be the cause', async()=>{
+  // Live on 2026-11-19: the session was started, the chat then waited for the
+  // user's search conditions, and 30 idle minutes later the session closed
+  // itself. `start` refused, and its message ended with the remote-debugging
+  // instructions, so the user was told to enable a setting that was already on.
+  const root=await realpath(await mkdtemp(join(tmpdir(),'browser-idle-')));
+  const args=action=>[join(root,'browser_session.mjs'),action,'--root',root,'--browser','chrome'];
+  const env={...process.env,CODEBUDDY_SANDBOX_BROKER_EXECUTION_ATTEMPT_ID:'fixture',CODEBUDDY_SANDBOX_BROKER_SESSION_ID:'same-chat'};
+  const run=action=>promisify(execFile)(process.execPath,args(action),{env,timeout:3000});
+  const stateFile=join(root,'browser-session-chrome.json');
+  const ended=(state,ended_reason)=>writeFile(stateFile,JSON.stringify({pid:2147483646,browser:'chrome',
+    source_endpoint:'ws://127.0.0.1:1/devtools/browser/fixture',endpoint:'ws://127.0.0.1:2/devtools/browser/x',
+    state,...(ended_reason ? {ended_reason} : {}),workbuddy_session:'same-chat'}));
+  let child;
+  try {
+    await writeFile(join(root,'browser_session.mjs'),await readFile(new URL('../browser_session.mjs',import.meta.url)));
+    await writeFile(join(root,'browser_cdp.mjs'),"export async function dailyEndpoint(){return 'ws://127.0.0.1:1/devtools/browser/fixture';}");
+    await mkdir(join(root,'node_modules/ws'),{recursive:true});
+    await writeFile(join(root,'runtime.json'),JSON.stringify({opencli:join(root,'opencli.js')}));
+    await writeFile(join(root,'node_modules/ws/index.js'),`
+const {EventEmitter}=require('node:events');
+exports.WebSocket=class extends EventEmitter {
+ constructor(){super();this.readyState=1;queueMicrotask(()=>this.emit('open'));}
+ close(){this.readyState=3;this.emit('close');}
+};
+exports.WebSocketServer=class extends EventEmitter {close(){}};
+`);
+    for (const [state,reason,says] of [['closed','stopped',/was stopped/],['disconnected','browser_disconnected',/closed the authorized connection/]]) {
+      await ended(state,reason);
+      await assert.rejects(run('start'),error=>{
+        assert.match(error.stderr,says);
+        assert.match(error.stderr,/Do not reconnect automatically/);
+        assert.doesNotMatch(error.stderr,/chrome:\/\/inspect|enable remote debugging/);
+        return true;
+      });
+    }
+    await ended('consent_timeout','consent_timeout');
+    await assert.rejects(run('start'),{stderr:/not accepted in time[^]*accept the browser's connection prompt/});
+    for (const [state,reason] of [['disconnected','connection_refused'],['disconnected',undefined]]) {
+      await ended(state,reason);
+      await assert.rejects(run('start'),{stderr:/chrome:\/\/inspect\/#remote-debugging/});
+    }
+    // A record from before reasons were kept is still a stop.
+    await ended('closed');
+    await assert.rejects(run('start'),{stderr:/Do not reconnect automatically/});
+
+    await ended('closed','idle_timeout');
+    assert.deepEqual(JSON.parse((await run('status')).stdout),{state:'stopped',browser:'chrome',reason:'idle_timeout'});
+    await assert.rejects(run('endpoint'),{stderr:/expired after 30 idle minutes/});
+    child=spawn(process.execPath,args('start'),{env,stdio:['ignore','pipe','inherit']});
+    const [line]=await once(child.stdout,'data',{signal:AbortSignal.timeout(3000)});
+    assert.deepEqual([JSON.parse(line).pid,JSON.parse(line).reused],[child.pid,false]);
+    assert.equal(JSON.parse((await run('status')).stdout).state,'connected');
+    const stopped=once(child,'exit');
+    await run('stop');
+    await stopped;
+    assert.equal(JSON.parse(await readFile(stateFile,'utf8')).ended_reason,'stopped');
+    await assert.rejects(run('start'),{stderr:/was stopped/});
+  } finally {
+    if (child && child.exitCode === null && child.signalCode === null) {const exited=once(child,'exit');child.kill('SIGKILL');await exited;}
+    await rm(root,{recursive:true,force:true});
+  }
+});

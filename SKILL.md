@@ -167,6 +167,8 @@ session described in [references/daily-browser.md](references/daily-browser.md).
 In WorkBuddy, run `browser-session start` once as a WorkBuddy Bash background
 task. Route OpenCLI, including `auth status`, and browser reads through the
 wrapper. On disconnect, stop the browser work and wait for the user to resume.
+Start the session only after your questions to the user are answered, right
+before the first live read; it expires after 30 idle minutes.
 
 When a platform requests human verification, stop that source and follow
 [references/user-recovery.md](references/user-recovery.md): tell the user the site

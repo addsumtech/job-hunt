@@ -19,28 +19,46 @@ const connectionHelp = browser => `Cannot connect to the selected daily ${browse
 // `start` without run_in_background is blocked until then and cannot tell the
 // user to accept Chrome's prompt, so the consent window must outlast that wait.
 export const consentMsFor = env => env.CODEBUDDY_SANDBOX_BROKER_EXECUTION_ATTEMPT_ID ? 11 * 60 * 1000 : 120000;
-const stoppedHelp = browser => `The browser session ended. Do not reconnect automatically. WorkBuddy can reset it from a new chat after the user asks to resume, or the user can reset it from a terminal. ${connectionHelp(browser)}`;
+const resumeHelp = 'Do not reconnect automatically. WorkBuddy can reset it from a new chat after the user asks to resume, or the user can reset it from a terminal.';
+// Say why the session ended. Every ending used to carry the remote-debugging
+// instructions, so a session that had merely idled out (live on 2026-11-19) was
+// reported to the user as "Chrome has remote debugging turned off".
+const ENDINGS = {
+  stopped: 'The browser session was stopped.',
+  idle_timeout: 'The browser session expired after 30 idle minutes.',
+  browser_disconnected: 'The browser closed the authorized connection (it was closed, restarted, or the connection was revoked).',
+  consent_timeout: "The browser's connection prompt was not accepted in time.",
+};
+const settingsIntact = "The browser's remote-debugging setting is not the cause.";
+const stoppedHelp = (browser, record) => {
+  const reason = record?.ended_reason;
+  if (reason === 'consent_timeout') return `${ENDINGS[reason]} ${resumeHelp} Then start one session and accept the browser's connection prompt.`;
+  if (ENDINGS[reason]) return `${ENDINGS[reason]} ${settingsIntact} ${resumeHelp}`;
+  // connection_refused, or a record written before reasons were kept.
+  return `The browser session ended. ${resumeHelp} ${connectionHelp(browser)}`;
+};
 
 export async function createSession({endpoint, WebSocket, WebSocketServer,
   idleMs = 30 * 60 * 1000, consentMs = 120000, changed = () => {}}) {
   const token = randomBytes(24).toString('hex');
   const socketPath = `/devtools/browser/${token}`;
   const pending = new Map(), owners = new Map(), sessionTargets = new Map(), targets = new Map(), clients = new Set();
-  let sequence = 0, state = 'waiting_for_consent', lastUse = Date.now(), closing = false;
+  let sequence = 0, state = 'waiting_for_consent', lastUse = Date.now(), closing = false, everConnected = false, reason;
   const server = createServer((req, res) => {
     if (!req.headers.origin && req.url === socketPath + '/status' && req.method === 'GET') {
       res.setHeader('Content-Type','application/json');
-      res.end(JSON.stringify({pid:process.pid,state,clients:clients.size,owned_tabs:targets.size,upstream_connections:1}));return;
+      // Measured, not asserted: 1 only while the one upstream socket is open.
+      res.end(JSON.stringify({pid:process.pid,state,clients:clients.size,owned_tabs:targets.size,upstream_connections:upstream.readyState === 1 ? 1 : 0}));return;
     }
     if (!req.headers.origin && req.url === socketPath + '/stop' && req.method === 'POST') {
       if (clients.size) {res.writeHead(409);res.end('Active clients still use this session');return;}
-      res.end('stopping');void close();return;
+      res.end('stopping');void close('closed','stopped');return;
     }
     res.writeHead(404);res.end();
   });
   const downstream = new WebSocketServer({noServer:true, maxPayload:8 * 1024 * 1024});
   const upstream = new WebSocket(endpoint);
-  const publish = () => changed({state, clients:clients.size, owned_tabs:targets.size});
+  const publish = () => changed({state, reason, clients:clients.size, owned_tabs:targets.size});
   function forward(client, command, cleanup = false) {
     const id = ++sequence;
     pending.set(id, {client, original:command.id, command, cleanup});
@@ -107,7 +125,7 @@ export async function createSession({endpoint, WebSocket, WebSocketServer,
       publish();
     });
   });
-  upstream.on('open', () => {state = 'connected';clearTimeout(consentTimer);publish();});
+  upstream.on('open', () => {state = 'connected';everConnected = true;clearTimeout(consentTimer);publish();});
   upstream.on('error', () => {});
   upstream.on('message', raw => {
     let message;try {message = JSON.parse(raw.toString());} catch {return;}
@@ -142,9 +160,9 @@ export async function createSession({endpoint, WebSocket, WebSocketServer,
     const owner = owners.get(message.sessionId) || targets.get(message.params?.targetId);
     if (owner) send(owner, message);
   });
-  const close = async (finalState = 'closed') => {
+  const close = async (finalState = 'closed', why = 'stopped') => {
     if (closing) return;
-    closing = true;state = finalState;publish();clearTimeout(consentTimer);clearInterval(idleTimer);
+    closing = true;state = finalState;reason = why;publish();clearTimeout(consentTimer);clearInterval(idleTimer);
     for (const targetId of targets.keys()) closeTarget(targetId);
     for (const client of clients) client.close(1001);
     if (upstream.readyState === 1) await new Promise(r => setTimeout(r, 100));
@@ -154,13 +172,13 @@ export async function createSession({endpoint, WebSocket, WebSocketServer,
     if (closing) return;
     clearTimeout(consentTimer);
     for (const client of clients) client.close(1011, 'Browser connection ended; wait for the user to resume');
-    pending.clear();void close('disconnected');
+    pending.clear();void close('disconnected', everConnected ? 'browser_disconnected' : 'connection_refused');
   });
-  const consentTimer = setTimeout(() => {void close('consent_timeout');}, consentMs);
-  const idleTimer = setInterval(() => {if (!clients.size && Date.now() - lastUse > idleMs) void close();}, Math.min(idleMs, 30000));
+  const consentTimer = setTimeout(() => {void close('consent_timeout','consent_timeout');}, consentMs);
+  const idleTimer = setInterval(() => {if (!clients.size && Date.now() - lastUse > idleMs) void close('closed','idle_timeout');}, Math.min(idleMs, 30000));
   await new Promise((ok, fail) => {server.once('error', fail);server.listen(0, '127.0.0.1', ok);});
   return {endpoint:`ws://127.0.0.1:${server.address().port}${socketPath}`, close,
-    status:() => ({state,clients:clients.size,owned_tabs:targets.size})};
+    status:() => ({state,reason,clients:clients.size,owned_tabs:targets.size})};
 }
 
 export async function main(argv) {
@@ -200,19 +218,20 @@ export async function main(argv) {
     return response;
   }
   if (action === 'status') {
-    if (endedUnexpectedly(previous)) throw Error(stoppedHelp(browser));
+    if (endedUnexpectedly(previous)) throw Error(stoppedHelp(browser, previous));
     if (!isLive(previous) || previous.state === 'closed') {
-      console.log(JSON.stringify({state:'stopped',browser}));return;
+      console.log(JSON.stringify({state:'stopped',browser,...(previous?.ended_reason ? {reason:previous.ended_reason} : {})}));return;
     }
     const status = await (await contact('/status')).json();
-    if (failed(status.state)) throw Error(stoppedHelp(browser));
+    if (failed(status.state)) throw Error(stoppedHelp(browser, previous));
     console.log(JSON.stringify({...status,browser}));return;
   }
   if (action === 'endpoint') {
-    if (endedUnexpectedly(previous)) throw Error(stoppedHelp(browser));
+    if (endedUnexpectedly(previous)) throw Error(stoppedHelp(browser, previous));
+    if (!isLive(previous) && previous?.state === 'closed') throw Error(`${ENDINGS[previous.ended_reason] || ENDINGS.stopped} ${settingsIntact} No browser session is running.`);
     const status = await (await contact('/status')).json();
     if (status.state !== 'connected') throw Error(`Browser session is ${status.state}; wait for user consent instead of opening another connection`);
-    if (previous.source_endpoint !== await dailyEndpoint(browser)) throw Error(stoppedHelp(browser));
+    if (previous.source_endpoint !== await dailyEndpoint(browser)) throw Error(stoppedHelp(browser, previous));
     console.log(previous.endpoint);return;
   }
   if (action === 'stop') {
@@ -230,7 +249,7 @@ export async function main(argv) {
       previous = await readState();
       if (isLive(previous)) throw Error('Wait for the existing browser session to stop before resetting');
       if (managed && previous && (!workbuddySession || !previous.workbuddy_session ||
-          workbuddySession === previous.workbuddy_session)) throw Error(stoppedHelp(browser));
+          workbuddySession === previous.workbuddy_session)) throw Error(stoppedHelp(browser, previous));
       if (previous) await unlink(stateFile);
       console.log(JSON.stringify({state:'stopped',browser}));
     });
@@ -239,12 +258,19 @@ export async function main(argv) {
   if (action !== 'start') throw Error('Use start, status, stop or reset');
   return withStartLock(async () => {
     previous = await readState();
-    if (endedUnexpectedly(previous) || (managed && previous?.state === 'closed')) throw Error(stoppedHelp(browser));
+    // An idle expiry is neither a failure nor a stop the user asked for: the
+    // session ran out while the chat waited (for the user's answers, on
+    // 2026-11-19). Refusing the next start left that chat with no way to read a
+    // single page. One new start asks for consent once; it cannot loop, because
+    // each expiry needs another 30 idle minutes. Every other ending still waits
+    // for the user and a new chat.
+    const idledOut = previous?.state === 'closed' && previous.ended_reason === 'idle_timeout' && !isLive(previous);
+    if (endedUnexpectedly(previous) || (managed && previous?.state === 'closed' && !idledOut)) throw Error(stoppedHelp(browser, previous));
     if (isLive(previous)) {
       if (previous.state === 'closed') throw Error('Browser session is stopping; wait for status to report stopped');
-      if (previous.source_endpoint !== await dailyEndpoint(browser)) throw Error(stoppedHelp(browser));
+      if (previous.source_endpoint !== await dailyEndpoint(browser)) throw Error(stoppedHelp(browser, previous));
       const status = await (await contact('/status')).json();
-      if (failed(status.state)) throw Error(stoppedHelp(browser));
+      if (failed(status.state)) throw Error(stoppedHelp(browser, previous));
       console.log(JSON.stringify({...status,browser,reused:true}));return;
     }
     let sourceEndpoint;
@@ -267,7 +293,7 @@ export async function main(argv) {
       const state = await readState();
       if (state?.pid===child.pid) {
         if (firstState === null) firstState = i;
-        if (failed(state.state)) throw Error(stoppedHelp(browser));
+        if (failed(state.state)) throw Error(stoppedHelp(browser, state));
         if (state.state === 'closed') throw Error(connectionHelp(browser));
         if (state.state !== 'waiting_for_consent' || i - firstState >= 20) {
           console.log(JSON.stringify({state:state.state,browser,pid:state.pid,reused:false}));return;
@@ -284,12 +310,12 @@ export async function main(argv) {
     const source_endpoint = sourceEndpoint ?? await dailyEndpoint(browser);
     const stagingFile = `${stateFile}.${process.pid}.tmp`;
     let localEndpoint, lastState, writes = Promise.resolve();
-    const save = ({state}) => {
+    const save = ({state, reason}) => {
       if (!localEndpoint || lastState === state) return;
       lastState = state;
       writes = writes.then(async () => {
         await writeFile(stagingFile,JSON.stringify({pid:process.pid,browser,
-          source_endpoint,endpoint:localEndpoint,state,workbuddy_session:workbuddySession}),{mode:0o600});
+          source_endpoint,endpoint:localEndpoint,state,...(reason ? {ended_reason:reason} : {}),workbuddy_session:workbuddySession}),{mode:0o600});
         await rename(stagingFile,stateFile);
       });
     };

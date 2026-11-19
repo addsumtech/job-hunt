@@ -441,6 +441,10 @@ the user's explicit completion/continue reply before a new linked round.
 
 Every live OpenCLI or browser read goes through one persistent browser session, so
 start it once for the task as described in [daily-browser.md](../references/daily-browser.md).
+Start it only when the next command is a live read: after the brief and every
+question to the user are settled, never before asking them. A session with no
+reads expires after 30 idle minutes, and a user who takes longer than that to
+answer comes back to an expired session.
 In WorkBuddy, send the first command as a separate Bash call with
 `run_in_background: true`; it does not exit while the session lives. Check
 `browser-session status` before the second command. Run the auth probe through the wrapper **without**
