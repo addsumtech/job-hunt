@@ -33,6 +33,8 @@ OpenCLI capability diagnosis first, following
    `chrome://inspect/#remote-debugging` and accepts Chrome's connection prompt.
    Start `python scripts/run_tool.py browser-session start` once and wait for
    consent; use `browser-session status` instead of repeated starts while waiting.
+   Start it immediately before the first live read, after every question to the
+   user is answered: an idle session closes itself after 30 minutes.
    In WorkBuddy, run that command in its own Bash call with
    `run_in_background: true`; it serves the session and does not exit. Keep the
    returned Bash task running while using the browser. If the call ran in the
@@ -47,6 +49,13 @@ OpenCLI capability diagnosis first, following
    browser work and report the failure. When the user asks to resume in a new
    WorkBuddy chat, run `browser-session reset` before starting one new session.
    A WorkBuddy chat cannot reset a session it started, even after a clean stop.
+   The one exception is an idle expiry: when `browser-session status` reports
+   `"state":"stopped","reason":"idle_timeout"`, run `browser-session start`
+   once in the same chat and tell the user to accept the browser's prompt again.
+   Read the reason in the error before telling the user what to do. Only a
+   message that itself names `chrome://inspect/#remote-debugging` means the
+   setting may be off; a stopped, expired or disconnected session says the
+   setting is not the cause, so do not ask the user to enable it.
    An ended session from an older install without a chat ID can be reset from
    the user's terminal. Keep `stop`, `reset` and `start` outside site and job
    retry loops.
@@ -54,6 +63,8 @@ OpenCLI capability diagnosis first, following
    `run_tool.py` so they reuse this connection. Close it with
    `browser-session stop` at the end. Idle sessions expire after 30 minutes;
    browser restarts or disconnections require a new explicit start and consent.
+   `status` reports `upstream_connections` as measured: 1 while the one browser
+   connection is open, 0 otherwise. It does not count consent prompts.
    The service listens only on loopback, uses a random private endpoint, and
    closes only client-owned tabs; a page handed to the user is released from
    automatic cleanup and survives idle expiry or session shutdown. It never

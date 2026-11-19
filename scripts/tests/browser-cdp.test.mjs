@@ -4,7 +4,7 @@ import {mkdtemp, mkdir, writeFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {runInNewContext} from 'node:vm';
-import {capture as rawCapture, dailyEndpoint, validateBudget} from '../browser_cdp.mjs';
+import {capture as rawCapture, dailyEndpoint, validateBudget, refusalUrl} from '../browser_cdp.mjs';
 
 const budgetFor = (n, extra={}) => ({version:1,max_rows:25,max_pages:2,used_rows:0,used_pages:[],
   stages:Array.from({length:n+1},()=>({row_selector:'.observed-job-card',page:1,max_rows:0})),...extra});
@@ -12,7 +12,7 @@ const capture = options => rawCapture({...options, ...(!('budget' in options) &&
   {budget:budgetFor(options.steps?.length || 1)} : {})});
 
 let fixtureId = 0;
-function fixture({status=200, navigationError=false, pageReadyState='complete', pageRefusal=false, pageTextReady=true, readyAfterWait=false, textAfterWait=false, revealNodeExists=true, textAfterReveal=false, refuseAfterClick=false, catalogCounts=[], failClick=0}={}) {
+function fixture({status=200, navigationError=false, pageReadyState='complete', pageRefusal=false, pageTextReady=true, readyAfterWait=false, textAfterWait=false, revealNodeExists=true, textAfterReveal=false, refuseAfterClick=false, catalogCounts=[], failClick=0, pageUrl='https://example.com/', pageText='Visible job description'}={}) {
   const commands=[];
   let clicks=0;
   const target=`owned-${++fixtureId}`, session=`session-${fixtureId}`;
@@ -26,10 +26,10 @@ function fixture({status=200, navigationError=false, pageReadyState='complete', 
         if(c.method==='Target.createTarget') result={targetId:target};
         if(c.method==='Target.attachToTarget') result={sessionId:session};
         if(c.method==='Page.navigate') {
-          emit({sessionId:session,method:'Network.responseReceived',params:{frameId:'frame',type:'Document',response:{url:'https://example.com/',status}}});
+          emit({sessionId:session,method:'Network.responseReceived',params:{frameId:'frame',type:'Document',response:{url:pageUrl,status}}});
           result=navigationError?{errorText:'net::ERR_FAILED'}:{frameId:'frame'};
         }
-        if(c.method==='Runtime.evaluate') result={result:{value:c.params.expression==='document.readyState'?(Array.isArray(pageReadyState)?pageReadyState.shift() || 'complete':pageReadyState):c.params.expression.startsWith('Boolean(') && (c.params.expression.includes('.includes(') || c.params.expression.startsWith('Boolean((() =>'))?(Array.isArray(pageTextReady)?pageTextReady.shift():pageTextReady):c.params.expression.startsWith('Boolean(')?pageRefusal:{url:'https://example.com/',title:'Fixture',text:'Visible job description',links:[]}}};
+        if(c.method==='Runtime.evaluate') result={result:{value:c.params.expression==='document.readyState'?(Array.isArray(pageReadyState)?pageReadyState.shift() || 'complete':pageReadyState):c.params.expression.startsWith('Boolean(') && (c.params.expression.includes('.includes(') || c.params.expression.startsWith('Boolean((() =>'))?(Array.isArray(pageTextReady)?pageTextReady.shift():pageTextReady):c.params.expression.startsWith('Boolean(')?pageRefusal:{url:pageUrl,title:'Fixture',text:pageText,links:[]}}};
         if(c.method==='Runtime.evaluate' && c.params.expression.startsWith('Boolean(\n')) {
           if(readyAfterWait) pageReadyState='complete';
           if(textAfterWait) pageTextReady=true;
@@ -69,6 +69,37 @@ test('capture retains the exact refusal page for the user instead of closing it'
   assert.equal(commands.some(c=>c.method==='Target.getTargets'),false);
   assert.ok(commands.filter(c=>/^(Page|Runtime|Network)\./.test(c.method)).every(c=>c.sessionId===session));
   assert.equal(result.capture.trace.at(-1).method,'JobHunt.handoffTarget');
+});
+
+test('a verification page with no readable text is handed to the user, not closed as an empty page',async()=>{
+  // Live on 2026-11-18: a WeChat article redirected to its captcha page, whose
+  // visible text was empty. Nothing matched, the tab was closed and the read
+  // exited 0 with characters:0.
+  const {Socket,commands,target}=fixture({pageUrl:'https://mp.weixin.qq.com/mp/wappoc_appmsgcaptcha?poc_token=x&target_url=y',pageText:''});
+  const result=await capture({endpoint:'ws://127.0.0.1:9222/devtools/browser/test',url:'https://weixin.sogou.com/link?url=abc',settleMs:0,WebSocketImpl:Socket});
+  assert.equal(result.http_status,200);
+  assert.equal(result.blocked,true);
+  assert.equal(result.handoff.kept_open,true);
+  assert.equal(result.empty_capture,undefined);
+  assert.deepEqual(commands.filter(c=>c.method==='Target.closeTarget'),[]);
+  assert.deepEqual(commands.filter(c=>c.method==='JobHunt.handoffTarget').map(c=>c.params.targetId),[target]);
+});
+
+test('only a whole captcha path segment is a verification URL',()=>{
+  for (const url of ['https://mp.weixin.qq.com/mp/wappoc_appmsgcaptcha?x=1','https://example.com/captcha','https://example.com/security/captcha/verify','https://example.com/captcha.html'])
+    assert.equal(refusalUrl(url),true,url);
+  for (const url of ['https://example.com/jobs/captcha-engineer','https://example.com/jobs?q=captcha','https://example.com/recaptcha-team/roles','https://example.com/','not a url'])
+    assert.equal(refusalUrl(url),false,url);
+});
+
+test('a loaded page with no readable text is flagged, and its own tab is still closed',async()=>{
+  const {Socket,commands}=fixture({pageText:'  \n '});
+  const result=await capture({endpoint:'ws://127.0.0.1:9222/devtools/browser/test',url:'https://example.com/',settleMs:0,WebSocketImpl:Socket});
+  assert.equal(result.empty_capture,true);
+  assert.equal(result.blocked,undefined);
+  assert.equal(commands.at(-1).method,'Target.closeTarget');
+  const readable=fixture();
+  assert.equal((await capture({endpoint:'ws://127.0.0.1:9222/devtools/browser/test',url:'https://example.com/',settleMs:0,WebSocketImpl:readable.Socket})).empty_capture,undefined);
 });
 
 for (const timedOut of [false, true]) {

@@ -228,6 +228,14 @@ example), retain that output and set `http_status: 403` or `blocked: true` on th
 snapshot; never record it as an empty successful page. Bare navbar links labelled
 Login do not establish a login wall. Explicit wall language does.
 
+The bundled reader also treats a final URL whose path is a verification page
+(a whole `captcha` path segment, for example WeChat's
+`/mp/wappoc_appmsgcaptcha`) as a refusal even when that page renders no text:
+it sets `blocked: true` and hands the tab to the user. A page that loaded but
+exposed no readable text is marked `empty_capture: true`, prints
+`EMPTY_CAPTURE` and exits 2. Neither is an empty search result or a read
+article; do not retry it through another tool.
+
 If a tool returns richer link objects, preserve its original output and make a
 separate deterministic projection to the snapshot shape above: retain `text`
 unchanged and extract only original HTTP(S) link URLs. Do not pass link objects

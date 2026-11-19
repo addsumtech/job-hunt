@@ -22,6 +22,15 @@ export async function dailyEndpoint(browser, {platform = process.platform, home 
 
 // Navigation-only helpers: data arguments are never interpolated as page code.
 export const REFUSAL = /(?:enter|complete|solve) (?:the |this |a )?captcha|(?:verify|verifying|confirm) (?:that )?you are (?:a )?human|access denied|too many requests|please (?:sign|log) in|(?:sign|log) in (?:required|to continue|to view)|(?:请输入|请完成|请填写).{0,12}验证码|验证您是人类|访问受限|访问过于频繁|请先登[录入]|请按住滑块[，,\s]*拖动到最右边|为了更好的访问体验[，,\s]*请进行验证|(?:验证|确认)(?:您|你)(?:是否)?是(?:真人|人类)|(?:正在|请|需要).{0,8}(?:真人验证|人机验证)|验证成功[。.!！\s]*正在等待|verification successful[.!\s]*waiting for|checking your browser|認証が必要|ログインが必要|로그인이 필요|접근이 제한|人机验证|真人验证|请按住滑块|unusual traffic|需要进行其他验证/i;
+// A verification interstitial can render no readable text at all: WeChat's
+// article captcha (/mp/wappoc_appmsgcaptcha) came back with an empty body on
+// 2026-11-18, so the text pattern above never saw it, the tab was closed and
+// the read exited 0. The FINAL URL is evidence too. Match a whole path segment
+// only, so a posting such as /jobs/captcha-engineer is not a wall.
+export const REFUSAL_PATH = /(?:^|\/)(?:[a-z0-9]+_)*(?:app)?(?:msg)?captcha(?:[._][a-z0-9]+)?(?:\/|$)/i;
+export function refusalUrl(value) {
+  try {return REFUSAL_PATH.test(new URL(value).pathname);} catch {return false;}
+}
 // An unrendered body's innerText can include script/style source. Read only
 // text nodes with rendered rectangles, excluding non-content elements.
 export const VISIBLE_TEXT_EXPRESSION = `(() => {
@@ -434,8 +443,10 @@ export async function capture({endpoint, url, settleMs = 1500, timeoutMs = 15000
       if (budgetExceeded) snapshot.budget_exceeded = true;
     }
     if (navigationError) snapshot.navigation_error = navigationError;
-    if (REFUSAL.test(snapshot.text.replace(/\s+/g, ' '))) refused = true;
+    if (REFUSAL.test(snapshot.text.replace(/\s+/g, ' ')) || refusalUrl(snapshot.url)) refused = true;
     if (refused) snapshot.blocked = true;
+    // A page that loaded and exposed no readable text is not a successful read.
+    if (!refused && !snapshot.text.trim()) snapshot.empty_capture = true;
     snapshot.load_timed_out = !ready && !refused;
     snapshot.render_wait_budgets_ms = renderWaits;
     if (waitForText) snapshot.wait_for_text = waitForText;
@@ -483,8 +494,10 @@ export async function main(argv) {
   const endpoint = args.endpoint || await dailyEndpoint(args.browser);
   const snapshot = await capture({endpoint, url:args.url, waitForText:args['wait-for-text'] || '', revealSelector:args['reveal-selector'] || '', clickText:args['click-text'] || '', clickSelector:args['click-selector'] || '', inspectText:args['inspect-text'] || '', steps:args['steps-file'] ? JSON.parse(await readFile(args['steps-file'], 'utf8')) : [], budget:args['budget-file'] ? JSON.parse(await readFile(args['budget-file'], 'utf8')) : null});
   await writeFile(args.output, JSON.stringify(snapshot, null, 2), {flag:'wx'});
-  console.log(JSON.stringify({output:args.output, url:snapshot.url, http_status:snapshot.http_status, characters:snapshot.text.length, backend:'builtin-cdp'}));
-  if (snapshot.budget_exceeded || snapshot.navigation_error || snapshot.catalog_accounting_pending) process.exitCode = 2;
+  console.log(JSON.stringify({output:args.output, url:snapshot.url, http_status:snapshot.http_status, characters:snapshot.text.length, backend:'builtin-cdp',
+    ...(snapshot.blocked ? {blocked:true, handoff:Boolean(snapshot.handoff)} : {}), ...(snapshot.empty_capture ? {empty_capture:true} : {})}));
+  if (snapshot.empty_capture) console.error('EMPTY_CAPTURE: the page exposed no readable text; this is not a successful read or an empty result');
+  if (snapshot.budget_exceeded || snapshot.navigation_error || snapshot.catalog_accounting_pending || snapshot.empty_capture) process.exitCode = 2;
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   main(process.argv.slice(2)).catch(err => {console.error(err.message);process.exitCode=1;});
