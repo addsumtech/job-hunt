@@ -31,9 +31,9 @@
 - **Sin cifras imposibles de comprobar**: ninguna puntuación del tipo "82 % de coincidencia"; solo pruebas, carencias y el esfuerzo de preparación.
 
 <p align="center">
-  <a href="docs/assets/examples/cv-en.png"><img src="docs/assets/examples/cv-en.png" width="49%" alt="Ejemplo de CV en inglés exportado del PDF real"></a>
-  <a href="docs/assets/examples/report-en-01.png"><img src="docs/assets/examples/report-en-01.png" width="49%" alt="Extracto anonimizado de un informe: conclusión, orden de candidatura y ofertas prioritarias"></a>
-  <br><sub>Izquierda: ejemplo de CV (persona ficticia). Derecha: extracto anonimizado de una búsqueda real de septiembre de 2026 (entonces algunas ofertas solo tenían resumen). Ver también el <a href="docs/assets/examples/cv-zh.png">CV en chino</a> y la <a href="docs/assets/examples/report-en-02.png">página 2 del informe</a>.</sub>
+  <a href="docs/assets/examples/cv-es.png"><img src="docs/assets/examples/cv-es.png" width="49%" alt="Ejemplo de CV en español exportado del PDF real"></a>
+  <a href="docs/assets/examples/report-es-01.png"><img src="docs/assets/examples/report-es-01.png" width="49%" alt="Extracto anonimizado de un informe: conclusión, orden de candidatura y ofertas prioritarias"></a>
+  <br><sub>Izquierda: ejemplo de CV (persona ficticia). Derecha: extracto anonimizado de una búsqueda real de septiembre de 2026 (entonces algunas ofertas solo tenían resumen). Ver también el <a href="docs/assets/examples/cv-en.png">CV en inglés</a> y la <a href="docs/assets/examples/report-es-02.png">página 2 del informe</a>.</sub>
 </p>
 
 ### Ejemplos de la evaluación

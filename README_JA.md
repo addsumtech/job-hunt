@@ -31,9 +31,9 @@
 - **確かめようのない数字は出さない**：「適合度 82%」のようなスコアは出さず、根拠、不足点、準備の負担だけを示します。
 
 <p align="center">
-  <a href="docs/assets/examples/cv-en.png"><img src="docs/assets/examples/cv-en.png" width="49%" alt="PDF から書き出した英語 CV の例"></a>
-  <a href="docs/assets/examples/report-en-01.png"><img src="docs/assets/examples/report-en-01.png" width="49%" alt="匿名化した求職レポートの抜粋：結論、応募順、重点求人"></a>
-  <br><sub>左：CV の例（人物は架空）。右：2026 年 9 月の実際の求人調査レポートを匿名化した抜粋（当時は一部の候補が概要のみ）。<a href="docs/assets/examples/cv-zh.png">中国語 CV</a>、<a href="docs/assets/examples/report-en-02.png">レポート 2 ページ目</a>もあります。</sub>
+  <a href="docs/assets/examples/cv-ja.png"><img src="docs/assets/examples/cv-ja.png" width="49%" alt="PDF から書き出した日本語 CV の例"></a>
+  <a href="docs/assets/examples/report-ja-01.png"><img src="docs/assets/examples/report-ja-01.png" width="49%" alt="匿名化した求職レポートの抜粋：結論、応募順、重点求人"></a>
+  <br><sub>左：CV の例（人物は架空）。右：2026 年 9 月の実際の求人調査レポートを匿名化した抜粋（当時は一部の候補が概要のみ）。<a href="docs/assets/examples/cv-en.png">英語 CV</a>、<a href="docs/assets/examples/report-ja-02.png">レポート 2 ページ目</a>もあります。</sub>
 </p>
 
 ### 評価での例

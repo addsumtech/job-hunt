@@ -69,6 +69,9 @@ NO_HIDDEN_CHARS
 他说的「AI 味」指的是写法不易读，例子是标题「你能拿出的证据」。1.6.1 在 `report-writing.md` 加了
 「Name sections and columns in the reader's words」一节，只是写作规范，没有加检查脚本。
 README 示例图由 `docs/assets/examples/src/report-{zh,en}.md` 渲染前两页得到（144 dpi）。
+五种语言的 README 各用自己语言的图（2026-11-20）：横幅是在英文原图上抹字重写（`banner-{zh,ja,ko,es}.jpg`，副标题不再点名具体工具）；
+日、韩、西语的示例简历由 `docs/assets/examples/src/cv-{ja,ko,es}.yaml` 走 `render_cv.py --format docx` 再用 LibreOffice 无界面转 PDF 得到，
+页脚的「虚构示例」一行是后加的；示例报告同样由 `src/report-{ja,ko,es}.md` 渲染。
 
 **判别力规则继续执行**：每条修复的新测试都要先在旧代码上确认会失败（把旧版脚本拷到临时副本跑新测试）。
 

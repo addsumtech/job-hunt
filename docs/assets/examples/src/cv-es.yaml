@@ -1,0 +1,70 @@
+# Ejemplo ficticio. Sin datos de ninguna persona real.
+meta:
+  name: Yian Chen
+  language: es
+  target_market: es
+  section_order:
+  - education
+  - experience
+  - projects
+  - skills
+contact:
+  email: yian.chen@example.com
+  phone: 138 XXXX XXXX
+education:
+- institution: Instituto Tecnológico Beichen
+  location: Singapur
+  degree: Máster en Informática; mención en Analítica de Negocio e Innovación
+  start: 2021-08
+  end: 2023-06
+  details: 'Nota media: 4,5/5,0. Asignaturas: aprendizaje automático, diseño de productos de datos y analítica de negocio. Investigación: búsqueda semántica y evaluación de respuestas en bases de conocimiento corporativas.'
+- institution: Universidad Tecnológica Linhai
+  location: China
+  degree: Grado en Ingeniería de Software
+  start: 2017-09
+  end: 2021-06
+  details: 'Nota media: 88,6/100. Graduado destacado y beca de segunda clase. Prototipos y pruebas con usuarios en 2 proyectos con empresas.'
+experience:
+- org: Yunqi Digital Intelligence (Hangzhou)
+  title: Especialista en operaciones de producto de IA (servicios de conocimiento corporativo)
+  start: 2023-08
+  end: present
+  bullets:
+  - Analizó los comentarios de soporte y las búsquedas fallidas para priorizar las lagunas de conocimiento; ayudó al equipo de contenidos a cubrir 12 categorías de preguntas frecuentes.
+  - Definió controles de exactitud, fiabilidad de la fuente y legibilidad de las respuestas; con Python y API redujo la preparación manual de muestras de 3 horas a 40 minutos por ciclo.
+  - Diseñó flujos de IA para la incorporación, revisión y recogida de comentarios, con entradas, salidas y criterios de aceptación definidos; los pilotos aumentaron el contenido procesado al mes en torno a un 80 %.
+- org: Yuanfan Consulting (Shanghái)
+  title: Becario de verano en transformación digital
+  start: 2022-06
+  end: 2022-09
+  bullets:
+  - 'Renovación del programa de socios de un minorista: clasificó más de 1.200 comentarios y 80 entrevistas; ayudó a actualizar procesos y especificaciones.'
+  - Alineó métricas y actas de aceptación de un panel de fábrica; hizo seguimiento de los cambios de requisitos y de los informes semanales.
+- org: Starbridge Ventures
+  title: Becario de investigación en software empresarial
+  start: 2021-07
+  end: 2021-09
+  bullets:
+  - Investigó el mercado de software de colaboración y sus competidores; documentó entrevistas con clientes, estructuras de producto y modelos de negocio.
+  - Construyó modelos de ingresos y de empresas comparables; hizo análisis de sensibilidad sobre crecimiento de clientes y renovaciones.
+- org: Qinghe Collaboration Technology
+  title: Becario de producto de colaboración
+  start: 2020-07
+  end: 2020-10
+  bullets:
+  - Convirtió 20 entrevistas con usuarios en requisitos, prototipos y especificaciones de asignación de tareas y seguimiento del progreso.
+  - Probó permisos, avisos y filtros del tablero; hizo seguimiento de las correcciones, redactó guías de uso y dio soporte a las pruebas internas.
+projects:
+- name: BriefKit
+  description: Herramienta de IA para resumir reuniones y extraer tareas; probada con 60 usuarios a lo largo de 3 iteraciones.
+- name: Morning Checklist
+  description: 'Aplicación de hábitos desarrollada en solitario: análisis de requisitos, diseño de interacción y recordatorios.'
+- name: Tutoriales de IA
+  description: Tutoriales sobre bases de conocimiento y herramientas de IA; unos 2.300 seguidores.
+skills:
+  Herramientas y métodos:
+  - Python, SQL, API, flujos de IA y prompts; análisis de requisitos, prototipado y entrevistas con usuarios.
+  Idiomas:
+  - 'Chino nativo. Inglés: IELTS 7,0; lectura de documentación técnica y comunicación diaria en el trabajo.'
+  Intereses:
+  - Bádminton, senderismo urbano, fotografía y divulgación científica.

@@ -31,9 +31,9 @@
 - **확인할 수 없는 숫자는 쓰지 않음**: “적합도 82%” 같은 점수 없이 근거, 부족한 점, 준비 부담만 설명합니다.
 
 <p align="center">
-  <a href="docs/assets/examples/cv-en.png"><img src="docs/assets/examples/cv-en.png" width="49%" alt="PDF에서 내보낸 영어 이력서 예시"></a>
-  <a href="docs/assets/examples/report-en-01.png"><img src="docs/assets/examples/report-en-01.png" width="49%" alt="익명화한 취업 보고서 발췌: 결론, 지원 순서, 주요 공고"></a>
-  <br><sub>왼쪽: 이력서 예시(가상 인물). 오른쪽: 2026년 9월 실제 공고 조사 보고서의 익명화 발췌(당시 일부 후보는 요약만 있음). <a href="docs/assets/examples/cv-zh.png">중국어 이력서</a>, <a href="docs/assets/examples/report-en-02.png">보고서 2쪽</a>도 볼 수 있습니다.</sub>
+  <a href="docs/assets/examples/cv-ko.png"><img src="docs/assets/examples/cv-ko.png" width="49%" alt="PDF에서 내보낸 한국어 이력서 예시"></a>
+  <a href="docs/assets/examples/report-ko-01.png"><img src="docs/assets/examples/report-ko-01.png" width="49%" alt="익명화한 취업 보고서 발췌: 결론, 지원 순서, 주요 공고"></a>
+  <br><sub>왼쪽: 이력서 예시(가상 인물). 오른쪽: 2026년 9월 실제 공고 조사 보고서의 익명화 발췌(당시 일부 후보는 요약만 있음). <a href="docs/assets/examples/cv-en.png">영어 이력서</a>, <a href="docs/assets/examples/report-ko-02.png">보고서 2쪽</a>도 볼 수 있습니다.</sub>
 </p>
 
 ### 평가에서의 예
