@@ -4,9 +4,9 @@ Search snapshot: 11 September 2026 | Mainland China, Beijing preferred | Target:
 
 ## 1. Where to start
 
-> **Start by exploring AI evaluation and application roles in Beijing.**
-> Your user-problem analysis, AI workflows, batch evaluation and personal products overlap with this work. The CV still needs clearer evidence of the features you owned, how you worked with engineers, and what happened after release.
-> None of the roles disclosed fixed monthly pay. Confirm the salary requirement before investing substantial preparation time.
+Start by exploring AI evaluation and application roles in Beijing. Your user-problem analysis, AI workflows, batch evaluation and personal products overlap with this work. The CV still needs clearer evidence of the features you owned, how you worked with engineers, and what happened after release.
+
+None of the roles disclosed fixed monthly pay. Confirm the salary requirement before investing substantial preparation time.
 
 The original search retained 48 title groups from 60 official records. Sixteen groups include a full description; 32 have list summaries only.
 

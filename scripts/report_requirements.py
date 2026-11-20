@@ -132,10 +132,10 @@ def requirements(markdown: str) -> dict | str:
                           "contents links {contents} pt; footer {footer} pt".format(**SIZES),
             "page_geometry": "A4 595.28 x 841.89 pt; text column 56–539 pt; body from 64 pt "
                              "to 770 pt; footer baseline 811 pt",
-            "headings_and_rules": "Black ink #1a1a1c throughout; title and headings in "
-                                  "bold with no rule beneath; table column labels in grey "
-                                  "over one light rule, no rules between rows; a quoted "
-                                  "block drawn as a pale band with a bar; no card frames",
+            "headings_and_rules": "Black ink #1a1a1c in one weight throughout, no bold; "
+                                  "headings set apart by size and space, with no rule "
+                                  "beneath; table column labels in grey over one light "
+                                  "rule, no rules between rows; no boxes or card frames",
             "dates_and_alignment": "All text left-aligned at 56 pt; footer label left and "
                                    f"page number right ({style['page'].format(number='N')})",
             "paragraph_spacing": "Body leading 1.35 x size; table rows 15.5 pt; no stacked "

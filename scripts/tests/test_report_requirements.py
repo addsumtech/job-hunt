@@ -68,4 +68,4 @@ def test_a_heading_the_contents_list_repeats_is_not_sampled(tmp_path):
     assert report_requirements.main(["--workspace", str(ws)]) == 0
     req = yaml.safe_load((ws / "report-layout-requirements.yaml").read_text(encoding="utf-8"))
     heading = next(s for s in req["text_samples"] if s["role"] == "heading")
-    assert heading["text"].startswith("依据") and heading["size_pt"] == 12.6
+    assert heading["text"].startswith("依据") and heading["size_pt"] == report_requirements.SIZES["subheading"]

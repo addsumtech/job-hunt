@@ -1,12 +1,12 @@
 """How a default report page looks, as far as a PDF can be asked.
 
-The report used to be navy on a pale blue band in a single weight. `**bold**`
-printed as plain text, a link inside a sentence was printed a second time on a
-line of its own, and every table row carried a rule, so a reader could not find
-the point of a page (user report, 2026-11-20). The first redraw swung the other
-way, with a rule under every heading and bold on every label, and was rejected
-the same day as too many lines and too much bold. These tests hold the result:
-black ink, bold where the author put it, one box for the conclusion, few lines.
+The report used to be navy on a pale blue band, a link inside a sentence was
+printed a second time on a line of its own, and every table row carried a rule
+(user report, 2026-11-20: ugly, and the point of a page is hard to find). Two
+redraws were rejected the same day: one with a rule under every heading and
+bold labels everywhere, one with bold headings and a grey conclusion box that
+"looked AI-made". These tests hold what was accepted: a plain document in
+black ink and one weight, with few lines and no boxes.
 """
 import pathlib
 import sys
@@ -57,30 +57,27 @@ def test_the_page_is_black_ink_with_no_blue(tmp_path):
                     assert max(tone) - min(tone) < 0.03, tone
 
 
-def test_bold_is_printed_as_bold_and_only_where_it_was_written(tmp_path):
-    plain = '# 报告\n\n## 分析\n\n经验缺口：简历没有讲清上线后的情况。\n\n| 岗位 | 判断 |\n|---|---|\n| 评测 | 可投 |\n'
-    with render(tmp_path, plain) as doc:
-        # Two headings and nothing else: a label with a colon and a table's
-        # column labels stay in the regular weight.
-        assert doc[0].read_contents().count(b'\n2 Tr') == 2
-    (tmp_path / 'more').mkdir()
-    with render(tmp_path / 'more', plain.replace('简历没有讲清', '**简历没有讲清**')) as doc:
-        assert doc[0].read_contents().count(b'\n2 Tr') == 3
-        # The bold phrase stays inside its sentence in the PDF's own text.
-        assert '经验缺口：简历没有讲清上线后的情况。' in doc[0].get_text().splitlines()
-
-
-def test_a_quoted_block_is_the_conclusion_box(tmp_path):
+def test_the_whole_page_is_one_weight_and_headings_differ_by_size(tmp_path):
     with render(tmp_path, REPORT) as doc:
         page = doc[0]
-        bands = [d for d in page.get_drawings() if d['type'] == 'f' and d['rect'].width > 400]
-        assert len(bands) == 1
-        band = bands[0]['rect']
-        inside = [span for span in spans(page) if band.y0 < span['bbox'][1] and span['bbox'][3] < band.y1]
-        assert ''.join(span['text'] for span in inside) == '先投北京的评测岗位。下一步：核实薪资。'
-        assert all(span['bbox'][0] > band.x0 + 10 for span in inside)
-        text = page.get_text()
-        assert '>' not in text and '正文说明真实经历。' in text
+        # No stroked (faux bold) text and a single face.
+        assert b'\n2 Tr' not in page.read_contents()
+        assert len({span['font'] for span in spans(page)}) == 1
+        size = {span['text']: span['size'] for span in spans(page)}
+        assert size['求职建议'] > size['结论'] > size['正文说明真实经历。']
+        # Emphasis marks are dropped, never printed.
+        assert '**' not in page.get_text() and '先投北京的评测岗位。' in page.get_text()
+
+
+def test_a_quoted_block_is_plain_indented_text_with_no_box(tmp_path):
+    with render(tmp_path, REPORT) as doc:
+        page = doc[0]
+        assert not [d for d in page.get_drawings() if d.get('fill')]
+        quoted = next(span for span in spans(page) if span['text'] == '先投北京的评测岗位。')
+        plain = next(span for span in spans(page) if span['text'] == '正文说明真实经历。')
+        assert quoted['bbox'][0] > plain['bbox'][0]
+        assert (quoted['size'], quoted['color']) == (plain['size'], plain['color'])
+        assert '>' not in page.get_text()
 
 
 def test_a_table_has_one_light_rule_and_headings_have_none(tmp_path):

@@ -61,10 +61,11 @@ NO_HIDDEN_CHARS
 不再删别人的锁）；`start`/`stop` 自己清掉损坏的状态文件；带 captcha 路径的页面文字上限由估的 80 改为实测后的 400
 （`REFUSAL_URL_MAX_TEXT`，实测数据写在常量上方的注释和测试里）。
 
-**2026-11-20 报告版式 → 1.6.0。** Martin 反馈蓝白报告丑、抓不住重点。`deliver._render_portable_report` 改成黑字、
-标题加粗、结论框（Markdown 引用块）、粗体真的印成粗体、单个链接原地可点。第一稿给每个标题和表格行都画线、
-标签全加粗，被他否了（「横线太多」「不要加粗那么多」），现在的规则是少线少粗体，写在 `test_report_page_style.py`。
-字号没动（`deliver.REPORT_SIZES`，`report_requirements.py` 直接引用）；「正文 12 号」「多个链接逐行列出」是之前定的规则，保留。
+**2026-11-20 报告版式 → 1.6.0。** Martin 反馈蓝白报告丑、抓不住重点。`deliver._render_portable_report` 改成朴素文档：
+黑字、一种字重、不加粗、不加框，标题靠字号区分，表格只留表头下一条浅线，单个链接原地可点。
+前两稿都被他否了：第一稿每个标题和表格行都画线、标签全加粗（「横线太多」「不要加粗那么多」）；
+第二稿标题加粗加灰色结论框（「不用加粗」「AI 味太重」）。规则写在 `test_report_page_style.py`，别再加粗体、框、竖条。
+正文字号没动（`deliver.REPORT_SIZES`，`report_requirements.py` 直接引用）；「正文 12 号」「多个链接逐行列出」是之前定的规则，保留。
 README 示例图由 `docs/assets/examples/src/report-{zh,en}.md` 渲染前两页得到（144 dpi）。
 
 **判别力规则继续执行**：每条修复的新测试都要先在旧代码上确认会失败（把旧版脚本拷到临时副本跑新测试）。
