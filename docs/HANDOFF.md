@@ -1,6 +1,6 @@
 # job-hunt — 接手说明
 
-**更新于 2026-11-20（1.5.3 发布）。** 这份文件以前在 8 月里过时了两次，接手的人信了旧状态就会重建已经存在的东西。
+**更新于 2026-11-20（1.6.0 发布）。** 这份文件以前在 8 月里过时了两次，接手的人信了旧状态就会重建已经存在的东西。
 **先跑一次 `make check`，再信任这里的任何一句话。**
 
 ---
@@ -8,11 +8,11 @@
 ## 当前状态
 
 - 五个模式（apply、assess、discover、interview、prepare）都已上线；`evals/` 已建成。
-- 版本：1.5.3（2026-11-20）。1.3.0 见 PR #34；1.2.1 到 1.2.3 没有单独打 tag，修复并入 1.3.0。
+- 版本：1.6.0（2026-11-20）。1.3.0 见 PR #34；1.2.1 到 1.2.3 没有单独打 tag，修复并入 1.3.0。
 - `make check`（2026-11-20，Python 3.12 venv）：
 
 ```
-6550 passed, 8 skipped
+6559 passed, 8 skipped
 LOSSLESS: 1317/1317 baseline lines accounted for across 61 files, 88 waived
 check_conventions --ci: exit 0
 NO_HIDDEN_CHARS
@@ -60,6 +60,12 @@ NO_HIDDEN_CHARS
 1.5.3 补上三个浏览器取舍：会话锁改成每条命令各写一个锁文件（`browser_session.acquireLock`，写前写后各看一次，
 不再删别人的锁）；`start`/`stop` 自己清掉损坏的状态文件；带 captcha 路径的页面文字上限由估的 80 改为实测后的 400
 （`REFUSAL_URL_MAX_TEXT`，实测数据写在常量上方的注释和测试里）。
+
+**2026-11-20 报告版式 → 1.6.0。** Martin 反馈蓝白报告丑、抓不住重点。`deliver._render_portable_report` 改成黑字、
+标题加粗、结论框（Markdown 引用块）、粗体真的印成粗体、单个链接原地可点。第一稿给每个标题和表格行都画线、
+标签全加粗，被他否了（「横线太多」「不要加粗那么多」），现在的规则是少线少粗体，写在 `test_report_page_style.py`。
+字号没动（`deliver.REPORT_SIZES`，`report_requirements.py` 直接引用）；「正文 12 号」「多个链接逐行列出」是之前定的规则，保留。
+README 示例图由 `docs/assets/examples/src/report-{zh,en}.md` 渲染前两页得到（144 dpi）。
 
 **判别力规则继续执行**：每条修复的新测试都要先在旧代码上确认会失败（把旧版脚本拷到临时副本跑新测试）。
 
