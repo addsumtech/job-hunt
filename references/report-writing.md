@@ -102,6 +102,42 @@ count; do not make the reader reconcile postings, grouped roles and closed jobs.
 Client usefulness decides what earns space: explain limitations that affect the
 next decision, without turning internal query bookkeeping into report content.
 
+## Name sections and columns in the reader's words
+
+A heading or a column label is read before anything under it, usually while
+skimming. The reader should be able to say what the section holds from the
+label alone, without having read the page before it and without knowing how
+this skill works. A real report (2026-10-16) used the headings below; the
+client's reaction was “这种就让人看不懂” (2026-11-20).
+
+| Label as written | What the reader can understand |
+|---|---|
+| 你能拿出的证据 | 岗位要求和你做过的事 |
+| 现有经历与边界 | 你做过什么，哪些还不能这么说 |
+| 真实差距 | 这个岗位你还缺什么 |
+| 简历怎么用 | 这份简历改了哪些地方 |
+| 已完整核查岗位 | 读过完整要求的岗位 |
+| 本轮其余线索与处置 | 看过但没有推荐的岗位，以及原因 |
+| 读取与处置 | 看了多少，为什么没选 |
+| Evidence you can show | The requirements, and what you have done |
+
+Three habits produce the left column:
+- **This skill's working vocabulary.** 证据, 边界, 口径, 处置, 线索, 核查, 本轮,
+  evidence, boundary, disposition, lead and round are the words the checks and
+  the research notes use. The client did not see that work. Say the thing
+  itself: what you did, what the posting asks, which roles were read.
+- **A slogan in place of a description.** “你能拿出的证据” sounds like a title and
+  tells the reader nothing about the table beneath it. A plain description is
+  better even when it is longer.
+- **A noun pair joined by 与.** “经历与边界”, “线索与处置” compress two questions
+  into two nouns. Write the questions.
+
+Check every heading and column label once before rendering: read it alone, as
+someone who has never used this tool, and rewrite it if you could not say what
+the section is about. The same test applies to the first sentence of each
+section. These are examples, not a list of banned words; 证据 is fine in a
+sentence that says which document it is.
+
 ## Keep narrative categories aligned with their table
 
 For a summary and the table it introduces, choose the grouping once. Draft the
