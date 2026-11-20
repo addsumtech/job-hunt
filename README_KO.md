@@ -20,7 +20,7 @@
   <a href="CHANGELOG.md">변경 기록 (중국어)</a>
 </p>
 
-<p align="center"><img src="docs/assets/banner.jpg" alt="job-hunt: 공고 탐색, 공고 평가, 지원, 면접 준비, 모의 면접" width="100%"></p>
+<p align="center"><img src="docs/assets/banner-ko.jpg" alt="job-hunt: 공고 탐색, 공고 평가, 지원, 면접 준비, 모의 면접" width="100%"></p>
 
 **Claude Code, Codex, WorkBuddy 등 Agent용 취업 Skill: 공고 전문을 읽고, 실제 경험만으로 이력서를 고치며, 서로 독립된 세 AI 검토로 확인하고, 어떤 직종이든 면접 준비를 돕습니다.**
 

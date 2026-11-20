@@ -20,7 +20,7 @@
   <a href="CHANGELOG.md">変更履歴（中国語）</a>
 </p>
 
-<p align="center"><img src="docs/assets/banner.jpg" alt="job-hunt：求人探し、求人の評価、応募、面接準備、模擬面接" width="100%"></p>
+<p align="center"><img src="docs/assets/banner-ja.jpg" alt="job-hunt：求人探し、求人の評価、応募、面接準備、模擬面接" width="100%"></p>
 
 **Claude Code、Codex、WorkBuddy などの Agent 向け求職 Skill：募集要項を全文読み、あなたの実際の経験だけで CV を直し、三つの独立した AI レビューで確認し、どの職種の面接準備にも対応します。**
 

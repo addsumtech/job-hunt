@@ -20,7 +20,7 @@
   <a href="CHANGELOG.md">更新日志</a>
 </p>
 
-<p align="center"><img src="docs/assets/banner.jpg" alt="job-hunt：找岗位、评估岗位、投递、面试准备、模拟面试" width="100%"></p>
+<p align="center"><img src="docs/assets/banner-zh.jpg" alt="job-hunt：找岗位、评估岗位、投递、面试准备、模拟面试" width="100%"></p>
 
 **给 Claude Code、Codex 以及 WorkBuddy 等 Agent 用的求职 Skill：读完整招聘页，只用你的真实经历改简历，由三个独立的 AI 评审把关，并帮你准备任何行业的面试。**
 

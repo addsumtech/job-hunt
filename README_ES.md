@@ -20,7 +20,7 @@
   <a href="CHANGELOG.md">Registro de cambios (chino)</a>
 </p>
 
-<p align="center"><img src="docs/assets/banner.jpg" alt="job-hunt: buscar, evaluar, postular, prepararse y ensayar la entrevista" width="100%"></p>
+<p align="center"><img src="docs/assets/banner-es.jpg" alt="job-hunt: buscar, evaluar, postular, prepararse y ensayar la entrevista" width="100%"></p>
 
 **Una skill de búsqueda de empleo para Claude Code, Codex y otros agentes como WorkBuddy: lee la oferta completa, adapta tu CV solo con experiencia real, lo somete a tres revisores de IA independientes y te prepara para entrevistas de cualquier sector.**
 
