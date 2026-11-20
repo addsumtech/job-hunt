@@ -26,14 +26,20 @@ export const REFUSAL = /(?:enter|complete|solve) (?:the |this |a )?captcha|(?:ve
 // article captcha (/mp/wappoc_appmsgcaptcha) came back with an empty body on
 // 2026-11-18, so the text pattern above never saw it, the tab was closed and
 // the read exited 0. The FINAL URL is evidence too. Match a whole path segment
-// only, so a posting such as /jobs/captcha-engineer is not a wall.
-export const REFUSAL_PATH = /(?:^|\/)(?:[a-z0-9]+_)*(?:app)?(?:msg)?captcha(?:[._][a-z0-9]+)?(?:\/|$)/i;
-// The URL is evidence only for a page that shows (almost) nothing. As the sole
-// test it called every readable page under such a path a wall: an encyclopedia
-// article at /wiki/CAPTCHA and a vendor's /product/captcha page were marked
-// blocked, left open in front of the user and stopped their source for the
-// round. A wall says little; an article does not fit in this many characters.
-export const REFUSAL_URL_MAX_TEXT = 80;
+// that ends in captcha (/captcha, /recaptcha, /errors/validateCaptcha), so a
+// posting such as /jobs/captcha-engineer is not a wall.
+export const REFUSAL_PATH = /(?:^|\/)[a-z0-9_]*captcha(?:[._][a-z0-9]+)?(?:\/|$)/i;
+// The URL is evidence only for a page that says little. As the sole test it
+// called every readable page under such a path a wall: an encyclopedia article
+// at /wiki/CAPTCHA and a vendor's /product/captcha page were marked blocked,
+// left open in front of the user and stopped their source for the round.
+// The limit was first guessed at 80. Measured on 2026-11-20 with a headless
+// browser (tag-stripped page text, whitespace collapsed): verification pages
+// on such paths carried 0, 0, 21, 38, 41 and 142 characters (Douyin, Liepin,
+// Baidu, a reCAPTCHA demo, WeChat, Amazon), readable pages 1303 to 31838
+// (reCAPTCHA docs, GitHub topics, Wikipedia in two languages, a vendor page,
+// PyPI). 80 let Amazon's page through as an ordinary read; 400 sits in the gap.
+export const REFUSAL_URL_MAX_TEXT = 400;
 // With no text at all there is nothing to misjudge, so any path that mentions
 // captcha counts (/captcha-verify, /recaptcha/challenge, /Security/CaptchaCheck).
 // Those were closed as empty pages, leaving the user nothing to solve.

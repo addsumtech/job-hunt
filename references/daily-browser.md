@@ -69,13 +69,13 @@ OpenCLI capability diagnosis first, following
    the user's terminal. Keep `stop`, `reset` and `start` outside site and job
    retry loops.
    If a command reports that the session state file is unreadable, run
-   `browser-session reset` once (allowed in any chat for a damaged file), then
-   start one session. A read that fails with `BROWSER_SESSION_UNAVAILABLE`
+   `browser-session start` once; it clears the damaged file itself and no
+   `reset` is needed. A read that fails with `BROWSER_SESSION_UNAVAILABLE`
    carries the session's own explanation; follow it, and do not rerun
    `setup_dependencies.py` for it. `A browser session state change is in
    progress` means another `start`, `stop` or `reset` is running: check
-   `status` and try again shortly. A lock left by a killed command is taken
-   over automatically after 30 seconds.
+   `status` and try again shortly. A lock left by a killed command is cleared
+   automatically.
    Run OpenCLI (including `auth status`) and fallback captures through
    `run_tool.py` so they reuse this connection. Close it with
    `browser-session stop` at the end. Idle sessions expire after 30 minutes;

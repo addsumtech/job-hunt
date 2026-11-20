@@ -93,6 +93,25 @@ test('beside a little text, only a whole captcha path segment is a verification 
     assert.equal(refusalUrl(url,little),false,url);
 });
 
+test('the text limit beside a captcha path is the measured one, not a guess',()=>{
+  // The limit was 80 characters, never measured. Pages fetched on 2026-11-20:
+  // Amazon's verification page carries 142 and sat above the limit, on a path
+  // (/errors/validateCaptcha) the segment pattern did not accept either, so it
+  // was read as an ordinary page. The shortest readable page was 1303.
+  const amazon='Click the button below to continue shopping Continue shopping Conditions of Use Privacy Policy © 1996-2025, Amazon.com, Inc. or its affiliates';
+  assert.equal(amazon.length,142);
+  assert.equal(refusalUrl('https://www.amazon.com/errors/validateCaptcha',amazon),true);
+  const measuredWalls=[['https://sec.douyin.com/a/captcha',0],['https://wappass.baidu.com/static/captcha/tuxing.html?ak=x',21],
+    ['https://nopecha.com/demo/recaptcha',38],['https://mp.weixin.qq.com/mp/wappoc_appmsgcaptcha?poc_token=x',41]];
+  for (const [url,length] of measuredWalls) assert.equal(refusalUrl(url,'验'.repeat(length)),true,url);
+  const measuredPages=[['https://developers.google.com/recaptcha',1303],['https://github.com/topics/captcha',2727],
+    ['https://zh.wikipedia.org/wiki/验证码',6038],['https://pypi.org/project/captcha/',11967],['https://en.wikipedia.org/wiki/CAPTCHA',31838]];
+  for (const [url,length] of measuredPages) assert.equal(refusalUrl(url,'a'.repeat(length)),false,url);
+  // A posting or a team page is still not a wall, whatever it says.
+  for (const url of ['https://example.com/jobs/captcha-engineer','https://example.com/recaptcha-team/roles'])
+    assert.equal(refusalUrl(url,amazon),false,url);
+});
+
 test('a readable page under a captcha path is read, not handed to the user as a wall',async()=>{
   // The URL alone decided: an encyclopedia article at /wiki/CAPTCHA and a
   // vendor's /product/captcha page came back blocked with 4200 readable
