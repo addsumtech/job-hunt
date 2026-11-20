@@ -3,8 +3,8 @@
 import {createServer} from 'node:http';
 import {randomBytes} from 'node:crypto';
 import {createRequire} from 'node:module';
-import {readFile, writeFile, mkdir, unlink, open, rename, stat} from 'node:fs/promises';
-import {join, resolve} from 'node:path';
+import {readFile, writeFile, mkdir, unlink, open, rename, stat, readdir} from 'node:fs/promises';
+import {join, resolve, dirname, basename} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {spawn} from 'node:child_process';
 import {dailyEndpoint} from './browser_cdp.mjs';
@@ -40,7 +40,9 @@ const settingsIntact = "The browser's remote-debugging setting is not the cause.
 // user for consent again, so this cannot reconnect behind their back.
 const RESTARTABLE = ['idle_timeout', 'process_gone'];
 const restartHelp = "Run browser-session start once in this chat and ask the user to accept the browser's connection prompt again; no reset is needed.";
-const corruptHelp = file => `The browser session state file is unreadable (damaged or half-written): ${file}. ${settingsIntact} Run browser-session reset once to clear it, then start one session and accept the browser's connection prompt.`;
+// A damaged record names no session, so nothing can be read through it. `start`
+// and `stop` clear it themselves; a read only reports it.
+const corruptHelp = file => `The browser session state file is unreadable (damaged or half-written): ${file}. ${settingsIntact} No browser session is running. ${restartHelp}`;
 const stoppedHelp = (browser, reason) => {
   if (reason === 'consent_timeout') return `${ENDINGS[reason]} ${resumeHelp} Then start one session and accept the browser's connection prompt.`;
   if (RESTARTABLE.includes(reason)) return `${ENDINGS[reason]} ${settingsIntact} ${restartHelp}`;
@@ -51,6 +53,46 @@ const stoppedHelp = (browser, reason) => {
 // A state change holds the lock for a few seconds at most (a start waits about
 // five for its child). A lock older than this was left by a killed process.
 const LOCK_STALE_MS = 30000;
+const lockBusy = () => Error('A browser session state change is in progress; check status');
+
+// Every command writes a lock file of its OWN name beside the state file and
+// holds the lock only if no other command's file is there, looked for both
+// before and after writing. The single shared file this replaces was taken over
+// by deleting it and creating it again; two commands that both judged it stale
+// could each delete the other's new lock and both go on to start a session.
+// Here nothing a live command wrote is ever deleted by another, and of two
+// commands that write at the same moment the later look always sees the other
+// file: one of them, or both, is refused, never neither.
+// `between` runs after the first look; tests use it to place a rival exactly
+// there.
+export async function acquireLock(lockFile, {between = async () => {}} = {}) {
+  const dir = dirname(lockFile), base = basename(lockFile);
+  const own = `${lockFile}.${randomBytes(8).toString('hex')}`;
+  // Is another command's lock there? A lock whose holder is gone, or that is
+  // older than any state change, is cleared on the way. The bare name is an
+  // older version's lock; an unreadable or ownerless one is judged by age.
+  async function held() {
+    let other = false;
+    for (const name of await readdir(dir)) {
+      const file = join(dir, name);
+      if ((name !== base && !name.startsWith(base + '.')) || file === own) continue;
+      let holder = {}, age = Infinity;
+      try {holder = JSON.parse(await readFile(file,'utf8')) || {};} catch {}
+      try {age = Date.now() - (Number.isFinite(holder.at) ? holder.at : (await stat(file)).mtimeMs);} catch {}
+      if (age < LOCK_STALE_MS && (!Number.isInteger(holder.pid) || alive(holder.pid))) other = true;
+      else await unlink(file).catch(() => {});
+    }
+    return other;
+  }
+  if (await held()) throw lockBusy();
+  await between();
+  await writeFile(own,JSON.stringify({pid:process.pid,at:Date.now()}),{flag:'wx',mode:0o600});
+  const release = () => unlink(own).catch(() => {});
+  let rival;
+  try {rival = await held();} catch (err) {await release();throw err;}
+  if (rival) {await release();throw lockBusy();}
+  return release;
+}
 
 export async function createSession({endpoint, WebSocket, WebSocketServer,
   idleMs = 30 * 60 * 1000, consentMs = 120000, changed = () => {}}) {
@@ -250,29 +292,18 @@ export async function main(argv) {
   const ending = () => gone() ? 'process_gone' : previous?.ended_reason;
   await load();
   async function withStartLock(action) {
-    const token = randomBytes(8).toString('hex');
-    const claim = () => writeFile(lockFile,JSON.stringify({pid:process.pid,at:Date.now(),token}),{flag:'wx',mode:0o600});
-    try {await claim();} catch (err) {
-      if (err.code !== 'EEXIST') throw err;
-      // The lock used to be an empty file with no owner, so one left behind by
-      // a killed command refused every later start, stop and reset. Take it
-      // over when its holder is gone or it is older than any state change. An
-      // unreadable or ownerless lock (an older version's) is judged by age.
-      let holder = {}, age = Infinity;
-      try {holder = JSON.parse(await readFile(lockFile,'utf8')) || {};} catch {}
-      try {age = Date.now() - (Number.isFinite(holder.at) ? holder.at : (await stat(lockFile)).mtimeMs);} catch {}
-      if (age < LOCK_STALE_MS && (!Number.isInteger(holder.pid) || alive(holder.pid))) throw Error('A browser session state change is in progress; check status');
-      await unlink(lockFile).catch(() => {});
-      try {await claim();} catch (again) {
-        if (again.code === 'EEXIST') throw Error('A browser session state change is in progress; check status');
-        throw again;
-      }
-    }
-    try {return await action();}
-    finally {
-      // Release only our own lock; a slow command may have been taken over.
-      try {if (JSON.parse(await readFile(lockFile,'utf8')).token === token) await unlink(lockFile);} catch {}
-    }
+    const release = await acquireLock(lockFile);
+    try {return await action();} finally {await release();}
+  }
+  // A damaged record cannot say which chat or process it belonged to, so no
+  // rule about either can be applied to it. `start` and `stop` used to refuse
+  // until someone ran `reset`; they now clear it and carry on as if no session
+  // had been recorded. Called with the lock held.
+  async function clearDamaged() {
+    if (!previous?.corrupt) return false;
+    await unlink(stateFile).catch(() => {});
+    previous = undefined;live = false;liveStatus = undefined;
+    return true;
   }
   async function contact(suffix, method = 'GET') {
     if (!previous?.endpoint || !live) throw Error('No running browser session');
@@ -283,7 +314,8 @@ export async function main(argv) {
   }
   const currentStatus = async () => liveStatus ?? await (await contact('/status')).json();
   if (action === 'status') {
-    if (previous?.corrupt) throw Error(corruptHelp(stateFile));
+    // Read-only: say what is there and leave the clearing to start/stop/reset.
+    if (previous?.corrupt) {console.log(JSON.stringify({state:'stopped',browser,reason:'state_file_damaged'}));return;}
     if (failed(previous?.state)) throw Error(stoppedHelp(browser, previous.ended_reason));
     if (!live || previous.state === 'closed') {
       const reason = ending();
@@ -308,7 +340,7 @@ export async function main(argv) {
   if (action === 'stop') {
     return withStartLock(async () => {
       await load();
-      if (previous?.corrupt) throw Error(corruptHelp(stateFile));
+      await clearDamaged();
       if (live) {
         if (active(previous.state)) await contact('/stop','POST');
         console.log(JSON.stringify({state:'stopping',browser}));return;
@@ -332,7 +364,7 @@ export async function main(argv) {
   if (action !== 'start') throw Error('Use start, status, stop or reset');
   return withStartLock(async () => {
     await load();
-    if (previous?.corrupt) throw Error(corruptHelp(stateFile));
+    const cleared = await clearDamaged() ? {cleared_damaged_state:true} : {};
     // Checked first: a session still shutting down is about to become one of
     // the cases below, and "stopping; wait" is the only true answer until then.
     if (live && previous.state === 'closed') throw Error('Browser session is stopping; wait for status to report stopped');
@@ -357,7 +389,7 @@ export async function main(argv) {
       // WorkBuddy revokes the broker capability when its Bash task exits.
       // Keep the server in that task. WorkBuddy runs the task in background.
       const session = await serve(sourceEndpoint);
-      console.log(JSON.stringify({...session.status(),browser,pid:process.pid,reused:false}));
+      console.log(JSON.stringify({...session.status(),browser,pid:process.pid,reused:false,...cleared}));
       return;
     }
     const log = await open(join(root,`browser-session-${browser}.log`),'a',0o600);
@@ -374,7 +406,7 @@ export async function main(argv) {
         if (failed(state.state)) throw Error(stoppedHelp(browser, state.ended_reason));
         if (state.state === 'closed') throw Error(connectionHelp(browser));
         if (state.state !== 'waiting_for_consent' || i - firstState >= 20) {
-          console.log(JSON.stringify({state:state.state,browser,pid:state.pid,reused:false}));return;
+          console.log(JSON.stringify({state:state.state,browser,pid:state.pid,reused:false,...cleared}));return;
         }
       }
       await new Promise(r=>setTimeout(r,50));

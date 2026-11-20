@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {EventEmitter, once} from 'node:events';
-import {mkdtemp, readFile, writeFile, mkdir, rm, realpath, utimes, access} from 'node:fs/promises';
+import {mkdtemp, readFile, writeFile, mkdir, rm, realpath, utimes, access, readdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {promisify} from 'node:util';
@@ -499,25 +499,80 @@ test('a lock left by a killed command is taken over, and a held one is respected
   } finally {await rm(root,{recursive:true,force:true});}
 });
 
-test('a damaged state file is named as such and reset clears it, in WorkBuddy too', async()=>{
-  // Every command, reset included, used to fail with the JSON parser's message
-  // ("Unterminated string in JSON at position 25") and leave the file in place.
+test('two commands taking over the same stale lock never both hold it', async()=>{
+  // Takeover deleted the shared lock file and created it again. A second
+  // command that had also judged the old lock stale then deleted the FIRST
+  // one's new lock and created its own: both ran, and two starts mean two
+  // browser connections. The rival below takes over between this command's
+  // look at the stale lock and its claim, the exact gap that was open.
+  const {acquireLock}=await import('../browser_session.mjs');
+  const root=await realpath(await mkdtemp(join(tmpdir(),'browser-lock-race-')));
+  const lockFile=join(root,'browser-session-chrome.json.lock');
+  try {
+    await writeFile(lockFile,JSON.stringify({pid:2147483646,at:Date.now(),token:'dead'}));
+    let rival;
+    await assert.rejects(acquireLock(lockFile,{between:async()=>{rival=await acquireLock(lockFile);}}),/state change is in progress/);
+    // The rival still holds: its lock survived the refused command.
+    await assert.rejects(acquireLock(lockFile),/state change is in progress/);
+    await rival();
+    const next=await acquireLock(lockFile);
+    await next();
+    assert.deepEqual((await readdir(root)).filter(name=>name.includes('.lock')),[]);
+  } finally {await rm(root,{recursive:true,force:true});}
+});
+
+test('eight commands racing for a stale lock are refused only as busy and leave no lock behind', async()=>{
+  const {root,args,env,lockFile}=await cliRoot('browser-lock-stress-');
+  try {
+    for (let round=0;round<3;round++) {
+      await writeFile(lockFile,JSON.stringify({pid:2147483646,at:Date.now(),token:'dead'}));
+      // `reset` holds the lock while it probes the recorded pid; each prints
+      // one line only if it got the lock.
+      const runs=await Promise.allSettled(Array.from({length:8},()=>promisify(execFile)(process.execPath,args('reset'),{env,timeout:10000})));
+      for (const run of runs) if (run.status==='rejected') assert.match(run.reason.stderr,/state change is in progress/);
+      assert.deepEqual((await readdir(root)).filter(name=>name.includes('.lock')),[]);
+    }
+  } finally {await rm(root,{recursive:true,force:true});}
+});
+
+test('a damaged state file does not need a reset: start and stop clear it, in WorkBuddy too', async()=>{
+  // Every command first failed with the JSON parser's message; then start and
+  // stop refused until someone ran `reset`, a step the record gave no reason
+  // for: it names no chat and no process, so there was nothing to protect.
   const wb={CODEBUDDY_SANDBOX_BROKER_EXECUTION_ATTEMPT_ID:'fixture',CODEBUDDY_SANDBOX_BROKER_SESSION_ID:'same-chat'};
   for (const env of [{},wb]) for (const damage of ['{"pid":123,"browser":"chr','','[]','null']) {
-    const {root,run,stateFile}=await cliRoot('browser-damaged-',env);
+    const {root,run,stateFile,args,env:full}=await cliRoot('browser-damaged-',env);
     try {
+      // Reads report it and leave it alone.
       await writeFile(stateFile,damage);
-      for (const action of ['status','endpoint','start','stop']) {
-        await assert.rejects(run(action),error=>{
-          assert.match(error.stderr,/state file is unreadable[^]*browser-session reset once/,action);
-          assert.doesNotMatch(error.stderr,/JSON|chrome:\/\/inspect/,action);
-          return true;
-        });
-      }
+      assert.deepEqual(JSON.parse((await run('status')).stdout),{state:'stopped',browser:'chrome',reason:'state_file_damaged'});
+      await assert.rejects(run('endpoint'),error=>{
+        assert.match(error.stderr,/state file is unreadable[^]*No browser session is running[^]*start once in this chat/);
+        assert.doesNotMatch(error.stderr,/JSON|chrome:\/\/inspect|reset once/);
+        return true;
+      });
       assert.equal(await readFile(stateFile,'utf8'),damage);
+
+      assert.equal(JSON.parse((await run('stop')).stdout).state,'stopped');
+      await assert.rejects(access(stateFile),{code:'ENOENT'});
+
+      await writeFile(stateFile,damage);
       assert.equal(JSON.parse((await run('reset')).stdout).state,'stopped');
       await assert.rejects(access(stateFile),{code:'ENOENT'});
-      assert.deepEqual(JSON.parse((await run('status')).stdout),{state:'stopped',browser:'chrome'});
+
+      // start goes straight to a new session.
+      await writeFile(stateFile,damage);
+      const started=spawn(process.execPath,args('start'),{env:full,stdio:['ignore','pipe','pipe']});
+      let pid;
+      try {
+        const [line]=await once(started.stdout,'data',{signal:AbortSignal.timeout(8000)});
+        const answer=JSON.parse(line);pid=answer.pid;
+        assert.deepEqual([answer.reused,answer.cleared_damaged_state],[false,true]);
+        assert.equal(JSON.parse(await readFile(stateFile,'utf8')).pid,pid);
+      } finally {
+        const done=started.exitCode===null?once(started,'exit'):null;started.kill('SIGKILL');await done;
+        if (pid && pid!==started.pid) try {process.kill(pid,'SIGKILL');} catch {}
+      }
     } finally {await rm(root,{recursive:true,force:true});}
   }
 });
