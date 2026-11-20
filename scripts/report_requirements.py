@@ -29,9 +29,8 @@ import deliver
 
 PAGE = [595.28, 841.89]                 # A4
 TEXT_BOUNDS = [56, 56, 539, 816]        # text column 56–539 pt; body from 64 pt; footer ends near 813 pt
-SIZES = {"title": 18, "heading": 14, "subheading": 12.6, "body": 12,
-         "table": 11.5, "contents": 10.5, "footer": 8}
-NAVY = 0x17365D                         # titles, headings and links
+SIZES = deliver.REPORT_SIZES            # the renderer's own table, not a copy of it
+INK = 0x1A1A1C                          # deliver.REPORT_INK: every title, heading and body line
 
 
 _CJK = re.compile(r"[\u3000-\u9fff\uac00-\ud7af\uff00-\uffef]")
@@ -84,7 +83,7 @@ def _samples(markdown: str, font: str) -> list[dict] | str:
     # list repeats every section heading.
     candidates["heading"].sort(key=lambda c: c[1] != SIZES["heading"])
     out = []
-    for role, color in (("title", NAVY), ("heading", NAVY), ("body", None)):
+    for role, color in (("title", INK), ("heading", INK), ("body", None)):
         found = next(((needle, size) for text, size in candidates[role]
                       if (needle := _needle(text, size, everything))), None)
         if found is None:
@@ -133,8 +132,10 @@ def requirements(markdown: str) -> dict | str:
                           "contents links {contents} pt; footer {footer} pt".format(**SIZES),
             "page_geometry": "A4 595.28 x 841.89 pt; text column 56–539 pt; body from 64 pt "
                              "to 770 pt; footer baseline 811 pt",
-            "headings_and_rules": "Navy #17365d title, headings and links; tables with a "
-                                  "pale header band and light row rules; no card frames",
+            "headings_and_rules": "Black ink #1a1a1c throughout; title and headings in "
+                                  "bold with no rule beneath; table column labels in grey "
+                                  "over one light rule, no rules between rows; a quoted "
+                                  "block drawn as a pale band with a bar; no card frames",
             "dates_and_alignment": "All text left-aligned at 56 pt; footer label left and "
                                    f"page number right ({style['page'].format(number='N')})",
             "paragraph_spacing": "Body leading 1.35 x size; table rows 15.5 pt; no stacked "

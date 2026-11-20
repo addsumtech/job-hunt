@@ -186,8 +186,9 @@ this comparison in the layout review under `content_order` and
 Keep the approved typography; follow `references/word-resume-layout.md` for the
 English Times New Roman and Chinese SimSun report convention and its language,
 template and user-request exceptions. Verify the embedded fonts in the output.
-The default consultation palette is white paper with navy emphasis (`#17365d`),
-very pale blue table alternation (`#f5f7fd`) and light blue rules (`#c5d2e3`).
+The default consultation palette is white paper and black ink (`#1a1a1c`) with
+no accent colour: bold headings without rules, grey table column labels over
+one light rule, and one pale grey band (`#f4f4f1`) for the conclusion box.
 A newer user palette or supplied template takes precedence. A request to borrow
 colors does not authorize copying a reference's fonts, spacing or entire layout.
 
@@ -210,9 +211,23 @@ or subtopics, so the renderer can preserve that visual hierarchy.
 Write contents entries as Markdown links to heading anchors; the bundled renderer
 resolves them after pagination. Do not hard-code page numbers into the source.
 The bundled renderer lays out a table of more than four columns as one labelled
-paragraph block per row, not a grid, and prints `**bold**` as plain text. Keep a
-comparison table to four columns when it should read as a table, and do not rely
-on bold to carry meaning.
+paragraph block per row, not a grid. Keep a comparison table to four columns
+when it should read as a table.
+The renderer gives the reader three ways to find the point, and a page that
+uses none of them reads as a wall of text:
+- **A conclusion box.** Write the report's decision as a Markdown quote (`> `)
+  directly under the first section heading: the judgment, the one reason that
+  decides it, and the next action, in at most three short lines. It prints as a
+  grey band with a bar. Use one per report, or one per role in a report that
+  compares roles; a box on every section is no emphasis at all.
+- **Bold, printed as bold, and rare.** Only headings are bold by default; table
+  column labels and field labels are not. Bold the judgment a reader must not
+  miss, such as the first line of the conclusion box. A page with more than two
+  or three bold phrases outside its headings has no emphasis left; labels such
+  as `经验缺口：` stay plain.
+- **One link, printed once.** A single link in a sentence is clickable where it
+  stands. Several postings in one paragraph are listed beneath it, one per
+  line, so prefer a table or a list for a group of postings.
 Keep figures at reading size rather than turning counts into oversized statistic
 cards. Use comparison tables where they help, with no card frame around every
 recommendation. A compact linked contents block can share the opening page.

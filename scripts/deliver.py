@@ -1182,12 +1182,82 @@ def _wrap_report_text(value, size, width, text_width, literal=False):
     return result or [""]
 
 
+# Report typography. One place, because report_requirements.py states these
+# values to the layout gate and a test measures a rendered page against them.
+REPORT_SIZES = {"title": 18, "heading": 14, "subheading": 12.6, "body": 12,
+                "callout": 12, "table": 11.5, "contents": 10.5, "meta": 10.5,
+                "footer": 8}
+REPORT_INK = (26 / 255, 26 / 255, 28 / 255)   # #1a1a1c, all text: the CV's black
+REPORT_MUTED = (0.42, 0.42, 0.44)      # metadata line, footer
+REPORT_RULE = (0.80, 0.80, 0.80)       # table row rules
+REPORT_BAND = (0.955, 0.955, 0.945)    # the conclusion box
+_INLINE = re.compile(
+    r"\[(?P<label>[^\]]+)]\((?:<)?(?P<url>[^\s)>]+)(?:>)?\)"
+    r"|<(?P<raw>https?://[^\s>]+)>"
+    r"|\*\*(?P<bold>.+?)\*\*"
+    r"|`(?P<code>[^`]+)`")
+_META_LINE = re.compile(r"[｜|·•]")
+
+
+def _inline_runs(value: str):
+    """One Markdown line as the PDF prints it, with what to embolden and link.
+
+    Returns `(display, bold, links)`: `bold` is `(start, end)` ranges and
+    `links` is `(start, end, url)` ranges, both in `display` offsets. The
+    ranges are recorded where the text is produced, so a label that occurs
+    twice in a line is linked where it was written.
+    """
+    out: list[str] = []
+    bold: list[tuple[int, int]] = []
+    links: list[tuple[int, int, str]] = []
+    length = 0
+
+    def put(text: str, is_bold: bool, url: str | None) -> None:
+        nonlocal length
+        if not text:
+            return
+        if is_bold:
+            bold.append((length, length + len(text)))
+        if url:
+            links.append((length, length + len(text), url))
+        out.append(text)
+        length += len(text)
+
+    def emit(text: str, is_bold: bool, url: str | None) -> None:
+        position = 0
+        for match in _INLINE.finditer(text):
+            put(text[position:match.start()], is_bold, url)
+            position = match.end()
+            if match.group("label") is not None:
+                emit(match.group("label"), is_bold, html.unescape(match.group("url")))
+            elif match.group("raw") is not None:
+                target = html.unescape(match.group("raw"))
+                put(urlsplit(target).netloc.removeprefix("www.") or target, is_bold, target)
+            elif match.group("bold") is not None:
+                emit(match.group("bold"), True, url)
+            else:
+                put(match.group("code"), is_bold, url)
+        put(text[position:], is_bold, url)
+
+    emit(value.replace("⚠️", "[!]").replace("⚠", "[!]"), False, None)
+    return "".join(out), bold, links
+
+
 def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
                             style: dict[str, str]) -> tuple[bool, str]:
     """Render a supported LTR report with a bundled, extractable PDF font.
 
     This avoids host-installed fonts and TeX font discovery for the five report
     languages the skill localizes: Chinese, English, Japanese, Korean, Spanish.
+
+    The page is black ink on white with few lines and little bold: headings
+    are bold, a table has one light rule under its column labels, and a quoted
+    block is the conclusion box. Until 1.6.0 it was navy on a pale blue band in
+    one weight, `**bold**` printed as plain text and every link in a sentence
+    was printed again on its own line, so nothing on a page stood out. A first
+    redraw with a rule under every heading and row and bold labels everywhere
+    was rejected as too many lines and too much bold (user, 2026-11-20). Bold
+    is the same face stroked, so one embedded font carries the whole document.
     """
     try:
         import pymupdf
@@ -1196,9 +1266,12 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
 
     page_width, page_height = 595.28, 841.89  # A4 in PDF points
     left, right, top, bottom = 56, 539, 64, 770
-    body_color = (0.09, 0.10, 0.13)
-    heading_color = (23 / 255, 54 / 255, 93 / 255)
-    link_color = heading_color
+    sizes = REPORT_SIZES
+    # Sizes and leading are the ones the report has always used: reading size
+    # is a standing rule, and the one-page interview brief is measured at it.
+    body, body_leading = sizes["body"], sizes["body"] * 1.35
+    table_size, table_leading = sizes["table"], 15.5
+    ink, muted = REPORT_INK, REPORT_MUTED
     font = pymupdf.Font(style["font"])
     document = pymupdf.open()
     page = None
@@ -1214,25 +1287,42 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
     def wrap(value: str, size: float, width: float, literal: bool = False) -> list[str]:
         return _wrap_report_text(value, size, width, text_width, literal)
 
+    def place_link(rect, url: str) -> None:
+        assert page is not None
+        if url.startswith("#"):
+            internal_links.append((page.number, rect, unquote(url[1:])))
+        else:
+            page.insert_link({"kind": pymupdf.LINK_URI, "from": rect, "uri": url})
+
     def write_lines(lines: list[str], x: float, size: float,
                     color: tuple[float, float, float], leading: float,
                     link: str | None = None, allow_split: bool = False,
-                    inline: list[tuple[str, str]] | None = None) -> bool:
+                    runs=None, bold: bool = False) -> bool:
         """Paint text through TextWriter, whose CJK metrics stay compact.
 
-        `inline` holds section links to make clickable where their label is
-        printed; each one placed is removed from the list, so the caller can
-        fall back to a separate link line for a label that wrapped. Each
-        entry is `(label, target, occurrence)`: the label's index among its
-        equal strings in the block, so `结论很简单：见[结论](#结论)` links the
-        second `结论`, not the first.
+        `runs` is `_inline_runs` output for the text these lines were wrapped
+        from. Each line is found again in that text, so a bold phrase or a link
+        label keeps its weight and its click target on every line it wraps
+        onto. `link` makes the whole block one link instead.
         """
-        inline_seen: dict[str, int] = {}
         nonlocal cursor
+        display, bold_ranges, link_ranges = runs or ("", [], [])
+        weight = [False] * len(display)
+        target = [-1] * len(display)
+        for start, end in bold_ranges:
+            weight[start:end] = [True] * (end - start)
+        for number, (start, end, _) in enumerate(link_ranges):
+            target[start:end] = [number] * (end - start)
+        offsets, position = [], 0
+        for line in lines:
+            found = display.find(line, position) if runs and line else -1
+            offsets.append(found)
+            if found >= 0:
+                position = found + len(line)
         height = len(lines) * leading
         if not allow_split and height <= bottom - top and cursor + height > bottom:
             new_page()
-        remaining = lines[:]
+        remaining = list(zip(lines, offsets))
         while remaining:
             count = min(len(remaining), int((bottom - cursor) / leading))
             if count < 1:
@@ -1240,43 +1330,57 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
                 continue
             chunk, remaining = remaining[:count], remaining[count:]
             assert page is not None
-            writer = pymupdf.TextWriter(page.rect)
+            # Pieces are written in reading order, a new writer whenever the
+            # weight changes. Painting all regular text and then all bold text
+            # put a bold label after its own paragraph in the PDF's text, and
+            # the text gate reads that order.
+            writer, heavy_now = None, False
+
+            def flush():
+                nonlocal writer
+                if writer is not None:
+                    # Bold is the same face, filled and stroked: a second
+                    # weight without a second embedded font.
+                    writer.write_text(page, color=color, render_mode=2 if heavy_now else 0)
+                    writer = None
+
             start = cursor
-            for line in chunk:
-                writer.append(pymupdf.Point(x, cursor + size), line, font=font,
-                              fontsize=size)
-                for pending in list(inline or []):
-                    label, target, occurrence = pending
-                    found, seen = -1, inline_seen.get(label, 0)
-                    position = line.find(label) if label else -1
-                    while position >= 0:
-                        if seen == occurrence:
-                            found = position
-                            break
-                        seen += 1
-                        position = line.find(label, position + len(label))
-                    if found < 0:
-                        continue
-                    x0 = x + text_width(line[:found], size)
-                    x1 = x0 + text_width(label, size)
-                    internal_links.append((page.number, pymupdf.Rect(x0, cursor, x1, cursor + leading),
-                                           unquote(target[1:])))
-                    page.draw_line(pymupdf.Point(x0, cursor + size + 2),
-                                   pymupdf.Point(x1, cursor + size + 2),
-                                   color=link_color, width=0.5)
-                    inline.remove(pending)
-                for label in {item[0] for item in inline or []} | set(inline_seen):
-                    if label:
-                        inline_seen[label] = inline_seen.get(label, 0) + line.count(label)
+            for line, offset in chunk:
+                index = 0
+                while index < len(line):
+                    at = offset + index if offset >= 0 else -1
+                    key = (weight[at], target[at]) if at >= 0 else (False, -1)
+                    stop = index + 1
+                    while stop < len(line) and offset >= 0 and (
+                            weight[offset + stop], target[offset + stop]) == key:
+                        stop += 1
+                    if offset < 0:
+                        stop = len(line)
+                    piece = line[index:stop]
+                    x0 = x + text_width(line[:index], size)
+                    wants_heavy = bool(bold or key[0])
+                    if writer is None or wants_heavy != heavy_now:
+                        flush()
+                        writer, heavy_now = pymupdf.TextWriter(page.rect), wants_heavy
+                    writer.append(pymupdf.Point(x0, cursor + size), piece, font=font, fontsize=size)
+                    if key[1] >= 0:
+                        x1 = x0 + text_width(piece, size)
+                        place_link(pymupdf.Rect(x0, cursor, x1, cursor + leading), link_ranges[key[1]][2])
+                        page.draw_line(pymupdf.Point(x0, cursor + size + 2.2),
+                                       pymupdf.Point(x1, cursor + size + 2.2),
+                                       color=muted, width=0.45)
+                    index = stop
                 cursor += leading
-            writer.write_text(page, color=color)
+            flush()
             if link:
-                width = min(right - x, max(text_width(line, size) for line in chunk))
+                width = min(right - x, max(text_width(line, size) for line, _ in chunk))
                 rect = pymupdf.Rect(x, start, x + width, cursor)
-                if link.startswith("#"):
-                    internal_links.append((page.number, rect, unquote(link[1:])))
-                else:
-                    page.insert_link({"kind": pymupdf.LINK_URI, "from": rect, "uri": link})
+                place_link(rect, link)
+                if not link.startswith("#"):
+                    for row, (line, _) in enumerate(chunk):
+                        y = start + row * leading + size + 2.2
+                        page.draw_line(pymupdf.Point(x, y), pymupdf.Point(x + text_width(line, size), y),
+                                       color=muted, width=0.45)
             if remaining:
                 new_page()
         return True
@@ -1285,31 +1389,15 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
         nonlocal page, cursor
         page = document.new_page(width=page_width, height=page_height)
         page.draw_line(pymupdf.Point(left, 790), pymupdf.Point(right, 790),
-                       color=(0.85, 0.89, 0.93), width=0.5)
+                       color=REPORT_RULE, width=0.5)
         footer = pymupdf.TextWriter(page.rect)
-        footer.append(pymupdf.Point(left, 811), style["footer"], font=font, fontsize=8)
-        footer.write_text(page, color=(0.38, 0.49, 0.60))
+        footer.append(pymupdf.Point(left, 811), style["footer"], font=font, fontsize=sizes["footer"])
+        footer.write_text(page, color=muted)
         cursor = top
 
     def text_and_links(value: str) -> tuple[str, list[tuple[str, str]]]:
-        links: list[tuple[str, str]] = []
-
-        def markdown_link(match: re.Match) -> str:
-            label, url = match.group(1), html.unescape(match.group(2))
-            links.append((label, url))
-            return label
-
-        def raw_link(match: re.Match) -> str:
-            url = html.unescape(match.group(1))
-            label = urlsplit(url).netloc.removeprefix("www.") or url
-            links.append((label, url))
-            return label
-
-        value = value.replace("⚠️", "[!]").replace("⚠", "[!]")
-        value = _MD_LINK.sub(markdown_link, value)
-        value = _RAW_ANGLE_URL.sub(raw_link, value)
-        value = _MD_BOLD.sub(r"\1", value)
-        return _MD_CODE.sub(r"\1", value), links
+        display, _, links = _inline_runs(value)
+        return display, [(display[start:end], url) for start, end, url in links]
 
     def only_a_link(value: str) -> bool:
         """Whether this whole value is one link, so its label needs painting once.
@@ -1326,85 +1414,132 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
         stripped = value.strip().rstrip("。．.,，、;；:：!！?？ \t")
         return bool(_MD_LINK.fullmatch(stripped) or _RAW_ANGLE_URL.fullmatch(stripped))
 
+    def links_in_place(lines: list[str], runs):
+        """Split a block's links into those linked where printed and the rest."""
+        display, bold_ranges, link_ranges = runs
+        external = [item for item in link_ranges if not item[2].startswith("#")]
+        spans, position = [], 0
+        for line in lines:
+            found = display.find(line, position) if line else -1
+            if found >= 0:
+                spans.append((found, found + len(line)))
+                position = found + len(line)
+        kept, below = [], []
+        for start, end, url in link_ranges:
+            whole = any(a <= start and end <= b for a, b in spans)
+            if whole and (url.startswith("#") or len(external) == 1):
+                kept.append((start, end, url))
+            else:
+                below.append((display[start:end], url))
+        return (display, bold_ranges, kept), below
+
     def add_block(value: str, size: float, color: tuple[float, float, float], gap: float,
-                  allow_split: bool = False) -> bool:
+                  allow_split: bool = False, bold: bool = False, indent: float = 0,
+                  leading: float | None = None) -> bool:
         nonlocal cursor
-        display, links = text_and_links(value)
+        leading = leading or size * 1.35
         # A list item that is nothing but a link (a contents entry) is a
         # standalone link too: painting `- 结论` and then a clickable `结论`
         # under it printed every contents entry twice.
         standalone_link = only_a_link(value) or (
             value.startswith("- ") and only_a_link(value[2:]))
-        if not standalone_link:
-            # A section link inside prose is clickable where it is printed;
-            # only a label that wrapped across lines still gets its own line.
-            inline = []
-            for match in _MD_LINK.finditer(value):
-                label, url = text_and_links(match.group(1))[0], html.unescape(match.group(2))
-                if url.startswith("#"):
-                    before, _ = text_and_links(value[:match.start()])
-                    inline.append((label, url, before.count(label)))
-            links = [(label, url) for label, url in links if not url.startswith("#")]
-            if not write_lines(wrap(display, size, right - left), left, size, color,
-                               size * 1.35, allow_split=allow_split, inline=inline):
-                return False
-            links = [(label, url) for label, url, _ in inline] + links
-            cursor += gap
-        for label, url in links:
+        if standalone_link:
+            for label, url in text_and_links(value)[1]:
+                link_label = label if url.startswith("#") else f"{style['link']}{label}"
+                if not write_lines(wrap(link_label, sizes["contents"], right - left - indent),
+                                   left + indent, sizes["contents"], ink, 14.5, url):
+                    return False
+                cursor += 3
+            return True
+        # A link inside prose is clickable where it is printed. It keeps a
+        # line of its own beneath the paragraph in two cases only: its label
+        # wrapped (one link, one target), or the paragraph holds several
+        # postings, which are told apart and clicked more easily as a list.
+        # Until 1.6.0 every external link was printed twice, so a paragraph
+        # with one link ran a line longer and read as two things.
+        runs = _inline_runs(value)
+        lines = wrap(runs[0], size, right - left - indent)
+        runs, below = links_in_place(lines, runs)
+        if not write_lines(lines, left + indent, size, color, leading,
+                           allow_split=allow_split, runs=runs, bold=bold):
+            return False
+        cursor += gap
+        for label, url in below:
             link_label = label if url.startswith("#") else f"{style['link']}{label}"
-            if not write_lines(wrap(link_label, 10.5, right - left), left,
-                               10.5, link_color, 14.5, url):
+            if not write_lines(wrap(link_label, sizes["contents"], right - left - indent),
+                               left + indent, sizes["contents"], ink, 14.5, url):
                 return False
             cursor += 3
         return True
 
     def entry_start_height(title: str) -> float:
         title_display, _ = text_and_links(title)
-        return len(wrap(title_display, 12.6, right - left)) * 17 + 36
+        return len(wrap(title_display, sizes["subheading"], right - left)) * 17 + 36
 
     def add_entry(title: str, fields: list[tuple[str, str]]) -> bool:
         """Flow a wide table entry as labeled paragraphs, without a card frame."""
         nonlocal cursor
         if cursor + entry_start_height(title) > bottom:
             new_page()
-        if not add_block(title, 12.6, heading_color, 5):
+        if not add_block(title, sizes["subheading"], ink, 4, bold=True):
             return False
         for label, value in fields:
+            prefix = f"{_inline_runs(label)[0]}{style['separator']}"
             if only_a_link(value):
                 # The field label already says what the link is, so paint one
                 # clickable `原链接：打开职位` instead of that line plus a
                 # `链接：打开职位` copy of it.
-                _, links = text_and_links(value)
-                for link_label, url in links:
-                    if not write_lines(
-                            wrap(f"{label}{style['separator']}{link_label}", 12,
-                                 right - left), left, 12, link_color, 16.2, url):
+                for link_label, url in text_and_links(value)[1]:
+                    if not write_lines(wrap(f"{prefix}{link_label}", body, right - left),
+                                       left, body, ink, body_leading, url):
                         return False
-                    cursor += 4
+                    cursor += 3
                 continue
-            if not add_block(f"{label}{style['separator']}{value}", 12, body_color, 4):
+            display, bold_ranges, link_ranges = _inline_runs(value)
+            shift = len(prefix)
+            runs = (prefix + display,
+                    [(a + shift, b + shift) for a, b in bold_ranges],
+                    [(a + shift, b + shift, url) for a, b, url in link_ranges])
+            lines = wrap(runs[0], body, right - left)
+            runs, below = links_in_place(lines, runs)
+            if not write_lines(lines, left, body, ink, body_leading, runs=runs):
                 return False
+            cursor += 4
+            for link_label, url in below:
+                if not write_lines(wrap(f"{style['link']}{link_label}", sizes["contents"], right - left),
+                                   left, sizes["contents"], ink, 14.5, url):
+                    return False
+                cursor += 3
         cursor += 6
         return True
 
     def table_layout(header, rows):
         """Use the same wrapped cell heights for lookahead and painting."""
-        widths = ([0.32, 0.68] if len(header) == 2 else
-                  [1 / len(header)] * len(header))
-        widths = [fraction * (right - left) for fraction in widths]
-        size = 11.5
+        # Width follows content: a column of two-word labels beside a column of
+        # sentences used to get the same third of the page, so the labels sat
+        # in white space and the sentences wrapped into a tall ribbon.
+        longest = [max([len(text_and_links(header[col])[0])]
+                       + [len(text_and_links(row[col])[0]) for row in rows])
+                   for col in range(len(header))]
+        weights = [min(max(length, 6), 60) ** 0.6 for length in longest]
+        floor = 0.16 if len(header) > 2 else 0.24
+        fractions = [max(weight / sum(weights), floor) for weight in weights]
+        widths = [fraction / sum(fractions) * (right - left) for fraction in fractions]
 
         def cell_data(values):
             cells = []
             for value, width in zip(values, widths):
-                display, links = text_and_links(value)
-                # A cell that is nothing but a link gets the clickable line
-                # alone; anything else keeps its prose and appends the link.
-                entries = [] if only_a_link(value) else [
-                    (wrap(display, size, width - 12), None)]
-                entries.extend((wrap(f"{style['link']}{label}", size, width - 12), url)
-                               for label, url in links)
-                cells.append(entries or [(wrap(display, size, width - 12), None)])
+                if only_a_link(value):
+                    # A cell that is nothing but a link is the clickable line alone.
+                    cells.append([(wrap(f"{style['link']}{label}", table_size, width - 12), url, None)
+                                  for label, url in text_and_links(value)[1]])
+                    continue
+                runs = _inline_runs(value)
+                lines = wrap(runs[0], table_size, width - 12)
+                runs, below = links_in_place(lines, runs)
+                cells.append([(lines, None, runs)] + [
+                    (wrap(f"{style['link']}{label}", table_size, width - 12), url, None)
+                    for label, url in below])
             return cells
 
         header_cells = cell_data(header)
@@ -1412,14 +1547,14 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
         return widths, header_cells, prepared, [table_row_height(cells) for cells in prepared]
 
     def table_row_height(cells):
-        return max(sum(len(lines) * 15.5 for lines, _ in entries)
+        return max(sum(len(lines) * table_leading for lines, _, _ in entries)
                    for entries in cells) + 10
 
     def table_start_height(block: list[str], available: float) -> float:
         rows = [_table_cells(line) for line in block]
         if len(rows) < 3 or not _is_table_rule(rows[1]):
             display, _ = text_and_links(" | ".join(rows[0]))
-            return len(wrap(display, 12, right - left)) * 16.2
+            return len(wrap(display, body, right - left)) * body_leading
         header, rows = rows[0], [row for row in rows[2:] if len(row) == len(rows[0])]
         if not rows:
             return 0
@@ -1439,7 +1574,7 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
         nonlocal cursor
         rows = [_table_cells(line) for line in block]
         if len(rows) < 3 or not _is_table_rule(rows[1]):
-            return all(add_block(" | ".join(row), 12, body_color, 6) for row in rows)
+            return all(add_block(" | ".join(row), body, ink, 6, leading=body_leading) for row in rows)
         header, rows = rows[0], rows[2:]
         rows = [row for row in rows if len(row) == len(header)]
         if len(header) > 4:
@@ -1453,25 +1588,25 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
 
         widths, header_cells, prepared, heights = table_layout(header, rows)
         header_height = table_row_height(header_cells)
-        size, leading = 11.5, 15.5
 
         def draw_row(cells, heading=False):
             nonlocal cursor
             assert page is not None
             start, height, x = cursor, table_row_height(cells), left
-            if heading:
-                page.draw_rect(pymupdf.Rect(left, start, right, start + height),
-                               fill=(245 / 255, 247 / 255, 253 / 255), color=None)
             for entries, width in zip(cells, widths):
                 cursor = start + 5
-                for lines, url in entries:
-                    if not write_lines(lines, x + 6, size,
-                                       link_color if url else body_color, leading, url):
+                for lines, url, runs in entries:
+                    if not write_lines(lines, x + 6, table_size, muted if heading else ink,
+                                       table_leading, url, runs=runs):
                         return False
                 x += width
             cursor = start + height
-            page.draw_line(pymupdf.Point(left, cursor), pymupdf.Point(right, cursor),
-                           color=(197 / 255, 210 / 255, 227 / 255), width=0.5)
+            # One rule under the column labels and none between rows: the
+            # space between rows separates them, and a line under every row
+            # made a page of stripes (user report, 2026-11-20).
+            if heading:
+                page.draw_line(pymupdf.Point(left, cursor), pymupdf.Point(right, cursor),
+                               color=REPORT_RULE, width=0.6)
             return True
 
         complete_height = header_height + sum(heights)
@@ -1501,26 +1636,49 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
                 needs_header = False
             if not draw_row(cells):
                 return False
-        cursor += 6
+        cursor += 8
+        return True
+
+    def add_callout(paragraphs: list[str]) -> bool:
+        """A quoted block is the page's conclusion box: a band with a bar."""
+        nonlocal cursor
+        size, leading, pad = sizes["callout"], sizes["callout"] * 1.4, 10
+        prepared = [(_inline_runs(text), None) for text in paragraphs]
+        prepared = [(runs, wrap(runs[0], size, right - left - 28)) for runs, _ in prepared]
+        height = sum(len(lines) * leading for _, lines in prepared) + 5 * (len(prepared) - 1) + 2 * pad
+        if height > bottom - top:
+            return all(add_block(text, body, ink, 6, leading=body_leading) for text in paragraphs)
+        if cursor + height > bottom:
+            new_page()
+        assert page is not None
+        start = cursor
+        page.draw_rect(pymupdf.Rect(left, start, right, start + height), fill=REPORT_BAND, color=None)
+        page.draw_rect(pymupdf.Rect(left, start, left + 3, start + height), fill=ink, color=None)
+        cursor = start + pad - 2
+        for runs, lines in prepared:
+            if not write_lines(lines, left + 16, size, ink, leading, runs=runs):
+                return False
+            cursor += 5
+        cursor = start + height + 10
         return True
 
     try:
         pdf.unlink(missing_ok=True)
         new_page()
         lines, index = list(_report_lines(md.read_text(encoding="utf-8"))), 0
-        after_heading = False
+        after_heading = after_title = False
         while index < len(lines):
             raw_line, literal = lines[index]
             line = raw_line.strip()
             index += 1
             if literal:
-                if not write_lines(wrap(raw_line, 12, right - left, literal=True),
-                                   left, 12, body_color, 16.2, allow_split=after_heading):
+                if not write_lines(wrap(raw_line, body, right - left, literal=True),
+                                   left, body, ink, body_leading, allow_split=after_heading):
                     return False, "report code block does not fit on a page"
-                after_heading = False
+                after_heading = after_title = False
                 continue
             if not line:
-                cursor += 4
+                cursor += 2
                 continue
             if line.startswith("|"):
                 table = [line]
@@ -1530,32 +1688,54 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
                     index += 1
                 if not add_table(table, keep_heading=after_heading):
                     return False, "report block does not fit on a page"
-                after_heading = False
+                after_heading = after_title = False
                 continue
+            if line == ">" or line.startswith("> "):
+                quote = [line[2:].strip()] if line[2:].strip() else []
+                while (index < len(lines) and not lines[index][1]
+                       and (lines[index][0].strip() == ">" or lines[index][0].strip().startswith("> "))):
+                    piece = lines[index][0].strip()[2:].strip()
+                    if piece:
+                        quote.append(piece)
+                    index += 1
+                if quote and not add_callout(quote):
+                    return False, "report block does not fit on a page"
+                after_heading = after_title = False
+                continue
+            options = {"leading": body_leading}
             if line.startswith("# "):
-                value, size, color, gap = line[2:], 18, heading_color, 8
+                value, size, gap, options = line[2:], sizes["title"], 8, {"bold": True}
             elif line.startswith("## "):
-                value, size, color, gap = line.lstrip("# "), 14, heading_color, 6
+                value, size, gap, options = line.lstrip("# "), sizes["heading"], 6, {"bold": True}
             elif line.startswith("### "):
-                value, size, color, gap = line.lstrip("# "), 12.6, heading_color, 5
+                value, size, gap, options = line.lstrip("# "), sizes["subheading"], 4, {"bold": True}
             elif line.startswith(("- ", "* ")):
-                value, size, color, gap = "- " + line[2:], 12, body_color, 5
-            elif line.startswith("> "):
-                value, size, color, gap = line[2:], 12, body_color, 5
+                value, size, gap = line[2:], body, 3
+                options = {"leading": body_leading, "indent": 13}
             else:
-                value, size, color, gap = line, 12, body_color, 6
+                value, size, gap = line, body, 6
+            color = ink
+            if after_title and not line.startswith(("#", "- ", "* ")) and _META_LINE.search(line) \
+                    and not re.search(r"[。！？]|[.!?](?:\s|$)", line):
+                # `2026年9月11日｜北京｜…` under the title is a dateline, not a sentence.
+                size, color, gap, options = sizes["meta"], muted, 8, {"leading": sizes["meta"] * 1.4}
             if line.startswith("#"):
                 heading_text, _ = text_and_links(value)
+                if line.startswith("## ") and cursor > top:
+                    cursor += 12
+                elif line.startswith("### ") and cursor > top:
+                    cursor += 4
                 heading_height = len(wrap(heading_text, size, right - left)) * size * 1.35
+                rule_height = 0
                 # The writer normally keeps a paragraph together. Reserve its
                 # actual height before painting the heading, or it can move to
                 # the next page alone despite the old two-line reservation.
-                following_height, blank_height = 32.4, 0
+                following_height, blank_height = 2 * body_leading, 0
                 for next_index in range(index, len(lines)):
                     next_line, next_literal = lines[next_index]
                     next_line = next_line.strip()
                     if not next_line:
-                        blank_height += 4
+                        blank_height += 2
                         continue
                     if not next_literal and next_line.startswith("|"):
                         table = []
@@ -1564,16 +1744,17 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
                             table.append(lines[next_index][0].strip())
                             next_index += 1
                         following_height = table_start_height(
-                            table, bottom - top - heading_height - gap - blank_height)
+                            table, bottom - top - heading_height - gap - rule_height - blank_height)
                     elif not next_literal and not next_line.startswith("#"):
                         if next_line.startswith(("- ", "* ", "> ")):
                             next_line = next_line[2:]
                         next_text, _ = text_and_links(next_line)
-                        following_height = len(wrap(next_text, 12, right - left)) * 16.2
+                        following_height = len(wrap(next_text, body, right - left)) * body_leading
                     break
-                if heading_height + gap + blank_height + following_height > bottom - top:
-                    following_height = 32.4  # A long first paragraph must flow.
-                if cursor + heading_height + gap + blank_height + following_height > bottom:
+                reserved = heading_height + gap + rule_height + blank_height
+                if reserved + following_height > bottom - top:
+                    following_height = 2 * body_leading  # A long first paragraph must flow.
+                if cursor + reserved + following_height > bottom:
                     new_page()
                 slug = re.sub(r"[^\w -]", "", heading_text.lower()).replace(" ", "-")
                 duplicate = anchor_counts.get(slug, 0)
@@ -1582,16 +1763,27 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
                 anchors[anchor] = (page.number, cursor)
                 if line.startswith("## "):
                     outline.append([1, heading_text, page.number + 1])
+            if line.startswith(("- ", "* ")) and not only_a_link(value):
+                # The mark sits in the margin of its item, so wrapped lines
+                # align with the text and not with the mark.
+                if cursor + body_leading > bottom:
+                    new_page()
+                mark = pymupdf.TextWriter(page.rect)
+                mark.append(pymupdf.Point(left + 2, cursor + body), "•", font=font, fontsize=body)
+                mark.write_text(page, color=ink)
+            elif line.startswith(("- ", "* ")):
+                value, options = "- " + value, {}
             if not add_block(value, size, color, gap,
-                             allow_split=after_heading and not line.startswith("#")):
+                             allow_split=after_heading and not line.startswith("#"), **options):
                 return False, "report block does not fit on a page"
+            after_title = line.startswith("# ")
             after_heading = line.startswith("#")
         for number, current_page in enumerate(document, start=1):
             footer = pymupdf.TextWriter(current_page.rect)
             label = style["page"].format(number=number)
-            footer.append(pymupdf.Point(right - text_width(label, 8), 811), label,
-                          font=font, fontsize=8)
-            footer.write_text(current_page, color=(0.38, 0.49, 0.60))
+            footer.append(pymupdf.Point(right - text_width(label, sizes["footer"]), 811), label,
+                          font=font, fontsize=sizes["footer"])
+            footer.write_text(current_page, color=muted)
         for page_number, rect, anchor in internal_links:
             if anchor not in anchors:
                 return False, f"unresolved report section link: #{anchor}"

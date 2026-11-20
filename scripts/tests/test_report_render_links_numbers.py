@@ -93,11 +93,13 @@ def test_no_section_link_is_lost_wherever_its_label_wraps(tmp_path):
     assert len(goto) == len(paragraphs)
 
 
-def test_external_links_keep_their_labelled_line(tmp_path):
-    url = 'https://www.linkedin.com/jobs/view/4483567304'
-    lines, links = render(tmp_path, f'# 报告\n\n投递前先读[职位原文]({url})。\n')
-    assert '链接：职位原文' in lines
-    assert [link['uri'] for link in links if link['kind'] == pymupdf.LINK_URI] == [url]
+def test_external_links_keep_their_labelled_line_when_there_are_several(tmp_path):
+    """One link is clickable where it stands (test_report_page_style); a group
+    of postings still gets a labelled line each, so they can be told apart."""
+    urls = ['https://www.linkedin.com/jobs/view/4483567304', 'https://www.linkedin.com/jobs/view/4483567305']
+    lines, links = render(tmp_path, f'# 报告\n\n投递前先读[职位原文]({urls[0]})和[另一个职位]({urls[1]})。\n')
+    assert '链接：职位原文' in lines and '链接：另一个职位' in lines
+    assert [link['uri'] for link in links if link['kind'] == pymupdf.LINK_URI] == urls
 
 
 @pytest.mark.parametrize('token', ['€ 4000', '4,000 €', '$ 12.50', '1.234,56 €'])
