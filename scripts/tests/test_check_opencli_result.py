@@ -174,6 +174,8 @@ def test_exit1_empty_stdout_yaml_stderr_is_not_logged_in():
     assert r["row_count"] == 0
     assert "HTTP 403 Forbidden" in r["error_message"]
     assert "click Login/登录" in r["remedy"]
+    assert "回复‘已登录’" in r["remedy"]
+    assert "Wait for their reply before changing sources" in r["remedy"]
     assert "opencli 1point3acres login" not in r["remedy"]
     assert "Do not retry" in r["remedy"]
 

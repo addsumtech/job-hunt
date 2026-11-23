@@ -30,6 +30,8 @@ import tempfile
 
 from opencli_compat import installed_package, prepared_opencli
 from host_execution import HOST_EXECUTION_REQUIRED, tectonic_needs_host_execution
+from delivery_paths import choose_delivery_root
+from runtime_config import default_root, read_runtime, update_runtime
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 REQUIREMENTS = REPO / "requirements.txt"
@@ -358,13 +360,19 @@ def checks() -> list[dict]:
                "JOBHUNT_PROFILES_ROOT to a folder it can write",
         "auto": False, "detail": detail,
     })
-    downloads = pathlib.Path.home() / "Downloads"
-    ok, detail = can_write(downloads)
+    try:
+        root = default_root()
+        runtime = read_runtime(root)
+        folder = str(choose_delivery_root(runtime))
+        if runtime.get("delivery_root") != folder:
+            update_runtime(root, {"delivery_root": folder})
+        ok, detail = True, f"Your files will be saved in {folder}"
+    except (OSError, ValueError) as exc:
+        ok, detail = False, str(exc)
     out.append({
-        "what": "write the delivery folder (~/Downloads)", "ok": ok,
+        "what": "write the delivery folder", "ok": ok,
         "cost": "deliver.py cannot copy the finished files; pass deliver.py --to <writable folder>",
-        "fix": "allow this agent to write ~/Downloads (macOS: Privacy & Security > Files and "
-               "Folders; or the host's sandbox setting), or deliver with --to",
+        "fix": "Choose a writable folder with deliver.py --to.",
         "auto": False, "detail": detail,
     })
     if opencli_tools()[0]:

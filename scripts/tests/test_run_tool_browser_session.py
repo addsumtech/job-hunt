@@ -57,7 +57,17 @@ def test_an_ended_session_is_not_reported_as_a_missing_capability(tmp_path, reco
     assert "setup_dependencies" not in out.stderr
     assert "TOOL_UNAVAILABLE" not in out.stderr
     assert "chrome://inspect" not in out.stderr
+    assert "点‘允许’" in out.stderr and "回复‘已允许’" in out.stderr
     assert not (tmp_path / "capture.json").exists()
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_new_search_without_session_explains_how_to_continue(tmp_path):
+    out = _read(_root(tmp_path), tmp_path)
+    assert out.returncode == 1
+    assert "BROWSER_SESSION_UNAVAILABLE: No running browser session" in out.stderr
+    assert "start it once" in out.stderr and "When it waits for consent" in out.stderr
+    assert "Chrome" in out.stderr and "回复‘已允许’" in out.stderr
 
 
 def test_a_missing_runtime_still_points_at_setup(tmp_path):

@@ -12,18 +12,34 @@ import sys
 import tempfile
 import uuid
 
-from setup_dependencies import SKILL, default_root
+from runtime_config import default_root
+from setup_dependencies import SKILL
 
 
 class SessionUnavailable(ValueError):
-    """The browser session ended, expired or is still waiting for consent.
+    """A browser connection needs recovery, with wording for the user."""
 
-    Kept apart from the other launch failures because the remedy differs: the
-    runtime is installed and intact, and browser_session.mjs has already said
-    what to do. Printed like the rest, an idle expiry ended with "run
-    scripts/setup_dependencies.py for the needed capability" and sent the
-    agent to reinstall a runtime that was never the problem.
-    """
+    def __init__(self, detail, browser):
+        super().__init__(detail)
+        self.browser = "Chrome" if browser == "chrome" else "Edge"
+
+    def handoff(self):
+        detail = str(self)
+        if ("Do not reconnect automatically" in detail
+                or detail.startswith("The browser session was stopped.")):
+            return (f"Tell the user now: “和{self.browser}的连接已中断。请保持平时用的"
+                    f"{self.browser}窗口打开。准备好后回复‘继续找岗位’，我会接着处理。”")
+        if "chrome://inspect/#remote-debugging" in detail:
+            return ("Tell the user now: “请在你平时用的 Chrome 窗口打开 "
+                    "chrome://inspect/#remote-debugging，勾选‘允许此浏览器实例进行远程调试’"
+                    "（以页面上的文字为准），然后回复‘已开启’。”")
+        if "waiting_for_consent" in detail:
+            lead = "Check status once. If it still waits for consent, tell the user now: "
+        else:
+            lead = ("Follow the session recovery above. If no session has started, start it once. "
+                    "When it waits for consent, tell the user now: ")
+        return (lead + f"“请在你平时用的{self.browser}窗口找到连接提示，点‘允许’"
+                       "（以弹窗上的按钮文字为准）。点完回复‘已允许’，我就继续找岗位。”")
 
 
 def main(argv=None):
@@ -43,7 +59,7 @@ def main(argv=None):
             print(reason, file=sys.stderr)
             return 2
     budget_file = None
-    runtime = json.loads((args.root.expanduser() / "runtime.json").read_text())
+    runtime = json.loads((args.root.expanduser() / "runtime.json").read_text(encoding="utf-8"))
     env = os.environ.copy()
     paths = [str(Path(runtime["python"]).parent)]
     if "node" in runtime:
@@ -67,9 +83,9 @@ def main(argv=None):
                 raise ValueError("Select the user's daily browser via --browser chrome|edge")
             probe = subprocess.run([node, str(SKILL / "scripts/browser_session.mjs"),
                 "endpoint", "--root", str(args.root.expanduser()), "--browser", browser],
-                capture_output=True, text=True)
+                capture_output=True, encoding="utf-8", errors="replace")
             if probe.returncode:
-                raise SessionUnavailable(probe.stderr.strip())
+                raise SessionUnavailable(probe.stderr.strip(), browser)
             return probe.stdout.strip()
 
         if args.tool == "opencli":
@@ -194,10 +210,14 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    from cli_io import configure_utf8
+
+    configure_utf8()
     try:
         sys.exit(main())
     except SessionUnavailable as exc:
         print(f"BROWSER_SESSION_UNAVAILABLE: {exc}", file=sys.stderr)
+        print(exc.handoff(), file=sys.stderr)
         sys.exit(1)
     except (OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
         print(f"TOOL_UNAVAILABLE: {exc}; run scripts/setup_dependencies.py for the needed capability", file=sys.stderr)

@@ -1644,10 +1644,12 @@ def target_files(workspace: pathlib.Path) -> list[pathlib.Path]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    from cli_io import parse_language_neutral_args
+
     parser = argparse.ArgumentParser(description="Ban predictions and invented numbers.")
     parser.add_argument("--workspace", required=True, type=pathlib.Path)
     parser.add_argument("--files", nargs="*", type=pathlib.Path, default=None)
-    args = parser.parse_args(argv)
+    args = parse_language_neutral_args(parser, argv)
 
     workspace = args.workspace
     if not workspace.is_dir():

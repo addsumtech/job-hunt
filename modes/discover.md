@@ -24,8 +24,9 @@ of dozens of jobs may require multiple bounded rounds; never increase a site's
 read budget or invent listings to reach that target.
 
 Keep a collection manifest with the requested count, maximum rounds, completed
-round workspaces, deduplicated posting URLs/IDs, and shortfall reasons. Continue
-independent sources while a site awaits login or recovery. Refusal locks and
+round workspaces, deduplicated posting URLs/IDs, and shortfall reasons. When a
+site needs login, wait for the user. If they explicitly skip it, use sources
+that need no login and disclose the omitted sites. Refusal locks and
 per-consultation limits survive round changes; a new folder never resets them.
 Reaching the collection target does not end lead gathering: every registered
 source and direction still needs its result and every observed lead a
@@ -275,12 +276,13 @@ it on the Red list: it is never run here. Ask the user to click Login/登录 on 
 page kept open in their daily browser, not to run a terminal command. Follow
 [user recovery](../references/user-recovery.md) and wait for their explicit reply.
 
-So say it plainly and wait:
-
-> `boss` needs a browser session. Click Login/登录 on the page already open in
-> your daily browser, finish login, and tell me when it's done — then I can search there.
-> It is a logged-in adapter, which `source-policy.md` puts in the yellow tier:
-> the search runs inside your own session, and account risk is not zero.
+Use the plain-language login message in
+[daily-browser.md](../references/daily-browser.md). Name the real site (for
+example BOSS直聘), name the browser window and ask for an “已登录” reply. Wait
+for the user. If they explicitly skip login, use sources that need no login,
+and record which sites were missed in the report.
+Apply the existing signed-in adapter rules in `references/source-policy.md`;
+account risk is not zero.
 
 **A quick `opencli auth status` probe can report `not_logged_in` for a live session.**
 Before asking the user to log into a site the quick probe called `not_logged_in`,
@@ -451,8 +453,8 @@ In WorkBuddy, send the first command as a separate Bash call with
 `--workspace` and save it into the round yourself:
 
 ```bash
-python3 scripts/run_tool.py browser-session start
-python3 scripts/run_tool.py opencli auth status -f json > <ws>/raw/auth-status.json
+python3 scripts/run_tool.py browser-session start  # only if status calls for a fresh session
+python3 scripts/run_tool.py opencli auth status -f json > <ws>/raw/auth-status.json  # once connected
 ```
 
 - `status: "logged_in"` — usable.
@@ -907,7 +909,8 @@ offering it"). Set it up only on the user's yes.
 
 Follow SKILL.md "Client deliverables" (write `report.md` after reading
 `references/report-writing.md`, render and review it, run `lint_no_prediction.py`,
-then `python3 scripts/deliver.py --workspace <ws>` last (client files go to `~/Downloads/<workspace-name>/`)).
+then `python3 scripts/deliver.py --workspace <ws>` last. Use the delivery folder
+printed by the command.
 **Discover reports also read `references/discover/multi-posting-report.md`** before
 drafting: the job directory, city/ID grouping, company grouping and job identities
 across sections. An existing CV is source material and is not redelivered unless the

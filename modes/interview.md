@@ -525,7 +525,8 @@ superseded.
 
 Then follow SKILL.md "Client deliverables": write `report.md` (read
 `references/report-writing.md` first), render and review it, run
-`lint_no_prediction.py`, then `python3 scripts/deliver.py --workspace <ws>` last (client files go to `~/Downloads/<workspace-name>/`). Do
+`lint_no_prediction.py`, then `python3 scripts/deliver.py --workspace <ws>` last.
+Use the delivery folder it prints. Do
 not start another mode automatically.
 
 ## Self-check before reporting the session complete

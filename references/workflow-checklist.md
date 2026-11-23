@@ -78,7 +78,7 @@ repo already puts `NOTICE_*`.
 | Adapter classification | `scripts/check_opencli_result.py` | *(wrapper, not a gate)* a non-zero exit, a login wall, a platform stop-signal, or an empty identity field. It exits **1 whenever the classification is not `ok`** and prints `ADAPTER_READ_NOT_OK` on stderr, so a caller that branches on `$?` cannot read a failed fetch as a success; the classification stays on stdout for a caller that parses it |
 | First-run environment | `scripts/doctor.py` | *(precondition, not a gate)* every capability the skill needs, checked by USING it — the PDF check renders a PDF, because an earlier `command -v xelatex` check called a working machine broken while tectonic was installed. `--install` installs the Python packages; the agent prepares required tools and daily-browser CDP via `references/agent-setup.md` |
 | Saving a master | `scripts/save_profile.py` | *(guarded write, not a gate)* one master per language; a new language never overwrites another, a repeat language is backed up first, and a profile with no `meta.language` is refused |
-| Delivery | `scripts/deliver.py` | *(hand-off, not a gate)* requires a client `report.md` and verified report PDF; puts requested client documents together in `~/Downloads/<workspace-name>/` (or shared `--to` folder) and prints the path. Exits 0 or 2, never 1. `DELIVER_DEST_UNWRITABLE` is macOS TCC refusing `~/Downloads` mid-session — say so and offer `--to`, never leave the artifacts undelivered |
+| Delivery | `scripts/deliver.py` | Requires a client `report.md` and verified report PDF. Uses a workspace-named folder under the saved delivery root or the explicit `--to` folder and prints the path. Exits 0 or 2. If the default becomes unwritable, run doctor to select a working folder. |
 | Read-only | `scripts/check_no_write.py` | a journaled command whose published `access:` is `write`, or whose access cannot be resolved at all |
 | Discovery profile snapshot | `scripts/snapshot_profile.py` | *(guarded helper, not a gate)* freezes `candidate-profile.yaml` for one search round and refuses to replace it with a changed master, so later CV edits cannot silently rewrite matching evidence |
 | Candidate match | `scripts/check_candidate_match.py` | a high verdict or default recommendation that lacks a complete row-specific detail, a frozen-profile evidence pointer, a valid requirement mapping, or its localized reader-facing summary; a card promoted without detail; a core gap hidden by optional preferences; a stale ordering or more detail mappings than `brief.max_match_reviews` permits; `detail_unmapped` verifies a full read without counting as a CV mapping |
@@ -91,6 +91,8 @@ repo already puts `NOTICE_*`.
 
 ## Self-check — run through this before reporting the package as done
 
+- [ ] Resuming an application after context compaction? Run `scripts/apply_status.py`
+      through the wrapper and use its recorded round and next step.
 - [ ] Drafting or revising a client report? Read `references/report-writing.md`,
       complete the separate full-report reader review: read every section/table,
       assess reasonableness, logic and readability, fix and reread the entire
@@ -286,7 +288,7 @@ Told the user:
 - [ ] Any remaining honest gaps, and — if the loop ended un-passed — whether this is
       POORLY BUILT or an HONEST STRETCH.
 - [ ] The consultation folder and its client report/CV files; keep internal files private.
-- [ ] **The delivered files** `deliver.py` printed — in one `~/Downloads/<workspace-name>/` folder, including the report PDF.
+- [ ] **The delivered files** `deliver.py` printed, including the report PDF and the actual delivery folder.
       That is the one the user can actually open; the workspace path is for an audit.
 - [ ] In discover: before delivering a complete report, read the full description
       of every retained posting. Search-card summaries serve internal triage and

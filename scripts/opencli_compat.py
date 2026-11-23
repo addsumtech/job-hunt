@@ -40,12 +40,12 @@ def prepared_opencli():
     installation. A runtime that records a path which no longer holds OpenCLI is
     an error, not a reason to fall back to PATH and inspect another copy again.
     """
-    from setup_dependencies import default_root
+    from runtime_config import default_root
     record = default_root() / 'runtime.json'
     if not record.is_file():
         return None
     try:
-        runtime = json.loads(record.read_text())
+        runtime = json.loads(record.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         raise ValueError(f'Prepared runtime {record} is unreadable ({exc}); re-run '
                          'scripts/setup_dependencies.py --discovery') from None

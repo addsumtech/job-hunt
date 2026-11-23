@@ -34,7 +34,8 @@ request needs no workspace, mode-entry command, report, PDF, research or three
 judges. Read a craft reference only for a real uncertainty. Stop after the edit;
 do not turn it into a whole CV assessment or offer unrelated modes.
 
-For a full task, choose one mode and read that mode file **in full**:
+For a full task, choose one mode and read that mode file **in full** before doing
+its work. For live job search, check the browser first as described below.
 
 | Mode | User's question | Read on entry |
 |---|---|---|
@@ -47,6 +48,16 @@ For a full task, choose one mode and read that mode file **in full**:
 All five modes are live. Do not invent an alternate workflow or read the other
 four modes by default. A pasted complete posting is enough to assess it; do not
 start a new job search unless needed for the user's question.
+
+**Live job search:** First run `python3 scripts/run_tool.py browser-session status`
+from the skill root, before reading the mode or code. Follow the
+[browser hand-off](references/daily-browser.md). If Chrome asks for consent,
+say this immediately in the user's language:
+
+> 请在你平时用的 Chrome 窗口找到连接提示，点「允许」（以弹窗上的按钮文字为准）。点完回复「已允许」，我就继续找岗位。
+
+Wait for the reply and recheck status. Use a pasted job description only at
+the user's request.
 
 ## The load-bearing rule — read first
 
@@ -113,11 +124,10 @@ dependencies. `doctor.py --install` installs Python packages only; a PATH probe
 does not prove a PDF engine works. Use `scripts/run_tool.py` for a prepared runtime.
 Do not set up discovery tools for an offline assessment or a small text edit.
 
-**How to read every command in this skill.** Run `python3 scripts/<x>.py` from the
-skill root with the prepared interpreter — the `python` path in the runtime's
-`runtime.json` (default `~/.local/share/job-hunt/venv/bin/python`), or
-`python scripts/run_tool.py python scripts/<x>.py …`. The `python3` on PATH is often
-macOS's 3.9 or a Python without the dependencies; never `pip install` into it.
+**Run all Python through the wrapper after setup.** From the skill root,
+`python3 scripts/<x>.py …` in any example means
+`python3 scripts/run_tool.py python scripts/<x>.py …`. Use the wrapper for
+`python -c` and heredocs too. Never install packages into the launcher Python.
 `<ws>` / `<workspace>` / `<round>` always mean the absolute path of this run's
 workspace, never `.` (that would be the skill directory), and raw captures go under
 `<ws>/raw/`. A script exits 2 with `PYTHON_TOO_OLD` on an interpreter older than 3.10 and with
@@ -127,7 +137,7 @@ Resolve the workspace through `scripts/paths.py`, look for a prior matching run,
 and create the selected directory before entering:
 
 ```bash
-python3 scripts/enter_mode.py --workspace <ws> --mode <mode> \
+python3 scripts/run_tool.py python scripts/enter_mode.py --workspace <ws> --mode <mode> \
     --because "<why this mode, from the user's request>"
 ```
 
@@ -145,6 +155,9 @@ from memory or assumption. The references hold the craft detail; the mode file
 is the flow. The complete per-artifact gate/checklist
 index is [references/workflow-checklist.md](references/workflow-checklist.md).
 Use its relevant subsection; do not load every listed resource pre-emptively.
+After a context compaction during an application, run
+`python3 scripts/run_tool.py python scripts/apply_status.py --workspace <ws>`
+first to recover the current round and next step from disk.
 
 ## Sources, when the task needs them
 
@@ -162,20 +175,20 @@ authorized CDP connection to the user's daily browser and existing login profile
 use a separate browser only on explicit request. Never use browser extensions,
 close the daily browser or close the user's existing tabs.
 
-For a live login probe or browser read, use `scripts/run_tool.py` and the one
-session described in [references/daily-browser.md](references/daily-browser.md).
-In WorkBuddy, run `browser-session start` once as a WorkBuddy Bash background
-task. Route OpenCLI, including `auth status`, and browser reads through the
-wrapper. On disconnect, stop the browser work and wait for the user to resume.
-Start the session only after your questions to the user are answered, right
-before the first live read; it expires after 30 idle minutes.
+Use one session for live OpenCLI and browser calls through the wrapper. Follow
+[references/daily-browser.md](references/daily-browser.md) for starting it in a
+WorkBuddy Bash background task and handling a disconnect.
 
-When a platform requests human verification, stop that source and follow
-[references/user-recovery.md](references/user-recovery.md): tell the user the site
-and page, let them complete it in the connected browser, and wait for their
-explicit completion reply. Do not retry through another tool to evade the stop.
-Keep the login or verification page open and visible for that action. A page
-handed to the user must survive tool cleanup and browser-session shutdown.
+When a job site needs login, name the site and window, then wait for the user:
+
+> BOSS直聘需要登录。请在你平时用的 Chrome 窗口切到 BOSS直聘页面，点「登录」。登录后回复「已登录」，我就继续在这里找。
+
+Name the actual site and window. If the user opts out, use public sources and
+name omitted sites in the report.
+
+For human verification, stop that source and follow
+[references/user-recovery.md](references/user-recovery.md). Keep the page open,
+even after tool cleanup, and wait for explicit confirmation before resuming.
 
 ## Client deliverables
 
@@ -193,18 +206,15 @@ Preserve the latest user-selected reference for each document; do not shrink
 fonts or replace its structure to make it fit. With the default report layout,
 run `scripts/render_report.py --workspace <ws>`. Custom layouts use its
 `render_with` wrapper. Both bind the source and fresh PDF before visual review.
-Use `scripts/layout_pages.py --workspace <ws> --report` to prepare canonical
-previews. Review every page initially; later, intact passed reviews may cover
-verified unchanged pages. Inspect the listed changed pages and complete the
-draft review as described in `references/layout-review.md`; never refresh a
-changed page's pass without inspecting it.
-Inspect every final page, read the whole report in order, repair any findings,
-and run `scripts/check_layout.py --workspace <ws> --report`. Any content or export
-change requires a new render and review; refreshing review hashes is insufficient.
+Before writing a visual review, run
+`python3 scripts/run_tool.py python scripts/layout_pages.py --workspace <ws> --report`
+and use its previews and draft. Inspect every page initially and every listed
+changed page after a new render. Read the whole report in order, repair findings,
+and run `scripts/check_layout.py --workspace <ws> --report`.
 Run `scripts/lint_no_prediction.py --workspace <ws>` on the final client text.
 
-Run `scripts/deliver.py --workspace <ws>` last. It copies client files to
-`~/Downloads/<workspace-name>/`, with the report under `报告/` and editable text.
+Run `scripts/deliver.py --workspace <ws>` last. It uses a workspace-named folder
+under the delivery root selected by setup or doctor. The report goes under `报告/`.
 Folder and file names follow the report's language (`Report/`, `Informe/`,
 `レポート/`, `보고서/`; Chinese when there is no text to tell).
 Report filenames include available candidate, company/role or search direction,

@@ -72,6 +72,22 @@ def test_default_destination_is_a_consultation_folder(tmp_path, monkeypatch):
     assert (tmp_path / "Downloads" / ws.name / "Report" / "Career consultation report.md").is_file()
 
 
+def test_saved_delivery_root_is_used_without_overriding_explicit_destination(tmp_path, monkeypatch):
+    ws = build(tmp_path)
+    root = tmp_path / "runtime"
+    root.mkdir()
+    saved = tmp_path / "Documents" / "job-hunt"
+    (root / "runtime.json").write_text(json.dumps({"delivery_root": str(saved)}), encoding="utf-8")
+    monkeypatch.setenv("JOBHUNT_RUNTIME_ROOT", str(root))
+    monkeypatch.setattr(deliver, "DEFAULT_ROOT", tmp_path / "Downloads")
+    assert deliver.main(["--workspace", str(ws), "--no-pdf"]) == 0
+    assert client_files(saved / ws.name)
+    assert not (tmp_path / "Downloads").exists()
+    explicit = tmp_path / "chosen"
+    assert deliver.main(["--workspace", str(ws), "--to", str(explicit), "--no-pdf"]) == 0
+    assert client_files(explicit) == client_files(saved / ws.name)
+
+
 def test_apply_delivers_its_readiness_brief_without_private_review_records(tmp_path):
     ws = build(tmp_path)
     deliver.journal.append(ws, {"action": "mode_entry", "mode": "apply"})
@@ -423,13 +439,13 @@ def test_every_mode_file_names_the_delivery_step(mode):
     """Prose in SKILL.md that only one mode repeats is prose three modes skip."""
     text = (REPO / "modes" / f"{mode}.md").read_text(encoding="utf-8")
     assert "deliver.py" in text, f"{mode}.md never tells the run to hand the files over"
-    assert "~/Downloads" in text
+    assert "delivery folder" in text
 
 
 def test_the_skill_file_lists_delivery_and_the_path_to_tell_the_user():
     text = (REPO / "SKILL.md").read_text(encoding="utf-8")
     assert "scripts/deliver.py" in text
-    assert "~/Downloads" in text
+    assert "delivery root selected by setup or doctor" in text
 
 
 # ---- flattening must not silently drop a file -----------------------------

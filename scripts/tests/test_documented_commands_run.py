@@ -31,15 +31,16 @@ SCRIPTS = ROOT / "scripts"
 DOCS = ([ROOT / "SKILL.md"] + sorted((ROOT / "modes").glob("*.md"))
         + sorted((ROOT / "references").glob("*.md")))
 
-# `python3 scripts/<name>.py <rest of the line>` as the docs write it.
-INVOCATION = re.compile(r"`?python3 (scripts/([a-z_]+)\.py)([^`\n]*)")
+# Also check the child script's flags when its command uses the wrapper.
+INVOCATION = re.compile(r"`?python3 (?:scripts/run_tool\.py python )?"
+                        r"scripts/([a-z_]+)\.py([^`\n]*)")
 
 
 def documented_invocations():
     for doc in DOCS:
         for i, line in enumerate(doc.read_text(encoding="utf-8").splitlines(), 1):
             for m in INVOCATION.finditer(line):
-                yield doc.relative_to(ROOT), i, m.group(2), m.group(3)
+                yield doc.relative_to(ROOT), i, m.group(1), m.group(2)
 
 
 def accepted_flags(script):

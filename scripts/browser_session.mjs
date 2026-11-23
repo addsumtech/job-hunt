@@ -13,7 +13,7 @@ const alive = pid => {try {process.kill(pid, 0);return true;} catch {return fals
 const send = (ws, value) => {if (ws?.readyState === 1) ws.send(JSON.stringify(value));};
 const failed = state => ['disconnected', 'consent_timeout'].includes(state);
 const active = state => ['connected', 'waiting_for_consent'].includes(state);
-const connectionHelp = browser => `Cannot connect to the selected daily ${browser}. Keep it open and ${browser === 'chrome' ? 'enable remote debugging at chrome://inspect/#remote-debugging' : 'enable its supported remote-debugging endpoint'}, then start one session and accept the browser's connection prompt.`;
+const connectionHelp = browser => `Cannot connect to the selected daily ${browser}. Keep it open and ${browser === 'chrome' ? 'enable remote debugging at chrome://inspect/#remote-debugging' : 'enable its supported remote-debugging endpoint'}, then start one session and accept the browser's connection prompt. Tell the user which window to use and ask them to reply “已开启” after enabling it; when the connection prompt appears, ask them to click “允许” and reply “已允许”.`;
 // WorkBuddy waits at most 600 s on a foreground Bash call (BASH_MAX_TIMEOUT_MS),
 // then moves it to the background and keeps the process. A model that runs
 // `start` without run_in_background is blocked until then and cannot tell the

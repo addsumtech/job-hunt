@@ -24,7 +24,7 @@ user's manual action without performing another automated read.
 
 | Observed state | Hand-off |
 |---|---|
-| A confirmed missing login | Tell the user to click Login/登录 on the page already open in their daily browser, finish login, then reply “已完成，继续”. Do not ask them to run a terminal command. |
+| A confirmed missing login | Name the site and the daily browser window. Ask the user to click Login/登录, finish login, then reply “已登录”. See the message in [daily-browser.md](daily-browser.md). |
 | A guest-group message such as `抱歉，您所在的用户组(游客)无法进行此操作` | Tell the user this site requires login. Do not call it an empty result or retry a working connection; the page's explicit guest state overrides a stale cached login flag. |
 | CAPTCHA, Cloudflare challenge or slider | Ask the user to open that site in the same connected browser and complete the displayed human verification. This does not establish that a login is missing. |
 | Human verification stays loading, including `验证成功。正在等待 … 响应` | Tell the user the page is still held at human verification and ask them to inspect/finish it. A tool timeout does not turn this into an ordinary loading retry. |
@@ -33,7 +33,7 @@ user's manual action without performing another automated read.
 
 For example, with a confirmed Nowcoder login requirement:
 
-> 牛客需要登录。请在已打开的牛客页面点击“登录”；完成后回复“已完成，继续”，我会接着读取。
+> 牛客需要登录。请在你平时用的 Chrome 窗口切到牛客页面，点「登录」。登录后回复「已登录」，我就继续在这里找。
 
 With an observed Indeed challenge:
 
@@ -47,8 +47,11 @@ working bridge is not proof of a logged-in or verified website session.
 Keep the original `raw/`, `journal.jsonl`, brief and collected rows unchanged.
 Record the pending hand-off in `recovery.md` within that workspace: site, actual
 error, requested action and `awaiting_user`. Do not store cookies or credentials.
-You may continue other already-authorized sources that have not refused access.
-If all sources are paused, wait for the user instead of declaring the task done.
+For login, wait for the user's reply before continuing the search. If they
+explicitly opt out, preserve the reply, continue with sources that need no
+login and name the omitted sites in the report. For other interruptions,
+independent already-authorized sources can continue where possible. Keep the
+handoff pending in chat.
 
 The previous user request plus the user's explicit reply that the action is done
 and they want to continue is enough; do not make them repeat their region, role
@@ -93,8 +96,8 @@ round's shortlist is validated against its own journal.
 
 If access is refused again, record the new refusal, pause and report it. Do not
 loop automatically or treat the earlier confirmation as permission for unlimited
-new rounds. Ask for a new user action or offer another source/pasted JD/partial
-results. Only use direction-level degraded output when the user chooses it or
+new rounds. Ask for the next user action. Use a pasted job description if the
+user chooses that option. Only use direction-level degraded output when the user chooses it or
 recovery is unavailable, explaining which sources remain inaccessible.
 
 ## What the scripts can prove

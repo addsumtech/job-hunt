@@ -1,6 +1,6 @@
 # job-hunt — 接手说明
 
-**更新于 2026-11-20（1.6.1 发布）。** 这份文件以前在 8 月里过时了两次，接手的人信了旧状态就会重建已经存在的东西。
+**更新于 2026-11-23（1.6.2）。** 这份文件以前在 8 月里过时了两次，接手的人信了旧状态就会重建已经存在的东西。
 **先跑一次 `make check`，再信任这里的任何一句话。**
 
 ---
@@ -8,11 +8,11 @@
 ## 当前状态
 
 - 五个模式（apply、assess、discover、interview、prepare）都已上线；`evals/` 已建成。
-- 版本：1.6.1（2026-11-20）。1.3.0 见 PR #34；1.2.1 到 1.2.3 没有单独打 tag，修复并入 1.3.0。
-- `make check`（2026-11-20，Python 3.12 venv）：
+- 版本：1.6.2（2026-11-23）。1.3.0 见 PR #34；1.2.1 到 1.2.3 没有单独打 tag，修复并入 1.3.0。
+- `make check`（2026-11-23，Python 3.12 venv）：
 
 ```
-6559 passed, 8 skipped
+6592 passed, 8 skipped
 LOSSLESS: 1317/1317 baseline lines accounted for across 61 files, 88 waived
 check_conventions --ci: exit 0
 NO_HIDDEN_CHARS
@@ -74,6 +74,11 @@ README 示例图由 `docs/assets/examples/src/report-{zh,en}.md` 渲染前两页
 页脚的「虚构示例」一行是后加的；示例报告同样由 `src/report-{ja,ko,es}.md` 渲染。
 
 **判别力规则继续执行**：每条修复的新测试都要先在旧代码上确认会失败（把旧版脚本拷到临时副本跑新测试）。
+
+**2026-11-23 WorkBuddy 实测修复（1.6.2）。** 安装程序先用新建环境导入标准库，成功后才安装 pip。
+失败会清理半成品，改用链接方式或切换到另一个已安装的 Python。安装与体检都实际试写交付目录，
+并把选定的路径存入 `runtime.json` 的 `delivery_root`。找岗位先查浏览器状态，遇到授权和登录时在对话里等待用户操作。
+定向简历中断后，用 `python3 scripts/run_tool.py python scripts/apply_status.py --workspace <ws>` 查看当前轮次。
 
 ---
 

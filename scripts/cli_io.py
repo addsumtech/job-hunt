@@ -85,13 +85,27 @@ def refuse_skill_workspace(argv=None) -> None:
             raise SystemExit(2)
 
 
-def configure_output() -> None:
-    require_supported_python()
+def configure_utf8() -> None:
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
         if callable(reconfigure):
             reconfigure(encoding="utf-8", errors=stream.errors, newline="\n")
+
+
+def configure_output() -> None:
+    require_supported_python()
+    configure_utf8()
     refuse_skill_workspace()
+
+
+def parse_language_neutral_args(parser, argv):
+    args, unknown = parser.parse_known_args(argv)
+    if any(arg == "--lang" or arg.startswith("--lang=") for arg in unknown):
+        parser.error("--lang is not used by this check. Remove it. In the assessment "
+                     "sequence, pass --lang only to count_coverage.py and consistency.py.")
+    if unknown:
+        parser.error("unrecognized arguments: " + " ".join(unknown))
+    return args
 
 
 def pass_notice(gate: str, mode: str | None = None) -> None:

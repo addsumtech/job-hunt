@@ -433,12 +433,14 @@ def check(workspace: pathlib.Path, market_dir: pathlib.Path,
 
 
 def main(argv: list[str] | None = None) -> int:
+    from cli_io import parse_language_neutral_args
+
     parser = argparse.ArgumentParser(description="The assess-mode gate.")
     parser.add_argument("--workspace", required=True, type=pathlib.Path)
     parser.add_argument("--market-dir", type=pathlib.Path, default=None)
     parser.add_argument("--skill-root", type=pathlib.Path, default=None)
     parser.add_argument("--today", default=None)
-    args = parser.parse_args(argv)
+    args = parse_language_neutral_args(parser, argv)
 
     workspace = args.workspace
     market_dir = args.market_dir or conventions.CONVENTIONS_DIR

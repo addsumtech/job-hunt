@@ -7,9 +7,12 @@ PDF. `evals/run.md` records the correction as "check for the CAPABILITY rather
 than for one binary's name", and these tests hold the script to it.
 """
 from skill_docs import read_guidance, skill_context
+import json
+import os
 import pathlib
 import subprocess
 import sys
+import tempfile
 
 import pytest
 
@@ -155,6 +158,36 @@ def test_a_complete_machine_exits_0(monkeypatch, capsys):
         {"what": "x", "ok": True, "cost": "c", "fix": "f", "auto": False}])
     assert doctor.main([]) == 0
     assert "Everything this skill needs is present" in capsys.readouterr().out
+
+
+def test_blocked_downloads_passes_doctor_and_saves_fallback(tmp_path, monkeypatch, capsys):
+    import paths
+
+    monkeypatch.setattr(pathlib.Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(paths, "PROFILES_ROOT", tmp_path / "profiles")
+    monkeypatch.setattr(doctor, "requirements", lambda: [])
+    monkeypatch.setattr(doctor, "can_render_report", lambda: (True, "ok"))
+    monkeypatch.setattr(doctor, "can_render_pdf", lambda: (True, "ok"))
+    monkeypatch.setattr(doctor, "opencli_tools", lambda: ("opencli", "node", ""))
+    monkeypatch.setattr(doctor, "can_use_opencli_cdp", lambda: (True, "ok"))
+    monkeypatch.setattr(doctor.shutil, "which", lambda name: name)
+    record = pathlib.Path(os.environ["JOBHUNT_RUNTIME_ROOT"]) / "runtime.json"
+    record.write_text('{"python": "existing-python"}', encoding="utf-8")
+    probe = tempfile.NamedTemporaryFile
+    blocked = (tmp_path / "Downloads").resolve()
+    blocked.mkdir()
+
+    def try_write(*args, **kwargs):
+        if kwargs.get("dir") == blocked:
+            raise PermissionError("Operation not permitted")
+        return probe(*args, **kwargs)
+
+    monkeypatch.setattr(tempfile, "NamedTemporaryFile", try_write)
+    assert doctor.main([]) == 0
+    fallback = str((tmp_path / "Documents" / "job-hunt").resolve())
+    assert f"Your files will be saved in {fallback}" in capsys.readouterr().out
+    assert json.loads(record.read_text(encoding="utf-8")) == {
+        "python": "existing-python", "delivery_root": fallback}
 
 
 def test_a_missing_capability_exits_1_and_names_the_cost(monkeypatch, capsys):

@@ -72,6 +72,11 @@ first use; `save_profile.py` creates it when a profile is saved.
 
 **Resume an in-progress application first.** Before anything else, check `~/.claude/job-profiles/*/applications/` for a workspace that matches this target (by company/role) and already contains a `posting.yaml` and/or `tailored-profile.yaml`. If one exists, a prior run was interrupted — show the user what's already there and offer to **resume from where it stopped** (e.g. posting already extracted → jump to gap analysis or tailoring) rather than rebuilding from Step 0. Only start fresh if they prefer it or no matching workspace exists.
 
+When continuing an active application after context compaction, run
+`python3 scripts/run_tool.py python scripts/apply_status.py --workspace <ws>` before
+reading script source or collecting help again. It reads the round, dispatch
+hashes and saved replies. Follow its next step and keep the existing files.
+
 **Check for existing profiles next.** Before building or parsing, check `~/.claude/job-profiles/` for any saved master profiles. If one or more exist, offer to reuse one (retargeting it for this new application) instead of rebuilding from scratch. A returning user can confirm a name and you jump straight to Step 2. New users with no saved profiles proceed to build/parse below.
 
 **Reusing a master carries their experience forward, never their target.** `meta.target_market`, `meta.language` and any `contact.personal` in that file describe the application it was last built for. Re-ask the region and language (Step 0, question 2) before tailoring, and re-confirm any personal field the new market's cluster would treat differently — the master is the source of truth about the candidate, not about where they are applying.
@@ -103,9 +108,9 @@ resolves to `profile.yaml` and the provenance gate checks a Chinese CV against a
 English master:
 
 ```bash
-python3 scripts/check_claims.py --workspace <workspace> \
-    --master "$(python3 -c "import sys;sys.path.insert(0,'scripts');import paths;print(paths.master_for_language('<name>', '<cv language>'))")" \
-    --record
+master=$(python3 scripts/run_tool.py python -c "import sys;sys.path.insert(0,'scripts');import paths;print(paths.master_for_language(sys.argv[1], sys.argv[2]))" "<name>" "<cv language>") &&
+python3 scripts/run_tool.py python scripts/check_claims.py --workspace <workspace> \
+    --master "$master" --record
 ```
 
 ## Step 2 — Job posting → structured requirements
@@ -253,6 +258,11 @@ it with the actual user-supplied template, honoring the user's later changes.
 Check fonts and sizes, page geometry, full-width heading rules, date alignment,
 paragraph spacing, section/entry/bullet order, and pagination/clipping. A matching
 section order or a readable PDF alone does not establish template fidelity.
+For visual review, export the final Word file to PDF first when reviewing a
+Word version and bind the export as described in `references/layout-review.md`.
+Generate the review images with
+`python3 scripts/run_tool.py python scripts/layout_pages.py --workspace <ws>`
+and inspect the pages it lists before filling out the review.
 Fix unapproved differences before delivery. Record the comparison, template and
 final-file hashes, and inspected page previews in `layout-review.yaml`; run
 `python scripts/check_layout.py --workspace <workspace>`. `check_apply.py` requires
@@ -452,7 +462,8 @@ Follow SKILL.md "Client deliverables": write `report.md` (read
 `references/report-writing.md` first), render and review it, run
 `lint_no_prediction.py` (a metric quoted verbatim from the candidate's master, whose
 `master-fingerprint.json` still matches, is allowed; never delete a true number to pass
-it), then `python3 scripts/deliver.py --workspace <ws>` last (client files go to `~/Downloads/<workspace-name>/`). The
+it), then `python3 scripts/deliver.py --workspace <ws>` last. Use the delivery folder
+it prints. The
 CV goes to `简历/`, the interview brief to `面试准备/`, the report to `报告/` (Chinese names shown; they follow the report's language, e.g. `Application/`, `Interview prep/`, `Report/`). A cover
 letter is provided on demand; it is not the domestic default. Do not start a mock
 interview or another mode automatically.

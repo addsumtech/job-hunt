@@ -46,7 +46,10 @@ known, otherwise clarify the browser choice. This also:
 
 The default runtime root is `~/.local/share/job-hunt` (`%LOCALAPPDATA%/job-hunt`
 on Windows); `--root PATH` selects another user-writable location. `runtime.json`
-stores executable paths and browser selection, never credentials. `--node PATH`
+stores executable paths, browser selection and the delivery root. Setup and
+`doctor.py` test whether the delivery folder can be written. If Downloads is
+unavailable, they try `~/Documents/job-hunt` and `~/job-hunt`, save the working
+path and print it for the user. `--node PATH`
 can select an existing Node 22+ executable. Setup requires internet access for
 missing packages; it does not imply an offline installation bundle.
 
@@ -68,9 +71,9 @@ python scripts/run_tool.py browser --url https://example.com --output raw/page.j
 
 Pass `--root PATH` before the tool name when setup used a custom root. The wrapper
 adds the private executables to subprocess PATH; no shell-profile edit is needed.
-All `python`, `node`, `opencli` and AnySearch examples in other references refer
-to these prepared tools. For direct commands, use the exact recorded executable
-paths and the wrapper's PATH layout, not an unrelated global installation.
+All Python examples, including ad hoc `-c` and heredoc calls, use
+`python3 scripts/run_tool.py python …` once setup finishes. The Node, OpenCLI
+and AnySearch examples also use the corresponding prepared tools.
 
 Start one `browser-session` before live browser reads. The wrapper sends both
 OpenCLI and the bundled reader through that persistent connection, so separate

@@ -127,7 +127,8 @@ Follow SKILL.md "Client deliverables". Read `references/report-writing.md` first
 - what to practise next.
 
 Render and review it, run `lint_no_prediction.py`, then
-`python3 scripts/deliver.py --workspace <workspace>` last. Do not start another mode
+`python3 scripts/deliver.py --workspace <workspace>` last. Use the delivery folder
+it prints. Do not start another mode
 automatically.
 
 ## Self-check before reporting the session complete

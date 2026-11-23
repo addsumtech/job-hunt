@@ -1,5 +1,32 @@
 # Daily browser and concurrent research
 
+## Hand over browser consent and site login
+
+Run `python3 scripts/run_tool.py browser-session status` as soon as the user asks
+to find live jobs. Check before reading mode details or investigating browser
+code. If a fresh session is needed, use the start procedure below and hand over
+as soon as it waits for consent.
+
+> 请在你平时用的 Chrome 窗口找到连接提示，点「允许」（以弹窗上的按钮文字为准）。点完回复「已允许」，我就继续找岗位。
+
+If startup says Chrome's remote debugging is off or unavailable, say:
+
+> 请在你平时用的 Chrome 窗口打开 chrome://inspect/#remote-debugging，勾选「允许此浏览器实例进行远程调试」（以页面上的文字为准），然后回复「已开启」。
+
+After their reply, start once as described below and give the consent message if
+Chrome asks. Use the actual selected browser and observed button label. While
+waiting for the user, leave their window open and keep the search pending.
+
+With a confirmed site login requirement, keep the page open and say:
+
+> BOSS直聘需要登录。请在你平时用的 Chrome 窗口切到 BOSS直聘页面，点「登录」。登录后回复「已登录」，我就继续在这里找。
+
+Substitute the actual name, such as 猎聘, and link the captured page when available.
+Wait for the reply and follow [user-recovery.md](user-recovery.md). If the user
+says to skip login, use sources that require no login and name the sites you
+could not cover in the report. Use a pasted job description only at the user's
+request.
+
 ## CDP only, after OpenCLI diagnosis
 
 For browser reads, use a supported CDP connection to the user's daily browser

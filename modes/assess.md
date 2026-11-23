@@ -427,13 +427,17 @@ and `consistency.py` compares it against the closable gaps.
 ## 11. Gates — run all of them, in this order
 
 ```
-python3 scripts/evidence_blocks.py     --workspace <ws>   # step 5, listed again for order
-python3 scripts/count_coverage.py      --workspace <ws> --lang <user language>
-python3 scripts/consistency.py         --workspace <ws> --lang <user language>
-python3 scripts/check_evidence_refs.py --workspace <ws>
-python3 scripts/lint_no_prediction.py  --workspace <ws>
-python3 scripts/check_assessment.py    --workspace <ws>
+python3 scripts/run_tool.py python scripts/evidence_blocks.py     --workspace <ws>
+python3 scripts/run_tool.py python scripts/count_coverage.py      --workspace <ws> --lang <user language>
+python3 scripts/run_tool.py python scripts/consistency.py         --workspace <ws> --lang <user language>
+python3 scripts/run_tool.py python scripts/check_evidence_refs.py --workspace <ws>
+python3 scripts/run_tool.py python scripts/lint_no_prediction.py  --workspace <ws>
+python3 scripts/run_tool.py python scripts/check_assessment.py    --workspace <ws>
 ```
+
+Pass `--lang` only to `count_coverage.py` and `consistency.py`. Run each command
+with its own arguments and confirm its exit status before moving to the next.
+If you batch the commands, chain with `&&` so a later success cannot hide a failure.
 
 `check_assessment.py` runs last on purpose: it reads the other five gates' receipts out
 of `journal.jsonl` and refuses to pass if any of them is missing (`MISSING_RECEIPT`) or
@@ -463,7 +467,8 @@ experience from the explanation. Preserve the assessment's facts and uncertainty
 
 Follow SKILL.md "Client deliverables": write `report.md` (read
 `references/report-writing.md` first), render and review it, run
-`lint_no_prediction.py`, then `python3 scripts/deliver.py --workspace <ws>` last (client files go to `~/Downloads/<workspace-name>/`). A
+`lint_no_prediction.py`, then `python3 scripts/deliver.py --workspace <ws>` last.
+Use the delivery folder it prints. A
 source CV is not redelivered unless the user asks (`--include-applications`). Do not
 start another mode automatically.
 

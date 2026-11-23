@@ -134,11 +134,13 @@ def strip_block_ids(markdown: str) -> tuple[str, list[str]]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    from cli_io import parse_language_neutral_args
+
     parser = argparse.ArgumentParser(description="Resolve or drop evidence references.")
     parser.add_argument("--workspace", required=True, type=pathlib.Path)
     parser.add_argument("--check-only", action="store_true",
                         help="make no writes; exit 1 if any drop or strip would happen")
-    args = parser.parse_args(argv)
+    args = parse_language_neutral_args(parser, argv)
 
     workspace = args.workspace
     blocks_path = workspace / "evidence-blocks.json"

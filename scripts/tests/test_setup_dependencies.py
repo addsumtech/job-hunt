@@ -1,6 +1,7 @@
 """Private installation must preserve existing tools and use bundled clients."""
 import io
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -13,6 +14,60 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import setup_dependencies as setup
 import run_tool
+
+
+@pytest.mark.parametrize("leftover", [False, True])
+def test_setup_replaces_a_broken_venv_before_installing_packages(tmp_path, monkeypatch,
+                                                            capsys, leftover):
+    root = tmp_path / "runtime"
+    environment = root / "venv"
+    home = tmp_path / "home"
+    first = tmp_path / "standalone-python"
+    second = tmp_path / "working-python"
+    if leftover:
+        environment.mkdir(parents=True)
+        (environment / "partial").touch()
+    monkeypatch.setattr(Path, "home", lambda: home)
+    monkeypatch.setattr(setup, "python_candidates", lambda: (first, second))
+    calls = []
+
+    def run(argv, **kwargs):
+        calls.append(argv)
+        if "--without-pip" in argv:
+            assert not environment.exists()
+            environment.mkdir()
+            (environment / "base").write_text(str(argv[0]), encoding="utf-8")
+        elif "import encodings, ssl, venv" in argv:
+            if not (environment / "base").is_file() or (environment / "base").read_text() == str(first):
+                raise subprocess.CalledProcessError(1, argv, stderr=b"No module named 'encodings'")
+        elif "ensurepip" in argv:
+            assert (environment / "base").read_text() == str(second)
+
+    monkeypatch.setattr(setup, "run", run)
+    assert setup.main(["--root", str(root)]) == 0
+    modes = ["--copies"] if os.name == "nt" else ["--copies", "--symlinks"]
+    assert [argv[-2] for argv in calls if argv[0] == first] == modes
+    ensure_index = next(i for i, argv in enumerate(calls) if "ensurepip" in argv)
+    assert calls[ensure_index - 1][-1] == "import encodings, ssl, venv"
+    tools = json.loads((root / "runtime.json").read_text(encoding="utf-8"))
+    assert tools["delivery_root"] == str((home / "Downloads").resolve())
+    assert json.loads(capsys.readouterr().out)["delivery_folder"] == tools["delivery_root"]
+
+
+def test_setup_cleans_last_failed_attempt_and_suggests_a_working_python(tmp_path, monkeypatch):
+    monkeypatch.setattr(setup, "python_candidates", lambda: (sys.executable,))
+
+    def run(argv, **kwargs):
+        if "--without-pip" in argv:
+            (tmp_path / "venv").mkdir()
+        else:
+            raise subprocess.CalledProcessError(1, argv)
+
+    monkeypatch.setattr(setup, "run", run)
+    with pytest.raises(RuntimeError, match="Install Python 3.12 from python.org"):
+        setup.main(["--root", str(tmp_path)])
+    assert not (tmp_path / "venv").exists()
+    assert not (tmp_path / "runtime.json").exists()
 
 
 @pytest.mark.parametrize('name', ['../escape', '/absolute', 'C:\\escape'])

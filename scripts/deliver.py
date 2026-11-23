@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Deliver a client consultation report and requested application documents.
 
-Default destination: ~/Downloads/<workspace-name>/. Use the same explicit --to
+Default destination: <configured delivery folder>/<workspace-name>/. Use the same explicit --to
 folder for all workspaces answering one consultation: a manifest in that folder
 records which workspace and mode wrote each file, so a second workspace (or a
 second mode of the same workspace) goes to its own subfolder instead of
@@ -37,6 +37,8 @@ import vocab
 from render_cv import has_rtl
 from pdf_glyphs import glyph_findings
 from docx_content import docx_findings
+from delivery_paths import writable
+from runtime_config import default_root, read_runtime
 
 SKIP_DIRS = {"raw"}
 SKIP_NAMES = {"journal.jsonl", ".DS_Store", "master-fingerprint.json"}
@@ -520,24 +522,6 @@ def is_deliverable(path: pathlib.Path, workspace: pathlib.Path,
             and len(rel.parts) == 1 and rel.stem in {
         "report", "cv", "letter", "rirekisho", "supporting-statement", "interview-brief"
     } and rel.suffix in {".md", ".pdf", ".docx"})
-
-
-def writable(directory: pathlib.Path) -> tuple[bool, str]:
-    """Can we actually create a file here?
-
-    Not `os.access` and not `is_dir()`. On macOS `~/Downloads` sits behind TCC:
-    the directory exists, `os.access` says yes, and the write still fails — and
-    it can start failing part-way through a session. The only honest test is to
-    write something.
-    """
-    try:
-        directory.mkdir(parents=True, exist_ok=True)
-        probe = directory / ".jobhunt-write-probe"
-        probe.write_text("", encoding="utf-8")
-        probe.unlink()
-        return True, ""
-    except OSError as exc:
-        return False, str(exc)
 
 
 # ---- one client folder, several workspaces --------------------------------
@@ -2223,7 +2207,8 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--workspace", required=True, type=pathlib.Path)
     ap.add_argument("--to", type=pathlib.Path, default=None,
-                    help=f"destination directory (default: {DEFAULT_ROOT})")
+                    help="destination directory (default: a workspace-named folder "
+                         "under the delivery root saved by setup or doctor)")
     ap.add_argument("--no-pdf", action="store_true",
                     help="do not render new PDFs; existing deliverable files are still copied")
     ap.add_argument("--include-applications", action="store_true",
@@ -2235,7 +2220,17 @@ def main(argv: list[str] | None = None) -> int:
         print(f"DELIVER_NO_WORKSPACE: {ws} is not a directory", file=sys.stderr)
         return 2
 
-    dest = (args.to.expanduser() if args.to else DEFAULT_ROOT / ws.name).resolve()
+    try:
+        if args.to:
+            dest = args.to.expanduser().resolve()
+        else:
+            configured = read_runtime(default_root()).get("delivery_root")
+            root = pathlib.Path(configured).expanduser() if configured else DEFAULT_ROOT
+            dest = (root / ws.name).resolve()
+    except (OSError, TypeError, ValueError) as exc:
+        print(f"DELIVER_DEST_UNAVAILABLE: {exc}. Run doctor.py, or use --to to choose "
+              "a writable folder.", file=sys.stderr)
+        return 2
     if dest == ws or ws in dest.parents:
         print(f"DELIVER_DEST_INSIDE_WORKSPACE: {dest} is the workspace or inside "
               "it; delivering there would copy the round into itself",
@@ -2269,10 +2264,9 @@ def main(argv: list[str] | None = None) -> int:
 
     ok, why = writable(dest)
     if not ok:
-        print(f"DELIVER_DEST_UNWRITABLE: cannot write to {dest}: {why}. On macOS "
-              "this is usually TCC blocking ~/Downloads for this process; grant "
-              "access, or pass --to with a directory that works. Nothing was "
-              "copied and the workspace is untouched.", file=sys.stderr)
+        print(f"DELIVER_DEST_UNWRITABLE: cannot write to {dest}: {why}. Run doctor.py "
+              "to choose a new default, or specify a writable folder with --to. "
+              "No files were copied.", file=sys.stderr)
         return 2
 
     include_applications = True if args.include_applications else None

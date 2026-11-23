@@ -162,12 +162,14 @@ job-hunt/
     ├── doctor.py                    # first-run environment check; --install for pip only
     ├── host_execution.py            # shared renderer host/sandbox diagnostics (library)
     ├── setup_dependencies.py         # Private Python/Node/OpenCLI installation
+    ├── runtime_config.py             # private runtime record read and update
     ├── run_tool.py                   # Invoke the prepared runtime and bundled clients
     ├── run_mock_tests.py             # Run a mock coding round's solution against its hidden cases
     ├── browser_cdp.mjs               # Direct CDP read capture; no npm packages/extensions
     ├── pdf_glyphs.py                # inspect painted PDF glyph IDs, including missing CJK
     ├── deliver.py                   # hand-off: the round's readable artifacts land
-    │                                #   in ~/Downloads/<workspace>/; requires a client report PDF
+    │                                #   in the saved delivery root under the workspace name
+    ├── delivery_paths.py            # probe and select a writable delivery root
     ├── discovery_catalogue.py       # reads references/discovery-sources.md; says which
     │                                #   commands publish job postings (library)
     ├── enter_mode.py                # mode entry + the mode file's content hash
@@ -200,6 +202,7 @@ job-hunt/
     ├── render_rirekisho.py          # Japanese 履歴書 form renderer
     ├── report_locales.py            # shared native report labels and gate anchors
     ├── rounds.py                    # judge-round-<n>.json read/merge (library)
+    ├── apply_status.py               # read the current application round and next step
     ├── vocab.py                     # every closed vocabulary in the skill (library)
     ├── mutants.py                   # break the code on purpose; make mutants / --ci
     ├── mutants-baseline.json        # surviving mutants known at measurement time

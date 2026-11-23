@@ -202,7 +202,12 @@ def _error_code(stderr_text):
 def recovery_guidance(kind="platform"):
     """Operator guidance only: a user reply is required, never a retry token."""
     actions = {
-        "login": "Ask the user to click Login/登录 on the page kept open in their connected browser, using their daily profile, and finish login there; do not ask them to run a terminal command.",
+        "login": ("Ask the user to click Login/登录 and finish login in the connected browser; "
+                  "do not ask them to run a terminal command. "
+                  "Tell them now, using the site's real name and their browser: "
+                  "“<网站>需要登录。请在你平时用的<浏览器>窗口切到<网站>页面，"
+                  "点‘登录’。登录后回复‘已登录’，我就继续在这里找。” "
+                  "Wait for their reply before changing sources."),
         "verification": "Ask the user to open the site in the connected browser and complete the human verification themselves; do not describe it as a missing login.",
         "rate_limit": "Explain the rate limit and any displayed wait time; login is not a fix. Do not poll or automatically retry after a timer.",
         "platform": "Ask the user to inspect the site in the connected browser: complete login or human verification only if the page asks for it. A permission or account restriction may not be fixable by logging in.",
@@ -213,8 +218,9 @@ def recovery_guidance(kind="platform"):
             "start one new bounded round linked to the paused workspace, using "
             "the same source and backend, and verify access with one read. "
             "Preserve the old journal; never clear its stop lock. If refused "
-            "again, pause and ask again. Offer partial results, other sources "
-            "or a pasted posting instead of silently abandoning the task. "
+            "again, pause and ask again. If the user chooses to skip login, search "
+            "public sources and disclose which sites were missed. Use a pasted "
+            "posting only if the user chooses that route. "
             "See references/user-recovery.md.")
 
 

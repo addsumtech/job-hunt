@@ -18,24 +18,13 @@ import sys
 import tarfile
 import tempfile
 import urllib.request
-import venv
 import zipfile
+
+from delivery_paths import choose_delivery_root
+from runtime_config import default_root, read_runtime, runtime_lock, update_runtime
 
 SKILL = Path(__file__).resolve().parent.parent
 PATCHES = SKILL / "assets" / "opencli-cdp"
-
-
-def default_root():
-    """The prepared runtime's directory.
-
-    `JOBHUNT_RUNTIME_ROOT` names it explicitly. run_tool.py exports it to every
-    child, so a helper run through a custom `--root` inspects that runtime rather
-    than the default one.
-    """
-    explicit = os.environ.get("JOBHUNT_RUNTIME_ROOT", "").strip()
-    if explicit:
-        return Path(explicit).expanduser()
-    return Path(os.environ.get("LOCALAPPDATA", Path.home() / ".local/share")) / "job-hunt"
 
 
 def run(argv, **kwargs):
@@ -179,6 +168,60 @@ def prepare_opencli(root, node):
     return entry
 
 
+def python_candidates():
+    names = ("python3", *(f"python3.{minor}" for minor in range(15, 9, -1)), "python")
+    seen = set()
+    base = getattr(sys, "_base_executable", sys.executable)
+    for candidate in (base, *(shutil.which(name) for name in names)):
+        if candidate:
+            executable = Path(candidate).resolve()
+            if executable not in seen:
+                seen.add(executable)
+                yield executable
+
+
+def prepare_python(root):
+    environment = root / "venv"
+    python = environment / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+
+    def verify():
+        run([python, "-I", "-c", "import encodings, ssl, venv"], capture_output=True)
+
+    def ensure_pip():
+        run([python, "-I", "-m", "ensurepip", "--upgrade", "--default-pip"], capture_output=True)
+
+    if environment.exists():
+        try:
+            verify()
+            try:
+                run([python, "-I", "-c", "import pip"], capture_output=True)
+            except subprocess.CalledProcessError:
+                ensure_pip()
+            return python
+        except (OSError, subprocess.SubprocessError):
+            shutil.rmtree(environment)
+
+    # Check the child before ensurepip: some standalone Python builds can
+    # create a venv whose executable cannot even load the standard library.
+    modes = ("--copies",) if os.name == "nt" else ("--copies", "--symlinks")
+    for base in python_candidates():
+        for mode in modes:
+            try:
+                run([base, "-I", "-c",
+                     "import sys, venv; assert sys.version_info >= (3, 10); "
+                     "venv.main(sys.argv[1:])", "--without-pip", mode, environment],
+                    capture_output=True)
+                verify()
+                ensure_pip()
+                return python
+            except (OSError, subprocess.SubprocessError):
+                if environment.exists():
+                    shutil.rmtree(environment)
+
+    raise RuntimeError("Could not prepare Python for job-hunt. Install Python 3.12 from python.org "
+                       "(or Homebrew on macOS) and rerun setup with that Python.")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--root", type=Path, default=default_root())
@@ -189,31 +232,34 @@ def main(argv=None):
     if sys.version_info < (3, 10):
         raise RuntimeError("Agent must prepare Python 3.10+ first")
     root = args.root.expanduser().resolve()
-    root.mkdir(parents=True, exist_ok=True)
-    record = root / "runtime.json"
-    runtime = json.loads(record.read_text()) if record.exists() else {}
-    environment = root / "venv"
-    python = environment / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-    if not python.exists():
-        venv.EnvBuilder(with_pip=True).create(environment)
-    run([python, "-m", "pip", "install", "--disable-pip-version-check", "-r", SKILL / "requirements.txt"])
-    run([python, "-c", "import yaml, docx, pymupdf"])
-    runtime["python"] = str(python)
-    if args.discovery:
-        node = prepare_node(root, args.node)
-        runtime.update(node=str(node), opencli=str(prepare_opencli(root, node)))
-        run([node, SKILL / "third_party/anysearch/anysearch_cli.js", "doc"], stdout=subprocess.DEVNULL)
-    if args.browser:
-        runtime["browser"] = args.browser
-    # Commit paths only after all requested capability preparations succeed.
-    temporary = record.with_suffix(".tmp")
-    temporary.write_text(json.dumps(runtime, indent=2) + "\n", encoding="utf-8")
-    temporary.replace(record)
-    print(json.dumps({"runtime": str(record), "tools": runtime}, ensure_ascii=False, indent=2))
+    with runtime_lock(root, ".setup.lock"):
+        python = prepare_python(root)
+        run([python, "-I", "-m", "pip", "install", "--disable-pip-version-check",
+             "-r", SKILL / "requirements.txt"])
+        run([python, "-I", "-c", "import yaml, docx, pymupdf"])
+        updates = {"python": str(python)}
+        if args.discovery:
+            node = prepare_node(root, args.node)
+            updates.update(node=str(node), opencli=str(prepare_opencli(root, node)))
+            run([node, SKILL / "third_party/anysearch/anysearch_cli.js", "doc"], stdout=subprocess.DEVNULL)
+        if args.browser:
+            updates["browser"] = args.browser
+        try:
+            folder = choose_delivery_root(read_runtime(root))
+        except OSError as exc:
+            print(f"Delivery folder: {exc}", file=sys.stderr)
+        else:
+            updates["delivery_root"] = str(folder)
+        runtime = update_runtime(root, updates)
+    print(json.dumps({"runtime": str(root / "runtime.json"), "tools": runtime,
+                      "delivery_folder": updates.get("delivery_root")}, ensure_ascii=False, indent=2))
     return 0
 
 
 if __name__ == "__main__":
+    from cli_io import configure_utf8
+
+    configure_utf8()
     try:
         sys.exit(main())
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
