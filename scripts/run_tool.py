@@ -6,14 +6,51 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import shlex
 import subprocess
 import sys
 import tempfile
 import uuid
 
+from fs_paths import ensure_directory
 from runtime_config import default_root
 from setup_dependencies import SKILL
+
+
+class RuntimeMissing(ValueError):
+    """Setup has not prepared a required tool."""
+
+
+def run_prepared(command, **kwargs):
+    try:
+        return subprocess.run(command, **kwargs)
+    except FileNotFoundError as exc:
+        if exc.filename == command[0]:
+            raise RuntimeMissing(f"Prepared executable is missing: {exc.filename}") from exc
+        raise
+
+
+def login_handoff(output, browser):
+    try:
+        rows = json.loads(output)
+    except ValueError:
+        # OpenCLI's default table output omits the logged_in column.
+        sites = re.findall(r"^│\s*([\w-]+)\s*│\s*not_logged_in\s*│[^│\n]*│\s*full\s*│",
+                           output.decode("utf-8", errors="replace"), re.MULTILINE)
+    else:
+        sites = [row["site"] for row in rows if isinstance(row, dict)
+                 and row.get("status") == "not_logged_in" and row.get("checked") == "full"
+                 and isinstance(row.get("site"), str)] if isinstance(rows, list) else []
+    if sites:
+        names = ", ".join("BOSS直聘" if site == "boss" else site for site in sites)
+        window = "Chrome" if browser == "chrome" else "Edge"
+        print(f"SITE_LOGIN_HANDOFF: Full login check: {names}. If a site is needed for "
+              "this search, make the login handoff your next message to the user. "
+              f"Name the site and their usual {window} window, ask them to click 登录 "
+              "and reply ‘已登录’. Wait for their reply before searching any other source. "
+              "Continue with public sources if they explicitly ask to skip login.",
+              file=sys.stderr)
 
 
 class SessionUnavailable(ValueError):
@@ -39,7 +76,8 @@ class SessionUnavailable(ValueError):
             lead = ("Follow the session recovery above. If no session has started, start it once. "
                     "When it waits for consent, tell the user now: ")
         return (lead + f"“请在你平时用的{self.browser}窗口找到连接提示，点‘允许’"
-                       "（以弹窗上的按钮文字为准）。点完回复‘已允许’，我就继续找岗位。”")
+                       "（以弹窗上的按钮文字为准）。点完回复‘已允许’，我就继续找岗位。”"
+                       " Send this request on its own and wait for the reply.")
 
 
 def main(argv=None):
@@ -59,10 +97,20 @@ def main(argv=None):
             print(reason, file=sys.stderr)
             return 2
     budget_file = None
-    runtime = json.loads((args.root.expanduser() / "runtime.json").read_text(encoding="utf-8"))
+    record = args.root.expanduser() / "runtime.json"
+    try:
+        runtime = json.loads(record.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise RuntimeMissing(f"Runtime configuration is missing: {record}") from exc
+    if not isinstance(runtime, dict):
+        raise ValueError(f"Expected a JSON object in {record}")
+    required = ("python",) if args.tool == "python" else ("python", "node", "opencli")
+    missing = [name for name in required if not runtime.get(name)]
+    if missing:
+        raise RuntimeMissing(f"Runtime is missing: {', '.join(missing)}")
     env = os.environ.copy()
     paths = [str(Path(runtime["python"]).parent)]
-    if "node" in runtime:
+    if runtime.get("node") and runtime.get("opencli"):
         paths += [str(Path(runtime["node"]).parent), str(Path(runtime["opencli"]).parents[4] / ".bin")]
     env["PATH"] = os.pathsep.join(paths + [env.get("PATH", "")])
     env["JOBHUNT_RUNTIME_ROOT"] = str(args.root.expanduser())
@@ -70,7 +118,7 @@ def main(argv=None):
             and os.path.abspath(sys.executable) != os.path.abspath(runtime['python'])):
         # Budget validation uses the prepared Python dependencies, even when
         # this lightweight launcher was invoked with the system Python.
-        return subprocess.run([runtime['python'], str(Path(__file__).resolve()),
+        return run_prepared([runtime['python'], str(Path(__file__).resolve()),
                                *(sys.argv[1:] if argv is None else argv)], env=env).returncode
     if args.tool == "python":
         command = [runtime["python"]]
@@ -81,7 +129,7 @@ def main(argv=None):
         def session_endpoint():
             if not browser:
                 raise ValueError("Select the user's daily browser via --browser chrome|edge")
-            probe = subprocess.run([node, str(SKILL / "scripts/browser_session.mjs"),
+            probe = run_prepared([node, str(SKILL / "scripts/browser_session.mjs"),
                 "endpoint", "--root", str(args.root.expanduser()), "--browser", browser],
                 capture_output=True, encoding="utf-8", errors="replace")
             if probe.returncode:
@@ -100,8 +148,8 @@ def main(argv=None):
                 if not args.args[0].replace('_', '').isalnum():
                     raise ValueError('Invalid OpenCLI source name')
                 cache = args.workspace.resolve() / 'raw' / 'opencli-help'
-                cache.mkdir(parents=True, exist_ok=True)
-                metadata = subprocess.run([node, runtime['opencli'], args.args[0], '--help', '-f', 'yaml'],
+                ensure_directory(cache, parents=True)
+                metadata = run_prepared([node, runtime['opencli'], args.args[0], '--help', '-f', 'yaml'],
                                           capture_output=True, env=env)
                 if metadata.returncode:
                     raise ValueError('Cannot verify OpenCLI command access')
@@ -178,14 +226,13 @@ def main(argv=None):
     try:
         if args.workspace and args.tool == 'anysearch':
             from search_capture import run
-            return run(args.workspace, command, args.args, env)
+            return run(args.workspace, command, args.args, env, execute=run_prepared)
         if args.workspace and args.tool == 'opencli' and not offline:
             from check_opencli_result import main as record_opencli
             root = args.workspace.resolve()
-            (root / 'raw').mkdir(exist_ok=True)
             prefix = args.args[0] + '-' + uuid.uuid4().hex
             out, err = root / 'raw' / (prefix + '.json'), root / 'raw' / (prefix + '.stderr.txt')
-            result = subprocess.run(command + args.args, env=env, capture_output=True)
+            result = run_prepared(command + args.args, env=env, capture_output=True)
             out.write_bytes(result.stdout)
             err.write_bytes(result.stderr)
             classification = io.StringIO()
@@ -203,7 +250,14 @@ def main(argv=None):
                 budget_file = Path(f.name)
                 json.dump(budget, f, ensure_ascii=False)
             args.args += ['--budget-file', str(budget_file)]
-        return subprocess.run(command + args.args, env=env).returncode
+        if (args.tool == "opencli" and not offline and args.args[:2] == ["auth", "status"]
+                and "--full" in args.args):
+            result = run_prepared(command + args.args, env=env, stdout=subprocess.PIPE)
+            sys.stdout.buffer.write(result.stdout)
+            if result.returncode == 0:
+                login_handoff(result.stdout, browser)
+            return result.returncode
+        return run_prepared(command + args.args, env=env).returncode
     finally:
         if budget_file:
             budget_file.unlink(missing_ok=True)
@@ -219,6 +273,10 @@ if __name__ == "__main__":
         print(f"BROWSER_SESSION_UNAVAILABLE: {exc}", file=sys.stderr)
         print(exc.handoff(), file=sys.stderr)
         sys.exit(1)
+    except RuntimeMissing as exc:
+        print(f"TOOL_UNAVAILABLE: {exc}. Run scripts/setup_dependencies.py "
+              "(add --discovery for browser and search tools).", file=sys.stderr)
+        sys.exit(1)
     except (OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
-        print(f"TOOL_UNAVAILABLE: {exc}; run scripts/setup_dependencies.py for the needed capability", file=sys.stderr)
+        print(f"TOOL_UNAVAILABLE: {exc}", file=sys.stderr)
         sys.exit(1)

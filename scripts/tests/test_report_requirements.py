@@ -8,8 +8,12 @@ import yaml
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 import deliver  # noqa: E402
+import check_layout  # noqa: E402
+import journal  # noqa: E402
+import layout_pages  # noqa: E402
 import layout_requirements  # noqa: E402
 import report_requirements  # noqa: E402
+import render_report  # noqa: E402
 
 pytest.importorskip("pymupdf")
 
@@ -69,3 +73,66 @@ def test_a_heading_the_contents_list_repeats_is_not_sampled(tmp_path):
     req = yaml.safe_load((ws / "report-layout-requirements.yaml").read_text(encoding="utf-8"))
     heading = next(s for s in req["text_samples"] if s["role"] == "heading")
     assert heading["text"].startswith("依据") and heading["size_pt"] == report_requirements.SIZES["subheading"]
+
+
+DISCOVER_REPORT = """# 北京产品岗位建议
+
+2026 年 11 月 24 日｜北京｜职位比较
+
+- [优先尝试的岗位](#优先尝试的岗位)
+- [还有哪些机会](#还有哪些机会)
+
+## 优先尝试的岗位
+
+优先查看能用现有项目说明职责的岗位。
+
+## 还有哪些机会
+
+准备面试时，把独立完成的工作单独列出来。
+"""
+
+
+def test_duplicate_contents_and_dateline_through_the_default_report_review(tmp_path):
+    ws = _workspace(tmp_path, DISCOVER_REPORT)
+    args = ["--workspace", str(ws)]
+    assert report_requirements.main(args) == 0
+    req = yaml.safe_load((ws / "report-layout-requirements.yaml").read_text(encoding="utf-8"))
+    _, heading, body = req["text_samples"]
+    assert heading["occurrence"] == 2 and heading["size_pt"] == deliver.REPORT_SIZES["heading"]
+    assert body["text"].startswith("优先查看")
+    assert render_report.main(args) == 0
+    assert layout_requirements.measure(ws, req, report=True) == []
+    wrong_size = {**req, "text_samples": [{**heading, "size_pt": deliver.REPORT_SIZES["contents"]},
+                                         req["text_samples"][0], body]}
+    assert any("expected 10.5" in issue for issue in layout_requirements.measure(ws, wrong_size, report=True))
+
+    generated = layout_pages.prepare(ws, report=True)
+    assert generated["review_required"] == [1]
+    draft = yaml.safe_load(pathlib.Path(generated["draft"]).read_text(encoding="utf-8"))
+    draft["checks"] = {key: {"status": "pass", "detail": f"Test comparison of {key}."}
+                       for key in check_layout.CHECKS}
+    draft["artifacts"]["report.pdf"]["previews"][0]["review_status"] = "pass"
+    draft["unresolved_differences"] = []
+    (ws / "report-layout-review.yaml").write_text(yaml.safe_dump(draft), encoding="utf-8")
+    assert check_layout.main([*args, "--report"]) == 0
+
+    (ws / "report.md").write_text(DISCOVER_REPORT + "\n再核对每个职位的面试流程。\n", encoding="utf-8")
+    assert render_report.main(args) == 0
+    findings, _ = check_layout.inspect(ws, report=True)
+    assert any("STALE_LAYOUT_REVIEW" in issue and "layout_pages.py" in issue for issue in findings)
+    refreshed = layout_pages.prepare(ws, report=True)
+    assert refreshed["review_required"] == [1]
+    new_draft = yaml.safe_load(pathlib.Path(refreshed["draft"]).read_text(encoding="utf-8"))
+    assert new_draft["artifacts"]["report.pdf"]["sha256"] == journal.sha256_file(ws / "report.pdf")
+    assert new_draft["artifacts"]["report.pdf"]["sha256"] != draft["artifacts"]["report.pdf"]["sha256"]
+    assert new_draft["artifacts"]["report.pdf"]["previews"][0]["review_status"] == "pending"
+
+
+def test_dateline_is_never_the_default_body_sample(tmp_path):
+    source = DISCOVER_REPORT.replace("- [优先尝试的岗位](#优先尝试的岗位)", "")
+    ws = _workspace(tmp_path, source)
+    args = ["--workspace", str(ws)]
+    assert report_requirements.main(args) == 0
+    req = yaml.safe_load((ws / "report-layout-requirements.yaml").read_text(encoding="utf-8"))
+    assert render_report.main(args) == 0
+    assert layout_requirements.measure(ws, req, report=True) == []

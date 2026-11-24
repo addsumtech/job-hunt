@@ -24,6 +24,8 @@ import pathlib
 
 import yaml
 
+from fs_paths import ensure_directory
+
 # The closed set a receipt's verdict may take. The last two are NOT synonyms and
 # the difference is load-bearing:
 #
@@ -45,7 +47,7 @@ VERDICTS = ("pass", "fail", "could_not_run", "recorded", "baseline_recorded")
 def append(workspace, record: dict) -> None:
     """Append one JSON record as a line to <workspace>/journal.jsonl."""
     workspace = pathlib.Path(workspace)
-    workspace.mkdir(parents=True, exist_ok=True)
+    ensure_directory(workspace, parents=True)
     line = json.dumps(record, ensure_ascii=False, sort_keys=True)
     # A killed process writes the newline LAST, so the realistic shape of a
     # crash is a final line with no terminator. Appending straight onto it

@@ -170,6 +170,7 @@ job-hunt/
     ├── deliver.py                   # hand-off: the round's readable artifacts land
     │                                #   in the saved delivery root under the workspace name
     ├── delivery_paths.py            # probe and select a writable delivery root
+    ├── fs_paths.py                  # safely create or reuse a directory
     ├── discovery_catalogue.py       # reads references/discovery-sources.md; says which
     │                                #   commands publish job postings (library)
     ├── enter_mode.py                # mode entry + the mode file's content hash

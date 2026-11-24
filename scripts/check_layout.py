@@ -21,6 +21,7 @@ GATE = "check_layout"
 CHECKS = ("fonts", "font_sizes", "page_geometry", "headings_and_rules",
           "dates_and_alignment", "paragraph_spacing", "content_order",
           "pagination_and_clipping")
+REPORT_PAGES = "python3 scripts/run_tool.py python scripts/layout_pages.py --workspace <ws> --report"
 
 
 def inspect(ws: pathlib.Path, report=False):
@@ -31,6 +32,9 @@ def inspect(ws: pathlib.Path, report=False):
     prefix = "report-" if report else ""
     path = ws / f"{prefix}layout-review.yaml"
     if not path.is_file():
+        if report:
+            return findings + [f"NO_LAYOUT_REVIEW: run {REPORT_PAGES}, then inspect the listed "
+                               f"pages and save the completed draft as {path.name}"], hashes
         return findings + [f"NO_LAYOUT_REVIEW: render and inspect every page against the supplied template, then write {path.name}"], hashes
     hashes[path.name] = journal.sha256_file(path)
     try:
@@ -54,7 +58,9 @@ def inspect(ws: pathlib.Path, report=False):
         now = journal.sha256_file(target)
         hashes[key] = now
         if expected != now:
-            findings.append(f"STALE_LAYOUT_REVIEW: {label} changed or was never fingerprinted; inspect the final version again")
+            remedy = (f"run {REPORT_PAGES} after the final render and complete the new draft"
+                      if report else "inspect the final version again")
+            findings.append(f"STALE_LAYOUT_REVIEW: {label} changed or was never fingerprinted; {remedy}")
         return target
 
     if not isinstance(review.get("reviewer"), str) or not review["reviewer"].strip():
@@ -127,7 +133,8 @@ def inspect(ws: pathlib.Path, report=False):
                 more = f" and {len(missing) - 3} more" if len(missing) > 3 else ""
                 findings.append("REPORT_PDF_TEXT_MISMATCH: report.pdf does not carry the current "
                                 "report.md text, in order: " + ", ".join(repr(m[:50]) for m in missing[:3]) + more
-                                + "; re-render report.pdf from the current report.md and review it again")
+                                + "; compare the listed text with the PDF, fix the missing or "
+                                  "reordered text, then run render_report.py and " + REPORT_PAGES)
     elif (ws / "cv.docx").is_file() and (ws / "cv.pdf").is_file():
         export = journal.as_mapping(review.get("word_export"))
         evidence = bind(export.get("path"), export.get("sha256"), "Word export PDF")

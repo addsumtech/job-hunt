@@ -101,6 +101,30 @@ def test_default_pdf_tables_and_cards_bind_with_clickable_links(tmp_path, column
         assert any(link.get("uri") == "https://example.test/job" for page in doc for link in page.get_links())
 
 
+def test_a_wide_table_does_not_take_the_following_directory_header(tmp_path):
+    source = """# 产品经理岗位建议
+
+## 优先查看
+
+| 公司 | 职位 | 简历证据 | 目前缺口 | 原链接 |
+| --- | --- | --- | --- | --- |
+| 海川软件 | 产品经理 | 整理过客户需求 | 缺少项目上线结果 | [打开职位](https://example.test/job) |
+| 长江科技 | 平台产品经理 | 做过平台需求 | | [打开岗位](https://example.test/another) |
+
+## 岗位目录
+
+| 公司 | 职位 | 地点 | 原链接 |
+| --- | --- | --- | --- |
+| 海川软件 | 产品经理 | 北京 | [打开职位](https://example.test/job) |
+"""
+    (tmp_path / "report.md").write_text(source, encoding="utf-8")
+    assert render_report.main(["--workspace", str(tmp_path)]) == 0
+    with pymupdf.open(tmp_path / "report.pdf") as doc:
+        pages = [page.get_text() for page in doc]
+    assert layout_requirements.report_text_problems(source, pages) == []
+    assert layout_requirements.report_text_problems(source.replace("缺少项目上线结果", "缺少项目资料"), pages)
+
+
 @pytest.mark.parametrize("intro,label", [
     ("Career advice for your application", "Work sample"),
     ("求职建议与申请准备", "作品示例"),

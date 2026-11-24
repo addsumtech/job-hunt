@@ -7,6 +7,16 @@ sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 import paths
 
 
+def test_missing_name_explains_where_to_find_profiles(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(paths, "PROFILES_ROOT", tmp_path / "profiles")
+    with pytest.raises(SystemExit) as error:
+        paths.main([])
+    assert error.value.code == 2
+    message = capsys.readouterr().err
+    assert str(paths.PROFILES_ROOT) in message and "profile.<language>.yaml" in message
+    assert not paths.PROFILES_ROOT.exists()
+
+
 def test_profiles_root_is_under_the_claude_dir():
     assert paths.PROFILES_ROOT == pathlib.Path.home() / ".claude" / "job-profiles"
 

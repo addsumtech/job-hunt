@@ -22,6 +22,7 @@ import zipfile
 
 from delivery_paths import choose_delivery_root
 from runtime_config import default_root, read_runtime, runtime_lock, update_runtime
+from fs_paths import ensure_directory
 
 SKILL = Path(__file__).resolve().parent.parent
 PATCHES = SKILL / "assets" / "opencli-cdp"
@@ -49,7 +50,7 @@ def extract_archive(archive, dest):
             for info, target in entries:
                 if info.is_dir() or ((info.external_attr >> 16) & 0o170000) == 0o120000:
                     continue
-                target.parent.mkdir(parents=True, exist_ok=True)
+                ensure_directory(target.parent, parents=True)
                 with z.open(info) as source, target.open("wb") as out:
                     shutil.copyfileobj(source, out)
     else:
@@ -58,7 +59,7 @@ def extract_archive(archive, dest):
             for info, target in entries:
                 if not info.isfile():
                     continue
-                target.parent.mkdir(parents=True, exist_ok=True)
+                ensure_directory(target.parent, parents=True)
                 with tar.extractfile(info) as source, target.open("wb") as out:
                     shutil.copyfileobj(source, out)
                 target.chmod(info.mode & 0o755)
@@ -105,7 +106,7 @@ def prepare_node(root, explicit=None):
             raise RuntimeError("Official Node archive checksum mismatch")
         extract_archive(temp / filename, temp / "extracted")
         install = root / "node" / name
-        install.parent.mkdir(parents=True, exist_ok=True)
+        ensure_directory(install.parent, parents=True)
         if install.exists():
             raise RuntimeError(f"Incomplete Node installation exists; inspect before replacing: {install}")
         shutil.move(str(temp / "extracted" / name), install)

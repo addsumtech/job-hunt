@@ -15,6 +15,7 @@ import unicodedata
 
 import journal
 import paths
+from fs_paths import ensure_directory
 
 KEEP_DAYS = 180
 _SUFFIXES = (("b", "v"), ("bv",), ("n", "v"), ("nv",), ("gmbh",), ("ltd",), ("limited",),
@@ -132,7 +133,7 @@ def load_ledger(name: str) -> dict:
 def save_ledger(name: str, ledger: dict) -> None:
     import yaml
     path = paths.digest_seen(name)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    ensure_directory(path.parent, parents=True)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".digest-seen-", suffix=".yaml")
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         yaml.safe_dump({"roles": ledger.get("roles") or []}, fh, allow_unicode=True, sort_keys=False)

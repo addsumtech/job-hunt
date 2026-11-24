@@ -342,14 +342,18 @@ def test_a_chinese_document_really_round_trips_through_a_real_pdf(tmp_path):
 
 # ---- could-not-run, never a silent success --------------------------------
 
-def test_an_unwritable_destination_exits_2_and_copies_nothing(tmp_path, monkeypatch):
-    """macOS TCC can start refusing ~/Downloads part-way through a session, and
-    `os.access` says yes while the write fails — so the probe writes a real file."""
+def test_an_unwritable_destination_exits_2_and_copies_nothing(tmp_path, monkeypatch, capsys):
+    """A host can refuse the actual copy even when directory checks pass."""
     ws = build(tmp_path)
-    monkeypatch.setattr(deliver, "writable", lambda d: (False, "Operation not permitted"))
+
+    def deny_copy(*args, **kwargs):
+        raise PermissionError("Operation not permitted")
+
+    monkeypatch.setattr(deliver.shutil, "copy2", deny_copy)
     dest = tmp_path / "blocked"
     assert deliver.main(["--workspace", str(ws), "--to", str(dest)]) == 2
-    assert not dest.exists()
+    assert not any(p.is_file() for p in dest.rglob("*"))
+    assert "Operation not permitted" in capsys.readouterr().err
 
 
 def test_a_missing_workspace_exits_2(tmp_path):

@@ -37,8 +37,9 @@ import vocab
 from render_cv import has_rtl
 from pdf_glyphs import glyph_findings
 from docx_content import docx_findings
-from delivery_paths import writable
+from delivery_paths import prepare_delivery_directory
 from runtime_config import default_root, read_runtime
+from fs_paths import ensure_directory
 
 SKIP_DIRS = {"raw"}
 SKIP_NAMES = {"journal.jsonl", ".DS_Store", "master-fingerprint.json"}
@@ -1181,6 +1182,11 @@ _INLINE = re.compile(
 _META_LINE = re.compile(r"[｜|·•]")
 
 
+def _report_dateline(line):
+    return (not line.startswith(("#", "- ", "* ")) and _META_LINE.search(line)
+            and not re.search(r"[。！？]|[.!?](?:\s|$)", line))
+
+
 def _inline_runs(value: str):
     """One Markdown line as the PDF prints it, and where its links are.
 
@@ -1649,8 +1655,7 @@ def _render_portable_report(md: pathlib.Path, pdf: pathlib.Path,
             else:
                 value, size, gap = line, body, 6
             color = ink
-            if after_title and not line.startswith(("#", "- ", "* ")) and _META_LINE.search(line) \
-                    and not re.search(r"[。！？]|[.!?](?:\s|$)", line):
+            if after_title and _report_dateline(line):
                 # `2026年9月11日｜北京｜…` under the title is a dateline, not a sentence.
                 size, color, gap, options = sizes["meta"], muted, 8, {"leading": sizes["meta"] * 1.4}
             if line.startswith("#"):
@@ -2096,7 +2101,7 @@ def deliver(workspace: pathlib.Path, dest: pathlib.Path, slug: str,
                 notes.extend(problems)
                 continue
         try:
-            target.parent.mkdir(parents=True, exist_ok=True)
+            ensure_directory(target.parent, parents=True)
             shutil.copy2(src, target)
         except OSError as exc:
             # One unreadable file, or a name past the OS limit, must not abandon
@@ -2262,9 +2267,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"DELIVER_DISCOVER_INCOMPLETE: {discover_problem}", file=sys.stderr)
         return 2
 
-    ok, why = writable(dest)
-    if not ok:
-        print(f"DELIVER_DEST_UNWRITABLE: cannot write to {dest}: {why}. Run doctor.py "
+    try:
+        prepare_delivery_directory(dest)
+    except OSError as exc:
+        print(f"DELIVER_DEST_UNWRITABLE: cannot write to {dest}: {exc}. Run doctor.py "
               "to choose a new default, or specify a writable folder with --to. "
               "No files were copied.", file=sys.stderr)
         return 2

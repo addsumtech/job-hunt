@@ -17,6 +17,9 @@ import sys
 
 import pytest
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+import run_tool
+
 SCRIPT = pathlib.Path(__file__).resolve().parents[1] / "run_tool.py"
 NODE = shutil.which("node")
 DEAD_PID = 2147483646
@@ -78,3 +81,77 @@ def test_a_missing_runtime_still_points_at_setup(tmp_path):
     assert out.returncode == 1
     assert out.stderr.startswith("TOOL_UNAVAILABLE: ")
     assert "setup_dependencies.py" in out.stderr
+
+
+def test_a_bad_runtime_gives_its_actual_error(tmp_path):
+    root = _root(tmp_path)
+    (root / "runtime.json").write_text("unfinished {")
+    out = _read(root, tmp_path)
+    assert out.returncode == 1
+    assert "Expecting value" in out.stderr
+    assert "setup_dependencies.py" not in out.stderr
+
+
+@pytest.mark.parametrize("output", [
+    b'[{"site":"boss","status":"not_logged_in","checked":"full"},'
+    b'{"site":"linkedin","status":"unknown","checked":"full"}]',
+    "│ boss │ not_logged_in │ │ full │ │\n".encode(),
+])
+def test_full_login_status_interrupts_search_and_preserves_stdout(tmp_path, monkeypatch, capsys, output):
+    root = _root(tmp_path)
+    record = root / "runtime.json"
+    record.write_text(json.dumps({**json.loads(record.read_text()), "node": "node"}))
+
+    def run(cmd, **kwargs):
+        if "endpoint" in cmd:
+            return subprocess.CompletedProcess(cmd, 0, stdout="ws://127.0.0.1:1")
+        return subprocess.CompletedProcess(cmd, 0, stdout=output)
+
+    monkeypatch.setattr(run_tool.subprocess, "run", run)
+    assert run_tool.main(["--root", str(root), "--browser", "chrome", "opencli",
+                          "auth", "status", "--site", "boss", "--full"]) == 0
+    out = capsys.readouterr()
+    assert out.out.encode() == output
+    assert "SITE_LOGIN_HANDOFF" in out.err and "BOSS直聘" in out.err
+    assert "next message" in out.err and "before searching any other source" in out.err
+    assert "linkedin" not in out.err
+
+
+def test_recorded_opencli_search_reaches_the_process_with_existing_raw(
+        tmp_path, monkeypatch, capsys):
+    import check_opencli_result
+    import opencli_meta
+    import search_capture
+
+    root = _root(tmp_path)
+    record = root / "runtime.json"
+    record.write_text(json.dumps({**json.loads(record.read_text()), "node": "node"}))
+    ws = tmp_path / "round"
+    raw = ws / "raw"
+    raw.mkdir(parents=True)
+    original = pathlib.Path.mkdir
+
+    def broker_mkdir(path, *args, **kwargs):
+        if path.exists():
+            raise FileExistsError(path)
+        return original(path, *args, **kwargs)
+
+    def run(cmd, **kwargs):
+        if "endpoint" in cmd:
+            return subprocess.CompletedProcess(cmd, 0, stdout="ws://127.0.0.1:1")
+        if "--help" in cmd:
+            return subprocess.CompletedProcess(cmd, 0, stdout=b"captured help")
+        return subprocess.CompletedProcess(cmd, 0, stdout=b'[]\n', stderr=b'')
+
+    monkeypatch.setattr(pathlib.Path, "mkdir", broker_mkdir)
+    monkeypatch.setattr(run_tool.subprocess, "run", run)
+    monkeypatch.setattr(search_capture, "preflight", lambda *args: None)
+    monkeypatch.setattr(opencli_meta, "access_for", lambda *args: "read")
+    monkeypatch.setattr(check_opencli_result, "main", lambda *args: 0)
+    args = ["--root", str(root), "--browser", "chrome", "--workspace", str(ws),
+            "opencli", "51job", "search", "--keyword", "AI 产品经理", "-f", "json"]
+    assert run_tool.main(args) == 0
+    assert run_tool.main(args) == 0
+    assert (raw / "opencli-help" / "51job.yaml").read_bytes() == b"captured help"
+    assert len(list(raw.glob("51job-*.json"))) == 2
+    assert capsys.readouterr().out == "[]\n[]\n"

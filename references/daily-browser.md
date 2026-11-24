@@ -9,6 +9,8 @@ as soon as it waits for consent.
 
 > 请在你平时用的 Chrome 窗口找到连接提示，点「允许」（以弹窗上的按钮文字为准）。点完回复「已允许」，我就继续找岗位。
 
+Send this connection request by itself and wait for the reply.
+
 If startup says Chrome's remote debugging is off or unavailable, say:
 
 > 请在你平时用的 Chrome 窗口打开 chrome://inspect/#remote-debugging，勾选「允许此浏览器实例进行远程调试」（以页面上的文字为准），然后回复「已开启」。
@@ -22,7 +24,9 @@ With a confirmed site login requirement, keep the page open and say:
 > BOSS直聘需要登录。请在你平时用的 Chrome 窗口切到 BOSS直聘页面，点「登录」。登录后回复「已登录」，我就继续在这里找。
 
 Substitute the actual name, such as 猎聘, and link the captured page when available.
-Wait for the reply and follow [user-recovery.md](user-recovery.md). If the user
+When the full check confirms a site needed for the search is logged out, make
+this the next message to the user. Wait for the reply before searching other
+sources and follow [user-recovery.md](user-recovery.md). If the user
 says to skip login, use sources that require no login and name the sites you
 could not cover in the report. Use a pasted job description only at the user's
 request.

@@ -23,6 +23,7 @@ import urllib.request
 
 import journal
 import paths
+from fs_paths import ensure_directory
 
 SOURCES = ("github", "scholar", "website")
 ASK_STATUSES = ("given", "none", "declined")
@@ -56,7 +57,7 @@ def save_record(path, record: dict) -> None:
     """Write atomically, so a crash never leaves half a record."""
     import yaml
     path = pathlib.Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    ensure_directory(path.parent, parents=True)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".online-presence-", suffix=".yaml")
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         yaml.safe_dump(record, fh, allow_unicode=True, sort_keys=False)
@@ -360,8 +361,8 @@ def write_snapshot(name: str, source: str, snapshot: dict, today: datetime.date,
                    workspace=None) -> pathlib.Path:
     """Save the snapshot (without raw bodies) and each raw response beside it."""
     base = paths.online_presence_dir(name)
-    (base / "snapshots").mkdir(parents=True, exist_ok=True)
-    (base / "raw").mkdir(parents=True, exist_ok=True)
+    ensure_directory(base / "snapshots", parents=True)
+    ensure_directory(base / "raw", parents=True)
     stem = f"{today.isoformat()}-{source}"
     n_same_day = 1
     while (base / "snapshots" / f"{stem}.json").exists():

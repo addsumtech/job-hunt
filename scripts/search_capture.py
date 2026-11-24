@@ -11,6 +11,7 @@ import sys
 import uuid
 
 import journal
+from fs_paths import ensure_directory
 
 ACTION = 'search_call'
 
@@ -101,7 +102,7 @@ def preflight(workspace, site, url=''):
     return calls
 
 
-def run(workspace, command, arguments, env):
+def run(workspace, command, arguments, env, *, execute=None):
     root = Path(workspace).resolve()
     if not arguments or arguments[0] != 'search':
         raise ValueError('Recorded AnySearch reads require one search query per invocation')
@@ -132,10 +133,11 @@ def run(workspace, command, arguments, env):
     requested = limits[0] if limits else 10
     if not 1 <= requested <= min(10, remaining):
         raise ValueError(f'SEARCH_BUDGET: request at most {min(10, max(0, remaining))} remaining rows')
-    (root / 'raw').mkdir(exist_ok=True)
+    ensure_directory(root / 'raw')
     prefix = 'anysearch-' + uuid.uuid4().hex
     out, err = root / 'raw' / (prefix + '.json'), root / 'raw' / (prefix + '.stderr.txt')
-    result = subprocess.run(command + arguments + ['--format', 'json'], env=env, capture_output=True)
+    execute = subprocess.run if execute is None else execute
+    result = execute(command + arguments + ['--format', 'json'], env=env, capture_output=True)
     out.write_bytes(result.stdout)
     err.write_bytes(result.stderr)
     stdout, stderr = (p.read_text(encoding='utf-8', errors='replace') for p in (out, err))

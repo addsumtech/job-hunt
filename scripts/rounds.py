@@ -12,6 +12,8 @@ from __future__ import annotations
 import json
 import pathlib
 
+from fs_paths import ensure_directory
+
 
 def round_path(workspace, n: int) -> pathlib.Path:
     return pathlib.Path(workspace) / f"judge-round-{int(n)}.json"
@@ -30,7 +32,7 @@ def load_round(workspace, n: int) -> dict:
 
 def merge_round(workspace, n: int, updates: dict) -> dict:
     path = round_path(workspace, n)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    ensure_directory(path.parent, parents=True)
     data = load_round(workspace, n)
     data.update(updates)
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False, sort_keys=True) + "\n",

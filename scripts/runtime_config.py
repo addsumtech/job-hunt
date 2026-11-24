@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 import tempfile
 
+from fs_paths import ensure_directory
+
 
 def default_root():
     # run_tool.py exports this for every child, including with a custom --root.
@@ -18,7 +20,7 @@ def default_root():
 def runtime_lock(root, name):
     # The OS releases the lock if setup is interrupted. Keep the lock file so
     # concurrent invocations always lock the same inode.
-    root.mkdir(parents=True, exist_ok=True)
+    ensure_directory(root, parents=True)
     with (root / name).open("a+b") as lock:
         try:
             if os.name == "nt":

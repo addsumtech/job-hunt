@@ -617,7 +617,7 @@ def test_nothing_imports_a_package_ci_does_not_install():
         if name:
             declared.add({"pyyaml": "yaml", "python-docx": "docx"}.get(name, name))
     stdlib = set(sys.stdlib_module_names)
-    local = {p.stem for p in (REPO / "scripts").rglob("*.py")} | {"evals"}
+    local = {p.stem for p in (REPO / "scripts").rglob("*.py")} | {"evals", "scripts"}
 
     offenders = []
     for path in sorted(list((REPO / "evals").rglob("*.py"))

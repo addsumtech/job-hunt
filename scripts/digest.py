@@ -20,6 +20,7 @@ import tempfile
 
 import journal
 import paths
+from fs_paths import ensure_directory
 
 LOCK_STALE = datetime.timedelta(hours=3)
 MIN_GAP = datetime.timedelta(days=6)
@@ -51,7 +52,7 @@ def load_settings(name: str) -> dict:
 def save_settings(name: str, data: dict) -> None:
     import yaml
     path = paths.digest_settings(name)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    ensure_directory(path.parent, parents=True)
     full = empty_settings()
     full.update(data)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".digest-", suffix=".yaml")
@@ -147,7 +148,7 @@ def _lock_path(name: str) -> pathlib.Path:
 
 def acquire_lock(name: str, now: datetime.datetime) -> bool:
     path = _lock_path(name)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    ensure_directory(path.parent, parents=True)
     for _ in range(2):
         try:
             fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
@@ -233,7 +234,7 @@ def _applescript(text: str) -> str:
 
 def _log(name: str, line: str) -> None:
     path = log_path(name)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    ensure_directory(path.parent, parents=True)
     with path.open("a", encoding="utf-8") as fh:
         fh.write(f"{datetime.datetime.now().isoformat(timespec='seconds')} {line}\n")
 
@@ -368,7 +369,7 @@ def install(name: str, platform: str = sys.platform, run=subprocess.run):
                             path=agent.get("path") or DEFAULT_PATH)
     if platform == "darwin":
         plist = _plist_path(name)
-        plist.parent.mkdir(parents=True, exist_ok=True)
+        ensure_directory(plist.parent, parents=True)
         plist.write_text(entry, encoding="utf-8")
         domain = f"gui/{os.getuid()}"
         run(["launchctl", "bootout", f"{domain}/com.jobhunt.digest.{_slug(name)}"], check=False,
@@ -538,7 +539,7 @@ def _write_file(workspace, today: datetime.date) -> pathlib.Path:
     import json
     mail = json.loads((pathlib.Path(workspace) / "digest-email.json").read_text(encoding="utf-8"))
     folder = pathlib.Path(os.path.expanduser("~")) / "Downloads" / "job-digest"
-    folder.mkdir(parents=True, exist_ok=True)
+    ensure_directory(folder, parents=True)
     path = folder / f"{today.isoformat()}.html"
     path.write_text("<!doctype html><meta charset=\"utf-8\"><title>{}</title><pre style=\"font: 15px/1.5 "
                     "system-ui; white-space: pre-wrap; max-width: 46em\">{}</pre>\n".format(

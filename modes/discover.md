@@ -287,6 +287,10 @@ account risk is not zero.
 **A quick `opencli auth status` probe can report `not_logged_in` for a live session.**
 Before asking the user to log into a site the quick probe called `not_logged_in`,
 re-probe it with `opencli auth status --site <site> --full`.
+When it confirms that a site needed for this search is logged out, the login
+handoff is the next message to the user. Wait for their reply before searching
+any other source. Continue with public sources if they explicitly ask to skip
+login. Send the Chrome connection request on its own and wait for the reply.
 
 Only once the region is fixed, the platforms are named, and the sessions the
 round needs are actually live, go on to the trigger reason and `brief.yaml`.
@@ -458,7 +462,9 @@ python3 scripts/run_tool.py opencli auth status -f json > <ws>/raw/auth-status.j
 ```
 
 - `status: "logged_in"` — usable.
-- `status: "not_logged_in"` — usable only for adapters that do not need a session.
+- `status: "not_logged_in"` — confirm with `--full`. For a site that needs login
+  for this search, give the login handoff as your next message and wait. The
+  wrapper prints `SITE_LOGIN_HANDOFF` on stderr for confirmed logged-out sites.
 - `status: "unknown"` — **not the same as logged out.** Its `logged_in` field is an
   **EMPTY STRING**, not `false`, so `if (!row.logged_in)` misreads it. Re-probe:
   `opencli auth status --site <sites> --full --timeout 40 -f json`, which runs the
@@ -920,6 +926,23 @@ subfolder there instead of overwriting the first. If `deliver.py` refuses
 incomplete evidence, keep the draft and say what is missing; never copy files into
 the delivery by hand. A preliminary report needs `brief.preliminary_request`. Do not
 start a mock interview or another mode automatically.
+
+For the bundled report layout, use the PDF bookmarks for short reports. Use a
+linked contents list when the report is long enough to need one. Keep tables
+to four columns when readers need to compare rows side by side.
+
+Run these commands from the skill root to prepare the first visual review:
+
+```bash
+python3 scripts/run_tool.py python scripts/report_requirements.py --workspace <ws>
+python3 scripts/run_tool.py python scripts/render_report.py --workspace <ws>
+python3 scripts/run_tool.py python scripts/layout_pages.py --workspace <ws> --report
+```
+
+After re-rendering a revised report, run the last command again. Open each page
+listed under `review_required` and complete the new
+`report-layout-review.next.yaml`. Save the completed draft as
+`report-layout-review.yaml`, then run `check_layout.py --workspace <ws> --report`.
 
 ## Self-check before reporting the round
 

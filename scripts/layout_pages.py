@@ -18,6 +18,8 @@ import shutil
 import journal
 import yaml
 
+from fs_paths import ensure_directory
+
 DPI = 144
 
 
@@ -126,7 +128,7 @@ def remember(ws, report, receipt):
                               'preview': target.name, 'sha256': journal.sha256_file(source),
                               'original_path': source.relative_to(ws).as_posix()})
             stored[name] = pages
-    directory.mkdir(parents=True, exist_ok=True)
+    ensure_directory(directory, parents=True)
     for source, target in copies:
         shutil.copy2(source, target)
     shutil.copy2(ws / pdf_name, directory / 'document.pdf')
@@ -228,6 +230,10 @@ def prepare(ws, report=False, adopt=False):
     import check_layout
     ws = pathlib.Path(ws).resolve()
     review_name, requirements_name, pdf_name = _paths(report)
+    if report and not (ws / requirements_name).is_file():
+        raise ValueError("For the bundled report layout, run python3 scripts/run_tool.py "
+                         "python scripts/report_requirements.py --workspace <ws> first. "
+                         "For a custom layout, save the measured requirements from the supplied template.")
     requirements = journal.load_yaml(ws / requirements_name, dict)
     current = journal.load_yaml(ws / review_name, dict) if (ws / review_name).is_file() else {}
     old, proof, baseline_path = {}, None, ''
@@ -260,7 +266,7 @@ def prepare(ws, report=False, adopt=False):
     needed = set()
     reuse_cache = {}
     directory = ws / 'raw/layout-pages' / journal.sha256_file(ws / pdf_name)
-    directory.mkdir(parents=True, exist_ok=True)
+    ensure_directory(directory, parents=True)
     with pymupdf.open(ws / pdf_name) as doc:
         page_count = len(doc)
         if not page_count:

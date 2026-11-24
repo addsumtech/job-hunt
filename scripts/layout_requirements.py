@@ -270,7 +270,7 @@ def report_text_problems(markdown, pages):
         """
         keys = tuple(key for key in keys if key)
         if not keys:
-            return cursor
+            return cursor, cursor
         goal = tuple(map(len, keys))
         zero = (0,) * len(keys)
         for first in range(max(0, at(cursor)), len(lines)):
@@ -306,7 +306,7 @@ def report_text_problems(markdown, pages):
                 if index > first and edge and (line["key"] == header or skippable(index)):
                     states |= saved
                 if any(state == goal for state, _ in states):
-                    return line["end"]
+                    return lines[first]["start"], line["end"]
                 if not states:
                     break
         return None
@@ -335,7 +335,7 @@ def report_text_problems(markdown, pages):
         # Wide/tall tables can be rendered as labeled entries. Labels are known
         # source headers, never arbitrary intervening PDF text.
         for title_columns in (1, 2):
-            labeled = [key if n < title_columns else "".join(headers[n]) + key
+            labeled = [key if n < title_columns or not key else "".join(headers[n]) + key
                        for n, key in enumerate(keys)] if len(headers) == len(keys) else []
             if labeled:
                 spot = row_end(labeled, cursor, header)
@@ -368,10 +368,16 @@ def report_text_problems(markdown, pages):
             spot = match_row(block["cells"], cursor, headers, merged, block["raw_cells"])
             if spot is None and block["kind"] == "header":
                 names = {"".join(c) for c, _ in cells}
+                # A labeled entry omits the header row. Look for any printed
+                # header before its first complete data row, where it belongs.
+                first = blocks[index + 1] if index + 1 < len(blocks) else {}
+                row = (match_row(first["cells"], cursor, headers, raw_cells=first["raw_cells"])
+                       if first.get("kind") == "row" else None)
+                end = row[0] if row else len(stream)
                 printed = any(len(names & {_ink_key(word) for word in line["text"].split()}) > 1
-                              or (line["key"] in names and n + 1 < len(lines)
+                              or (line["key"] in names and n + 1 < len(lines) and lines[n + 1]["start"] < end
                                   and lines[n + 1]["key"] in names)
-                              for n, line in enumerate(lines) if line["start"] >= cursor)
+                              for n, line in enumerate(lines) if cursor <= line["start"] < end)
                 if not printed:
                     above = None    # a card layout prints no header row
                     continue
@@ -379,7 +385,7 @@ def report_text_problems(markdown, pages):
                 problems.append(block["text"])
                 above = None
             else:
-                cursor = spot
+                cursor = spot[1]
                 above = block["cells"] if block["kind"] == "row" else None
             continue
         above = None
@@ -495,6 +501,10 @@ def measure(ws, requirements, report=False):
                         fail("every text sample needs literal text and expected fonts")
                         continue
                     matches = []
+                    occurrence = sample.get("occurrence")
+                    if occurrence is not None and (not report or type(occurrence) is not int or occurrence < 1):
+                        fail("occurrence must be a positive line number among matches in a report")
+                        continue
                     region = sample.get("region_pt")
                     if region is not None and (not isinstance(region, list) or len(region) != 4
                                                or any(type(v) not in (int, float) or not math.isfinite(v) for v in region)):
@@ -509,14 +519,24 @@ def measure(ws, requirements, report=False):
                         if sample_range is None:
                             continue
                         start, stop = sample_range
+                        if occurrence is not None:
+                            if text[:start].strip():
+                                continue
+                            occurrence -= 1
+                            if occurrence:
+                                continue
                         offset = 0
                         for span in spans:
                             end = offset + len(span["text"])
                             if end > start and offset < stop:
                                 matches.append(span)
                             offset = end
+                        if occurrence == 0:
+                            break
                     if not matches:
-                        fail(f"sample {needle!r} missing from final PDF")
+                        filename = "report-layout-requirements.yaml" if report else "layout-requirements.yaml"
+                        fail(f"{sample.get('role')} sample {needle!r} missing from final PDF; "
+                             f"check that it points to current text in {filename}")
                     for span in matches:
                         if not close(span["size"], sample.get("size_pt")):
                             fail(f"{needle!r} size {span['size']:.2f} pt, expected {sample.get('size_pt')}")

@@ -64,9 +64,10 @@ When following a consultation-report example, preserve: a priority table;
 numbered key jobs with consistent “匹配依据 / 经验缺口 / 投递准备” fields; a table
 of remaining jobs and tradeoffs; numbered preparation steps; an interview
 preparation list/table; and a job directory with company, full title,
-location, reading status and usable source links. Use a linked contents list
-for a multi-section report. Scale the rows to the actual evidence; never copy
-the example's job count or fabricate entries to fill it.
+location, reading status and usable source links. For the bundled layout, use
+the PDF bookmarks in a short report and add a linked contents list in a long
+one. Scale the rows to the actual evidence. Use the roles actually found and
+reviewed.
 
 ## Keep job identities consistent across sections
 

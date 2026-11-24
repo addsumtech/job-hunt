@@ -49,7 +49,9 @@ on Windows); `--root PATH` selects another user-writable location. `runtime.json
 stores executable paths, browser selection and the delivery root. Setup and
 `doctor.py` test whether the delivery folder can be written. If Downloads is
 unavailable, they try `~/Documents/job-hunt` and `~/job-hunt`, save the working
-path and print it for the user. `--node PATH`
+path and print it for the user. If all of those folders fail, ask where to
+save the job-search files, pass the user's full path to `deliver.py --to`,
+and give the user the full delivery path. `--node PATH`
 can select an existing Node 22+ executable. Setup requires internet access for
 missing packages; it does not imply an offline installation bundle.
 

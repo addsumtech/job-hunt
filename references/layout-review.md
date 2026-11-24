@@ -21,6 +21,10 @@ writes `report-layout-requirements.yaml` with `reference: null`, the renderer's
 documented defaults for all eight checks, and text samples taken from the report. Do not
 rebuild these values from the renderer's source. It exits 2 for a report the bundled
 renderer does not draw. In that case, write the file by hand as below.
+Generated samples prefer unique text. If a contents entry repeats a section
+heading, a sample may specify its numbered occurrence in PDF reading order.
+If a revision removed sampled text, point that sample at current text with the
+same role and keep its expected typography.
 
 The requirements file also carries measured checks. Example for a fictional CV
 (replace text samples with literal text from this candidate and retain the
@@ -113,6 +117,9 @@ page only when that actual passed baseline is intact and its page position,
 pixels, geometry, rotation, text, fonts and links match. Requirements, template
 and user overrides must also match. Form/annotation pages require fresh review;
 a page-count change requires the pagination to be reviewed again.
+
+After re-rendering a report, refresh the previews and draft with
+`python3 scripts/run_tool.py python scripts/layout_pages.py --workspace <ws> --report`.
 
 Inspect each `pending` page in the draft, mark its `review_status: pass`, update
 the eight comparison observations, reviewer/time and unresolved differences, then

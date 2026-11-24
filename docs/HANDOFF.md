@@ -1,6 +1,6 @@
 # job-hunt — 接手说明
 
-**更新于 2026-11-23（1.6.2）。** 这份文件以前在 8 月里过时了两次，接手的人信了旧状态就会重建已经存在的东西。
+**更新于 2026-11-24（1.6.3）。** 这份文件以前在 8 月里过时了两次，接手的人信了旧状态就会重建已经存在的东西。
 **先跑一次 `make check`，再信任这里的任何一句话。**
 
 ---
@@ -8,11 +8,11 @@
 ## 当前状态
 
 - 五个模式（apply、assess、discover、interview、prepare）都已上线；`evals/` 已建成。
-- 版本：1.6.2（2026-11-23）。1.3.0 见 PR #34；1.2.1 到 1.2.3 没有单独打 tag，修复并入 1.3.0。
-- `make check`（2026-11-23，Python 3.12 venv）：
+- 版本：1.6.3（2026-11-24）。1.3.0 见 PR #34；1.2.1 到 1.2.3 没有单独打 tag，修复并入 1.3.0。
+- `make check`（2026-11-24，Python 3.12 venv）：
 
 ```
-6592 passed, 8 skipped
+6609 passed, 8 skipped
 LOSSLESS: 1317/1317 baseline lines accounted for across 61 files, 88 waived
 check_conventions --ci: exit 0
 NO_HIDDEN_CHARS
@@ -79,6 +79,13 @@ README 示例图由 `docs/assets/examples/src/report-{zh,en}.md` 渲染前两页
 失败会清理半成品，改用链接方式或切换到另一个已安装的 Python。安装与体检都实际试写交付目录，
 并把选定的路径存入 `runtime.json` 的 `delivery_root`。找岗位先查浏览器状态，遇到授权和登录时在对话里等待用户操作。
 定向简历中断后，用 `python3 scripts/run_tool.py python scripts/apply_status.py --workspace <ws>` 查看当前轮次。
+
+**2026-11-24 WorkBuddy 模块 1、2 修复（1.6.3）。** 交付目录保留一个固定的写入标记。所有默认目录都失败时，
+问用户要把文件放在哪里，并给出完整交付路径。Python 脚本通过 `fs_paths.ensure_directory` 复用已有目录；
+运行失败时保留原始原因。确认本轮要用的网站未登录后，先发登录提示并等待回复，再查其他来源。
+默认报告抽样会跳过标题下方的小字号日期，并定位在目录中重复的章节标题。五列表格按条目排版时照常核对。
+重新渲染后，用 `python3 scripts/run_tool.py python scripts/layout_pages.py --workspace <ws> --report`
+生成当前 PDF 的预览和复核草稿，查看列出的页面并完成新草稿。
 
 ---
 

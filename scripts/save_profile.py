@@ -40,6 +40,7 @@ import sys
 
 import journal
 import paths
+from fs_paths import ensure_directory
 
 
 def language_of(profile: dict) -> str:
@@ -102,7 +103,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"would write {target}")
     else:
         try:
-            target.parent.mkdir(parents=True, exist_ok=True)
+            ensure_directory(target.parent, parents=True)
             if replaced is not None and replaced.exists():
                 # A counter, because three saves in one day left the ORIGINAL
                 # unrecoverable: each `.bak-<date>` overwrote the last while both runs

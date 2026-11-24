@@ -1,4 +1,5 @@
 """Private installation must preserve existing tools and use bundled clients."""
+from contextlib import contextmanager
 import io
 import json
 import os
@@ -7,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import tempfile
 import zipfile
 
 import pytest
@@ -14,6 +16,72 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import setup_dependencies as setup
 import run_tool
+from delivery_paths import choose_delivery_root, writable
+from fs_paths import ensure_directory
+
+
+def test_delivery_probe_can_create_without_deleting(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    downloads = home / "Downloads"
+    downloads.mkdir(parents=True)
+    monkeypatch.setattr(Path, "home", lambda: home)
+    original = tempfile.NamedTemporaryFile
+
+    @contextmanager
+    def no_delete(*args, **kwargs):
+        with original(*args, **kwargs, delete=False) as probe:
+            yield probe
+        raise PermissionError("host refuses to remove the probe")
+
+    def deny_unlink(*args, **kwargs):
+        pytest.fail("probing a delivery directory must never delete a file")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(tempfile, "NamedTemporaryFile", no_delete)
+        patch.setattr(Path, "unlink", deny_unlink)
+        assert choose_delivery_root({}) == downloads.resolve()
+        assert choose_delivery_root({}) == downloads.resolve()
+    assert list(downloads.iterdir()) == [downloads / ".jobhunt-write-probe"]
+
+
+def test_no_writable_delivery_folder_asks_for_a_full_path(tmp_path, monkeypatch):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    def deny_open(path, *args, **kwargs):
+        raise PermissionError(f"host refuses to write to {path}")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "open", deny_open)
+        assert not writable(tmp_path)[0]
+        with pytest.raises(OSError) as error:
+            choose_delivery_root({})
+    for folder in ("Downloads", "Documents/job-hunt", "job-hunt"):
+        assert str(tmp_path.resolve() / folder) in str(error.value)
+    assert "完整路径" in str(error.value)
+    assert "deliver.py --to" in str(error.value)
+    assert not list(tmp_path.rglob(".jobhunt-write-probe*"))
+
+
+def test_ensure_directory_tolerates_a_race_but_refuses_files(tmp_path, monkeypatch):
+    original = Path.mkdir
+    calls = []
+
+    def broker_mkdir(path, *, parents=False):
+        calls.append(path)
+        if not path.exists():
+            original(path, parents=parents)
+        raise FileExistsError(path)
+
+    directory, file = tmp_path / "folder", tmp_path / "file"
+    file.touch()
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "mkdir", broker_mkdir)
+        ensure_directory(directory)
+        ensure_directory(directory)
+        with pytest.raises(FileExistsError):
+            ensure_directory(file)
+    assert calls == [directory, file]
+    assert directory.is_dir() and file.is_file()
 
 
 @pytest.mark.parametrize("leftover", [False, True])

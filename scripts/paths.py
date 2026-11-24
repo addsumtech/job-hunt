@@ -19,6 +19,8 @@ import pathlib
 import re
 import unicodedata
 
+from fs_paths import ensure_directory
+
 # `JOBHUNT_PROFILES_ROOT` relocates the whole store. The default stays under
 # `.claude` even on another host, on purpose: someone who runs this skill from
 # two agents should get ONE set of CVs, not two half-populated ones.
@@ -518,7 +520,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description="Create the application workspace for one posting (or, with "
                     "--prep, a prepare-mode workspace) and print its path.")
-    parser.add_argument("--name", required=True, help="the candidate's name as in profile meta.name")
+    parser.add_argument("--name", help="the candidate's name as in profile meta.name")
     parser.add_argument("--company", help="the exact public employer name")
     parser.add_argument("--role", help="the posting's role title")
     parser.add_argument("--prep", metavar="DIRECTION",
@@ -526,6 +528,9 @@ def main(argv=None) -> int:
                              "(e.g. 'backend engineer cn campus'), instead of --company/--role")
     parser.add_argument("--date", help="YYYY-MM-DD; default: today's local date")
     args = parser.parse_args(argv)
+    if args.name is None:
+        parser.error("--name is required to create a workspace. To find existing profiles, "
+                     f"look for profile.yaml or profile.<language>.yaml under {PROFILES_ROOT}/<candidate>/")
     date = args.date or datetime.date.today().isoformat()
     if bool(args.prep) == bool(args.company or args.role) or (
             not args.prep and not (args.company and args.role)):
@@ -539,7 +544,7 @@ def main(argv=None) -> int:
         print(f"cannot run: {exc}", file=sys.stderr)
         return 2
     try:
-        path.mkdir(parents=True, exist_ok=True)
+        ensure_directory(path, parents=True)
     except OSError as exc:
         # Not PermissionError alone: a file where the store should be
         # (NotADirectoryError, FileExistsError) and a read-only volume (EROFS)

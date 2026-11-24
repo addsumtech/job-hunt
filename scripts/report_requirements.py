@@ -9,7 +9,7 @@ The values below are the ones `deliver._render_portable_report` draws with;
 `test_report_requirements.py` renders a report and measures it against them, so a
 change to the renderer that is not made here fails the suite.
 
-The text samples are the report's own first title, section heading and body line,
+The text samples come from the report's title, a heading and a body paragraph,
 so run this after `report.md` exists and before `render_report.py`.
 
 Exit codes: 0 written; 2 could not run — no report.md, a requirements file is
@@ -37,59 +37,67 @@ _CJK = re.compile(r"[\u3000-\u9fff\uac00-\ud7af\uff00-\uffef]")
 _USABLE_WIDTH = TEXT_BOUNDS[2] - TEXT_BOUNDS[0]
 
 
-def _display(line: str) -> str:
-    """What the PDF prints for one Markdown line: link labels, no emphasis marks."""
-    line = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", line)
-    return re.sub(r"[*_`]", "", line).strip()
-
-
-def _needle(text: str, size: float, everything: str) -> str | None:
-    """The shortest prefix of `text` that fits on its first PDF line and occurs
-    once in the whole report.
-
-    Uniqueness is the point. The gate checks every line that contains a sample,
-    so a section heading that the contents list repeats at 10.5 pt, or a title
-    prefix that the body repeats, fails a report that is fine.
-    """
-    fits = lambda s: sum(size if _CJK.match(c) else size * 0.62 for c in s) <= _USABLE_WIDTH
+def _prefixes(text: str, size: float):
+    """Prefixes that fit on the first PDF line."""
     if _CJK.search(text):
-        prefixes = [text[:n] for n in range(min(6, len(text)), len(text) + 1)]
+        choices = [text[:n] for n in range(min(6, len(text)), len(text) + 1)]
     else:
         words = text.split()
-        prefixes = [" ".join(words[:n]) for n in range(min(2, len(words)), len(words) + 1)]
-    for prefix in prefixes:
-        if not fits(prefix):
+        choices = [" ".join(words[:n]) for n in range(min(2, len(words)), len(words) + 1)]
+    for prefix in choices:
+        if sum(size if _CJK.match(c) else size * 0.62 for c in prefix) > _USABLE_WIDTH:
             break
-        if everything.count(prefix) == 1:
-            return prefix
-    return None
+        if prefix.strip():
+            yield prefix
 
 
 def _samples(markdown: str, font: str) -> list[dict] | str:
-    """A title, a heading and a body line, each as literal text printed once."""
-    lines = [raw.strip() for raw in markdown.splitlines()]
-    everything = "\n".join(_display(line.lstrip("#").strip()) for line in lines)
+    """Prefer unique text, then use its occurrence in source reading order."""
+    lines = []
     candidates = {"title": [], "heading": [], "body": []}
-    for line in lines:
-        if line.startswith("# "):
-            candidates["title"].append((_display(line[2:]), SIZES["title"]))
-        elif line.startswith("## "):
-            candidates["heading"].append((_display(line[3:]), SIZES["heading"]))
-        elif line.startswith("### "):
-            candidates["heading"].append((_display(line[4:]), SIZES["subheading"]))
-        elif line and not re.match(r"[#>|\-*+`\[!]|\d+[.)]\s", line):
-            candidates["body"].append((_display(line), SIZES["body"]))
-    # Prefer a section heading; a sub-heading is used only when the contents
-    # list repeats every section heading.
+    after_title = False
+    for raw, literal in deliver._report_lines(markdown):
+        line = raw.strip()
+        if not line:
+            continue
+        size = role = None
+        value = re.sub(r"^(?:#{1,3} |[-*+] |\d+[.)] |>[ ]?)", "", line)
+        display = line if literal else deliver._inline_runs(value)[0].strip()
+        if not literal:
+            if line.startswith("# "):
+                role, size = "title", SIZES["title"]
+            elif line.startswith(("## ", "### ")):
+                role = "heading"
+                size = SIZES["subheading" if line.startswith("### ") else "heading"]
+            elif (not re.match(r"[#>|\-*+`\[!]|\d+[.)]\s", line)
+                  and not (after_title and deliver._report_dateline(line))):
+                role, size = "body", SIZES["body"]
+        if role:
+            candidates[role].append((len(lines), size))
+        lines.append(display)
+        after_title = role == "title"
+    everything = "\n".join(lines)
     candidates["heading"].sort(key=lambda c: c[1] != SIZES["heading"])
     out = []
     for role, color in (("title", INK), ("heading", INK), ("body", None)):
-        found = next(((needle, size) for text, size in candidates[role]
-                      if (needle := _needle(text, size, everything))), None)
-        if found is None:
-            return (f"no {role} text in report.md is printed exactly once on one line; "
-                    "write text_samples by hand with region_pt")
-        sample = {"role": role, "text": found[0], "size_pt": found[1], "fonts": [font]}
+        fallback = None
+        for index, size in candidates[role]:
+            prefixes = list(_prefixes(lines[index], size))
+            needle = next((prefix for prefix in prefixes if everything.count(prefix) == 1), None)
+            if needle:
+                sample = {"role": role, "text": needle, "size_pt": size, "fonts": [font]}
+                break
+            if prefixes and fallback is None:
+                needle = prefixes[-1]
+                occurrence = 1 + sum(line.startswith(needle) for line in lines[:index])
+                fallback = {"role": role, "text": needle, "size_pt": size, "fonts": [font],
+                            "occurrence": occurrence}
+        else:
+            if fallback is None:
+                examples = {"title": "a # title", "heading": "a ## section heading",
+                            "body": "a plain body paragraph below a section heading"}
+                return f"no {role} text to sample in report.md; add {examples[role]} and rerun this command"
+            sample = fallback
         if color is not None:
             sample["color"] = color
         out.append(sample)
@@ -140,7 +148,7 @@ def requirements(markdown: str) -> dict | str:
                                    f"page number right ({style['page'].format(number='N')})",
             "paragraph_spacing": "Body leading 1.35 x size; table rows 15.5 pt; no stacked "
                                  "blank lines",
-            "content_order": "Title, metadata, contents, then the sections in this order: "
+            "content_order": "Title, any metadata and contents, then the sections in this order: "
                              + "; ".join(headings),
             "pagination_and_clipping": "Headings stay with their first block; table headers "
                                        "repeat on a continued table; no clipped or "

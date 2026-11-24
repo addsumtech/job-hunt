@@ -105,6 +105,7 @@ def test_the_self_check_names_every_script():
     skip = {"journal.py", "paths.py", "rounds.py", "vocab.py",
             "cli_io.py",                         # imported by CLI entry points
             "runtime_config.py", "delivery_paths.py",  # imported by setup and delivery
+            "fs_paths.py",                       # shared directory creation
             "report_locales.py",                 # shared text, imported by gates
             "opencli_meta.py",                    # Plan 3 — leave it
             "mock_vocab.py", "mock_blocks.py",    # imported, never invoked

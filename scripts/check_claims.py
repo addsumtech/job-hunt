@@ -96,6 +96,7 @@ import unicodedata
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import journal
 import paths
+from fs_paths import ensure_directory
 
 GATE = "check_claims"
 FINGERPRINT = "master-fingerprint.json"
@@ -1185,7 +1186,7 @@ def main(argv=None) -> int:
             return 2
         master = pathlib.Path(args.master).resolve()
         digest = journal.sha256_file(master)
-        ws.mkdir(parents=True, exist_ok=True)
+        ensure_directory(ws, parents=True)
         fp_path.write_text(json.dumps({
             "path": str(master), "sha256": digest,
             "mtime_ns": master.stat().st_mtime_ns}, indent=2) + "\n", encoding="utf-8")

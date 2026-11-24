@@ -60,7 +60,9 @@ def main(argv=None):
     if not ok:
         print(reason)
         return 2
-    print("REPORT_RENDERED: inspect every PDF page, then run check_layout.py --report")
+    print("REPORT_RENDERED: run python3 scripts/run_tool.py python scripts/layout_pages.py "
+          "--workspace <ws> --report to create the current review draft and previews. "
+          "Complete the draft, then run check_layout.py --report.")
     return 0
 
 

@@ -372,7 +372,7 @@ def checks() -> list[dict]:
     out.append({
         "what": "write the delivery folder", "ok": ok,
         "cost": "deliver.py cannot copy the finished files; pass deliver.py --to <writable folder>",
-        "fix": "Choose a writable folder with deliver.py --to.",
+        "fix": "Ask the user where to save the files. Use that full path with deliver.py --to.",
         "auto": False, "detail": detail,
     })
     if opencli_tools()[0]:

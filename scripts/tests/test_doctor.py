@@ -12,7 +12,6 @@ import os
 import pathlib
 import subprocess
 import sys
-import tempfile
 
 import pytest
 
@@ -173,16 +172,16 @@ def test_blocked_downloads_passes_doctor_and_saves_fallback(tmp_path, monkeypatc
     monkeypatch.setattr(doctor.shutil, "which", lambda name: name)
     record = pathlib.Path(os.environ["JOBHUNT_RUNTIME_ROOT"]) / "runtime.json"
     record.write_text('{"python": "existing-python"}', encoding="utf-8")
-    probe = tempfile.NamedTemporaryFile
+    open_file = pathlib.Path.open
     blocked = (tmp_path / "Downloads").resolve()
     blocked.mkdir()
 
-    def try_write(*args, **kwargs):
-        if kwargs.get("dir") == blocked:
+    def try_write(path, mode="r", *args, **kwargs):
+        if path.parent == blocked and any(flag in mode for flag in "wax+"):
             raise PermissionError("Operation not permitted")
-        return probe(*args, **kwargs)
+        return open_file(path, mode, *args, **kwargs)
 
-    monkeypatch.setattr(tempfile, "NamedTemporaryFile", try_write)
+    monkeypatch.setattr(pathlib.Path, "open", try_write)
     assert doctor.main([]) == 0
     fallback = str((tmp_path / "Documents" / "job-hunt").resolve())
     assert f"Your files will be saved in {fallback}" in capsys.readouterr().out
